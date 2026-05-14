@@ -17,6 +17,8 @@ Web estatica de lanzamiento para InmoRadar.
 - `api/check-premium.js`: endpoint para que la extension compruebe si un email tiene Premium.
 - `api/lemonsqueezy-webhook.js`: webhook preparado para sincronizar suscripciones de Lemon Squeezy.
 - `database/premium-subscriptions.sql`: tabla Supabase para guardar suscripciones Premium.
+- `api/market-price.js`: endpoint agregado para que la extension consulte precios de mercado por zona.
+- `database/market-price-sources.sql`: tabla Supabase `market_price_sources` y seed minimo de mercado.
 
 ## Checkout
 
@@ -67,3 +69,13 @@ El webhook de Lemon Squeezy debe apuntar a:
 ```text
 https://www.inmoradar.app/api/lemonsqueezy-webhook
 ```
+
+## Endpoint de mercado
+
+La extension consulta:
+
+```text
+https://www.inmoradar.app/api/market-price?operation=sale&municipality=Logrono&zone=Casco%20Antiguo&listing_price_total=210000&listing_area_m2=100
+```
+
+El endpoint devuelve solo datos agregados procesados. No expone `raw_payload` ni redistribuye el dataset bruto al frontend.
