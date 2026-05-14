@@ -38,14 +38,25 @@ Para la primera version de pago:
 
 ## Siguiente fase tecnica
 
-La web ya vende el plan, pero la extension todavia necesita validacion real de suscripcion.
+La web incluye endpoints para validar Premium y recibir webhooks.
 
-Para produccion:
+Para activar produccion:
 
-- Crear backend de licencias.
-- Recibir webhooks del proveedor de pagos.
-- Guardar email/cliente/suscripcion.
-- Exponer endpoint para validar si el usuario tiene Premium activo.
-- Cambiar el boton de la extension para iniciar sesion o introducir email/licencia.
+1. Crear proyecto en Supabase.
+2. Ejecutar `database/premium-subscriptions.sql`.
+3. Crear producto mensual en Lemon Squeezy.
+4. Crear webhook con URL `https://TU-DOMINIO/api/lemonsqueezy-webhook`.
+5. Seleccionar eventos `subscription_created`, `subscription_updated`, `subscription_cancelled`, `subscription_resumed`, `subscription_expired`, `subscription_paused` y `subscription_unpaused`.
+6. Configurar estas variables en Vercel:
+
+```text
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+LEMONSQUEEZY_WEBHOOK_SECRET=
+```
+
+7. Redeploy.
+8. Probar `https://TU-DOMINIO/api/health`.
+9. Probar `https://TU-DOMINIO/api/check-premium?email=TU_EMAIL`.
 
 No conviene confiar en `chrome.storage.local` para Premium real, porque el usuario puede modificarlo.

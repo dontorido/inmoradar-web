@@ -14,6 +14,9 @@ Web estatica de lanzamiento para InmoRadar.
 - `assets/hero-inmoradar.png`: visual principal local.
 - `robots.txt` y `sitemap.xml`.
 - `_redirects` y `vercel.json` para que `/premium`, `/privacidad`, `/terminos`, `/success` y `/cancel` funcionen en Netlify/Vercel.
+- `api/check-premium.js`: endpoint para que la extension compruebe si un email tiene Premium.
+- `api/lemonsqueezy-webhook.js`: webhook preparado para sincronizar suscripciones de Lemon Squeezy.
+- `database/premium-subscriptions.sql`: tabla Supabase para guardar suscripciones Premium.
 
 ## Checkout
 
@@ -42,3 +45,25 @@ Ver `DEPLOY.md`.
 ## Dominios
 
 Ver `DOMINIOS.md`.
+
+## Variables de entorno para Premium
+
+Configurar en Vercel:
+
+```text
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+LEMONSQUEEZY_WEBHOOK_SECRET=
+```
+
+El endpoint de comprobacion quedara en:
+
+```text
+https://www.inmoradar.app/api/check-premium?email=usuario@email.com
+```
+
+El webhook de Lemon Squeezy debe apuntar a:
+
+```text
+https://www.inmoradar.app/api/lemonsqueezy-webhook
+```
