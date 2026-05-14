@@ -52,6 +52,10 @@ function supabaseConfig() {
   };
 }
 
+function normalizeSupabaseUrl(url) {
+  return String(url || "").replace(/\/+$/, "").replace(/\/rest\/v1$/, "");
+}
+
 function hasSupabaseConfig() {
   const config = supabaseConfig();
   return Boolean(config.url && config.key);
@@ -75,7 +79,7 @@ async function supabaseFetch(path, options = {}) {
     headers.authorization = `Bearer ${key}`;
   }
 
-  const response = await fetch(`${url.replace(/\/$/, "")}/rest/v1/${path}`, {
+  const response = await fetch(`${normalizeSupabaseUrl(url)}/rest/v1/${path}`, {
     ...options,
     headers
   });
