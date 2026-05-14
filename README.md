@@ -93,6 +93,12 @@ MVP disponible en:
 https://www.inmoradar.app/api/parking-difficulty?lat=40.356&lng=-3.520&city=Rivas-Vaciamadrid
 ```
 
+Tambien acepta direccion si no hay coordenadas:
+
+```text
+https://www.inmoradar.app/api/parking-difficulty?address=Calle%20Juan%20Gris,%2026,%20Rivas-Vaciamadrid&city=Rivas-Vaciamadrid
+```
+
 Para probar sin depender de Overpass:
 
 ```text

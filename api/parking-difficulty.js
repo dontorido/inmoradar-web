@@ -7,6 +7,8 @@ const { fetchOverpassParking, mockOverpassParkingResponse } = require("./_parkin
 const { parseOverpassParkingSignals } = require("./_parking/parseOverpassParkingSignals");
 
 const DEFAULT_RADIUS_M = 500;
+const NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search";
+const PHOTON_ENDPOINT = "https://photon.komoot.io/api/";
 
 function parseCoordinate(value) {
   if (value === null || value === undefined || value === "") return null;
@@ -23,8 +25,18 @@ function parseRadius(value) {
 function validateRequest(query) {
   const lat = parseCoordinate(query.get("lat"));
   const lng = parseCoordinate(query.get("lng") || query.get("lon"));
+  const address = String(query.get("address") || "").trim();
   if (lat === null || lng === null) {
-    return { ok: false, status: 400, error: "lat_and_lng_required" };
+    if (!address) return { ok: false, status: 400, error: "lat_lng_or_address_required" };
+    return {
+      ok: true,
+      lat: null,
+      lng: null,
+      address,
+      city: String(query.get("city") || "").trim(),
+      radiusM: parseRadius(query.get("radius_m")),
+      useMock: query.get("mock") === "1" || query.get("mock") === "true"
+    };
   }
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
     return { ok: false, status: 400, error: "invalid_lat_lng" };
@@ -33,10 +45,107 @@ function validateRequest(query) {
     ok: true,
     lat,
     lng,
+    address,
     city: String(query.get("city") || "").trim(),
     radiusM: parseRadius(query.get("radius_m")),
     useMock: query.get("mock") === "1" || query.get("mock") === "true"
   };
+}
+
+function withTimeout(ms = 7000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return {
+    signal: controller.signal,
+    done: () => clearTimeout(timer)
+  };
+}
+
+function normalizeAddressCandidate(address, city) {
+  const raw = [address, city].filter(Boolean).join(", ");
+  return raw
+    .replace(/\s+/g, " ")
+    .replace(/,+/g, ",")
+    .replace(/^,|,$/g, "")
+    .trim();
+}
+
+function buildAddressCandidates(address, city) {
+  const candidates = new Set();
+  const add = (value) => {
+    const cleaned = normalizeAddressCandidate(value, "");
+    if (cleaned.length >= 3) candidates.add(cleaned);
+  };
+
+  add(address);
+  if (city && !String(address).toLowerCase().includes(String(city).toLowerCase())) add(`${address}, ${city}`);
+  if (!/\bEspa(?:ñ|n)a\b/i.test(address)) add(`${address}, España`);
+  if (city) add(`${address}, ${city}, España`);
+  return [...candidates].slice(0, 6);
+}
+
+async function geocodeWithNominatim(candidate) {
+  const url = new URL(NOMINATIM_ENDPOINT);
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("countrycodes", "es");
+  url.searchParams.set("q", candidate);
+  const timeout = withTimeout();
+  try {
+    const response = await fetch(url, {
+      signal: timeout.signal,
+      headers: { "user-agent": "InmoRadar/parking-difficulty" }
+    });
+    if (!response.ok) return null;
+    const results = await response.json();
+    const first = results?.[0];
+    if (!first?.lat || !first?.lon) return null;
+    return {
+      lat: Number(first.lat),
+      lng: Number(first.lon),
+      precision: first.type || first.class || "unknown",
+      provider: "Nominatim/OpenStreetMap",
+      queryUsed: candidate
+    };
+  } finally {
+    timeout.done();
+  }
+}
+
+async function geocodeWithPhoton(candidate) {
+  const url = new URL(PHOTON_ENDPOINT);
+  url.searchParams.set("q", candidate.replace(/\bEspa(?:ñ|n)a\b/gi, "").replace(/,+/g, " "));
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("lang", "es");
+  const timeout = withTimeout();
+  try {
+    const response = await fetch(url, { signal: timeout.signal });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    const feature = payload?.features?.[0];
+    const coordinates = feature?.geometry?.coordinates;
+    if (!coordinates) return null;
+    return {
+      lat: Number(coordinates[1]),
+      lng: Number(coordinates[0]),
+      precision: feature.properties?.osm_key || "unknown",
+      provider: "Photon/OpenStreetMap",
+      queryUsed: candidate
+    };
+  } finally {
+    timeout.done();
+  }
+}
+
+async function geocodeAddress(address, city) {
+  for (const candidate of buildAddressCandidates(address, city)) {
+    const nominatim = await geocodeWithNominatim(candidate).catch(() => null);
+    if (nominatim?.lat && nominatim?.lng) return nominatim;
+    const photon = await geocodeWithPhoton(candidate).catch(() => null);
+    if (photon?.lat && photon?.lng) return photon;
+  }
+  return null;
 }
 
 function sourceList({ overpassOk, usedMock, municipalSignals }) {
@@ -119,6 +228,20 @@ module.exports = async function handler(req, res) {
     return json(res, validation.status, { ok: false, error: validation.error });
   }
 
+  let geocodedLocation = null;
+  if ((validation.lat === null || validation.lng === null) && validation.address) {
+    geocodedLocation = await geocodeAddress(validation.address, validation.city);
+    if (!geocodedLocation) {
+      return json(res, 422, {
+        ok: false,
+        error: "geocoding_failed",
+        message: "No se pudo localizar la dirección indicada."
+      });
+    }
+    validation.lat = geocodedLocation.lat;
+    validation.lng = geocodedLocation.lng;
+  }
+
   const cacheKey = parkingCacheKey({
     lat: validation.lat,
     lng: validation.lng,
@@ -133,6 +256,10 @@ module.exports = async function handler(req, res) {
 
   try {
     const payload = await buildParkingDifficultyResponse(validation);
+    if (geocodedLocation) {
+      payload.location = geocodedLocation;
+      payload.meta.address = validation.address;
+    }
     if (!validation.useMock) setCachedParkingDifficulty(cacheKey, payload);
     return json(res, 200, payload);
   } catch (error) {
