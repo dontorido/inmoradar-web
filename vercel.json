@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/premium", "destination": "/premium.html" },
+    { "source": "/privacidad", "destination": "/privacidad.html" },
+    { "source": "/terminos", "destination": "/terminos.html" },
+    { "source": "/success", "destination": "/success.html" },
+    { "source": "/cancel", "destination": "/cancel.html" }
+  ]
+}
