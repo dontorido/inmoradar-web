@@ -63,14 +63,21 @@ async function supabaseFetch(path, options = {}) {
     throw new Error("Supabase is not configured");
   }
 
+  const headers = {
+    apikey: key,
+    "content-type": "application/json",
+    ...(options.headers || {})
+  };
+
+  // Supabase secret keys (`sb_secret_...`) are backend-only API keys and should not be
+  // sent as JWT bearer tokens. Legacy JWT `service_role` keys still use Authorization.
+  if (!String(key).startsWith("sb_secret_") && !String(key).startsWith("sb_publishable_")) {
+    headers.authorization = `Bearer ${key}`;
+  }
+
   const response = await fetch(`${url.replace(/\/$/, "")}/rest/v1/${path}`, {
     ...options,
-    headers: {
-      apikey: key,
-      authorization: `Bearer ${key}`,
-      "content-type": "application/json",
-      ...(options.headers || {})
-    }
+    headers
   });
 
   if (!response.ok) {
