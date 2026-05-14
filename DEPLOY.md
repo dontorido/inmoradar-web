@@ -30,7 +30,7 @@ Despues de elegir dominio, actualiza:
 Para la primera version de pago:
 
 1. Crear producto `InmoRadar Premium`.
-2. Tipo: suscripcion mensual.
+2. Tipo: suscripcion semanal.
 3. Precio: `1,99 EUR`.
 4. Success URL: `https://TU-DOMINIO/success.html`.
 5. Cancel URL: `https://TU-DOMINIO/cancel.html`.
@@ -45,7 +45,7 @@ Para activar produccion:
 1. Crear proyecto en Supabase.
 2. Ejecutar `database/premium-subscriptions.sql`.
 3. Ejecutar `database/market-price-sources.sql` para crear `market_price_sources`.
-4. Crear producto mensual en Lemon Squeezy.
+4. Crear producto semanal en Lemon Squeezy.
 5. Crear webhook con URL `https://TU-DOMINIO/api/lemonsqueezy-webhook`.
 6. Seleccionar eventos `subscription_created`, `subscription_updated`, `subscription_cancelled`, `subscription_resumed`, `subscription_expired`, `subscription_paused` y `subscription_unpaused`.
 7. Configurar estas variables en Vercel:
