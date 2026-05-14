@@ -19,6 +19,11 @@ Web estatica de lanzamiento para InmoRadar.
 - `database/premium-subscriptions.sql`: tabla Supabase para guardar suscripciones Premium.
 - `api/market-price.js`: endpoint agregado para que la extension consulte precios de mercado por zona.
 - `database/market-price-sources.sql`: tabla Supabase `market_price_sources` y seed minimo de mercado.
+- `api/parking-difficulty.js`: MVP del Parking Difficulty Score con Overpass/OpenStreetMap, scoring y cache en memoria.
+- `api/_parking/*`: servicios internos para scoring, parser Overpass, adaptadores municipales y cache.
+- `types/parking.ts`: tipos TypeScript preparados para migrar el endpoint a TS.
+- `database/parking-difficulty.sql`: tablas preparadas para zonas de aparcamiento regulado y cache persistente.
+- `tests/parking-difficulty.test.js`: tests basicos del scoring, parser y cache.
 
 ## Checkout
 
@@ -79,3 +84,31 @@ https://www.inmoradar.app/api/market-price?operation=sale&municipality=Logrono&z
 ```
 
 El endpoint devuelve solo datos agregados procesados. No expone `raw_payload` ni redistribuye el dataset bruto al frontend.
+
+## Endpoint Parking Difficulty
+
+MVP disponible en:
+
+```text
+https://www.inmoradar.app/api/parking-difficulty?lat=40.356&lng=-3.520&city=Rivas-Vaciamadrid
+```
+
+Para probar sin depender de Overpass:
+
+```text
+https://www.inmoradar.app/api/parking-difficulty?lat=40.356&lng=-3.520&city=Rivas-Vaciamadrid&mock=1
+```
+
+Devuelve un indice orientativo de dificultad para aparcar de 1 a 10 con senales y explicaciones. No promete disponibilidad real de plaza ni medicion exacta.
+
+Variable opcional:
+
+```text
+OVERPASS_URL=https://overpass-api.de/api/interpreter
+```
+
+Tests:
+
+```bash
+node --test tests/parking-difficulty.test.js
+```
