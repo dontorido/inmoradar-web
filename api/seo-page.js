@@ -209,7 +209,7 @@ function renderLandingHtml(landing) {
       --display: "Cabinet Grotesk", "IBM Plex Sans", sans-serif;
       --body: "IBM Plex Sans", sans-serif;
       --mono: "JetBrains Mono", monospace;
-      background: #111111;
+      background: #171717;
       color: #D4D4D4;
       font-family: var(--body);
       letter-spacing: 0.005em;
@@ -321,7 +321,7 @@ function renderLandingHtml(landing) {
       top: 112px;
     }
     .seo-toc {
-      background: #111111;
+      background: #171717;
       margin-bottom: 24px;
     }
     .seo-toc a {
@@ -341,7 +341,7 @@ function renderLandingHtml(landing) {
     .seo-data-card,
     .seo-inline-cta,
     .seo-final-cta {
-      background: #161616;
+      background: #1D1D1D;
       border: 1px solid #1F1F1F;
       border-radius: 0;
     }
@@ -354,7 +354,7 @@ function renderLandingHtml(landing) {
       margin-top: 20px;
     }
     .seo-stat-cell {
-      background: #161616;
+      background: #1D1D1D;
       display: grid;
       gap: 6px;
       padding: 18px;
@@ -387,7 +387,7 @@ function renderLandingHtml(landing) {
     .seo-calculator { display: grid; gap: 12px; margin-top: 24px; }
     .seo-calculator label { display: grid; gap: 7px; }
     .seo-calculator input {
-      background: #121212;
+      background: #1A1A1A;
       border: 1px solid #1F1F1F;
       border-radius: 0;
       color: #FFFFFF;
@@ -399,7 +399,7 @@ function renderLandingHtml(landing) {
     }
     .seo-calculator input:focus { border-color: #CCFF00; }
     .seo-calc-result {
-      background: #121212;
+      background: #1A1A1A;
       border: 1px solid #1F1F1F;
       display: grid;
       gap: 6px;
@@ -479,7 +479,7 @@ function renderLandingHtml(landing) {
     }
     .seo-data-label,
     .seo-data-value {
-      background: #161616;
+      background: #1D1D1D;
       padding: 14px 18px;
     }
     .seo-data-label {
@@ -496,8 +496,19 @@ function renderLandingHtml(landing) {
       line-height: 1.5;
     }
     .seo-source-list { margin-top: 18px; }
+    .seo-source-list li {
+      display: block;
+      padding-left: 18px;
+      position: relative;
+    }
+    .seo-source-list li::before {
+      left: 0;
+      margin-top: 10px;
+      position: absolute;
+      top: 0;
+    }
     .seo-formula {
-      background: #161616;
+      background: #1D1D1D;
       border-left: 3px solid #CCFF00;
       margin: 32px 0;
       max-width: 68ch;
@@ -573,14 +584,14 @@ function renderLandingHtml(landing) {
     }
     .seo-link-bento a {
       align-items: center;
-      background: #111111;
+      background: #171717;
       display: grid;
       gap: 14px;
       grid-template-columns: 16px minmax(0, 1fr) auto;
       padding: 16px 18px;
       text-decoration: none;
     }
-    .seo-link-bento a:hover { background: #161616; }
+    .seo-link-bento a:hover { background: #1D1D1D; }
     .seo-link-bento .seo-icon { color: #CCFF00; }
     .seo-link-bento a:hover .seo-icon { color: #FFFFFF; }
     .seo-link-bento span { color: #FFFFFF; font-size: 15px; }
