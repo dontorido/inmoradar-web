@@ -12,7 +12,7 @@ module.exports = async function handler(req, res) {
   }
 
   json(res, 200, {
-    latestVersion: "1.0.0",
+    latestVersion: "1.0.1",
     minimumRequiredVersion: "1.0.0",
     forceUpdate: false,
     message: "Hay una nueva versión de InmoRadar disponible.",
