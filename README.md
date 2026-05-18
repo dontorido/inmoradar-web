@@ -55,6 +55,8 @@ Ver `DOMINIOS.md`.
 
 ## Variables de entorno para Premium
 
+La oferta comercial visible en la web es: **2 dias gratis** y despues **1,99 EUR/semana**.
+
 Configurar en Vercel:
 
 ```text

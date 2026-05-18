@@ -32,9 +32,10 @@ Para la primera version de pago:
 1. Crear producto `InmoRadar Premium`.
 2. Tipo: suscripcion semanal.
 3. Precio: `1,99 EUR`.
-4. Success URL: `https://TU-DOMINIO/success.html`.
-5. Cancel URL: `https://TU-DOMINIO/cancel.html`.
-6. Copiar URL de checkout en `assets/app.js`.
+4. Trial gratuito: `2 dias`.
+5. Success URL: `https://TU-DOMINIO/success.html`.
+6. Cancel URL: `https://TU-DOMINIO/cancel.html`.
+7. Copiar URL de checkout en `assets/app.js`.
 
 ## Siguiente fase tecnica
 
