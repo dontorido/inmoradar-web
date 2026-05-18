@@ -311,11 +311,35 @@ function calculateDifferencePct(listingPriceEurM2, marketPriceEurM2) {
   return roundTo(((listingPriceEurM2 - marketPriceEurM2) / marketPriceEurM2) * 100, 2);
 }
 
-function priceScoreFromDifference(differencePct, operation) {
+function geoPrecisionWeight(geoLevel) {
+  const level = canonicalGeoLevel({ geo_level: geoLevel });
+  if (level === "neighbourhood") return 1;
+  if (level === "district") return 0.85;
+  if (level === "municipality") return 0.55;
+  if (level === "province") return 0.3;
+  if (level === "autonomous_community") return 0.22;
+  if (level === "country") return 0.18;
+  return 0.35;
+}
+
+function scoreCapForGeoLevel(geoLevel) {
+  const level = canonicalGeoLevel({ geo_level: geoLevel });
+  if (level === "neighbourhood") return 9.4;
+  if (level === "district") return 8.8;
+  if (level === "municipality") return 8.2;
+  if (level === "province") return 7.2;
+  if (level === "autonomous_community") return 6.8;
+  if (level === "country") return 6.5;
+  return 7;
+}
+
+function priceScoreFromDifference(differencePct, operation, geoLevel = "country", confidenceScore = 0.35) {
   if (differencePct === null || differencePct === undefined) return null;
   const affordableSide = differencePct < 0 ? Math.min(Math.abs(differencePct), operation === "rent" ? 18 : 25) : 0;
   const expensiveSide = differencePct > 0 ? Math.min(differencePct, operation === "rent" ? 18 : 25) : 0;
-  return roundTo(clamp(7 + affordableSide * 0.12 - expensiveSide * 0.16, 1, 10), 1);
+  const reliability = geoPrecisionWeight(geoLevel) * clamp(Number(confidenceScore) || 0.35, 0.2, 0.95);
+  const rawScore = 6.4 + affordableSide * 0.14 * reliability - expensiveSide * 0.16;
+  return roundTo(clamp(rawScore, 1, scoreCapForGeoLevel(geoLevel)), 1);
 }
 
 function classifySale(differencePct) {
@@ -406,6 +430,32 @@ function classifyComparison(differencePct, operation) {
   };
 }
 
+function adjustComparisonForPrecision(comparison, operation, geoLevel, confidenceScore) {
+  if (!comparison) return null;
+  const level = canonicalGeoLevel({ geo_level: geoLevel });
+  const broadReference = !["neighbourhood", "district"].includes(level);
+  const veryCheap = comparison.difference_pct <= -15;
+
+  if (!broadReference || !veryCheap) {
+    return {
+      ...comparison,
+      price_score: priceScoreFromDifference(comparison.difference_pct, operation, geoLevel, confidenceScore),
+      confidence_adjusted: false
+    };
+  }
+
+  return {
+    ...comparison,
+    raw_label: comparison.label,
+    label: "buen_precio",
+    severity: "success",
+    message:
+      "El anuncio está por debajo de la referencia disponible, pero la referencia no es de barrio. Trátalo como señal positiva a validar con comparables cercanos, no como oportunidad cerrada.",
+    price_score: priceScoreFromDifference(comparison.difference_pct, operation, geoLevel, confidenceScore),
+    confidence_adjusted: true
+  };
+}
+
 function precisionLabel(geoLevel) {
   const level = canonicalGeoLevel({ geo_level: geoLevel });
   if (level === "neighbourhood") return "Referencia de zona";
@@ -454,7 +504,7 @@ function hasFeatureCaveat(query) {
   ].some((value) => String(value || "").trim());
 }
 
-function buildCaveats(query, record, confidenceScore) {
+function buildCaveats(query, record, confidenceScore, differencePct) {
   const caveats = [];
   const level = canonicalGeoLevel(record || {});
 
@@ -472,6 +522,9 @@ function buildCaveats(query, record, confidenceScore) {
   }
   if (confidenceScore < 0.5) {
     caveats.push("La confianza del dato es limitada. Úsalo solo como orientación.");
+  }
+  if (Math.abs(Number(differencePct)) > 25 && !["neighbourhood", "district"].includes(level)) {
+    caveats.push("La diferencia frente a mercado es muy alta para una referencia amplia; conviene contrastarla con anuncios comparables del mismo barrio.");
   }
   if (hasFeatureCaveat(query)) {
     caveats.push("Algunas características del inmueble pueden justificar diferencias frente a la media.");
@@ -534,10 +587,10 @@ function buildResponse(query, record) {
 
   const marketPrice = asNumber(record.price_eur_m2);
   const differencePct = calculateDifferencePct(listing.price_eur_m2, marketPrice);
-  const comparison = classifyComparison(differencePct, query.operation);
   const geoLevel = canonicalGeoLevel(record);
   const confidenceScore = confidenceFromRecord(record);
-  const caveats = buildCaveats(query, record, confidenceScore);
+  const comparison = adjustComparisonForPrecision(classifyComparison(differencePct, query.operation), query.operation, geoLevel, confidenceScore);
+  const caveats = buildCaveats(query, record, confidenceScore, differencePct);
   const market = {
     price_eur_m2: marketPrice,
     geo_level: geoLevel,

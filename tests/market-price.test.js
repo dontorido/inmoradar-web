@@ -101,6 +101,23 @@ test("handler devuelve aviso claro si no se detecta municipio ni fallback geogra
   assert.equal(response.body.message, "No se ha podido buscar referencia de mercado porque no se ha detectado el municipio.");
 });
 
+test("handler modera el veredicto y score cuando la referencia es municipal", async () => {
+  const response = await invokeMarketPrice({
+    operation: "sale",
+    listing_price_total: "100000",
+    listing_area_m2: "100",
+    municipality: "Logroño",
+    province: "La Rioja"
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.market.geo_level, "municipality");
+  assert.equal(response.body.comparison.label, "buen_precio");
+  assert.equal(response.body.comparison.confidence_adjusted, true);
+  assert.ok(response.body.comparison.price_score <= 8.2);
+  assert.ok(response.body.caveats.some((text) => text.includes("referencia amplia")));
+});
+
 async function invokeMarketPrice(query) {
   const res = {
     headers: {},
