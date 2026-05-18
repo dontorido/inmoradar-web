@@ -91,8 +91,33 @@ async function fetchPendingOpportunities({ limit, templateType }) {
     order: "search_priority.desc",
     limit: String(limit)
   });
-  const rows = await supabaseFetch(`seo_landing_opportunities?${params.toString()}`);
+  let rows = await supabaseFetch(`seo_landing_opportunities?${params.toString()}`);
+  if (Array.isArray(rows) && rows.length === 0) {
+    await seedDefaultOpportunitiesIfEmpty(templateType);
+    rows = await supabaseFetch(`seo_landing_opportunities?${params.toString()}`);
+  }
   return Array.isArray(rows) ? rows : [];
+}
+
+async function seedDefaultOpportunitiesIfEmpty(templateType) {
+  if (!hasSupabaseConfig()) return;
+
+  const existingParams = new URLSearchParams({
+    select: "id",
+    template_type: `eq.${templateType}`,
+    limit: "1"
+  });
+  const existing = await supabaseFetch(`seo_landing_opportunities?${existingParams.toString()}`);
+  if (Array.isArray(existing) && existing.length > 0) return;
+
+  const seedRows = DEFAULT_SEED_OPPORTUNITIES.filter((opportunity) => opportunity.template_type === templateType);
+  if (!seedRows.length) return;
+
+  await supabaseFetch("seo_landing_opportunities?on_conflict=keyword,city,template_type", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(seedRows)
+  });
 }
 
 function landingToOpportunity(landing) {

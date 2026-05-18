@@ -241,11 +241,26 @@ async function runSeoGeneration(mode) {
         };
 
   showStatus(mode === "publish" ? "Buscando SEO elegible para publicar..." : "Generando draft SEO...");
-  await api("/api/admin?resource=seo/generate-landings", {
+  const result = await api("/api/admin?resource=seo/generate-landings", {
     method: "POST",
     body: JSON.stringify(payload)
   });
   await loadAll();
+  if (!result.generated_count) {
+    showStatus("No hay oportunidades SEO pendientes para generar.", "neutral");
+    return;
+  }
+  const first = result.results?.[0];
+  if (mode === "publish") {
+    showStatus(
+      result.published_count
+        ? `Publicado: ${first?.slug || "landing SEO"}`
+        : `Generado, pero sin publicar: score ${first?.quality_score || 0}`,
+      result.published_count ? "good" : "neutral"
+    );
+    return;
+  }
+  showStatus(`Draft SEO generado: ${first?.slug || "landing SEO"} · score ${first?.quality_score || 0}`, "good");
 }
 
 async function runSeoRowAction(action, slug) {
