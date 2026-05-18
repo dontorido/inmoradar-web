@@ -13,8 +13,8 @@ function handler(req, res) {
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <rect width="1200" height="630" fill="#0A0A0A"/>
-  <rect x="64" y="64" width="1072" height="502" fill="#0D0D0D" stroke="#1F1F1F"/>
+  <rect width="1200" height="630" fill="#111111"/>
+  <rect x="64" y="64" width="1072" height="502" fill="#161616" stroke="#1F1F1F"/>
   <rect x="96" y="96" width="42" height="42" fill="none" stroke="#1F1F1F"/>
   <rect x="109" y="109" width="16" height="16" fill="none" stroke="#CCFF00" stroke-width="4"/>
   <rect x="115" y="115" width="4" height="4" fill="#CCFF00" stroke="#CCFF00" stroke-width="4"/>
