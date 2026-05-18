@@ -18,6 +18,8 @@ Address Intelligence es una capa opcional para enriquecer el análisis de precio
 GET /api/address-intelligence
 ```
 
+En Vercel Hobby este endpoint se sirve mediante rewrite hacia `/api/market-price?resource=address-intelligence` para no crear una función serverless adicional.
+
 Parámetros:
 
 - `address`
@@ -58,6 +60,8 @@ TTL por defecto: 60 días. El endpoint también mantiene una caché en memoria p
 ```http
 GET /api/property-assessment
 ```
+
+También se sirve mediante rewrite hacia `/api/market-price?resource=property-assessment`.
 
 Recibe los mismos datos que `/api/market-price` más dirección. Devuelve:
 

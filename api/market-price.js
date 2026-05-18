@@ -1,4 +1,9 @@
 const { handleCors, hasSupabaseConfig, json, supabaseFetch } = require("./_utils");
+const {
+  buildAddressIntelligenceResponse,
+  calculateAddressPriceAdjustment,
+  checkAddressRateLimit
+} = require("./_address/intelligence");
 
 const GEO_CONFIDENCE = {
   neighbourhood: 0.85,
@@ -8,6 +13,24 @@ const GEO_CONFIDENCE = {
   province: 0.45,
   autonomous_community: 0.35,
   country: 0.25
+};
+
+const GEO_CONFIDENCE_CAP = {
+  neighbourhood: 0.95,
+  district: 0.9,
+  municipality: 0.78,
+  province: 0.58,
+  autonomous_community: 0.48,
+  country: 0.38
+};
+
+const SOURCE_WEIGHTS = {
+  idealista_public_report: 1,
+  fotocasa_index: 0.95,
+  fotocasa_public_report: 0.95,
+  serpavi: 0.8,
+  mivau_appraisal: 0.7,
+  mivau: 0.7
 };
 
 const MARKET_SELECT = [
@@ -182,6 +205,36 @@ function isZoneRecord(record) {
   return ["neighbourhood", "zone"].includes(record.geo_level);
 }
 
+function sourceWeight(record = {}) {
+  const source = normalizeText(record.source).replace(/\s+/g, "_");
+  if (SOURCE_WEIGHTS[source]) return SOURCE_WEIGHTS[source];
+  if (source.includes("idealista")) return 1;
+  if (source.includes("fotocasa")) return 0.95;
+  if (source.includes("serpavi")) return 0.8;
+  if (source.includes("mivau") || source.includes("fomento")) return 0.7;
+  return 0.6;
+}
+
+function recordGeoValue(record, level = canonicalGeoLevel(record)) {
+  if (level === "neighbourhood") return record.zone_name || record.neighbourhood || null;
+  if (level === "district") return record.district || record.zone_name || null;
+  if (level === "municipality") return record.municipality || record.zone_name || null;
+  if (level === "province") return record.province || null;
+  if (level === "autonomous_community") return record.autonomous_community || null;
+  if (level === "country") return record.country || null;
+  return geoName(record);
+}
+
+function sameGeoBucket(record, selected) {
+  const level = canonicalGeoLevel(selected);
+  if (canonicalGeoLevel(record) !== level) return false;
+
+  const selectedName = recordGeoValue(selected, level);
+  const recordName = recordGeoValue(record, level);
+  if (level === "country") return sameName(recordName || selectedName, selectedName || recordName);
+  return sameName(recordName, selectedName);
+}
+
 function sortRecords(records) {
   return [...records].sort((a, b) => {
     const confidenceA = confidenceFromRecord(a);
@@ -208,9 +261,7 @@ function recordMatchesBase(record, query) {
   return true;
 }
 
-function findBestFromRecords(records, query) {
-  const candidates = sortRecords(records.filter((record) => recordMatchesBase(record, query)));
-
+function findBestCandidateFromCandidates(candidates, query) {
   if (query.zone) {
     const exactZone = candidates.find(
       (record) =>
@@ -256,6 +307,20 @@ function findBestFromRecords(records, query) {
   }
 
   return candidates.find((record) => record.geo_level === "country" && record.country === "ES") || null;
+}
+
+function findBestGroupFromRecords(records, query) {
+  const candidates = sortRecords(records.filter((record) => recordMatchesBase(record, query)));
+  const selected = findBestCandidateFromCandidates(candidates, query);
+  if (!selected) return null;
+
+  const group = candidates.filter((record) => sameGeoBucket(record, selected));
+  return sortRecords(group.length ? group : [selected]);
+}
+
+function findBestFromRecords(records, query) {
+  const group = findBestGroupFromRecords(records, query);
+  return group?.[0] || null;
 }
 
 async function fetchSupabaseCandidates(query) {
@@ -474,6 +539,10 @@ function monthsSince(value) {
 }
 
 function confidenceFromRecord(record = {}) {
+  if (record.source === "market_consensus" && record.confidence_score !== null && record.confidence_score !== undefined) {
+    return roundTo(clamp(asNumber(record.confidence_score), 0.15, 0.95), 2);
+  }
+
   const level = canonicalGeoLevel(record);
   const explicit = asNumber(record.confidence_score);
   const base = explicit || GEO_CONFIDENCE[level] || 0.35;
@@ -489,6 +558,99 @@ function confidenceFromRecord(record = {}) {
   if (["province", "autonomous_community", "country"].includes(level)) confidence -= 0.03;
 
   return roundTo(clamp(confidence, 0.15, 0.95), 2);
+}
+
+function median(values) {
+  const sorted = values.filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function latestValue(records, field) {
+  return sortRecords(records).find((record) => record[field])?.[field] || null;
+}
+
+function marketSourceSummary(record) {
+  return {
+    source: record.source || null,
+    price_eur_m2: asNumber(record.price_eur_m2),
+    period_label: record.period_label || null,
+    period_date: record.period_date || null,
+    source_url: record.source_url || null,
+    sample_size: asNumber(record.sample_size),
+    confidence_score: confidenceFromRecord(record)
+  };
+}
+
+function removePriceOutliers(records) {
+  const valid = records.filter((record) => asNumber(record.price_eur_m2));
+  if (valid.length < 3) return valid;
+
+  const medianPrice = median(valid.map((record) => asNumber(record.price_eur_m2)));
+  if (!medianPrice) return valid;
+
+  const filtered = valid.filter((record) => {
+    const price = asNumber(record.price_eur_m2);
+    return Math.abs(((price - medianPrice) / medianPrice) * 100) <= 35;
+  });
+
+  return filtered.length >= 2 ? filtered : valid;
+}
+
+function consensusWeight(record) {
+  const confidence = confidenceFromRecord(record);
+  return Math.max(0.05, confidence * sourceWeight(record));
+}
+
+function buildConsensusRecord(records) {
+  const valid = sortRecords((records || []).filter((record) => asNumber(record.price_eur_m2)));
+  if (!valid.length) return null;
+
+  const filtered = removePriceOutliers(valid);
+  const base = sortRecords(filtered)[0];
+  const level = canonicalGeoLevel(base);
+  const prices = filtered.map((record) => asNumber(record.price_eur_m2));
+  const totalWeight = filtered.reduce((sum, record) => sum + consensusWeight(record), 0);
+  const weightedPrice = filtered.reduce((sum, record) => {
+    return sum + asNumber(record.price_eur_m2) * consensusWeight(record);
+  }, 0);
+  const distinctSources = new Set(filtered.map((record) => normalizeText(record.source))).size;
+  const bestConfidence = Math.max(...filtered.map((record) => confidenceFromRecord(record)));
+  const boost = distinctSources >= 3 ? 0.08 : distinctSources === 2 ? 0.05 : 0;
+  const confidenceCap = GEO_CONFIDENCE_CAP[level] || 0.65;
+  const confidenceScore = roundTo(clamp(bestConfidence + boost, 0.15, confidenceCap), 2);
+
+  if (filtered.length === 1) {
+    return {
+      ...base,
+      source_count: 1,
+      source_provider_count: distinctSources,
+      sources: filtered.map(marketSourceSummary),
+      price_range_eur_m2: {
+        min: prices[0],
+        max: prices[0]
+      }
+    };
+  }
+
+  return {
+    ...base,
+    source: "market_consensus",
+    source_url: null,
+    price_eur_m2: roundTo(weightedPrice / totalWeight, 2),
+    period_label: latestValue(filtered, "period_label"),
+    period_date: latestValue(filtered, "period_date"),
+    confidence_score: confidenceScore,
+    source_count: filtered.length,
+    source_provider_count: distinctSources,
+    sources: filtered.map(marketSourceSummary),
+    price_range_eur_m2: {
+      min: Math.min(...prices),
+      max: Math.max(...prices)
+    },
+    discarded_outlier_count: valid.length - filtered.length
+  };
 }
 
 function hasFeatureCaveat(query) {
@@ -522,6 +684,12 @@ function buildCaveats(query, record, confidenceScore, differencePct) {
   }
   if (confidenceScore < 0.5) {
     caveats.push("La confianza del dato es limitada. Úsalo solo como orientación.");
+  }
+  if (asNumber(record?.source_count) > 1) {
+    caveats.push("La referencia combina varias fuentes públicas del mismo nivel geográfico para evitar depender de una sola serie.");
+  }
+  if (asNumber(record?.discarded_outlier_count) > 0) {
+    caveats.push("Se han descartado referencias atípicas antes de calcular el consenso de mercado.");
   }
   if (Math.abs(Number(differencePct)) > 25 && !["neighbourhood", "district"].includes(level)) {
     caveats.push("La diferencia frente a mercado es muy alta para una referencia amplia; conviene contrastarla con anuncios comparables del mismo barrio.");
@@ -560,18 +728,34 @@ function noDataResponse(query, error, message, extra = {}) {
   };
 }
 
+function queryFromRequest(req) {
+  if (req.query) return req.query;
+  const url = new URL(req.url || "/", `https://${req.headers?.host || "www.inmoradar.app"}`);
+  return Object.fromEntries(url.searchParams.entries());
+}
+
+function clientKey(req) {
+  return (
+    req.headers?.["x-forwarded-for"]?.split(",")[0]?.trim() ||
+    req.headers?.["x-real-ip"] ||
+    req.headers?.["cf-connecting-ip"] ||
+    "anonymous"
+  );
+}
+
 async function findMarketPrice(query) {
   if (hasSupabaseConfig()) {
     try {
       const records = await fetchSupabaseCandidates(query);
-      const match = findBestFromRecords(records, query);
+      const group = findBestGroupFromRecords(records, query);
+      const match = buildConsensusRecord(group);
       if (match) return match;
     } catch (error) {
       console.warn("[market-price] Supabase lookup failed, using fallback seed", error.message);
     }
   }
 
-  return findBestFromRecords(FALLBACK_MARKET_PRICES, query);
+  return buildConsensusRecord(findBestGroupFromRecords(FALLBACK_MARKET_PRICES, query));
 }
 
 function buildResponse(query, record) {
@@ -603,7 +787,14 @@ function buildResponse(query, record) {
     period_date: record.period_date || null,
     confidence_score: confidenceScore,
     source_url: record.source_url || null,
-    precision_label: precisionLabel(geoLevel)
+    precision_label: precisionLabel(geoLevel),
+    sources: Array.isArray(record.sources) ? record.sources : [marketSourceSummary(record)],
+    source_count: asNumber(record.source_count) || 1,
+    source_provider_count: asNumber(record.source_provider_count) || 1,
+    price_range_eur_m2: record.price_range_eur_m2 || {
+      min: marketPrice,
+      max: marketPrice
+    }
   };
 
   return {
@@ -628,6 +819,9 @@ function buildResponse(query, record) {
     autonomous_community: market.autonomous_community,
     source: market.source,
     source_url: market.source_url,
+    sources: market.sources,
+    source_count: market.source_count,
+    price_range_eur_m2: market.price_range_eur_m2,
     period_label: market.period_label,
     period_date: market.period_date,
     evolution_month_pct: asNumber(record.evolution_month_pct),
@@ -641,6 +835,150 @@ function buildResponse(query, record) {
   };
 }
 
+function buildBaseQuery(params = {}) {
+  return {
+    operation: parseOperation(params.operation),
+    municipality: params.municipality || "",
+    province: params.province || "",
+    autonomous_community: params.autonomous_community || "",
+    district: params.district || "",
+    zone: params.zone || "",
+    listing_price_total: params.listing_price_total,
+    listing_area_m2: params.listing_area_m2,
+    property_type: params.property_type || "",
+    rooms: params.rooms || "",
+    bathrooms: params.bathrooms || "",
+    floor: params.floor || "",
+    has_lift: params.has_lift || "",
+    has_parking: params.has_parking || "",
+    has_terrace: params.has_terrace || "",
+    condition: params.condition || ""
+  };
+}
+
+async function marketPricePayload(params = {}) {
+  const baseQuery = buildBaseQuery(params);
+
+  if (!baseQuery.operation) {
+    return {
+      status: 400,
+      body: noDataResponse(baseQuery, "invalid_operation", "No se ha podido comparar el precio porque no se ha detectado si es venta o alquiler.")
+    };
+  }
+
+  if (!asNumber(baseQuery.listing_price_total)) {
+    return {
+      status: 400,
+      body: noDataResponse(baseQuery, "missing_price", "No se ha podido calcular â‚¬/mÂ² porque no se ha detectado el precio.")
+    };
+  }
+
+  const area = asNumber(baseQuery.listing_area_m2);
+  if (!area || area <= 0) {
+    return {
+      status: 400,
+      body: noDataResponse(baseQuery, "missing_surface", "No se ha podido calcular â‚¬/mÂ² porque no se ha detectado la superficie.")
+    };
+  }
+
+  if (!baseQuery.municipality && !baseQuery.province && !baseQuery.autonomous_community) {
+    return {
+      status: 400,
+      body: noDataResponse(baseQuery, "missing_location", "No se ha podido buscar referencia de mercado porque no se ha detectado el municipio.")
+    };
+  }
+
+  const record = await findMarketPrice(baseQuery);
+  return {
+    status: record ? 200 : 404,
+    body: buildResponse(baseQuery, record)
+  };
+}
+
+function mergePropertyAssessmentComparison(marketAssessment, addressAssessment) {
+  const comparison = marketAssessment.comparison
+    ? { ...marketAssessment.comparison }
+    : { difference_pct: null, label: null, severity: "neutral", message: "" };
+  const addressCaveats = addressAssessment?.caveats || [];
+  const caveats = [...new Set([...(marketAssessment.caveats || []), ...addressCaveats])];
+  const strongLiftCaveat = addressCaveats.find((text) => /sin ascensor/i.test(text));
+
+  if (comparison.message && strongLiftCaveat) {
+    comparison.message = `${comparison.message} Además, ${strongLiftCaveat.charAt(0).toLowerCase()}${strongLiftCaveat.slice(1)}`;
+  }
+
+  comparison.caveats = caveats;
+  comparison.address_signals = {
+    positive: addressAssessment?.positive_signals || [],
+    warning: addressAssessment?.warning_signals || []
+  };
+  comparison.address_valuation = addressAssessment?.valuation_comparison || null;
+  return comparison;
+}
+
+async function addressIntelligencePayload(params = {}, req = { headers: {} }) {
+  const rate = checkAddressRateLimit(clientKey(req));
+  if (!rate.allowed) {
+    return {
+      status: 429,
+      body: {
+        ok: false,
+        error: "rate_limited",
+        message: "Demasiadas consultas de dirección en poco tiempo.",
+        rate_limit: rate
+      }
+    };
+  }
+
+  const result = await buildAddressIntelligenceResponse(params);
+  return {
+    status: result.ok ? 200 : result.reason === "insufficient_address_parts" ? 400 : 404,
+    body: result
+  };
+}
+
+async function propertyAssessmentPayload(params = {}) {
+  const market = await marketPricePayload(params);
+  const addressIntel = await buildAddressIntelligenceResponse(params).catch((error) => ({
+    ok: false,
+    reason: error?.message || "address_intelligence_failed",
+    message: "No se han podido obtener datos adicionales del edificio.",
+    address_intelligence: null
+  }));
+
+  const addressPayload = addressIntel.ok ? addressIntel : null;
+  const addressAssessment = addressPayload
+    ? calculateAddressPriceAdjustment(
+        {
+          price_total: params.listing_price_total,
+          surface_m2: params.listing_area_m2,
+          floor: params.floor
+        },
+        addressPayload
+      )
+    : null;
+
+  return {
+    status: market.body?.ok ? 200 : market.status || 207,
+    body: {
+      ok: Boolean(market.body?.ok || addressIntel.ok),
+      listing: market.body?.listing || null,
+      market: market.body?.market || null,
+      address_intelligence: addressPayload,
+      address_intelligence_status: addressIntel.ok
+        ? { ok: true, cache: addressIntel.cache || null }
+        : {
+            ok: false,
+            reason: addressIntel.reason || addressIntel.error || "address_intelligence_unavailable",
+            message: addressIntel.message || "No se han podido obtener datos adicionales del edificio."
+          },
+      comparison: mergePropertyAssessmentComparison(market.body || {}, addressAssessment),
+      disclaimer:
+        "Estimación orientativa. Los datos de edificio se usan como contexto y no sustituyen una tasación ni confirman el precio exacto de una vivienda."
+    }
+  };
+}
+
 async function handler(req, res) {
   if (handleCors(req, res)) return;
   if (req.method !== "GET") {
@@ -649,53 +987,23 @@ async function handler(req, res) {
   }
 
   try {
-    const operation = parseOperation(req.query?.operation);
-    const baseQuery = {
-      operation,
-      municipality: req.query?.municipality || "",
-      province: req.query?.province || "",
-      autonomous_community: req.query?.autonomous_community || "",
-      district: req.query?.district || "",
-      zone: req.query?.zone || "",
-      listing_price_total: req.query?.listing_price_total,
-      listing_area_m2: req.query?.listing_area_m2,
-      property_type: req.query?.property_type || "",
-      rooms: req.query?.rooms || "",
-      bathrooms: req.query?.bathrooms || "",
-      floor: req.query?.floor || "",
-      has_lift: req.query?.has_lift || "",
-      has_parking: req.query?.has_parking || "",
-      has_terrace: req.query?.has_terrace || "",
-      condition: req.query?.condition || ""
-    };
+    const params = queryFromRequest(req);
+    const resource = params.resource || params.endpoint || "";
 
-    if (!operation) {
-      json(res, 400, noDataResponse(baseQuery, "invalid_operation", "No se ha podido comparar el precio porque no se ha detectado si es venta o alquiler."));
+    if (resource === "address-intelligence") {
+      const result = await addressIntelligencePayload(params, req);
+      json(res, result.status, result.body);
       return;
     }
 
-    if (!asNumber(baseQuery.listing_price_total)) {
-      json(res, 400, noDataResponse(baseQuery, "missing_price", "No se ha podido calcular €/m² porque no se ha detectado el precio."));
+    if (resource === "property-assessment") {
+      const result = await propertyAssessmentPayload(params);
+      json(res, result.status, result.body);
       return;
     }
 
-    const area = asNumber(baseQuery.listing_area_m2);
-    if (!area || area <= 0) {
-      json(res, 400, noDataResponse(baseQuery, "missing_surface", "No se ha podido calcular €/m² porque no se ha detectado la superficie."));
-      return;
-    }
-
-    if (!baseQuery.municipality && !baseQuery.province && !baseQuery.autonomous_community) {
-      json(
-        res,
-        400,
-        noDataResponse(baseQuery, "missing_location", "No se ha podido buscar referencia de mercado porque no se ha detectado el municipio.")
-      );
-      return;
-    }
-
-    const record = await findMarketPrice(baseQuery);
-    json(res, record ? 200 : 404, buildResponse(baseQuery, record));
+    const result = await marketPricePayload(params);
+    json(res, result.status, result.body);
   } catch (error) {
     console.error("[market-price]", error);
     json(res, 500, { ok: false, error: "market_price_failed", disclaimer: DISCLAIMER });
@@ -706,8 +1014,12 @@ module.exports = handler;
 module.exports._internal = {
   calculateDifferencePct,
   calculateListingPriceEurM2,
+  buildConsensusRecord,
   classifyComparison,
   confidenceFromRecord,
+  findBestGroupFromRecords,
   findBestFromRecords,
+  marketPricePayload,
+  propertyAssessmentPayload,
   precisionLabel
 };
