@@ -17,6 +17,10 @@ const types = {
 
 const rewrites = {
   "/sitemap.xml": "/api/sitemap",
+  "/api/admin/summary": "/api/admin?resource=summary",
+  "/api/admin/premium/subscriptions": "/api/admin?resource=premium/subscriptions",
+  "/api/admin/seo/landings": "/api/admin?resource=seo/landings",
+  "/api/admin/seo/generate-landings": "/api/admin?resource=seo/generate-landings",
   "/admin": "/admin.html",
   "/premium": "/premium.html",
   "/privacidad": "/privacidad.html",

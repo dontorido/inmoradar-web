@@ -7,6 +7,10 @@
   ],
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
+    { "source": "/api/admin/summary", "destination": "/api/admin?resource=summary" },
+    { "source": "/api/admin/premium/subscriptions", "destination": "/api/admin?resource=premium/subscriptions" },
+    { "source": "/api/admin/seo/landings", "destination": "/api/admin?resource=seo/landings" },
+    { "source": "/api/admin/seo/generate-landings", "destination": "/api/admin?resource=seo/generate-landings" },
     { "source": "/precio-metro-cuadrado/:city", "destination": "/api/seo-page?slug=precio-metro-cuadrado/:city" },
     { "source": "/precio-metro-cuadrado/:city/", "destination": "/api/seo-page?slug=precio-metro-cuadrado/:city" },
     { "source": "/admin", "destination": "/admin.html" },

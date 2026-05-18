@@ -18,14 +18,12 @@ Web estatica de lanzamiento para InmoRadar.
 - `api/lemonsqueezy-checkout.js`: crea checkouts de Lemon Squeezy en modo prueba o produccion sin exponer la API key.
 - `api/lemonsqueezy-webhook.js`: webhook preparado para sincronizar suscripciones de Lemon Squeezy.
 - `admin.html`, `assets/admin.js` y `assets/admin.css`: backoffice protegido por `ADMIN_IMPORT_TOKEN`.
-- `api/admin/summary.js`: resumen operativo de Premium, SEO y estado de integraciones.
-- `api/admin/premium/subscriptions.js`: listado admin de suscripciones Premium.
-- `api/admin/seo/landings.js`: listado y acciones admin para landings SEO.
+- `api/admin.js`: backoffice API compacta para Premium, SEO y estado de integraciones. Se usa una sola serverless function para respetar el limite de Vercel Hobby.
 - `database/premium-subscriptions.sql`: tabla Supabase para guardar suscripciones Premium.
 - `api/market-price.js`: endpoint agregado para que la extension consulte precios de mercado por zona.
 - `database/market-price-sources.sql`: tabla Supabase `market_price_sources` y seed minimo de mercado.
 - `database/seo-landings.sql`: tablas `seo_landing_opportunities` y `seo_landings`, con seed de 5 oportunidades `price_city`.
-- `api/admin/seo/generate-landings.js`: generador admin protegido por `ADMIN_IMPORT_TOKEN`.
+- `api/admin.js?resource=seo/generate-landings`: generador admin protegido por `ADMIN_IMPORT_TOKEN`.
 - `api/cron/seo-publish.js`: cron protegido por `CRON_SECRET` o `ADMIN_IMPORT_TOKEN` para regenerar drafts y publicar una landing elegible.
 - `.github/workflows/seo-cron.yml`: ejecuta el endpoint SEO cada 6 horas desde GitHub Actions; Vercel Hobby queda con un cron diario compatible.
 - `api/seo-page.js`: render publico de landings SEO por slug.
@@ -180,10 +178,10 @@ Dry run local:
 npm run seo:generate -- --limit=5 --dry-run
 ```
 
-Endpoint admin:
+Endpoint admin SEO:
 
 ```text
-POST /api/admin/seo/generate-landings
+POST /api/admin?resource=seo/generate-landings
 Authorization: Bearer ADMIN_IMPORT_TOKEN
 ```
 

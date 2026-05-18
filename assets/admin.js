@@ -180,7 +180,7 @@ function renderSeo(rows) {
 }
 
 async function loadSummary() {
-  const summary = await api("/api/admin/summary");
+  const summary = await api("/api/admin?resource=summary");
   renderStats(summary);
 }
 
@@ -190,7 +190,7 @@ async function loadPremium() {
     status: state.premium.status || "all"
   });
   if (state.premium.q) params.set("q", state.premium.q);
-  const payload = await api(`/api/admin/premium/subscriptions?${params.toString()}`);
+  const payload = await api(`/api/admin?resource=premium/subscriptions&${params.toString()}`);
   renderPremium(payload.subscriptions || []);
 }
 
@@ -199,7 +199,7 @@ async function loadSeo() {
     limit: "50",
     status: state.seo.status || "all"
   });
-  const payload = await api(`/api/admin/seo/landings?${params.toString()}`);
+  const payload = await api(`/api/admin?resource=seo/landings&${params.toString()}`);
   renderSeo(payload.landings || []);
 }
 
@@ -241,7 +241,7 @@ async function runSeoGeneration(mode) {
         };
 
   showStatus(mode === "publish" ? "Buscando SEO elegible para publicar..." : "Generando draft SEO...");
-  await api("/api/admin/seo/generate-landings", {
+  await api("/api/admin?resource=seo/generate-landings", {
     method: "POST",
     body: JSON.stringify(payload)
   });
@@ -250,7 +250,7 @@ async function runSeoGeneration(mode) {
 
 async function runSeoRowAction(action, slug) {
   showStatus(`${action} · ${slug}`);
-  await api("/api/admin/seo/landings", {
+  await api("/api/admin?resource=seo/landings", {
     method: "POST",
     body: JSON.stringify({ action, slug })
   });
