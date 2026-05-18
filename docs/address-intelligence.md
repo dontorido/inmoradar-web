@@ -85,6 +85,14 @@ https://ovc.catastro.meh.es/OVCServWeb/OVCWcfCallejero/COVCCallejero.svc/json/Co
 
 La documentación oficial de Catastro indica que los servicios libres permiten REST/GET y formato JSON para servicios de callejero y datos catastrales no protegidos. Esta fuente no devuelve valoración ni servicios cercanos, pero sí puede aportar referencia catastral, domicilio, uso, superficie y antigüedad cuando la dirección encaja.
 
+El fallback no se queda en una sola llamada. Si `Consulta_DNPLOC` responde con errores como `EL NUMERO NO EXISTE`, intenta:
+
+1. `ConsultaVia` para normalizar el nombre/tipo de vía.
+2. `ConsultaNumero` para encontrar numeración candidata.
+3. `Consulta_DNPLOC` con la vía y número normalizados.
+
+Si después de ese flujo solo hay errores de Catastro, el endpoint devuelve `ok:false` y la extensión debe omitir el bloque de edificio.
+
 Cuando la respuesta sale de Catastro:
 
 - `source = "catastro"`

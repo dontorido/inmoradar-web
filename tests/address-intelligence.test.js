@@ -4,10 +4,12 @@ const assert = require("node:assert/strict");
 const {
   buildAddressIntelligenceResponse,
   buildCatastroDnpLocUrl,
+  buildCatastroViaUrl,
   buildIdealistaMapsUrl,
   calculateAddressPriceAdjustment,
   clearAddressIntelCache,
   parseCatastroPayload,
+  parseCatastroViaCandidates,
   parseIdealistaMapsHtml,
   splitSpanishStreetType,
   slugifyIdealistaMapsPart
@@ -85,6 +87,36 @@ const MOCK_CATASTRO = {
   }
 };
 
+const MOCK_CATASTRO_ERROR = {
+  consulta_dnp: {
+    control: { cuerr: "1" },
+    lerr: {
+      err: { cod: "43", des: "EL NUMERO NO EXISTE" }
+    }
+  }
+};
+
+const MOCK_CATASTRO_VIA = {
+  consulta_callejero: {
+    callejero: {
+      calle: {
+        dir: { tv: "CL", nv: "SERRANO", cv: "12345" }
+      }
+    }
+  }
+};
+
+const MOCK_CATASTRO_NUMERO = {
+  consulta_numerero: {
+    numerero: {
+      nump: {
+        pc: { pc1: "1234567", pc2: "VK4713A" },
+        num: { pnp: "45" }
+      }
+    }
+  }
+};
+
 test("slugifyIdealistaMapsPart construye slugs compatibles con idealista/maps", () => {
   assert.equal(slugifyIdealistaMapsPart("El Campello"), "el-campello");
   assert.equal(slugifyIdealistaMapsPart("Alicante"), "alicante");
@@ -118,6 +150,20 @@ test("splitSpanishStreetType y buildCatastroDnpLocUrl preparan consulta oficial"
   assert.match(url, /Consulta_DNPLOC/);
   assert.match(url, /TipoVia=AV/);
   assert.match(url, /NomVia=Metro\+Del/);
+});
+
+test("buildCatastroViaUrl y parseCatastroViaCandidates preparan candidatos de vía", () => {
+  const url = buildCatastroViaUrl({
+    province: "Madrid",
+    municipality: "Madrid",
+    street: "Calle Serrano"
+  });
+  assert.match(url, /ConsultaVia/);
+  assert.match(url, /TipoVia=CL/);
+  assert.match(url, /NomVia=Serrano/);
+  assert.deepEqual(parseCatastroViaCandidates(MOCK_CATASTRO_VIA), [
+    { tipo_via: "CL", nom_via: "SERRANO", codigo_via: "12345", raw: { dir: { tv: "CL", nv: "SERRANO", cv: "12345" } } }
+  ]);
 });
 
 test("parseIdealistaMapsHtml extrae datos de edificio, fincas y valoración", () => {
@@ -195,7 +241,8 @@ test("buildAddressIntelligenceResponse maneja 404 sin romper", async () => {
       province: "Madrid"
     },
     {
-      fetchImpl: async () => ({ ok: false, status: 404, text: async () => "" })
+      fetchImpl: async () => ({ ok: false, status: 404, text: async () => "" }),
+      useCatastroFallback: false
     }
   );
 
@@ -226,6 +273,59 @@ test("buildAddressIntelligenceResponse usa Catastro si idealista/maps devuelve 4
   assert.equal(response.source, "catastro");
   assert.equal(response.cache.layer, "catastro_fallback");
   assert.equal(response.building.year_built, 1965);
+});
+
+test("buildAddressIntelligenceResponse usa vía y número candidatos si DNPLOC falla", async () => {
+  clearAddressIntelCache();
+  const calls = [];
+  const response = await buildAddressIntelligenceResponse(
+    {
+      street: "Calle Serrano",
+      street_number: "45",
+      municipality: "Madrid",
+      province: "Madrid"
+    },
+    {
+      fetchImpl: async () => ({ ok: false, status: 403, text: async () => "" }),
+      catastroFetchImpl: async (url) => {
+        calls.push(String(url));
+        if (String(url).includes("Consulta_DNPLOC") && calls.length === 1) {
+          return { ok: true, json: async () => MOCK_CATASTRO_ERROR };
+        }
+        if (String(url).includes("ConsultaVia")) {
+          return { ok: true, json: async () => MOCK_CATASTRO_VIA };
+        }
+        if (String(url).includes("ConsultaNumero")) {
+          return { ok: true, json: async () => MOCK_CATASTRO_NUMERO };
+        }
+        return { ok: true, json: async () => MOCK_CATASTRO };
+      }
+    }
+  );
+
+  assert.equal(response.ok, true);
+  assert.equal(response.source, "catastro");
+  assert.equal(response.raw_payload.catastro_candidate_flow.via.nom_via, "SERRANO");
+  assert.equal(response.building_refs[0], "6966104YH2566N0003DE");
+});
+
+test("buildAddressIntelligenceResponse no devuelve ok=true si Catastro solo trae errores", async () => {
+  clearAddressIntelCache();
+  const response = await buildAddressIntelligenceResponse(
+    {
+      street: "Calle Inexistente",
+      street_number: "999",
+      municipality: "Madrid",
+      province: "Madrid"
+    },
+    {
+      fetchImpl: async () => ({ ok: false, status: 403, text: async () => "" }),
+      catastroFetchImpl: async () => ({ ok: true, json: async () => MOCK_CATASTRO_ERROR })
+    }
+  );
+
+  assert.equal(response.ok, false);
+  assert.equal(response.reason, "maps_fetch_failed");
 });
 
 test("calculateAddressPriceAdjustment añade caveats de edificio", () => {

@@ -3,6 +3,10 @@ const { hasSupabaseConfig, supabaseFetch } = require("../_utils");
 const IDEALISTA_MAPS_BASE_URL = "https://www.idealista.com/maps";
 const CATASTRO_DNPLOC_URL =
   "https://ovc.catastro.meh.es/OVCServWeb/OVCWcfCallejero/COVCCallejero.svc/json/Consulta_DNPLOC";
+const CATASTRO_VIA_URL =
+  "https://ovc.catastro.meh.es/OVCServWeb/OVCWcfCallejero/COVCCallejero.svc/json/ConsultaVia";
+const CATASTRO_NUMERO_URL =
+  "https://ovc.catastro.meh.es/OVCServWeb/OVCWcfCallejero/COVCCallejero.svc/json/ConsultaNumero";
 const IDEALISTA_MAPS_SOURCE = "idealista_maps";
 const CATASTRO_SOURCE = "catastro";
 const DEFAULT_TTL_MS = 60 * 24 * 60 * 60 * 1000;
@@ -404,6 +408,33 @@ function parseCatastroPayload(payload, context = {}) {
   return intel;
 }
 
+function catastroErrors(payload = {}) {
+  const errors = asArray(
+    payload?.consulta_dnp?.lerr?.err ||
+      payload?.consulta_callejero?.lerr?.err ||
+      payload?.consulta_numerero?.lerr?.err ||
+      payload?.lerr?.err
+  );
+  const control =
+    payload?.consulta_dnp?.control ||
+    payload?.consulta_callejero?.control ||
+    payload?.consulta_numerero?.control ||
+    payload?.control ||
+    {};
+  if (!errors.length && asNumber(control.cuerr) > 0) {
+    return [{ cod: "unknown", des: "Catastro devolvió errores sin detalle" }];
+  }
+  return errors;
+}
+
+function hasUsefulCatastroIntel(intel = {}) {
+  if (!intel || intel.source !== CATASTRO_SOURCE) return false;
+  if ((intel.building_refs || []).length) return true;
+  if ((intel.units || []).some((unit) => unit.cadastral_ref || unit.surface_m2 || unit.use_type)) return true;
+  if (intel.building?.year_built) return true;
+  return false;
+}
+
 function parseIdealistaMapsHtml(html, context = {}) {
   const lines = htmlToLines(html);
   const address = parseAddress(lines, context);
@@ -719,7 +750,9 @@ async function fetchIdealistaMapsHtml(sourceUrl, fetchImpl = fetch) {
 }
 
 function buildCatastroDnpLocUrl(input = {}) {
-  const { tipo_via: tipoVia, nom_via: nomVia } = splitSpanishStreetType(input.street);
+  const split = splitSpanishStreetType(input.street);
+  const tipoVia = input.tipo_via || input.catastro_tipo_via || split.tipo_via;
+  const nomVia = input.nom_via || input.catastro_nom_via || split.nom_via;
   const url = new URL(CATASTRO_DNPLOC_URL);
   url.searchParams.set("Provincia", input.province || "");
   url.searchParams.set("Municipio", input.municipality || "");
@@ -729,8 +762,28 @@ function buildCatastroDnpLocUrl(input = {}) {
   return url.toString();
 }
 
-async function fetchCatastroAddressIntel(input = {}, fetchImpl = fetch) {
-  const sourceUrl = buildCatastroDnpLocUrl(input);
+function buildCatastroViaUrl(input = {}) {
+  const split = splitSpanishStreetType(input.street);
+  const url = new URL(CATASTRO_VIA_URL);
+  url.searchParams.set("Provincia", input.province || "");
+  url.searchParams.set("Municipio", input.municipality || "");
+  url.searchParams.set("TipoVia", input.tipo_via || split.tipo_via);
+  url.searchParams.set("NomVia", input.nom_via || split.nom_via);
+  return url.toString();
+}
+
+function buildCatastroNumeroUrl(input = {}, via = {}) {
+  const split = splitSpanishStreetType(input.street);
+  const url = new URL(CATASTRO_NUMERO_URL);
+  url.searchParams.set("Provincia", input.province || "");
+  url.searchParams.set("Municipio", input.municipality || "");
+  url.searchParams.set("TipoVia", via.tipo_via || input.tipo_via || split.tipo_via);
+  url.searchParams.set("NomVia", via.nom_via || input.nom_via || split.nom_via);
+  url.searchParams.set("Numero", input.street_number || "");
+  return url.toString();
+}
+
+async function fetchCatastroJson(sourceUrl, fetchImpl = fetch) {
   const timeout = withTimeout();
   try {
     const response = await fetchImpl(sourceUrl, {
@@ -743,23 +796,7 @@ async function fetchCatastroAddressIntel(input = {}, fetchImpl = fetch) {
     if (!response.ok) {
       return { ok: false, reason: "catastro_fetch_failed", status: response.status, source_url: sourceUrl };
     }
-    const payload = await response.json();
-    const errors = asArray(payload?.consulta_dnp?.lerr?.err || payload?.lerr?.err);
-    if (errors.length) {
-      return {
-        ok: false,
-        reason: "catastro_not_found",
-        status: 404,
-        source_url: sourceUrl,
-        errors
-      };
-    }
-
-    const intel = parseCatastroPayload(payload, { ...input, source_url: sourceUrl });
-    if (!intel.building_refs.length && !intel.units.length && !intel.address_full) {
-      return { ok: false, reason: "catastro_parse_empty", source_url: sourceUrl };
-    }
-    return { ok: true, intel };
+    return { ok: true, payload: await response.json(), source_url: sourceUrl };
   } catch (error) {
     return {
       ok: false,
@@ -769,6 +806,134 @@ async function fetchCatastroAddressIntel(input = {}, fetchImpl = fetch) {
   } finally {
     timeout.done();
   }
+}
+
+function parseCatastroViaCandidates(payload = {}) {
+  const calles = asArray(payload?.consulta_callejero?.callejero?.calle || payload?.callejero?.calle);
+  return calles
+    .map((calle) => ({
+      tipo_via: calle?.dir?.tv || "",
+      nom_via: calle?.dir?.nv || "",
+      codigo_via: calle?.dir?.cv || "",
+      raw: calle
+    }))
+    .filter((candidate) => candidate.nom_via)
+    .slice(0, 8);
+}
+
+function parseCatastroNumeroCandidates(payload = {}) {
+  const numeros = asArray(payload?.consulta_numerero?.numerero?.nump || payload?.numerero?.nump);
+  return numeros
+    .map((item) => {
+      const number = [item?.num?.pnp, item?.num?.plp].filter(Boolean).join("");
+      return {
+        street_number: number || null,
+        pc1: item?.pc?.pc1 || null,
+        pc2: item?.pc?.pc2 || null,
+        raw: item
+      };
+    })
+    .filter((candidate) => candidate.street_number)
+    .slice(0, 10);
+}
+
+function pickBestNumberCandidate(candidates, requestedNumber) {
+  const requested = normalizeText(requestedNumber);
+  return (
+    candidates.find((candidate) => normalizeText(candidate.street_number) === requested) ||
+    candidates.find((candidate) => normalizeText(candidate.street_number).startsWith(requested)) ||
+    candidates[0] ||
+    null
+  );
+}
+
+async function fetchCatastroIntelDirect(input, sourceUrl, fetchImpl) {
+  const fetched = await fetchCatastroJson(sourceUrl, fetchImpl);
+  if (!fetched.ok) return fetched;
+  const errors = catastroErrors(fetched.payload);
+  if (errors.length) {
+    return {
+      ok: false,
+      reason: "catastro_not_found",
+      status: 404,
+      source_url: sourceUrl,
+      errors
+    };
+  }
+
+  const intel = parseCatastroPayload(fetched.payload, { ...input, source_url: sourceUrl });
+  if (!hasUsefulCatastroIntel(intel)) {
+    return { ok: false, reason: "catastro_parse_empty", source_url: sourceUrl };
+  }
+  return { ok: true, intel };
+}
+
+async function fetchCatastroIntelWithCandidates(input = {}, fetchImpl = fetch) {
+  const viaUrl = buildCatastroViaUrl(input);
+  const viaResponse = await fetchCatastroJson(viaUrl, fetchImpl);
+  if (!viaResponse.ok || catastroErrors(viaResponse.payload).length) {
+    return {
+      ok: false,
+      reason: "catastro_via_not_found",
+      source_url: viaUrl,
+      errors: viaResponse.payload ? catastroErrors(viaResponse.payload) : []
+    };
+  }
+
+  const vias = parseCatastroViaCandidates(viaResponse.payload);
+  for (const via of vias) {
+    const numeroUrl = buildCatastroNumeroUrl(input, via);
+    const numeroResponse = await fetchCatastroJson(numeroUrl, fetchImpl);
+    if (!numeroResponse.ok || catastroErrors(numeroResponse.payload).length) continue;
+
+    const numbers = parseCatastroNumeroCandidates(numeroResponse.payload);
+    const number = pickBestNumberCandidate(numbers, input.street_number);
+    if (!number) continue;
+
+    const dnpInput = {
+      ...input,
+      tipo_via: via.tipo_via,
+      nom_via: via.nom_via,
+      street_number: number.street_number || input.street_number
+    };
+    const dnpUrl = buildCatastroDnpLocUrl(dnpInput);
+    const direct = await fetchCatastroIntelDirect(
+      {
+        ...dnpInput,
+        street: [via.tipo_via, via.nom_via].filter(Boolean).join(" ")
+      },
+      dnpUrl,
+      fetchImpl
+    );
+    if (direct.ok) {
+      direct.intel.raw_payload = {
+        ...(direct.intel.raw_payload || {}),
+        catastro_candidate_flow: {
+          via_url: viaUrl,
+          numero_url: numeroUrl,
+          dnp_url: dnpUrl,
+          via,
+          number
+        }
+      };
+      return direct;
+    }
+  }
+
+  return { ok: false, reason: "catastro_candidates_not_found", source_url: viaUrl };
+}
+
+async function fetchCatastroAddressIntel(input = {}, fetchImpl = fetch) {
+  const sourceUrl = buildCatastroDnpLocUrl(input);
+  const direct = await fetchCatastroIntelDirect(input, sourceUrl, fetchImpl);
+  if (direct.ok) return direct;
+  const candidate = await fetchCatastroIntelWithCandidates(input, fetchImpl);
+  if (candidate.ok) return candidate;
+  return {
+    ...direct,
+    candidate_reason: candidate.reason,
+    candidate_source_url: candidate.source_url
+  };
 }
 
 function normalizeInput(input = {}) {
@@ -874,6 +1039,8 @@ module.exports = {
   DEFAULT_TTL_MS,
   buildAddressIntelligenceResponse,
   buildCatastroDnpLocUrl,
+  buildCatastroNumeroUrl,
+  buildCatastroViaUrl,
   buildIdealistaMapsUrl,
   calculateAddressPriceAdjustment,
   checkAddressRateLimit,
@@ -883,6 +1050,8 @@ module.exports = {
   getCachedAddressIntel,
   normalizedAddressKey,
   parseCatastroPayload,
+  parseCatastroNumeroCandidates,
+  parseCatastroViaCandidates,
   parseIdealistaMapsHtml,
   setCachedAddressIntel,
   splitSpanishStreetType,
