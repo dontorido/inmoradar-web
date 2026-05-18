@@ -21,7 +21,8 @@ Web estatica de lanzamiento para InmoRadar.
 - `database/market-price-sources.sql`: tabla Supabase `market_price_sources` y seed minimo de mercado.
 - `database/seo-landings.sql`: tablas `seo_landing_opportunities` y `seo_landings`, con seed de 5 oportunidades `price_city`.
 - `api/admin/seo/generate-landings.js`: generador admin protegido por `ADMIN_IMPORT_TOKEN`.
-- `api/cron/seo-publish.js`: cron protegido por `CRON_SECRET` o `ADMIN_IMPORT_TOKEN` para regenerar drafts y publicar una landing elegible cada 6 horas.
+- `api/cron/seo-publish.js`: cron protegido por `CRON_SECRET` o `ADMIN_IMPORT_TOKEN` para regenerar drafts y publicar una landing elegible.
+- `.github/workflows/seo-cron.yml`: ejecuta el endpoint SEO cada 6 horas desde GitHub Actions; Vercel Hobby queda con un cron diario compatible.
 - `api/seo-page.js`: render publico de landings SEO por slug.
 - `api/sitemap.js`: sitemap dinamico con landings publicadas e indexables.
 - `scripts/seo-generate.js`: dry run local del generador SEO.
@@ -174,4 +175,4 @@ GET /api/cron/seo-publish
 Authorization: Bearer CRON_SECRET
 ```
 
-Vercel lo ejecuta cada 6 horas (`0 */6 * * *`). El cron intenta primero landings existentes en `draft`, `needs_review` o `ready_to_publish`, las regenera con datos frescos y publica como maximo una por ejecucion si llega a `quality_score >= 85`. Si no hay datos reales suficientes, la landing queda `noindex` y el cron pasa a la siguiente candidata.
+GitHub Actions lo ejecuta cada 6 horas (`0 */6 * * *`) usando el secreto `CRON_SECRET` del repo. Vercel Hobby tambien conserva un cron diario compatible (`0 7 * * *`) porque ese plan no permite crons mas frecuentes. El cron intenta primero landings existentes en `draft`, `needs_review` o `ready_to_publish`, las regenera con datos frescos y publica como maximo una por ejecucion si llega a `quality_score >= 85`. Si no hay datos reales suficientes, la landing queda `noindex` y el cron pasa a la siguiente candidata.

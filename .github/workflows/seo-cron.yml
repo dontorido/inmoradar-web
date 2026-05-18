@@ -1,0 +1,20 @@
+name: SEO landing cron
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  publish-seo-landing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger InmoRadar SEO cron
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$CRON_SECRET"
+          curl --fail-with-body \
+            --request GET \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            https://inmoradar.app/api/cron/seo-publish
