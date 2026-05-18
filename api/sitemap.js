@@ -14,8 +14,13 @@ async function fetchPublishedLandings() {
     order: "published_at.desc",
     limit: "500"
   });
-  const rows = await supabaseFetch(`seo_landings?${params.toString()}`);
-  const landings = Array.isArray(rows) ? rows : [];
+  let landings = [];
+  try {
+    const rows = await supabaseFetch(`seo_landings?${params.toString()}`);
+    landings = Array.isArray(rows) ? rows : [];
+  } catch (error) {
+    console.warn("[sitemap] Supabase landing lookup failed, using seed fallback", error.message);
+  }
   if (seed && !landings.some((landing) => landing.slug === seed.slug)) {
     landings.unshift(seed);
   }

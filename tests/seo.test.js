@@ -8,6 +8,7 @@ const { buildPriceCityLanding } = require("../api/_seo/priceCity");
 const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { runSeoLandingGeneration } = require("../api/_seo/generator");
 const { getSeedPublishedLanding } = require("../api/_seo/seedPublished");
+const seoPageHandler = require("../api/seo-page");
 const { renderLandingHtml } = require("../api/seo-page");
 
 test("price_city genera una landing de alta calidad cuando hay datos reales, fuente y fecha", async () => {
@@ -92,4 +93,42 @@ test("la primera landing seed queda publicada e indexable", async () => {
   assert.equal(landing.index_status, "index");
   assert.ok(landing.quality_score >= 85);
   assert.match(landing.body_html, /Fuente:/);
+});
+
+test("el render publico usa fallback si Supabase esta configurado pero falla", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "sb_secret_test";
+
+  const req = {
+    method: "GET",
+    url: "/api/seo-page?slug=precio-metro-cuadrado/logrono",
+    headers: { host: "inmoradar.app" }
+  };
+  const chunks = [];
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+
+  try {
+    await seoPageHandler(req, res);
+  } finally {
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+
+  const html = chunks.join("");
+  assert.equal(res.statusCode, 200);
+  assert.match(html, /Precio del metro cuadrado en Logro/);
+  assert.match(html, /index,follow/);
 });

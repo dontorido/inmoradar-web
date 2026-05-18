@@ -17,9 +17,14 @@ async function fetchLanding(slug) {
     slug: `eq.${slug}`,
     limit: "1"
   });
-  const result = await supabaseFetch(`seo_landings?${params.toString()}`);
-  const landing = Array.isArray(result) ? result[0] || null : null;
-  return landing || getSeedPublishedLanding(slug);
+  try {
+    const result = await supabaseFetch(`seo_landings?${params.toString()}`);
+    const landing = Array.isArray(result) ? result[0] || null : null;
+    return landing || getSeedPublishedLanding(slug);
+  } catch (error) {
+    console.warn("[seo-page] Supabase landing lookup failed, using seed fallback", error.message);
+    return getSeedPublishedLanding(slug);
+  }
 }
 
 function faqStructuredData(landing) {
