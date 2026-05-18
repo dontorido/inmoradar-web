@@ -429,10 +429,20 @@ function catastroErrors(payload = {}) {
 
 function hasUsefulCatastroIntel(intel = {}) {
   if (!intel || intel.source !== CATASTRO_SOURCE) return false;
+  return hasUsefulAddressIntel(intel);
+}
+
+function hasUsefulAddressIntel(intel = {}) {
+  if (!intel) return false;
   if ((intel.building_refs || []).length) return true;
   if ((intel.units || []).some((unit) => unit.cadastral_ref || unit.surface_m2 || unit.use_type)) return true;
   if (intel.building?.year_built) return true;
-  return false;
+  if (intel.building?.has_lift !== null && intel.building?.has_lift !== undefined) return true;
+  if (intel.building?.floors || intel.building?.homes_count || intel.building?.commercial_units_count) return true;
+  if (intel.valuation?.min_price || intel.valuation?.max_price) return true;
+  const nearby = intel.nearby_services || {};
+  if (nearby.nearest_transport_distance_km !== null && nearby.nearest_transport_distance_km !== undefined) return true;
+  return Object.values(nearby).some((value) => Number(value) > 0);
 }
 
 function parseIdealistaMapsHtml(html, context = {}) {
@@ -648,6 +658,10 @@ function getMemoryCache(key) {
     memoryCache.delete(key);
     return null;
   }
+  if (!hasUsefulAddressIntel(item.value)) {
+    memoryCache.delete(key);
+    return null;
+  }
   return item.value;
 }
 
@@ -667,7 +681,8 @@ async function getPersistentCache(key) {
     limit: "1"
   });
   const rows = await supabaseFetch(`address_intelligence_cache?${params.toString()}`);
-  return rowToIntel(Array.isArray(rows) ? rows[0] : null);
+  const intel = rowToIntel(Array.isArray(rows) ? rows[0] : null);
+  return hasUsefulAddressIntel(intel) ? intel : null;
 }
 
 async function setPersistentCache(key, intel, ttlMs = DEFAULT_TTL_MS) {
@@ -1054,6 +1069,7 @@ module.exports = {
   parseCatastroViaCandidates,
   parseIdealistaMapsHtml,
   setCachedAddressIntel,
+  hasUsefulAddressIntel,
   splitSpanishStreetType,
   slugifyIdealistaMapsPart
 };

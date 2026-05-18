@@ -8,6 +8,7 @@ const {
   buildIdealistaMapsUrl,
   calculateAddressPriceAdjustment,
   clearAddressIntelCache,
+  hasUsefulAddressIntel,
   parseCatastroPayload,
   parseCatastroViaCandidates,
   parseIdealistaMapsHtml,
@@ -206,6 +207,37 @@ test("parseCatastroPayload extrae referencia, antigüedad y superficies", () => 
   assert.equal(parsed.building_refs[0], "6966104YH2566N0003DE");
   assert.equal(parsed.units.length, 2);
   assert.equal(parsed.units[0].surface_m2, 121);
+});
+
+test("hasUsefulAddressIntel rechaza cachés sin datos útiles", () => {
+  assert.equal(
+    hasUsefulAddressIntel({
+      source: "catastro",
+      address_full: "Calle Serrano, 45, Madrid",
+      building_refs: [],
+      units: [],
+      building: {
+        year_built: null,
+        has_lift: null,
+        floors: null,
+        homes_count: null,
+        commercial_units_count: null
+      },
+      valuation: { min_price: null, max_price: null },
+      nearby_services: {}
+    }),
+    false
+  );
+  assert.equal(
+    hasUsefulAddressIntel({
+      source: "catastro",
+      address_full: "Calle Serrano, 45, Madrid",
+      building_refs: ["1234567VK4713A0001AB"],
+      units: [],
+      building: {}
+    }),
+    true
+  );
 });
 
 test("buildAddressIntelligenceResponse devuelve cache hit tras un primer miss", async () => {
