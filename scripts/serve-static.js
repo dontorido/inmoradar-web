@@ -50,7 +50,8 @@ function runApiHandler(apiRoute, req, res) {
 
 http.createServer((req, res) => {
   const parsed = new URL(req.url, `http://${req.headers.host}`);
-  const route = routeDynamic(parsed.pathname);
+  const routeBase = routeDynamic(parsed.pathname);
+  const route = routeBase.startsWith("/api/") && !routeBase.includes("?") ? `${routeBase}${parsed.search}` : routeBase;
   if (route.startsWith("/api/") && runApiHandler(route, req, res)) return;
 
   const relative = route === "/" ? "/index.html" : route;

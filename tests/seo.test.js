@@ -76,6 +76,7 @@ test("las landings publicas incluyen Google Tag Manager", () => {
   assert.match(html, /GTM-NWHKRNMD/);
   assert.match(html, /googletagmanager\.com\/gtm\.js/);
   assert.match(html, /googletagmanager\.com\/ns\.html/);
+  assert.match(html, /\/api\/og\/price-city/);
 });
 
 test("la home tiene seccion Noticias con enlaces a publicaciones", () => {
