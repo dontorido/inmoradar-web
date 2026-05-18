@@ -28,6 +28,12 @@ module.exports = async function handler(req, res) {
     supabase_configured: supabaseConfigured,
     supabase_market_prices_readable: marketPricesReadable,
     supabase_market_prices_error: marketPricesError,
+    lemonsqueezy_checkout_configured: Boolean(
+      process.env.LEMONSQUEEZY_API_KEY &&
+        process.env.LEMONSQUEEZY_STORE_ID &&
+        process.env.LEMONSQUEEZY_VARIANT_ID
+    ),
+    lemonsqueezy_test_mode: String(process.env.LEMONSQUEEZY_TEST_MODE || "true").toLowerCase() !== "false",
     lemonsqueezy_webhook_configured: Boolean(process.env.LEMONSQUEEZY_WEBHOOK_SECRET)
   });
 };

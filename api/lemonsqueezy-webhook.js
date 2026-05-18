@@ -20,8 +20,8 @@ function pickEmail(attributes, meta) {
 
 function normalizeStatus(eventName, attributes) {
   const status = String(attributes.status || "").toLowerCase();
+  if (eventName === "order_created" && status === "paid") return "active";
   if (status) return status;
-  if (eventName === "order_created" && attributes.status === "paid") return "active";
   if (eventName === "subscription_cancelled") return "cancelled";
   if (eventName === "subscription_expired") return "expired";
   return "unknown";

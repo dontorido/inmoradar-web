@@ -10,11 +10,12 @@ Web estatica de lanzamiento para InmoRadar.
 - `terminos.html`: terminos de uso iniciales.
 - `success.html`: retorno tras pago correcto.
 - `cancel.html`: retorno tras pago cancelado.
-- `assets/app.js`: URL de checkout editable.
+- `assets/app.js`: abre el checkout Premium desde el endpoint backend.
 - `assets/hero-inmoradar.png`: visual principal local.
 - `robots.txt` y `sitemap.xml`.
 - `_redirects` y `vercel.json` para que `/premium`, `/privacidad`, `/terminos`, `/success` y `/cancel` funcionen en Netlify/Vercel.
 - `api/check-premium.js`: endpoint para que la extension compruebe si un email tiene Premium.
+- `api/lemonsqueezy-checkout.js`: crea checkouts de Lemon Squeezy en modo prueba o produccion sin exponer la API key.
 - `api/lemonsqueezy-webhook.js`: webhook preparado para sincronizar suscripciones de Lemon Squeezy.
 - `database/premium-subscriptions.sql`: tabla Supabase para guardar suscripciones Premium.
 - `api/market-price.js`: endpoint agregado para que la extension consulte precios de mercado por zona.
@@ -35,13 +36,13 @@ Web estatica de lanzamiento para InmoRadar.
 
 ## Checkout
 
-Ahora mismo el checkout esta en modo placeholder:
+El checkout Premium se crea en backend mediante Lemon Squeezy:
 
-```js
-const CHECKOUT_URL = "https://inmoradar.lemonsqueezy.com/buy/REEMPLAZAR";
+```text
+POST /api/lemonsqueezy-checkout
 ```
 
-Cuando tengas el producto creado en Lemon Squeezy o Stripe, cambia esa URL en `assets/app.js`.
+Por defecto usa `LEMONSQUEEZY_TEST_MODE=true`, asi que sirve para probar compras sin cobrar dinero real. Los botones con `data-checkout-button` llaman a este endpoint y redirigen al `checkout_url` devuelto por Lemon Squeezy.
 
 ## Probar en local
 
@@ -70,10 +71,20 @@ Configurar en Vercel:
 ```text
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
+LEMONSQUEEZY_API_KEY=
+LEMONSQUEEZY_STORE_ID=
+LEMONSQUEEZY_VARIANT_ID=
+LEMONSQUEEZY_TEST_MODE=true
 LEMONSQUEEZY_WEBHOOK_SECRET=
 ADMIN_IMPORT_TOKEN=
 CRON_SECRET=
 PUBLIC_SITE_URL=https://inmoradar.app
+```
+
+El endpoint de checkout quedara en:
+
+```text
+https://www.inmoradar.app/api/lemonsqueezy-checkout
 ```
 
 El endpoint de comprobacion quedara en:
