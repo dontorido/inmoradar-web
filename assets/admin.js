@@ -254,7 +254,7 @@ async function runSeoGeneration(mode) {
   if (mode === "publish") {
     showStatus(
       result.published_count
-        ? `Publicado: ${first?.slug || "landing SEO"}`
+        ? `Publicado y añadido a Noticias: ${first?.slug || "landing SEO"}`
         : `Generado, pero sin publicar: score ${first?.quality_score || 0}`,
       result.published_count ? "good" : "neutral"
     );
@@ -270,6 +270,9 @@ async function runSeoRowAction(action, slug) {
     body: JSON.stringify({ action, slug })
   });
   await loadAll();
+  if (action === "publish") {
+    showStatus(`Publicado y añadido a Noticias: ${slug}`, "good");
+  }
 }
 
 els.tokenForm.addEventListener("submit", async (event) => {

@@ -8,6 +8,7 @@ const { buildPriceCityLanding } = require("../api/_seo/priceCity");
 const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { runSeoLandingGeneration } = require("../api/_seo/generator");
 const { getSeedPublishedLanding } = require("../api/_seo/seedPublished");
+const sitemapHandler = require("../api/sitemap");
 const seoPageHandler = require("../api/seo-page");
 const { renderLandingHtml } = require("../api/seo-page");
 
@@ -83,8 +84,36 @@ test("la home tiene seccion Noticias con enlaces a publicaciones", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 
   assert.match(html, /id="noticias"/);
+  assert.match(html, /data-news-list/);
   assert.match(html, /Noticias/);
   assert.match(html, /\/precio-metro-cuadrado\/logrono\//);
+});
+
+test("el endpoint de noticias publica landings publicadas e indexables", async () => {
+  const req = {
+    method: "GET",
+    url: "/api/sitemap?format=news",
+    headers: { host: "inmoradar.app" }
+  };
+  const chunks = [];
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+
+  await sitemapHandler(req, res);
+
+  const payload = JSON.parse(chunks.join(""));
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.headers["content-type"], "application/json; charset=utf-8");
+  assert.equal(payload.ok, true);
+  assert.equal(payload.news.some((item) => item.slug === "precio-metro-cuadrado/logrono"), true);
 });
 
 test("la primera landing seed queda publicada e indexable", async () => {

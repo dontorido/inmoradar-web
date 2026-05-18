@@ -7,6 +7,7 @@
   ],
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
+    { "source": "/api/news", "destination": "/api/sitemap?format=news" },
     { "source": "/api/admin/summary", "destination": "/api/admin?resource=summary" },
     { "source": "/api/admin/premium/subscriptions", "destination": "/api/admin?resource=premium/subscriptions" },
     { "source": "/api/admin/seo/landings", "destination": "/api/admin?resource=seo/landings" },

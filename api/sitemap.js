@@ -8,7 +8,7 @@ async function fetchPublishedLandings() {
   const seed = await getSeedPublishedLanding("precio-metro-cuadrado/logrono");
   if (!hasSupabaseConfig()) return seed ? [seed] : [];
   const params = new URLSearchParams({
-    select: "slug,updated_at,published_at,last_generated_at",
+    select: "slug,title,meta_description,city,template_type,updated_at,published_at,last_generated_at",
     index_status: "eq.index",
     status: "eq.published",
     order: "published_at.desc",
@@ -33,6 +33,37 @@ function urlEntry(loc, lastmod) {
   </url>`;
 }
 
+function newsMeta(landing) {
+  if (landing.template_type === "price_city") return "Precio por m²";
+  if (landing.template_type === "rent_city") return "Alquiler";
+  if (landing.template_type === "parking_city") return "Aparcamiento";
+  if (landing.template_type === "noise_city") return "Ruido";
+  return "Guía inmobiliaria";
+}
+
+function newsDescription(landing) {
+  if (landing.meta_description) return landing.meta_description;
+  if (landing.template_type === "price_city") {
+    return `Referencia de precio por metro cuadrado en ${landing.city || "España"} con fuente, fecha del dato y pautas para comparar anuncios.`;
+  }
+  return "Guía publicada por InmoRadar para buscar vivienda con más contexto antes de contactar.";
+}
+
+function newsItem(landing) {
+  const slug = String(landing.slug || "").replace(/^\/+|\/+$/g, "");
+  return {
+    slug,
+    url: `/${slug}/`,
+    title: landing.title || slug,
+    description: newsDescription(landing),
+    meta: newsMeta(landing),
+    city: landing.city || null,
+    template_type: landing.template_type || null,
+    published_at: landing.published_at || landing.updated_at || landing.last_generated_at || null,
+    updated_at: landing.updated_at || landing.last_generated_at || null
+  };
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== "GET") {
     res.statusCode = 405;
@@ -42,8 +73,17 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    const url = new URL(req.url || "/", `https://${req.headers.host || "inmoradar.app"}`);
     const baseUrl = siteUrl();
     const landings = await fetchPublishedLandings();
+    if (url.searchParams.get("format") === "news") {
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/json; charset=utf-8");
+      res.setHeader("cache-control", "no-store, max-age=0");
+      res.end(JSON.stringify({ ok: true, news: landings.slice(0, 12).map(newsItem) }));
+      return;
+    }
+
     const entries = [
       ...STATIC_PATHS.map((pathname) => urlEntry(`${baseUrl}${pathname === "/" ? "/" : pathname}`)),
       ...landings.map((landing) =>

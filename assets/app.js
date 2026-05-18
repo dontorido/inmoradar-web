@@ -52,6 +52,51 @@ document.querySelectorAll("[data-checkout-button]").forEach((button) => {
   });
 });
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderNewsItems(items) {
+  const list = document.querySelector("[data-news-list]");
+  if (!list || !Array.isArray(items) || !items.length) return;
+
+  list.innerHTML = items
+    .map(
+      (item) => `
+        <article class="news-item">
+          <div>
+            <span class="news-meta">${escapeHtml(item.meta || "Guía inmobiliaria")}</span>
+            <h3><a href="${escapeHtml(item.url)}">${escapeHtml(item.title)}</a></h3>
+          </div>
+          <p>${escapeHtml(item.description)}</p>
+        </article>
+      `
+    )
+    .join("");
+}
+
+async function loadPublishedNews() {
+  const list = document.querySelector("[data-news-list]");
+  if (!list) return;
+
+  try {
+    const response = await fetch("/api/news", {
+      headers: { accept: "application/json" },
+      cache: "no-store"
+    });
+    const payload = await response.json();
+    if (response.ok && payload.ok) renderNewsItems(payload.news);
+  } catch {
+    // Si falla la API, se mantiene el contenido editorial estático.
+  }
+}
+
+loadPublishedNews();
+
 document.querySelectorAll("[data-year]").forEach((node) => {
   node.textContent = String(new Date().getFullYear());
 });
