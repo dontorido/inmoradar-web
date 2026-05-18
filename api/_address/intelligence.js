@@ -1,7 +1,10 @@
 const { hasSupabaseConfig, supabaseFetch } = require("../_utils");
 
 const IDEALISTA_MAPS_BASE_URL = "https://www.idealista.com/maps";
+const CATASTRO_DNPLOC_URL =
+  "https://ovc.catastro.meh.es/OVCServWeb/OVCWcfCallejero/COVCCallejero.svc/json/Consulta_DNPLOC";
 const IDEALISTA_MAPS_SOURCE = "idealista_maps";
+const CATASTRO_SOURCE = "catastro";
 const DEFAULT_TTL_MS = 60 * 24 * 60 * 60 * 1000;
 const DEFAULT_FETCH_TIMEOUT_MS = 10000;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
@@ -72,6 +75,31 @@ function buildIdealistaMapsUrl({ street, street_number, municipality, province }
   const numberSlug = slugifyIdealistaMapsPart(street_number);
   if (!municipalitySlug || !provinceSlug || !streetSlug || !numberSlug) return null;
   return `${IDEALISTA_MAPS_BASE_URL}/${municipalitySlug}-${provinceSlug}/${streetSlug}/${numberSlug}/`;
+}
+
+function splitSpanishStreetType(street = "") {
+  const cleaned = String(street || "").replace(/\s+/g, " ").trim();
+  const patterns = [
+    [/^(avenida|avda\.?|av\.?)\s+/i, "AV"],
+    [/^(calle|c\/|cl\.?)\s+/i, "CL"],
+    [/^(plaza|pl\.?|pza\.?)\s+/i, "PZ"],
+    [/^(paseo|ps\.?)\s+/i, "PS"],
+    [/^(carretera|ctra\.?)\s+/i, "CR"],
+    [/^(camino|cmno\.?)\s+/i, "CM"],
+    [/^(ronda)\s+/i, "RD"],
+    [/^(traves[ií]a|trv\.?)\s+/i, "TR"],
+    [/^(callejón|callejon)\s+/i, "CJ"],
+    [/^(bulevar|boulevard)\s+/i, "BL"]
+  ];
+  for (const [regex, type] of patterns) {
+    if (regex.test(cleaned)) {
+      return {
+        tipo_via: type,
+        nom_via: cleaned.replace(regex, "").trim()
+      };
+    }
+  }
+  return { tipo_via: "", nom_via: cleaned };
 }
 
 function decodeHtmlEntities(value) {
@@ -234,6 +262,146 @@ function calculateIntelConfidence(intel) {
   if (intel.valuation?.min_price && intel.valuation?.max_price) confidence += 0.04;
   if (intel.cadastre_source) confidence += 0.06;
   return Math.round(Math.min(0.85, confidence) * 100) / 100;
+}
+
+function objectValue(source, path, fallback = null) {
+  let value = source;
+  for (const part of path) {
+    if (value === null || value === undefined) return fallback;
+    value = value[part];
+  }
+  return value === undefined ? fallback : value;
+}
+
+function asArray(value) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function firstDefined(...values) {
+  return values.find((value) => value !== null && value !== undefined && value !== "") ?? null;
+}
+
+function catastroRefFromRc(rc = {}) {
+  return [rc.pc1, rc.pc2, rc.car, rc.cc1, rc.cc2].filter(Boolean).join("") || null;
+}
+
+function addressFromCatastroBi(bi = {}, context = {}) {
+  return firstDefined(
+    bi.ldt,
+    objectValue(bi, ["dt", "ldt"]),
+    [
+      context.street,
+      context.street_number,
+      context.postal_code,
+      context.municipality,
+      context.province
+    ]
+      .filter(Boolean)
+      .join(", ")
+  );
+}
+
+function parseCatastroPayload(payload, context = {}) {
+  const consulta = payload?.consulta_dnp || payload;
+  const bico = consulta?.bico || {};
+  const bi = bico.bi || {};
+  const rcdnpList = asArray(consulta?.lrcdnp?.rcdnp);
+  const consList = asArray(bico?.lcons?.cons);
+  const refs = [];
+  const units = [];
+
+  for (const item of rcdnpList) {
+    const rc = item.rc || {};
+    const ref = catastroRefFromRc(rc);
+    if (ref) refs.push(ref);
+    units.push({
+      label: item.dt?.locs?.lous?.lourb?.loint?.pt || item.dt?.ldt || item.ldt || null,
+      use_type: item.debi?.luso || item.debi?.dtip || null,
+      surface_m2: asNumber(item.debi?.sfc),
+      cadastral_ref: ref
+    });
+  }
+
+  for (const item of consList) {
+    units.push({
+      label: [item.es, item.pt, item.pu].filter(Boolean).join(" ") || null,
+      use_type: item.luso || item.dtip || null,
+      surface_m2: asNumber(item.stl || item.sfc),
+      cadastral_ref: catastroRefFromRc(bi.idbi?.rc || {})
+    });
+  }
+
+  const mainRef = catastroRefFromRc(bi.idbi?.rc || {});
+  if (mainRef) refs.push(mainRef);
+  const buildingYear = asNumber(firstDefined(bi.debi?.ant, bi.debi?.anio));
+  const surface = asNumber(firstDefined(bi.debi?.sfc, bi.debi?.sfs));
+  const addressFull = addressFromCatastroBi(bi, context);
+
+  const intel = {
+    source: CATASTRO_SOURCE,
+    source_url: context.source_url || null,
+    address_full: addressFull,
+    street: context.street || null,
+    street_number: context.street_number || null,
+    postal_code: context.postal_code || null,
+    municipality: context.municipality || null,
+    province: context.province || null,
+    autonomous_community: context.autonomous_community || null,
+    lat: context.lat || null,
+    lng: context.lng || null,
+    cadastre_source: "Dirección General de Catastro",
+    building_refs: [...new Set(refs.filter(Boolean))],
+    units: units.filter((unit) => unit.label || unit.use_type || unit.surface_m2 || unit.cadastral_ref),
+    building: {
+      plot_surface_m2: null,
+      year_built: buildingYear,
+      construction_quality: null,
+      floors: null,
+      neighbours_per_floor: null,
+      has_lift: null,
+      homes_count: null,
+      commercial_units_count: null
+    },
+    valuation: {
+      min_price: null,
+      max_price: null
+    },
+    listing_history: {},
+    nearby_services: {
+      transport_count: 0,
+      nearest_transport_distance_km: null,
+      bus_stop_count: 0,
+      metro_train_count: 0,
+      supermarket_count: 0,
+      school_count: 0,
+      health_count: 0,
+      pharmacy_count: 0
+    },
+    extracted_at: new Date().toISOString(),
+    raw_payload: {
+      parser: "catastro_dnp_loc_json_v1",
+      source: "Dirección General de Catastro",
+      main_surface_m2: surface,
+      payload
+    }
+  };
+
+  if (!intel.units.length && (surface || mainRef)) {
+    intel.units.push({
+      label: null,
+      use_type: bi.debi?.luso || null,
+      surface_m2: surface,
+      cadastral_ref: mainRef
+    });
+  }
+
+  const homeLike = intel.units.filter((unit) => /vivienda|residencial/i.test(String(unit.use_type || ""))).length;
+  const commercialLike = intel.units.filter((unit) => /comerc|local/i.test(String(unit.use_type || ""))).length;
+  intel.building.homes_count = homeLike || null;
+  intel.building.commercial_units_count = commercialLike || null;
+  intel.confidence_score = calculateIntelConfidence(intel);
+  return intel;
 }
 
 function parseIdealistaMapsHtml(html, context = {}) {
@@ -550,6 +718,59 @@ async function fetchIdealistaMapsHtml(sourceUrl, fetchImpl = fetch) {
   }
 }
 
+function buildCatastroDnpLocUrl(input = {}) {
+  const { tipo_via: tipoVia, nom_via: nomVia } = splitSpanishStreetType(input.street);
+  const url = new URL(CATASTRO_DNPLOC_URL);
+  url.searchParams.set("Provincia", input.province || "");
+  url.searchParams.set("Municipio", input.municipality || "");
+  url.searchParams.set("TipoVia", tipoVia);
+  url.searchParams.set("NomVia", nomVia);
+  url.searchParams.set("Numero", input.street_number || "");
+  return url.toString();
+}
+
+async function fetchCatastroAddressIntel(input = {}, fetchImpl = fetch) {
+  const sourceUrl = buildCatastroDnpLocUrl(input);
+  const timeout = withTimeout();
+  try {
+    const response = await fetchImpl(sourceUrl, {
+      signal: timeout.signal,
+      headers: {
+        "user-agent": "InmoRadarAddressIntelligence/1.0 (+https://www.inmoradar.app)",
+        accept: "application/json,text/plain,*/*"
+      }
+    });
+    if (!response.ok) {
+      return { ok: false, reason: "catastro_fetch_failed", status: response.status, source_url: sourceUrl };
+    }
+    const payload = await response.json();
+    const errors = asArray(payload?.consulta_dnp?.lerr?.err || payload?.lerr?.err);
+    if (errors.length) {
+      return {
+        ok: false,
+        reason: "catastro_not_found",
+        status: 404,
+        source_url: sourceUrl,
+        errors
+      };
+    }
+
+    const intel = parseCatastroPayload(payload, { ...input, source_url: sourceUrl });
+    if (!intel.building_refs.length && !intel.units.length && !intel.address_full) {
+      return { ok: false, reason: "catastro_parse_empty", source_url: sourceUrl };
+    }
+    return { ok: true, intel };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error?.name === "AbortError" ? "catastro_timeout" : "catastro_fetch_failed",
+      source_url: sourceUrl
+    };
+  } finally {
+    timeout.done();
+  }
+}
+
 function normalizeInput(input = {}) {
   const split = splitStreetAndNumber(input.address);
   return {
@@ -603,6 +824,26 @@ async function buildAddressIntelligenceResponse(rawInput = {}, options = {}) {
     ? { ok: true, html: options.html }
     : await fetchIdealistaMapsHtml(sourceUrl, options.fetchImpl || fetch);
   if (!fetched.ok) {
+    if (options.useCatastroFallback !== false) {
+      const catastro = options.catastroPayload
+        ? { ok: true, intel: parseCatastroPayload(options.catastroPayload, { ...input, source_url: "catastro:mock" }) }
+        : await fetchCatastroAddressIntel(input, options.catastroFetchImpl || options.fetchImpl || fetch);
+
+      if (catastro.ok) {
+        catastro.intel.normalized_address_key = key;
+        catastro.intel.raw_payload = {
+          ...(catastro.intel.raw_payload || {}),
+          idealista_maps_status: {
+            reason: fetched.reason,
+            status: fetched.status || null,
+            source_url: sourceUrl
+          }
+        };
+        await setCachedAddressIntel(key, catastro.intel, options.ttlMs || DEFAULT_TTL_MS);
+        return publicIntelPayload(catastro.intel, { hit: false, layer: "catastro_fallback" });
+      }
+    }
+
     return {
       ok: false,
       reason: fetched.reason,
@@ -632,14 +873,18 @@ async function buildAddressIntelligenceResponse(rawInput = {}, options = {}) {
 module.exports = {
   DEFAULT_TTL_MS,
   buildAddressIntelligenceResponse,
+  buildCatastroDnpLocUrl,
   buildIdealistaMapsUrl,
   calculateAddressPriceAdjustment,
   checkAddressRateLimit,
   clearAddressIntelCache,
+  fetchCatastroAddressIntel,
   fetchIdealistaMapsHtml,
   getCachedAddressIntel,
   normalizedAddressKey,
+  parseCatastroPayload,
   parseIdealistaMapsHtml,
   setCachedAddressIntel,
+  splitSpanishStreetType,
   slugifyIdealistaMapsPart
 };

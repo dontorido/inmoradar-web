@@ -10,6 +10,7 @@ Address Intelligence es una capa opcional para enriquecer el análisis de precio
 - Usa caché y rate limit.
 - Guarda `source_url` y `extracted_at`.
 - Trata `idealista/maps` como fuente complementaria, nunca como fuente única ni tasación.
+- Si `idealista/maps` bloquea la petición del backend, intenta Catastro oficial como fallback.
 - Si no hay datos, la extensión debe seguir funcionando sin error técnico visible.
 
 ## Endpoint
@@ -76,4 +77,18 @@ La comparación mezcla caveats de mercado y caveats de edificio, por ejemplo:
 
 ## Fallback Catastro
 
-El parser actual usa idealista/maps porque agrupa datos públicos de Catastro y contexto urbano. La tabla y la respuesta ya están preparadas para añadir una fuente oficial directa de Catastro como fallback (`source = "catastro"`), manteniendo el mismo contrato de salida.
+El endpoint intenta `idealista/maps` primero porque agrupa datos de edificio, rango orientativo y servicios cercanos. Si esa petición devuelve 403/404/timeout, intenta la consulta oficial de datos catastrales no protegidos por localización:
+
+```text
+https://ovc.catastro.meh.es/OVCServWeb/OVCWcfCallejero/COVCCallejero.svc/json/Consulta_DNPLOC
+```
+
+La documentación oficial de Catastro indica que los servicios libres permiten REST/GET y formato JSON para servicios de callejero y datos catastrales no protegidos. Esta fuente no devuelve valoración ni servicios cercanos, pero sí puede aportar referencia catastral, domicilio, uso, superficie y antigüedad cuando la dirección encaja.
+
+Cuando la respuesta sale de Catastro:
+
+- `source = "catastro"`
+- `cadastre_source = "Dirección General de Catastro"`
+- `valuation.min_price/max_price = null`
+- `nearby_services` queda vacío
+- se conserva el mismo contrato JSON para que la extensión no tenga que cambiar.

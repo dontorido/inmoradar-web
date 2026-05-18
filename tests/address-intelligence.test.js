@@ -3,10 +3,13 @@ const assert = require("node:assert/strict");
 
 const {
   buildAddressIntelligenceResponse,
+  buildCatastroDnpLocUrl,
   buildIdealistaMapsUrl,
   calculateAddressPriceAdjustment,
   clearAddressIntelCache,
+  parseCatastroPayload,
   parseIdealistaMapsHtml,
+  splitSpanishStreetType,
   slugifyIdealistaMapsPart
 } = require("../api/_address/intelligence");
 
@@ -50,6 +53,38 @@ const MOCK_HTML = `
   </html>
 `;
 
+const MOCK_CATASTRO = {
+  consulta_dnp: {
+    bico: {
+      bi: {
+        idbi: {
+          rc: {
+            pc1: "6966104",
+            pc2: "YH2566N",
+            car: "0003",
+            cc1: "D",
+            cc2: "E"
+          }
+        },
+        dt: {
+          ldt: "AV METRO DEL 7, EL CAMPELLO (ALICANTE)"
+        },
+        debi: {
+          luso: "Residencial",
+          sfc: "121",
+          ant: "1965"
+        }
+      },
+      lcons: {
+        cons: [
+          { es: "1", pt: "01", pu: "A", luso: "Vivienda", stl: "121" },
+          { es: "1", pt: "02", pu: "B", luso: "Vivienda", stl: "90" }
+        ]
+      }
+    }
+  }
+};
+
 test("slugifyIdealistaMapsPart construye slugs compatibles con idealista/maps", () => {
   assert.equal(slugifyIdealistaMapsPart("El Campello"), "el-campello");
   assert.equal(slugifyIdealistaMapsPart("Alicante"), "alicante");
@@ -67,6 +102,22 @@ test("buildIdealistaMapsUrl compone la URL probable", () => {
     }),
     "https://www.idealista.com/maps/el-campello-alicante/avenida-metro-del/7/"
   );
+});
+
+test("splitSpanishStreetType y buildCatastroDnpLocUrl preparan consulta oficial", () => {
+  assert.deepEqual(splitSpanishStreetType("Avenida Metro Del"), {
+    tipo_via: "AV",
+    nom_via: "Metro Del"
+  });
+  const url = buildCatastroDnpLocUrl({
+    province: "Alicante",
+    municipality: "El Campello",
+    street: "Avenida Metro Del",
+    street_number: "7"
+  });
+  assert.match(url, /Consulta_DNPLOC/);
+  assert.match(url, /TipoVia=AV/);
+  assert.match(url, /NomVia=Metro\+Del/);
 });
 
 test("parseIdealistaMapsHtml extrae datos de edificio, fincas y valoración", () => {
@@ -92,6 +143,23 @@ test("parseIdealistaMapsHtml extrae datos de edificio, fincas y valoración", ()
   assert.equal(parsed.units[0].surface_m2, 121);
   assert.equal(parsed.nearby_services.nearest_transport_distance_km, 0.05);
   assert.equal(parsed.nearby_services.supermarket_count, 4);
+});
+
+test("parseCatastroPayload extrae referencia, antigüedad y superficies", () => {
+  const parsed = parseCatastroPayload(MOCK_CATASTRO, {
+    street: "Avenida Metro Del",
+    street_number: "7",
+    municipality: "El Campello",
+    province: "Alicante"
+  });
+
+  assert.equal(parsed.source, "catastro");
+  assert.equal(parsed.cadastre_source, "Dirección General de Catastro");
+  assert.equal(parsed.address_full, "AV METRO DEL 7, EL CAMPELLO (ALICANTE)");
+  assert.equal(parsed.building.year_built, 1965);
+  assert.equal(parsed.building_refs[0], "6966104YH2566N0003DE");
+  assert.equal(parsed.units.length, 2);
+  assert.equal(parsed.units[0].surface_m2, 121);
 });
 
 test("buildAddressIntelligenceResponse devuelve cache hit tras un primer miss", async () => {
@@ -134,6 +202,30 @@ test("buildAddressIntelligenceResponse maneja 404 sin romper", async () => {
   assert.equal(response.ok, false);
   assert.equal(response.reason, "maps_not_found");
   assert.equal(response.message, "No se han podido obtener datos adicionales del edificio.");
+});
+
+test("buildAddressIntelligenceResponse usa Catastro si idealista/maps devuelve 403", async () => {
+  clearAddressIntelCache();
+  const response = await buildAddressIntelligenceResponse(
+    {
+      street: "Avenida Metro Del",
+      street_number: "7",
+      municipality: "El Campello",
+      province: "Alicante"
+    },
+    {
+      fetchImpl: async () => ({ ok: false, status: 403, text: async () => "" }),
+      catastroFetchImpl: async () => ({
+        ok: true,
+        json: async () => MOCK_CATASTRO
+      })
+    }
+  );
+
+  assert.equal(response.ok, true);
+  assert.equal(response.source, "catastro");
+  assert.equal(response.cache.layer, "catastro_fallback");
+  assert.equal(response.building.year_built, 1965);
 });
 
 test("calculateAddressPriceAdjustment añade caveats de edificio", () => {
