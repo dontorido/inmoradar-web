@@ -210,6 +210,7 @@ h3 {
 .hero-metrics,
 .feature-grid,
 .signal-grid,
+.news-list,
 .faq-grid {
   display: grid;
   gap: 1px;
@@ -226,6 +227,7 @@ h3 {
 .metric-pill,
 .feature,
 .signal,
+.news-item,
 .price-card,
 .faq-grid details {
   background: var(--bg);
@@ -289,6 +291,33 @@ h3 {
   letter-spacing: -.03em;
 }
 
+.news-list { grid-template-columns: 1fr; }
+.news-item {
+  display: grid;
+  grid-template-columns: minmax(0, .8fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+.news-item h3 {
+  margin-top: 10px;
+  line-height: 1.05;
+}
+.news-item h3 a:hover { color: var(--accent); }
+.news-item p {
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0;
+}
+.news-meta {
+  color: var(--accent);
+  display: inline-flex;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
 .pricing-band {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
@@ -347,6 +376,7 @@ h3 {
   .nav-links, .nav-actions { flex-wrap: wrap; }
   .hero-grid, .split, .pricing-band { grid-template-columns: 1fr; }
   .hero-metrics, .feature-grid { grid-template-columns: 1fr; }
+  .news-item { grid-template-columns: 1fr; }
   h1 { font-size: clamp(48px, 16vw, 78px); }
   .footer-grid { align-items: flex-start; flex-direction: column; }
 }

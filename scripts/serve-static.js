@@ -16,6 +16,7 @@ const types = {
 };
 
 const rewrites = {
+  "/sitemap.xml": "/api/sitemap",
   "/premium": "/premium.html",
   "/privacidad": "/privacidad.html",
   "/terminos": "/terminos.html",
@@ -23,9 +24,35 @@ const rewrites = {
   "/cancel": "/cancel.html"
 };
 
+function routeDynamic(pathname) {
+  const priceCity = pathname.match(/^\/precio-metro-cuadrado\/([^/]+)\/?$/);
+  if (priceCity) {
+    return `/api/seo-page?slug=precio-metro-cuadrado/${encodeURIComponent(priceCity[1])}`;
+  }
+  return rewrites[pathname] || pathname;
+}
+
+function runApiHandler(apiRoute, req, res) {
+  const routeOnly = apiRoute.split("?")[0];
+  const functionPath = path.normalize(path.join(root, `${routeOnly}.js`));
+  if (!functionPath.startsWith(path.join(root, "api"))) {
+    res.writeHead(403);
+    res.end("Forbidden");
+    return true;
+  }
+  if (!fs.existsSync(functionPath)) return false;
+  req.url = apiRoute;
+  delete require.cache[require.resolve(functionPath)];
+  const handler = require(functionPath);
+  handler(req, res);
+  return true;
+}
+
 http.createServer((req, res) => {
   const parsed = new URL(req.url, `http://${req.headers.host}`);
-  const route = rewrites[parsed.pathname] || parsed.pathname;
+  const route = routeDynamic(parsed.pathname);
+  if (route.startsWith("/api/") && runApiHandler(route, req, res)) return;
+
   const relative = route === "/" ? "/index.html" : route;
   const filePath = path.normalize(path.join(root, relative));
 

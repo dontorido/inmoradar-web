@@ -1,4 +1,7 @@
 User-agent: *
 Allow: /
+Allow: /precio-metro-cuadrado/
+Disallow: /api/admin/
+Disallow: /api/cron/
 
 Sitemap: https://inmoradar.app/sitemap.xml

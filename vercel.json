@@ -1,5 +1,14 @@
 {
+  "crons": [
+    {
+      "path": "/api/cron/seo-publish",
+      "schedule": "0 */6 * * *"
+    }
+  ],
   "rewrites": [
+    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
+    { "source": "/precio-metro-cuadrado/:city", "destination": "/api/seo-page?slug=precio-metro-cuadrado/:city" },
+    { "source": "/precio-metro-cuadrado/:city/", "destination": "/api/seo-page?slug=precio-metro-cuadrado/:city" },
     { "source": "/premium", "destination": "/premium.html" },
     { "source": "/privacidad", "destination": "/privacidad.html" },
     { "source": "/terminos", "destination": "/terminos.html" },

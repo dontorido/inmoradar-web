@@ -1,3 +1,6 @@
+/sitemap.xml /api/sitemap 200
+/precio-metro-cuadrado/:city /api/seo-page?slug=precio-metro-cuadrado/:city 200
+/precio-metro-cuadrado/:city/ /api/seo-page?slug=precio-metro-cuadrado/:city 200
 /premium /premium.html 200
 /privacidad /privacidad.html 200
 /terminos /terminos.html 200
