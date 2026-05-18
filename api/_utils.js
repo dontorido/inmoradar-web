@@ -18,6 +18,27 @@ function handleCors(req, res) {
   return true;
 }
 
+function adminTokenFromRequest(req) {
+  const authorization = req.headers.authorization || "";
+  if (authorization.toLowerCase().startsWith("bearer ")) {
+    return authorization.slice(7).trim();
+  }
+  return String(req.headers["x-admin-token"] || "").trim();
+}
+
+function assertAdmin(req, res) {
+  const expected = process.env.ADMIN_IMPORT_TOKEN;
+  if (!expected) {
+    json(res, 500, { ok: false, error: "admin_token_not_configured" });
+    return false;
+  }
+  if (adminTokenFromRequest(req) !== expected) {
+    json(res, 401, { ok: false, error: "unauthorized" });
+    return false;
+  }
+  return true;
+}
+
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
@@ -104,6 +125,8 @@ function isPremiumActive(subscription) {
 
 module.exports = {
   ACTIVE_STATUSES,
+  adminTokenFromRequest,
+  assertAdmin,
   handleCors,
   hasSupabaseConfig,
   isEmail,

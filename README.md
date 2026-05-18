@@ -17,6 +17,10 @@ Web estatica de lanzamiento para InmoRadar.
 - `api/check-premium.js`: endpoint para que la extension compruebe si un email tiene Premium.
 - `api/lemonsqueezy-checkout.js`: crea checkouts de Lemon Squeezy en modo prueba o produccion sin exponer la API key.
 - `api/lemonsqueezy-webhook.js`: webhook preparado para sincronizar suscripciones de Lemon Squeezy.
+- `admin.html`, `assets/admin.js` y `assets/admin.css`: backoffice protegido por `ADMIN_IMPORT_TOKEN`.
+- `api/admin/summary.js`: resumen operativo de Premium, SEO y estado de integraciones.
+- `api/admin/premium/subscriptions.js`: listado admin de suscripciones Premium.
+- `api/admin/seo/landings.js`: listado y acciones admin para landings SEO.
 - `database/premium-subscriptions.sql`: tabla Supabase para guardar suscripciones Premium.
 - `api/market-price.js`: endpoint agregado para que la extension consulte precios de mercado por zona.
 - `database/market-price-sources.sql`: tabla Supabase `market_price_sources` y seed minimo de mercado.
@@ -86,6 +90,23 @@ El endpoint de checkout quedara en:
 ```text
 https://www.inmoradar.app/api/lemonsqueezy-checkout
 ```
+
+## Backoffice
+
+Acceso:
+
+```text
+https://www.inmoradar.app/admin
+```
+
+El panel no indexa y los datos se cargan desde endpoints protegidos con `ADMIN_IMPORT_TOKEN`. Permite:
+
+- ver estado de Supabase y Lemon Squeezy;
+- revisar suscripciones Premium sincronizadas por webhook;
+- revisar landings SEO, quality score, estado e indexacion;
+- generar un draft SEO;
+- publicar una landing elegible;
+- cambiar una landing a `noindex` o regenerarla.
 
 El endpoint de comprobacion quedara en:
 

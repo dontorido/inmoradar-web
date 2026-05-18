@@ -1,6 +1,7 @@
 User-agent: *
 Allow: /
 Allow: /precio-metro-cuadrado/
+Disallow: /admin
 Disallow: /api/admin/
 Disallow: /api/cron/
 

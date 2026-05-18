@@ -17,6 +17,7 @@ const types = {
 
 const rewrites = {
   "/sitemap.xml": "/api/sitemap",
+  "/admin": "/admin.html",
   "/premium": "/premium.html",
   "/privacidad": "/privacidad.html",
   "/terminos": "/terminos.html",

@@ -42,8 +42,13 @@ module.exports = async function handler(req, res) {
     const result = await runSeoLandingGeneration({
       mode: body.mode || "dry_run",
       limit: body.limit || 5,
+      candidateLimit: body.candidateLimit,
       template_type: body.template_type || "price_city",
-      autoPublish: body.autoPublish === true
+      autoPublish: body.autoPublish === true,
+      includeExistingDrafts: body.includeExistingDrafts === true,
+      publishFirstEligible: body.publishFirstEligible === true,
+      dailyPublishLimit: typeof body.dailyPublishLimit === "number" ? body.dailyPublishLimit : undefined,
+      maxPublishesPerRun: typeof body.maxPublishesPerRun === "number" ? body.maxPublishesPerRun : undefined
     });
     return json(res, 200, result);
   } catch (error) {
