@@ -5,7 +5,7 @@ const ACTIVE_STATUSES = new Set(["active", "on_trial"]);
 function json(res, status, payload) {
   res.statusCode = status;
   res.setHeader("content-type", "application/json; charset=utf-8");
-  res.setHeader("cache-control", "no-store");
+  res.setHeader("cache-control", "no-store, max-age=0");
   res.setHeader("access-control-allow-origin", "*");
   res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
   res.setHeader("access-control-allow-headers", "content-type,x-signature,x-event-name");
