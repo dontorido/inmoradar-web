@@ -14,6 +14,7 @@
     { "source": "/api/admin/seo/generate-landings", "destination": "/api/admin?resource=seo/generate-landings" },
     { "source": "/api/address-intelligence", "destination": "/api/market-price?resource=address-intelligence" },
     { "source": "/api/property-assessment", "destination": "/api/market-price?resource=property-assessment" },
+    { "source": "/api/photo-condition-analysis", "destination": "/api/market-price?resource=photo-condition-analysis" },
     { "source": "/precio-metro-cuadrado/:city", "destination": "/api/seo-page?slug=precio-metro-cuadrado/:city" },
     { "source": "/precio-metro-cuadrado/:city/", "destination": "/api/seo-page?slug=precio-metro-cuadrado/:city" },
     { "source": "/admin", "destination": "/admin.html" },

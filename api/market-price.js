@@ -1,9 +1,10 @@
-const { handleCors, hasSupabaseConfig, json, supabaseFetch } = require("./_utils");
+const { handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
 const {
   buildAddressIntelligenceResponse,
   calculateAddressPriceAdjustment,
   checkAddressRateLimit
 } = require("./_address/intelligence");
+const { buildPhotoConditionAnalysisResponse } = require("./_photo/analysis");
 
 const GEO_CONFIDENCE = {
   neighbourhood: 0.85,
@@ -734,6 +735,17 @@ function queryFromRequest(req) {
   return Object.fromEntries(url.searchParams.entries());
 }
 
+async function jsonBodyFromRequest(req) {
+  if (req.body && typeof req.body === "object") return req.body;
+  const rawBody = await readRawBody(req);
+  if (!rawBody) return {};
+  try {
+    return JSON.parse(rawBody);
+  } catch {
+    return null;
+  }
+}
+
 function clientKey(req) {
   return (
     req.headers?.["x-forwarded-for"]?.split(",")[0]?.trim() ||
@@ -981,14 +993,30 @@ async function propertyAssessmentPayload(params = {}) {
 
 async function handler(req, res) {
   if (handleCors(req, res)) return;
-  if (req.method !== "GET") {
-    json(res, 405, { ok: false, error: "method_not_allowed" });
-    return;
-  }
 
   try {
     const params = queryFromRequest(req);
     const resource = params.resource || params.endpoint || "";
+
+    if (resource === "photo-condition-analysis") {
+      if (req.method !== "POST") {
+        json(res, 405, { ok: false, error: "method_not_allowed" });
+        return;
+      }
+      const body = await jsonBodyFromRequest(req);
+      if (body === null) {
+        json(res, 400, { ok: false, error: "invalid_json", message: "El cuerpo de la peticion no es JSON valido." });
+        return;
+      }
+      const result = await buildPhotoConditionAnalysisResponse(body, { clientKey: clientKey(req) });
+      json(res, result.status, result.body);
+      return;
+    }
+
+    if (req.method !== "GET") {
+      json(res, 405, { ok: false, error: "method_not_allowed" });
+      return;
+    }
 
     if (resource === "address-intelligence") {
       const result = await addressIntelligencePayload(params, req);
