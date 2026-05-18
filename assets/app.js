@@ -79,6 +79,55 @@ function renderNewsItems(items) {
     .join("");
 }
 
+function renderNewsItem(item, className) {
+  return `
+    <article class="${className}">
+      <div>
+        <span class="news-meta">${escapeHtml(item.meta || "Guía inmobiliaria")}</span>
+        <h3><a href="${escapeHtml(item.url)}">${escapeHtml(item.title)}</a></h3>
+      </div>
+      <p>${escapeHtml(item.description)}</p>
+    </article>
+  `;
+}
+
+function archiveLoopItems(items) {
+  const base = [];
+  while (base.length < Math.max(items.length, 4)) {
+    base.push(...items);
+  }
+  const visibleLoop = base.slice(0, Math.max(items.length, 4));
+  return [...visibleLoop, ...visibleLoop];
+}
+
+function renderLatestAndArchiveNews(items) {
+  const list = document.querySelector("[data-news-list]");
+  const archive = document.querySelector("[data-news-archive]");
+  const archiveTrack = document.querySelector("[data-news-track]");
+  const archiveCount = document.querySelector("[data-news-archive-count]");
+  if (!list || !Array.isArray(items) || !items.length) return;
+
+  const latest = items.slice(0, 5);
+  const older = items.slice(5);
+
+  list.innerHTML = latest.map((item) => renderNewsItem(item, "news-item")).join("");
+
+  if (!archive || !archiveTrack) return;
+  if (!older.length) {
+    archive.hidden = true;
+    archiveTrack.innerHTML = "";
+    return;
+  }
+
+  archive.hidden = false;
+  if (archiveCount) {
+    archiveCount.textContent = `${older.length} publicaciones anteriores`;
+  }
+  archiveTrack.innerHTML = archiveLoopItems(older)
+    .map((item) => renderNewsItem(item, "news-archive-item"))
+    .join("");
+}
+
 async function loadPublishedNews() {
   const list = document.querySelector("[data-news-list]");
   if (!list) return;
@@ -89,7 +138,7 @@ async function loadPublishedNews() {
       cache: "no-store"
     });
     const payload = await response.json();
-    if (response.ok && payload.ok) renderNewsItems(payload.news);
+    if (response.ok && payload.ok) renderLatestAndArchiveNews(payload.news);
   } catch {
     // Si falla la API, se mantiene el contenido editorial estático.
   }

@@ -85,8 +85,14 @@ test("la home tiene seccion Noticias con enlaces a publicaciones", () => {
 
   assert.match(html, /id="noticias"/);
   assert.match(html, /data-news-list/);
+  assert.match(html, /data-news-archive/);
+  assert.match(html, /data-news-track/);
   assert.match(html, /Noticias/);
   assert.match(html, /\/precio-metro-cuadrado\/logrono\//);
+
+  const script = fs.readFileSync(path.join(__dirname, "..", "assets", "app.js"), "utf8");
+  assert.match(script, /items\.slice\(0, 5\)/);
+  assert.match(script, /archiveLoopItems/);
 });
 
 test("el endpoint de noticias publica landings publicadas e indexables", async () => {
@@ -113,6 +119,7 @@ test("el endpoint de noticias publica landings publicadas e indexables", async (
   assert.equal(res.statusCode, 200);
   assert.equal(res.headers["content-type"], "application/json; charset=utf-8");
   assert.equal(payload.ok, true);
+  assert.equal(payload.latest_limit, 5);
   assert.equal(payload.news.some((item) => item.slug === "precio-metro-cuadrado/logrono"), true);
 });
 

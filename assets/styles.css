@@ -318,6 +318,63 @@ h3 {
   text-transform: uppercase;
 }
 
+.news-archive[hidden] { display: none; }
+.news-archive { margin-top: 24px; }
+.news-archive-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.news-rail {
+  overflow: hidden;
+  background: var(--line);
+  border: 1px solid var(--line);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+}
+.news-track {
+  display: flex;
+  width: max-content;
+  animation: news-scroll 44s linear infinite;
+  will-change: transform;
+}
+.news-rail:hover .news-track { animation-play-state: paused; }
+.news-archive-item {
+  flex: 0 0 clamp(280px, 32vw, 380px);
+  min-height: 168px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 22px;
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+  padding: 18px;
+}
+.news-archive-item h3 {
+  margin-top: 10px;
+  font-size: 24px;
+  line-height: 1.05;
+}
+.news-archive-item h3 a:hover { color: var(--accent); }
+.news-archive-item p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+@keyframes news-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
 .pricing-band {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
@@ -377,6 +434,16 @@ h3 {
   .hero-grid, .split, .pricing-band { grid-template-columns: 1fr; }
   .hero-metrics, .feature-grid { grid-template-columns: 1fr; }
   .news-item { grid-template-columns: 1fr; }
+  .news-archive-item { flex-basis: 82vw; }
   h1 { font-size: clamp(48px, 16vw, 78px); }
   .footer-grid { align-items: flex-start; flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .news-rail {
+    overflow-x: auto;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .news-track { animation: none; }
 }

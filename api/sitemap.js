@@ -24,7 +24,13 @@ async function fetchPublishedLandings() {
   if (seed && !landings.some((landing) => landing.slug === seed.slug)) {
     landings.unshift(seed);
   }
-  return landings;
+  return landings.sort((left, right) => publishedTime(right) - publishedTime(left));
+}
+
+function publishedTime(landing) {
+  const value = landing.published_at || landing.updated_at || landing.last_generated_at;
+  const time = new Date(value || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
 }
 
 function urlEntry(loc, lastmod) {
@@ -80,7 +86,7 @@ module.exports = async function handler(req, res) {
       res.statusCode = 200;
       res.setHeader("content-type", "application/json; charset=utf-8");
       res.setHeader("cache-control", "no-store, max-age=0");
-      res.end(JSON.stringify({ ok: true, news: landings.slice(0, 12).map(newsItem) }));
+      res.end(JSON.stringify({ ok: true, latest_limit: 5, news: landings.slice(0, 60).map(newsItem) }));
       return;
     }
 
