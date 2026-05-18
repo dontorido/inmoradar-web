@@ -41,17 +41,50 @@ test("selectRepresentativeListingImages deduplica y prioriza interiores", () => 
   ]);
 
   assert.equal(selection.selectedImages.length, 4);
-  assert.equal(selection.selectedImages[0], "https://img.example.com/foto1.jpg?imwidth=1200");
+  assert.equal(selection.selectedImages[0], "https://img.example.com/foto1.jpg");
   assert.equal(selection.selectedImages[1], "https://img.example.com/foto2.jpg");
   assert.ok(selection.discardedImages.some((item) => item.reason === "duplicate"));
   assert.ok(selection.discardedImages.some((item) => item.reason === "invalid_url"));
 });
 
-test("photo-condition-analysis devuelve no_images si no hay fotos", async () => {
+test("photo-condition-analysis devuelve no_valid_images si no hay fotos validas", async () => {
   clearPhotoAnalysisMemory();
-  const response = await buildPhotoConditionAnalysisResponse({}, { skipRateLimit: true });
+  const response = await buildPhotoConditionAnalysisResponse(
+    { image_urls: ["http://img.example.com/a.jpg", "blob:https://x", "/relative.jpg", ""] },
+    { skipRateLimit: true }
+  );
   assert.equal(response.status, 400);
-  assert.equal(response.body.reason, "no_images");
+  assert.equal(response.body.reason, "no_valid_images");
+});
+
+test("photo-condition-analysis captura OpenAI 400 como openai_bad_request", async () => {
+  clearPhotoAnalysisMemory();
+  const response = await buildPhotoConditionAnalysisResponse(
+    {
+      listing_url: "https://www.idealista.com/inmueble/openai-400/",
+      image_urls: ["https://img.example.com/cocina.jpg"]
+    },
+    {
+      openaiApiKey: "test-key",
+      skipRateLimit: true,
+      skipCache: true,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              message: "Bad request",
+              type: "invalid_request_error",
+              param: "input",
+              code: "invalid_value"
+            }
+          }),
+          { status: 400, headers: { "content-type": "application/json" } }
+        )
+    }
+  );
+  assert.equal(response.status, 400);
+  assert.equal(response.body.reason, "openai_bad_request");
+  assert.equal(response.body.message, "No se ha podido analizar visualmente el inmueble en este momento.");
 });
 
 test("photo-condition-analysis devuelve respuesta normalizada y cachea", async () => {

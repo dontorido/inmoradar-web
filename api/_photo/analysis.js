@@ -6,6 +6,9 @@ const DEFAULT_MAX_IMAGES = 8;
 const DEFAULT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = "gpt-4.1-mini";
+const MAX_FALLBACK_IMAGES = 4;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const FRIENDLY_ERROR_MESSAGE = "No se ha podido analizar visualmente el inmueble en este momento.";
 
 const memoryCache = new Map();
 const rateBuckets = new Map();
@@ -144,7 +147,7 @@ function normalizeImageUrl(value) {
   if (!raw || /^data:/i.test(raw) || /^blob:/i.test(raw)) return null;
   try {
     const url = new URL(raw);
-    if (!/^https?:$/.test(url.protocol)) return null;
+    if (url.protocol !== "https:") return null;
     url.hash = "";
     for (const key of [...url.searchParams.keys()]) {
       if (/^(imwidth|width|height|quality|size|w|h|q)$/i.test(key)) url.searchParams.delete(key);
@@ -153,6 +156,70 @@ function normalizeImageUrl(value) {
   } catch {
     return null;
   }
+}
+
+function timeoutSignal(ms) {
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(ms);
+  }
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), ms).unref?.();
+  return controller.signal;
+}
+
+async function validateRemoteImageUrl(url, options = {}) {
+  const fetchImpl = options.fetchImpl || fetch;
+  try {
+    const head = await fetchImpl(url, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: timeoutSignal(5000),
+      headers: { "User-Agent": "Mozilla/5.0 InmoRadarBot/1.0" }
+    });
+    const contentType = head.headers?.get?.("content-type") || "";
+    if (head.ok && contentType.startsWith("image/")) return true;
+  } catch {
+    // Algunos portales no permiten HEAD. Probamos GET parcial antes de descartar.
+  }
+
+  try {
+    const partial = await fetchImpl(url, {
+      method: "GET",
+      redirect: "follow",
+      signal: timeoutSignal(5000),
+      headers: {
+        Range: "bytes=0-1024",
+        "User-Agent": "Mozilla/5.0 InmoRadarBot/1.0"
+      }
+    });
+    const contentType = partial.headers?.get?.("content-type") || "";
+    return partial.ok && contentType.startsWith("image/");
+  } catch {
+    return false;
+  }
+}
+
+async function imageUrlToDataUrl(url, options = {}) {
+  const fetchImpl = options.fetchImpl || fetch;
+  const response = await fetchImpl(url, {
+    method: "GET",
+    redirect: "follow",
+    signal: timeoutSignal(8000),
+    headers: { "User-Agent": "Mozilla/5.0 InmoRadarBot/1.0" }
+  });
+
+  if (!response.ok) throw new Error(`Image fetch failed ${response.status}`);
+
+  const contentType = response.headers?.get?.("content-type") || "image/jpeg";
+  if (!["image/jpeg", "image/png", "image/webp"].includes(contentType.split(";")[0].trim().toLowerCase())) {
+    throw new Error(`Invalid image content-type: ${contentType}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  if (arrayBuffer.byteLength > MAX_IMAGE_BYTES) throw new Error("Image too large");
+
+  const base64 = Buffer.from(arrayBuffer).toString("base64");
+  return `data:${contentType.split(";")[0].trim().toLowerCase()};base64,${base64}`;
 }
 
 function scoreImageCandidate(candidate) {
@@ -206,7 +273,7 @@ function selectRepresentativeListingImages(imageUrls, options = {}) {
   }
 
   return {
-    selectedImages: selected.map((item) => item.url),
+    selectedImages: selected.map((item) => item.normalizedUrl),
     normalizedSelectedImages: selected.map((item) => item.normalizedUrl),
     discardedImages,
     selectionReason: `Seleccionadas ${selected.length} imagenes representativas priorizando interiores y descartando duplicados.`
@@ -298,13 +365,66 @@ function extractOutputText(response = {}) {
   return "";
 }
 
-async function callVisionModel(input, selectedImages, options = {}) {
-  const apiKey = options.openaiApiKey || process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return { ok: false, reason: "vision_model_not_configured", message: "Falta OPENAI_API_KEY en Vercel." };
-  }
+function safeOpenAIErrorBody(body) {
+  if (!body || typeof body !== "object") return { message: String(body || "").slice(0, 500) };
+  const error = body.error && typeof body.error === "object" ? body.error : body;
+  return {
+    message: error.message || null,
+    type: error.type || null,
+    param: error.param || null,
+    code: error.code || null
+  };
+}
 
-  const payload = {
+async function parseOpenAIError(response) {
+  const text = await response.text().catch(() => "");
+  let parsed = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    parsed = { message: text.slice(0, 500) };
+  }
+  return safeOpenAIErrorBody(parsed);
+}
+
+function shouldExposeDebug() {
+  return process.env.NODE_ENV !== "production" || process.env.DEBUG_PHOTO_ANALYSIS === "true";
+}
+
+function openAIDebug(error) {
+  if (!shouldExposeDebug()) return undefined;
+  return {
+    status: error?.status || null,
+    message: error?.openai?.message || error?.message || null,
+    type: error?.openai?.type || null,
+    param: error?.openai?.param || null,
+    code: error?.openai?.code || null,
+    retried_with_base64: Boolean(error?.retriedWithBase64)
+  };
+}
+
+function logOpenAIError(error, imagesCount, hasSchema = true) {
+  console.error("OpenAI vision error", {
+    status: error?.status || null,
+    body: error?.openai || { message: error?.message || null },
+    imagesCount,
+    hasSchema,
+    retriedWithBase64: Boolean(error?.retriedWithBase64)
+  });
+}
+
+function createResponsesPayload(input, selectedImages, options = {}) {
+  const useSchema = options.useSchema !== false;
+  const format = useSchema
+    ? {
+        type: "json_schema",
+        name: "photo_condition_analysis",
+        strict: true,
+        schema: PHOTO_ANALYSIS_SCHEMA
+      }
+    : { type: "json_object" };
+
+  return {
     model: options.model || process.env.OPENAI_VISION_MODEL || DEFAULT_MODEL,
     input: [
       {
@@ -315,41 +435,114 @@ async function callVisionModel(input, selectedImages, options = {}) {
         ]
       }
     ],
-    text: {
-      format: {
-        type: "json_schema",
-        name: "photo_condition_analysis",
-        strict: true,
-        schema: PHOTO_ANALYSIS_SCHEMA
-      }
-    },
-    temperature: 0.1,
+    text: { format },
     max_output_tokens: 1800
   };
+}
 
+async function fetchOpenAIResponses(payload, apiKey, options = {}) {
   const response = await (options.fetchImpl || fetch)(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json"
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
     },
     body: JSON.stringify(payload)
   });
 
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    return { ok: false, reason: "vision_model_error", status: response.status, details: text.slice(0, 500) };
+    const openai = await parseOpenAIError(response);
+    return { ok: false, status: response.status, openai };
   }
 
-  const data = await response.json();
-  const outputText = extractOutputText(data);
+  return { ok: true, data: await response.json() };
+}
+
+async function fallbackImagesToDataUrls(selectedImages, options = {}) {
+  const dataUrls = [];
+  const errors = [];
+  for (const url of selectedImages.slice(0, MAX_FALLBACK_IMAGES)) {
+    try {
+      dataUrls.push(await imageUrlToDataUrl(url, options));
+    } catch (error) {
+      errors.push({ url, message: error.message });
+    }
+  }
+  return { dataUrls, errors };
+}
+
+async function callVisionModelOnce(input, selectedImages, apiKey, options = {}) {
+  const payload = createResponsesPayload(input, selectedImages, options);
+  const response = await fetchOpenAIResponses(payload, apiKey, options);
+  if (!response.ok) {
+    return {
+      ok: false,
+      reason: response.status === 400 ? "openai_bad_request" : "vision_model_error",
+      status: response.status,
+      openai: response.openai,
+      useSchema: options.useSchema !== false
+    };
+  }
+
+  const outputText = extractOutputText(response.data);
   if (!outputText) return { ok: false, reason: "vision_model_empty" };
 
   try {
-    return { ok: true, analysis: JSON.parse(outputText), raw: data };
+    return { ok: true, analysis: JSON.parse(outputText), raw: response.data };
   } catch {
     return { ok: false, reason: "vision_model_invalid_json" };
   }
+}
+
+function looksLikeImageBadRequest(error = {}) {
+  const text = `${error.openai?.message || ""} ${error.openai?.param || ""} ${error.openai?.code || ""}`.toLowerCase();
+  return error.status === 400 && /(image|url|download|fetch|invalid)/.test(text);
+}
+
+function looksLikeSchemaBadRequest(error = {}) {
+  const text = `${error.openai?.message || ""} ${error.openai?.param || ""} ${error.openai?.code || ""}`.toLowerCase();
+  return error.status === 400 && /(schema|json_schema|text\.format|response_format)/.test(text);
+}
+
+async function callVisionModel(input, selectedImages, options = {}) {
+  const apiKey = options.openaiApiKey || process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return { ok: false, reason: "vision_model_not_configured", message: "Falta OPENAI_API_KEY en Vercel." };
+  }
+
+  const direct = await callVisionModelOnce(input, selectedImages, apiKey, { ...options, useSchema: true });
+  if (direct.ok) return direct;
+
+  logOpenAIError(direct, selectedImages.length, true);
+
+  if (looksLikeSchemaBadRequest(direct)) {
+    const withoutSchema = await callVisionModelOnce(input, selectedImages, apiKey, { ...options, useSchema: false });
+    if (withoutSchema.ok) return withoutSchema;
+    logOpenAIError(withoutSchema, selectedImages.length, false);
+    return { ...withoutSchema, debug: openAIDebug(withoutSchema) };
+  }
+
+  if (looksLikeImageBadRequest(direct)) {
+    const fallback = await fallbackImagesToDataUrls(selectedImages, options);
+    if (!fallback.dataUrls.length) {
+      return {
+        ok: false,
+        reason: "openai_bad_request",
+        status: direct.status,
+        openai: direct.openai,
+        debug: openAIDebug({ ...direct, retriedWithBase64: true })
+      };
+    }
+
+    const retried = await callVisionModelOnce(input, fallback.dataUrls, apiKey, { ...options, useSchema: true });
+    if (retried.ok) return { ...retried, usedFallbackBase64: true };
+
+    const retriedError = { ...retried, retriedWithBase64: true };
+    logOpenAIError(retriedError, fallback.dataUrls.length, true);
+    return { ...retried, debug: openAIDebug(retriedError) };
+  }
+
+  return { ...direct, debug: openAIDebug(direct) };
 }
 
 function cachePayload(input, analysis, selectedImages, rawResponse = null) {
@@ -516,8 +709,8 @@ async function buildPhotoConditionAnalysisResponse(input = {}, options = {}) {
       status: 400,
       body: {
         ok: false,
-        reason: "no_images",
-        message: "No se han detectado fotos suficientes para analizar el estado visual del inmueble."
+        reason: "no_valid_images",
+        message: "No se han detectado fotos validas para analizar."
       }
     };
   }
@@ -546,13 +739,16 @@ async function buildPhotoConditionAnalysisResponse(input = {}, options = {}) {
     : await callVisionModel(input, selection.selectedImages, options);
 
   if (!model.ok) {
+    const status = model.reason === "vision_model_not_configured" ? 503 : model.reason === "openai_bad_request" ? 400 : 502;
+    const body = {
+      ok: false,
+      reason: model.reason || "vision_model_error",
+      message: FRIENDLY_ERROR_MESSAGE
+    };
+    if (model.debug) body.debug = model.debug;
     return {
-      status: model.reason === "vision_model_not_configured" ? 503 : 502,
-      body: {
-        ok: false,
-        reason: model.reason || "vision_model_error",
-        message: "No se ha podido analizar visualmente el inmueble en este momento."
-      }
+      status,
+      body
     };
   }
 
@@ -590,6 +786,9 @@ module.exports = {
   checkPhotoRateLimit,
   clearPhotoAnalysisMemory,
   combinePriceAndPhotoAssessment,
+  imageUrlToDataUrl,
+  normalizeImageUrl,
   normalizeModelAnalysis,
-  selectRepresentativeListingImages
+  selectRepresentativeListingImages,
+  validateRemoteImageUrl
 };
