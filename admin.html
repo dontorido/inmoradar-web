@@ -9,6 +9,7 @@
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="assets/styles.css">
   <link rel="stylesheet" href="assets/admin.css">
+  <link rel="stylesheet" href="assets/admin-video-busy.css">
 </head>
 <body class="admin-body">
   <main class="admin-shell">
@@ -255,6 +256,13 @@
               <button class="admin-button tiny ghost" type="button" data-video-download-json data-testid="admin-action-download-video-json" disabled>Descargar storyboard</button>
               <button class="admin-button tiny" type="button" data-video-download-html data-testid="admin-action-download-video-html" disabled>Descargar preview HTML</button>
               <button class="admin-button tiny" type="button" data-video-export data-testid="admin-action-export-video" disabled>Exportar video</button>
+            </div>
+          </div>
+          <div class="admin-video-busy" data-video-busy role="status" aria-live="polite" hidden>
+            <div class="admin-video-busy-card">
+              <span class="admin-video-busy-clock" aria-hidden="true"></span>
+              <strong>Trabajando...</strong>
+              <p data-video-busy-message>Preparando video IA.</p>
             </div>
           </div>
           <div class="admin-video-grid">

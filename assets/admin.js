@@ -25,7 +25,8 @@ const state = {
   },
   video: {
     lastProject: null,
-    selectedSceneIndex: 0
+    selectedSceneIndex: 0,
+    busy: false
   }
 };
 
@@ -66,7 +67,9 @@ const els = {
   videoCopyPrompt: document.querySelector("[data-video-copy-prompt]"),
   videoDownloadJson: document.querySelector("[data-video-download-json]"),
   videoDownloadHtml: document.querySelector("[data-video-download-html]"),
-  videoExport: document.querySelector("[data-video-export]")
+  videoExport: document.querySelector("[data-video-export]"),
+  videoBusy: document.querySelector("[data-video-busy]"),
+  videoBusyMessage: document.querySelector("[data-video-busy-message]")
 };
 
 function escapeHtml(value) {
@@ -460,8 +463,24 @@ function renderKpis(payload) {
 
 function setVideoActions(enabled) {
   [els.videoCopyPrompt, els.videoDownloadJson, els.videoDownloadHtml, els.videoExport].forEach((button) => {
-    if (button) button.disabled = !enabled;
+    if (button) button.disabled = !enabled || state.video.busy;
   });
+}
+
+function setVideoBusy(isBusy, message = "Trabajando...") {
+  state.video.busy = Boolean(isBusy);
+  if (els.videoBusy) {
+    els.videoBusy.hidden = !state.video.busy;
+  }
+  if (els.videoBusyMessage) {
+    els.videoBusyMessage.textContent = message;
+  }
+  if (els.videoForm) {
+    els.videoForm.querySelectorAll("input, select, button").forEach((control) => {
+      control.disabled = state.video.busy;
+    });
+  }
+  setVideoActions(Boolean(state.video.lastProject));
 }
 
 function videoFormPayload(form) {
@@ -983,8 +1002,7 @@ async function exportVideoProject() {
     recorder.onstop = () => resolve();
   });
 
-  const button = els.videoExport;
-  if (button) button.disabled = true;
+  setVideoBusy(true, "Exportando video con personas de fondo, musica y marca fija.");
   showStatus(`Exportando video ${extension.toUpperCase()} con musica... manten esta pestana abierta.`);
   const start = performance.now();
 
@@ -1015,19 +1033,24 @@ async function exportVideoProject() {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
-  if (button) button.disabled = false;
+  setVideoBusy(false);
   showStatus(`Video exportado en ${extension.toUpperCase()} con personas de fondo, musica y branding obligatorio.`, "good");
 }
 
 async function runVideoGeneration(form) {
   const payload = videoFormPayload(form);
+  setVideoBusy(true, "Generando guion, storyboard y preview con marca fija.");
   showStatus("Generando storyboard de video IA...");
-  const project = await api("/api/admin?resource=social-video/generate", {
-    method: "POST",
-    body: JSON.stringify(payload)
-  });
-  renderVideoProject(project);
-  showStatus(`Video IA preparado: ${project.title}`, "good");
+  try {
+    const project = await api("/api/admin?resource=social-video/generate", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    renderVideoProject(project);
+    showStatus(`Video IA preparado: ${project.title}`, "good");
+  } finally {
+    setVideoBusy(false);
+  }
 }
 
 async function copyVideoPrompt() {
@@ -1332,7 +1355,7 @@ if (els.videoDownloadHtml) {
 if (els.videoExport) {
   els.videoExport.addEventListener("click", () =>
     exportVideoProject().catch((error) => {
-      els.videoExport.disabled = false;
+      setVideoBusy(false);
       showStatus(error.message, "bad");
     })
   );
