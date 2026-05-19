@@ -7,6 +7,7 @@ const { generateSocialVideoProject } = require("../lib/social-video/generator");
 test("video branding config exige logo y web en posiciones fijas", () => {
   assert.equal(VIDEO_BRANDING_CONFIG.showLogo, true);
   assert.equal(VIDEO_BRANDING_CONFIG.logoPosition, "top-right");
+  assert.equal(VIDEO_BRANDING_CONFIG.logoAssetPath, "/assets/inmoradar-brand-mark.svg");
   assert.equal(VIDEO_BRANDING_CONFIG.showWebsite, true);
   assert.equal(VIDEO_BRANDING_CONFIG.websiteText, "Inmoradar.app");
   assert.equal(VIDEO_BRANDING_CONFIG.websitePosition, "bottom-right");

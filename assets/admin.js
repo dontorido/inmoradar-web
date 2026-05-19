@@ -591,7 +591,7 @@ function buildVideoPreviewHtml(project) {
       <p>${escapeHtml(project.caption || "")}</p>
     </section>
     <section class="scene-list">${scenes}</section>
-    <img class="brand-logo" src="https://www.inmoradar.app/assets/favicon.svg" alt="InmoRadar">
+    <img class="brand-logo" src="https://www.inmoradar.app/assets/inmoradar-brand-mark.svg" alt="InmoRadar">
     <span class="brand-site">Inmoradar.app</span>
   </main>
 </body>
@@ -675,9 +675,21 @@ function drawVideoBranding(ctx, project, logoImage) {
       ctx.strokeStyle = "#FF4500";
       ctx.lineWidth = 6;
       ctx.stroke();
+      ctx.strokeStyle = "#FFFFFF";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(logoX + logoSize / 2, logoY + logoSize / 2, logoSize * 0.2, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.fillStyle = "#FFFFFF";
-      ctx.font = "800 18px Arial";
-      ctx.fillText("IR", logoX + 22, logoY + 46);
+      ctx.beginPath();
+      ctx.arc(logoX + logoSize / 2, logoY + logoSize / 2, logoSize * 0.05, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#FFFFFF";
+      ctx.lineWidth = 3.4;
+      ctx.beginPath();
+      ctx.moveTo(logoX + logoSize / 2, logoY + logoSize / 2);
+      ctx.lineTo(logoX + logoSize * 0.62, logoY + logoSize * 0.37);
+      ctx.stroke();
     }
   }
 
@@ -797,7 +809,7 @@ async function exportVideoProject() {
   let logoImage = null;
 
   try {
-    logoImage = await loadImage("assets/favicon.svg");
+    logoImage = await loadImage("assets/inmoradar-brand-mark.svg");
   } catch (error) {
     logoImage = null;
   }
