@@ -32,7 +32,12 @@ test("generateSocialVideoProject genera storyboard con branding obligatorio", ()
   assert.match(project.visual_backdrop, /personas reales|familia|amigos/);
   assert.equal(project.music_style, "warm_house");
   assert.match(project.music_direction, /volumen bajo|BPM|instrumental/);
+  assert.equal(project.real_ai_video.status, "requires_external_ai_video_renderer");
+  assert.match(project.real_ai_video.master_prompt, /Personas reales y fotorealistas|REQUISITO CRITICO DE REALISMO/);
+  assert.match(project.real_ai_video.negative_prompt, /ilustracion|avatar|manos deformes/);
+  assert.equal(project.real_ai_video.scene_prompts.length, 5);
   assert.equal(project.render_contract.mandatory_overlay, true);
+  assert.equal(project.render_contract.real_people_final, "external_ai_video_renderer_or_uploaded_clip_required");
   assert.equal(project.render_contract.webm_fallback, true);
   assert.equal(project.render_contract.audio_track, true);
   assert.equal(project.scenes.length, 5);
@@ -42,5 +47,6 @@ test("generateSocialVideoProject genera storyboard con branding obligatorio", ()
   assert.match(project.global_ai_prompt, /Musica obligatoria/);
   assert.ok(project.quality_checks.includes("branding_visible_all_scenes"));
   assert.ok(project.quality_checks.includes("people_background_present"));
+  assert.ok(project.quality_checks.includes("real_people_ai_pack_ready"));
   assert.ok(project.quality_checks.includes("music_track_present"));
 });

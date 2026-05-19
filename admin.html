@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow">
   <title>Backoffice | InmoRadar</title>
   <meta name="theme-color" content="#0A140F">
-  <link rel="icon" href="/assets/inmoradar-brand-mark.svg?v=20260519" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon-32.png?v=20260519b" type="image/png" sizes="32x32">
   <link rel="stylesheet" href="assets/styles.css">
   <link rel="stylesheet" href="assets/admin.css">
   <link rel="stylesheet" href="assets/admin-video-busy.css">
@@ -253,9 +253,10 @@
             </div>
             <div class="admin-row-actions">
               <button class="admin-button tiny ghost" type="button" data-video-copy-prompt data-testid="admin-action-copy-video-prompt" disabled>Copiar prompt IA</button>
+              <button class="admin-button tiny ghost" type="button" data-video-download-ai-pack data-testid="admin-action-download-ai-pack" disabled>Pack IA real</button>
               <button class="admin-button tiny ghost" type="button" data-video-download-json data-testid="admin-action-download-video-json" disabled>Descargar storyboard</button>
               <button class="admin-button tiny" type="button" data-video-download-html data-testid="admin-action-download-video-html" disabled>Descargar preview HTML</button>
-              <button class="admin-button tiny" type="button" data-video-export data-testid="admin-action-export-video" disabled>Exportar video</button>
+              <button class="admin-button tiny" type="button" data-video-export data-testid="admin-action-export-video" disabled>Exportar maqueta</button>
             </div>
           </div>
           <div class="admin-video-busy" data-video-busy role="status" aria-live="polite" hidden>
@@ -319,6 +320,10 @@
                 </select>
               </label>
               <label>
+                <span>Clip IA/personas reales</span>
+                <input type="file" name="background_clip" accept="video/mp4,video/webm,video/quicktime">
+              </label>
+              <label>
                 <span>Musica</span>
                 <select name="music_style">
                   <option value="warm_house" selected>House suave</option>
@@ -337,13 +342,14 @@
                 </select>
               </label>
               <button class="admin-button" type="submit" data-testid="admin-action-generate-video">Generar video IA</button>
-              <p class="admin-video-note">El video se genera con personas visibles de fondo, musica audible, logo arriba derecha y firma Inmoradar.app abajo derecha. Si el navegador no soporta MP4 con audio AAC, se exporta en WebM para conservar sonido.</p>
+              <p class="admin-video-note">Para personas reales, sube un clip vertical generado con IA o grabado. Si no subes clip, el export local es una maqueta visual; el Pack IA real contiene prompts para generar el video final en una IA de video.</p>
             </form>
 
             <section class="admin-video-preview-shell" aria-label="Preview vertical">
               <div class="admin-video-preview" data-video-preview data-testid="admin-video-preview">
+                <video class="admin-video-preview-clip" data-video-preview-clip muted loop playsinline hidden></video>
                 <div class="admin-video-preview-bg"></div>
-                <div aria-hidden="true" style="position:absolute;left:0;right:0;bottom:0;height:54%;opacity:.62;background:radial-gradient(circle at 26% 36%,rgba(255,255,255,.28) 0 18px,transparent 19px),radial-gradient(circle at 50% 32%,rgba(255,69,0,.22) 0 17px,transparent 18px),radial-gradient(circle at 72% 38%,rgba(255,255,255,.22) 0 16px,transparent 17px),linear-gradient(90deg,transparent 12%,rgba(255,255,255,.10) 12% 30%,transparent 30% 36%,rgba(255,255,255,.08) 36% 58%,transparent 58% 64%,rgba(255,255,255,.08) 64% 84%,transparent 84%);"></div>
+                <div data-mock-people aria-hidden="true" style="position:absolute;left:0;right:0;bottom:0;height:54%;opacity:.62;background:radial-gradient(circle at 26% 36%,rgba(255,255,255,.28) 0 18px,transparent 19px),radial-gradient(circle at 50% 32%,rgba(255,69,0,.22) 0 17px,transparent 18px),radial-gradient(circle at 72% 38%,rgba(255,255,255,.22) 0 16px,transparent 17px),linear-gradient(90deg,transparent 12%,rgba(255,255,255,.10) 12% 30%,transparent 30% 36%,rgba(255,255,255,.08) 36% 58%,transparent 58% 64%,rgba(255,255,255,.08) 64% 84%,transparent 84%);"></div>
                 <div class="admin-video-preview-content">
                   <span class="admin-video-overline" data-video-preview-topic>Social Video Studio</span>
                   <h3 data-video-preview-headline>Genera un video inmobiliario listo para redes.</h3>

@@ -26,7 +26,10 @@ const state = {
   video: {
     lastProject: null,
     selectedSceneIndex: 0,
-    busy: false
+    busy: false,
+    backgroundClipUrl: "",
+    backgroundClipName: "",
+    backgroundClipType: ""
   }
 };
 
@@ -63,8 +66,10 @@ const els = {
   videoPreviewBody: document.querySelector("[data-video-preview-body]"),
   videoPreviewTitle: document.querySelector("[data-video-preview-title]"),
   videoPreviewMeta: document.querySelector("[data-video-preview-meta]"),
+  videoPreviewClip: document.querySelector("[data-video-preview-clip]"),
   videoStoryboard: document.querySelector("[data-video-storyboard]"),
   videoCopyPrompt: document.querySelector("[data-video-copy-prompt]"),
+  videoDownloadAiPack: document.querySelector("[data-video-download-ai-pack]"),
   videoDownloadJson: document.querySelector("[data-video-download-json]"),
   videoDownloadHtml: document.querySelector("[data-video-download-html]"),
   videoExport: document.querySelector("[data-video-export]"),
@@ -462,7 +467,7 @@ function renderKpis(payload) {
 }
 
 function setVideoActions(enabled) {
-  [els.videoCopyPrompt, els.videoDownloadJson, els.videoDownloadHtml, els.videoExport].forEach((button) => {
+  [els.videoCopyPrompt, els.videoDownloadAiPack, els.videoDownloadJson, els.videoDownloadHtml, els.videoExport].forEach((button) => {
     if (button) button.disabled = !enabled || state.video.busy;
   });
 }
@@ -497,10 +502,65 @@ function videoFormPayload(form) {
   };
 }
 
+function syncVideoBackgroundClip(form) {
+  const file = form?.querySelector('[name="background_clip"]')?.files?.[0];
+  if (!file) return;
+  if (state.video.backgroundClipUrl) {
+    URL.revokeObjectURL(state.video.backgroundClipUrl);
+  }
+  state.video.backgroundClipUrl = URL.createObjectURL(file);
+  state.video.backgroundClipName = file.name || "clip-personas-reales";
+  state.video.backgroundClipType = file.type || "video";
+}
+
+function storedVideoProject(project) {
+  if (!project) return null;
+  const copy = { ...project };
+  delete copy.local_background_clip;
+  return copy;
+}
+
+function realVideoPackText(project) {
+  if (!project) return "";
+  const pack = project.real_ai_video || {};
+  const scenePrompts = (pack.scene_prompts || project.scenes || [])
+    .map((scene, index) => {
+      const title = scene.title || scene.headline || `Escena ${index + 1}`;
+      const prompt = scene.prompt || scene.visual_prompt || "";
+      return `${String(index + 1).padStart(2, "0")} - ${title}\n${prompt}`;
+    })
+    .join("\n\n");
+
+  return [
+    `INMORADAR - PACK VIDEO IA REAL`,
+    `Titulo: ${project.title || ""}`,
+    `Duracion: ${project.duration_seconds || 24}s`,
+    `Formato: ${project.format?.width || 1080}x${project.format?.height || 1920}`,
+    "",
+    "PROMPT MAESTRO",
+    pack.master_prompt || project.global_ai_prompt || "",
+    "",
+    "NEGATIVE PROMPT",
+    pack.negative_prompt || "Sin dibujos, sin 3D, sin avatares, sin caras deformes, sin manos deformes, sin texto ilegible, sin logotipos externos.",
+    "",
+    "ESCENAS",
+    scenePrompts,
+    "",
+    "MUSICA",
+    project.music_prompt || project.music_direction || "",
+    "",
+    "BRANDING OBLIGATORIO",
+    `Logo InmoRadar arriba derecha. Texto exacto "${project.branding?.websiteText || "Inmoradar.app"}" abajo derecha durante todo el video.`,
+    "",
+    "USO RECOMENDADO",
+    "Genera el video base con este pack en una IA de video. Despues sube ese clip en 'Clip IA/personas reales' y exporta la maqueta final con texto, marca y musica desde InmoRadar."
+  ].join("\n");
+}
+
 function renderVideoProject(project) {
   state.video.lastProject = project;
   state.video.selectedSceneIndex = Math.min(state.video.selectedSceneIndex || 0, Math.max((project.scenes || []).length - 1, 0));
-  sessionStorage.setItem(VIDEO_PROJECT_KEY, JSON.stringify(project));
+  sessionStorage.setItem(VIDEO_PROJECT_KEY, JSON.stringify(storedVideoProject(project)));
   renderVideoPreview();
   renderVideoStoryboard();
   setVideoActions(Boolean(project));
@@ -517,7 +577,22 @@ function renderVideoPreview() {
   if (els.videoPreviewBody) els.videoPreviewBody.textContent = scene.body || project.caption || "";
   if (els.videoPreviewTitle) els.videoPreviewTitle.textContent = project.title || "Video InmoRadar";
   if (els.videoPreviewMeta) {
-    els.videoPreviewMeta.textContent = `${project.duration_seconds || 24}s - ${project.format?.width || 1080}x${project.format?.height || 1920} - ${project.visual_style_label || "hogar"} - ${project.music_label || "musica"}`;
+    const clipLabel = state.video.backgroundClipName ? `clip real: ${state.video.backgroundClipName}` : "maqueta local sin clip real";
+    els.videoPreviewMeta.textContent = `${project.duration_seconds || 24}s - ${project.format?.width || 1080}x${project.format?.height || 1920} - ${project.visual_style_label || "hogar"} - ${project.music_label || "musica"} - ${clipLabel}`;
+  }
+  if (els.videoPreviewClip) {
+    if (state.video.backgroundClipUrl) {
+      if (els.videoPreviewClip.src !== state.video.backgroundClipUrl) {
+        els.videoPreviewClip.src = state.video.backgroundClipUrl;
+      }
+      els.videoPreviewClip.hidden = false;
+      els.videoPreviewClip.play().catch(() => {});
+      els.videoPreview.classList.add("has-real-clip");
+    } else {
+      els.videoPreviewClip.hidden = true;
+      els.videoPreviewClip.removeAttribute("src");
+      els.videoPreview.classList.remove("has-real-clip");
+    }
   }
 }
 
@@ -545,6 +620,11 @@ function renderVideoStoryboard() {
       <p>Fondo humano: ${escapeHtml(project.visual_style_label || "Hogar cotidiano")} - ${escapeHtml(project.visual_backdrop || "")}</p>
       <p>Musica: ${escapeHtml(project.music_label || "House suave")} - ${escapeHtml(project.music_direction || "")}</p>
       <p>Branding: logo arriba derecha (${escapeHtml(project.branding?.logoSizePx || 72)} px) y texto exacto "${escapeHtml(project.branding?.websiteText || "Inmoradar.app")}" abajo derecha durante todo el video.</p>
+    </section>
+    <section class="admin-video-branding-card">
+      <strong>Personas reales</strong>
+      <p>${state.video.backgroundClipName ? `Clip real activo: ${escapeHtml(state.video.backgroundClipName)}. Se usara como fondo del export local.` : "Sin clip real subido. El export local usa una maqueta; para personas reales descarga el Pack IA real, genera un clip vertical y subelo en el formulario."}</p>
+      <p>${escapeHtml(project.real_ai_video?.production_note || "El render final con personas reales requiere una IA de video o un clip real como fuente visual.")}</p>
     </section>
     <div class="admin-video-scenes">
       ${(project.scenes || [])
@@ -837,7 +917,18 @@ function drawVideoBranding(ctx, project, logoImage) {
   }
 }
 
-function drawVideoFrame(ctx, project, elapsedMs, logoImage) {
+function drawCoverVideo(ctx, video, width, height) {
+  const videoWidth = video.videoWidth || width;
+  const videoHeight = video.videoHeight || height;
+  const scale = Math.max(width / videoWidth, height / videoHeight);
+  const drawWidth = videoWidth * scale;
+  const drawHeight = videoHeight * scale;
+  const x = (width - drawWidth) / 2;
+  const y = (height - drawHeight) / 2;
+  ctx.drawImage(video, x, y, drawWidth, drawHeight);
+}
+
+function drawVideoFrame(ctx, project, elapsedMs, logoImage, backgroundVideo) {
   const width = project.format?.width || 1080;
   const height = project.format?.height || 1920;
   const scenes = project.scenes || [];
@@ -848,26 +939,41 @@ function drawVideoFrame(ctx, project, elapsedMs, logoImage) {
   const sceneIndex = Math.max(0, scenes.indexOf(scene));
   const progress = Math.max(0, Math.min(1, elapsedMs / Math.max(1, (project.duration_seconds || 24) * 1000)));
 
-  const bg = ctx.createLinearGradient(0, 0, width, height);
-  bg.addColorStop(0, "#09090B");
-  bg.addColorStop(0.55, "#18181B");
-  bg.addColorStop(1, "#0A140F");
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, width, height);
+  if (backgroundVideo && backgroundVideo.readyState >= 2) {
+    drawCoverVideo(ctx, backgroundVideo, width, height);
+    const photoOverlay = ctx.createLinearGradient(0, 0, width, height);
+    photoOverlay.addColorStop(0, "rgba(9,9,11,.82)");
+    photoOverlay.addColorStop(0.46, "rgba(9,9,11,.36)");
+    photoOverlay.addColorStop(1, "rgba(9,9,11,.22)");
+    ctx.fillStyle = photoOverlay;
+    ctx.fillRect(0, 0, width, height);
+    const bottomOverlay = ctx.createLinearGradient(0, height * 0.58, 0, height);
+    bottomOverlay.addColorStop(0, "rgba(9,9,11,0)");
+    bottomOverlay.addColorStop(1, "rgba(9,9,11,.82)");
+    ctx.fillStyle = bottomOverlay;
+    ctx.fillRect(0, 0, width, height);
+  } else {
+    const bg = ctx.createLinearGradient(0, 0, width, height);
+    bg.addColorStop(0, "#09090B");
+    bg.addColorStop(0.55, "#18181B");
+    bg.addColorStop(1, "#0A140F");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
 
-  const orangeGlow = ctx.createRadialGradient(270, 240, 0, 270, 240, 520);
-  orangeGlow.addColorStop(0, "rgba(255,69,0,.38)");
-  orangeGlow.addColorStop(1, "rgba(255,69,0,0)");
-  ctx.fillStyle = orangeGlow;
-  ctx.fillRect(0, 0, width, height);
+    const orangeGlow = ctx.createRadialGradient(270, 240, 0, 270, 240, 520);
+    orangeGlow.addColorStop(0, "rgba(255,69,0,.38)");
+    orangeGlow.addColorStop(1, "rgba(255,69,0,0)");
+    ctx.fillStyle = orangeGlow;
+    ctx.fillRect(0, 0, width, height);
 
-  const limeGlow = ctx.createRadialGradient(900, 340, 0, 900, 340, 420);
-  limeGlow.addColorStop(0, "rgba(212,255,63,.14)");
-  limeGlow.addColorStop(1, "rgba(212,255,63,0)");
-  ctx.fillStyle = limeGlow;
-  ctx.fillRect(0, 0, width, height);
+    const limeGlow = ctx.createRadialGradient(900, 340, 0, 900, 340, 420);
+    limeGlow.addColorStop(0, "rgba(212,255,63,.14)");
+    limeGlow.addColorStop(1, "rgba(212,255,63,0)");
+    ctx.fillStyle = limeGlow;
+    ctx.fillRect(0, 0, width, height);
 
-  drawPeopleBackground(ctx, project, elapsedMs);
+    drawPeopleBackground(ctx, project, elapsedMs);
+  }
 
   ctx.strokeStyle = "rgba(255,255,255,.055)";
   ctx.lineWidth = 1;
@@ -998,6 +1104,22 @@ async function createVideoMusicTrack(project, durationMs) {
   };
 }
 
+function createBackgroundVideo(url) {
+  if (!url) return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    const done = () => resolve(video);
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    video.onloadeddata = done;
+    video.onerror = () => reject(new Error("background_clip_load_failed"));
+    video.src = url;
+    video.load();
+  });
+}
+
 async function exportVideoProject() {
   const project = state.video.lastProject;
   if (!project) return;
@@ -1016,6 +1138,7 @@ async function exportVideoProject() {
   const extension = mimeType.includes("webm") ? "webm" : "mp4";
   let logoImage = null;
   let musicTrack = null;
+  let backgroundVideo = null;
 
   try {
     logoImage = await loadImage("assets/inmoradar-brand-mark.svg");
@@ -1024,6 +1147,17 @@ async function exportVideoProject() {
   }
 
   const durationMs = Math.max(1000, (project.duration_seconds || 24) * 1000);
+  try {
+    backgroundVideo = await createBackgroundVideo(state.video.backgroundClipUrl);
+    if (backgroundVideo) {
+      backgroundVideo.currentTime = 0;
+      await backgroundVideo.play().catch(() => {});
+    }
+  } catch (error) {
+    backgroundVideo = null;
+    showStatus("No pude cargar el clip real; exporto maqueta local.", "neutral");
+  }
+
   try {
     musicTrack = await createVideoMusicTrack(project, durationMs);
     musicTrack?.stream?.getAudioTracks().forEach((track) => stream.addTrack(track));
@@ -1048,7 +1182,7 @@ async function exportVideoProject() {
   await new Promise((resolve) => {
     function frame(now) {
       const elapsed = Math.min(durationMs, now - start);
-      drawVideoFrame(ctx, project, elapsed, logoImage);
+      drawVideoFrame(ctx, project, elapsed, logoImage, backgroundVideo);
       if (elapsed < durationMs) {
         requestAnimationFrame(frame);
       } else {
@@ -1061,6 +1195,11 @@ async function exportVideoProject() {
   await finished;
   stream.getTracks().forEach((track) => track.stop());
   if (musicTrack) await musicTrack.close();
+  if (backgroundVideo) {
+    backgroundVideo.pause();
+    backgroundVideo.removeAttribute("src");
+    backgroundVideo.load();
+  }
 
   const blob = new Blob(chunks, { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -1072,11 +1211,15 @@ async function exportVideoProject() {
   link.remove();
   URL.revokeObjectURL(url);
   setVideoBusy(false);
-  showStatus(`Video exportado en ${extension.toUpperCase()} con personas de fondo, musica y branding obligatorio.`, "good");
+  showStatus(
+    `Video exportado en ${extension.toUpperCase()} ${state.video.backgroundClipName ? "con clip real de fondo" : "como maqueta local"} y musica.`,
+    "good"
+  );
 }
 
 async function runVideoGeneration(form) {
   const payload = videoFormPayload(form);
+  syncVideoBackgroundClip(form);
   setVideoBusy(true, "Generando guion, storyboard y preview con marca fija.");
   showStatus("Generando storyboard de video IA...");
   try {
@@ -1094,14 +1237,20 @@ async function runVideoGeneration(form) {
 async function copyVideoPrompt() {
   const project = state.video.lastProject;
   if (!project) return;
-  const text = project.global_ai_prompt || "";
+  const text = project.real_ai_video?.master_prompt || project.global_ai_prompt || "";
   try {
     await navigator.clipboard.writeText(text);
-    showStatus("Prompt IA copiado.", "good");
+    showStatus("Prompt IA real copiado.", "good");
   } catch (error) {
     downloadText(`${project.id || "inmoradar-video"}-prompt.txt`, "text/plain;charset=utf-8", text);
     showStatus("No pude copiar al portapapeles; he descargado el prompt.", "neutral");
   }
+}
+
+function downloadVideoAiPack() {
+  const project = state.video.lastProject;
+  if (!project) return;
+  downloadText(`${project.id || "inmoradar-video"}-pack-ia-real.txt`, "text/plain;charset=utf-8", realVideoPackText(project));
 }
 
 function downloadVideoJson() {
@@ -1366,6 +1515,14 @@ if (els.videoForm) {
     event.preventDefault();
     runVideoGeneration(els.videoForm).catch((error) => showStatus(error.message, "bad"));
   });
+  els.videoForm.querySelector('[name="background_clip"]')?.addEventListener("change", () => {
+    syncVideoBackgroundClip(els.videoForm);
+    renderVideoPreview();
+    renderVideoStoryboard();
+    if (state.video.backgroundClipName) {
+      showStatus(`Clip real cargado: ${state.video.backgroundClipName}`, "good");
+    }
+  });
 }
 
 if (els.videoStoryboard) {
@@ -1380,6 +1537,10 @@ if (els.videoStoryboard) {
 
 if (els.videoCopyPrompt) {
   els.videoCopyPrompt.addEventListener("click", () => copyVideoPrompt().catch((error) => showStatus(error.message, "bad")));
+}
+
+if (els.videoDownloadAiPack) {
+  els.videoDownloadAiPack.addEventListener("click", downloadVideoAiPack);
 }
 
 if (els.videoDownloadJson) {
