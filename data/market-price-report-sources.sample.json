@@ -1,0 +1,28 @@
+[
+  {
+    "disabled": true,
+    "source": "idealista_public_report",
+    "operation": "sale",
+    "country": "ES",
+    "autonomous_community": "Madrid",
+    "province": "Madrid",
+    "municipality": "Madrid",
+    "row_geo_level": "district",
+    "period_label": "abril 2026",
+    "period_date": "2026-04-01",
+    "url": "https://www.idealista.com/sala-de-prensa/informes-precio-vivienda/venta/madrid/madrid-provincia/madrid/"
+  },
+  {
+    "disabled": true,
+    "source": "fotocasa_index",
+    "operation": "rent",
+    "country": "ES",
+    "autonomous_community": "Cataluña",
+    "province": "Barcelona",
+    "municipality": "Barcelona",
+    "row_geo_level": "district",
+    "period_label": "abril 2026",
+    "period_date": "2026-04-01",
+    "url": "https://www.fotocasa.es/fotocasa-life/indice-inmobiliario-fotocasa/"
+  }
+]

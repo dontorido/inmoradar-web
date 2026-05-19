@@ -8,7 +8,11 @@ const state = {
     status: "all"
   },
   seo: {
-    status: "all"
+    status: "all",
+    page: 1,
+    pageSize: 10,
+    hasNextPage: false,
+    hasPreviousPage: false
   },
   parking: {
     lastProbe: null
@@ -34,6 +38,7 @@ const els = {
   stats: document.querySelector("[data-admin-stats]"),
   premiumRows: document.querySelector("[data-premium-rows]"),
   seoRows: document.querySelector("[data-seo-rows]"),
+  seoPagination: document.querySelector("[data-seo-pagination]"),
   premiumFilter: document.querySelector("[data-premium-filter]"),
   seoFilter: document.querySelector("[data-seo-filter]"),
   seoGenerate: document.querySelector("[data-seo-generate]"),
@@ -234,9 +239,16 @@ function renderPremium(rows) {
     .join("");
 }
 
-function renderSeo(rows) {
+function renderSeo(payload) {
+  const rows = payload.landings || [];
+  state.seo.page = Number(payload.page || state.seo.page || 1);
+  state.seo.pageSize = Number(payload.page_size || state.seo.pageSize || 10);
+  state.seo.hasNextPage = Boolean(payload.has_next_page);
+  state.seo.hasPreviousPage = Boolean(payload.has_previous_page);
+
   if (!rows.length) {
     els.seoRows.innerHTML = `<tr><td colspan="5">No hay landings con este filtro.</td></tr>`;
+    renderSeoPagination(payload);
     return;
   }
 
@@ -266,6 +278,25 @@ function renderSeo(rows) {
       `;
     })
     .join("");
+  renderSeoPagination(payload);
+}
+
+function renderSeoPagination(payload) {
+  if (!els.seoPagination) return;
+  const page = Number(payload.page || state.seo.page || 1);
+  const from = Number(payload.from || 0);
+  const to = Number(payload.to || 0);
+  const hasPrevious = Boolean(payload.has_previous_page);
+  const hasNext = Boolean(payload.has_next_page);
+  const range = from && to ? `${from}-${to}` : "0";
+
+  els.seoPagination.innerHTML = `
+    <span>Pagina ${escapeHtml(page)} - Landings ${escapeHtml(range)} - 10 por pagina</span>
+    <div class="admin-pagination-actions">
+      <button class="admin-button tiny ghost" type="button" data-seo-page="previous" ${hasPrevious ? "" : "disabled"}>Anterior</button>
+      <button class="admin-button tiny ghost" type="button" data-seo-page="next" ${hasNext ? "" : "disabled"}>Siguiente</button>
+    </div>
+  `;
 }
 
 function fieldOptions(field, value) {
@@ -372,11 +403,12 @@ async function loadPremium() {
 
 async function loadSeo() {
   const params = new URLSearchParams({
-    limit: "50",
+    limit: String(state.seo.pageSize || 10),
+    page: String(state.seo.page || 1),
     status: state.seo.status || "all"
   });
   const payload = await api(`/api/admin?resource=seo/landings&${params.toString()}`);
-  renderSeo(payload.landings || []);
+  renderSeo(payload);
 }
 
 async function loadKpis() {
@@ -561,6 +593,7 @@ els.seoFilter.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = new FormData(els.seoFilter);
   state.seo.status = String(form.get("status") || "all");
+  state.seo.page = 1;
   await loadSeo();
 });
 
@@ -595,6 +628,17 @@ els.seoRows.addEventListener("click", (event) => {
   const slug = button.dataset.slug;
   runSeoRowAction(action, slug).catch((error) => showStatus(error.message, "bad"));
 });
+
+if (els.seoPagination) {
+  els.seoPagination.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-seo-page]");
+    if (!button || button.disabled) return;
+    const direction = button.dataset.seoPage;
+    if (direction === "previous") state.seo.page = Math.max(1, state.seo.page - 1);
+    if (direction === "next") state.seo.page += 1;
+    loadSeo().catch((error) => showStatus(error.message, "bad"));
+  });
+}
 
 requireLogin();
 setAdminSection(state.activeSection);

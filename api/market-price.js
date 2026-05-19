@@ -65,7 +65,17 @@ const MARKET_SELECT = [
 ].join(",");
 
 const DISCLAIMER =
-  "Estimación orientativa basada en la referencia de mercado disponible. No sustituye una valoración profesional ni refleja el precio exacto de una calle o portal.";
+  "Referencia orientativa basada en datos agregados de mercado. No sustituye una valoración profesional.";
+
+const FALLBACK_STEPS = [
+  "neighbourhood_with_district",
+  "neighbourhood_without_district",
+  "district",
+  "municipality",
+  "province",
+  "autonomous_community",
+  "country"
+];
 
 let kpiSettingsCache = {
   expiresAt: 0,
@@ -73,6 +83,46 @@ let kpiSettingsCache = {
 };
 
 const FALLBACK_MARKET_PRICES = [
+  {
+    source: "idealista_public_report",
+    operation: "sale",
+    country: "ES",
+    autonomous_community: "Madrid Comunidad",
+    province: "Madrid",
+    municipality: "Madrid",
+    district: "Puente de Vallecas",
+    neighbourhood: "Portazgo",
+    zone_name: "Portazgo",
+    geo_level: "neighbourhood",
+    price_eur_m2: 3290,
+    evolution_month_pct: -3.0,
+    evolution_quarter_pct: -0.1,
+    evolution_year_pct: 27.3,
+    historic_max_price_eur_m2: 3392,
+    historic_max_period: "mar 2026",
+    variation_from_historic_max_pct: -3.0,
+    period_label: "abril 2026",
+    period_date: "2026-04-01",
+    source_url: "https://www.idealista.com/sala-de-prensa/informes-precio-vivienda/venta/madrid-comunidad/madrid-provincia/madrid/puente-de-vallecas/",
+    confidence_score: 0.82,
+    extracted_at: "2026-05-19T10:00:00Z"
+  },
+  {
+    source: "idealista_public_report",
+    operation: "sale",
+    country: "ES",
+    autonomous_community: "Madrid Comunidad",
+    province: "Madrid",
+    municipality: "Madrid",
+    district: "Puente de Vallecas",
+    geo_level: "district",
+    price_eur_m2: 3325,
+    period_label: "abril 2026",
+    period_date: "2026-04-01",
+    source_url: "https://www.idealista.com/sala-de-prensa/informes-precio-vivienda/venta/madrid-comunidad/madrid-provincia/madrid/puente-de-vallecas/",
+    confidence_score: 0.78,
+    extracted_at: "2026-05-19T10:00:00Z"
+  },
   {
     source: "idealista_public_report",
     operation: "sale",
@@ -298,6 +348,19 @@ function recordMatchesBase(record, query) {
 
 function findBestCandidateFromCandidates(candidates, query) {
   if (query.zone) {
+    const zoneCandidates = candidates.filter(
+      (record) =>
+        isZoneRecord(record) &&
+        [record.zone_name, record.neighbourhood].some((name) => sameName(query.zone, name))
+    );
+
+    if (query.district) {
+      const exactZoneWithDistrict = zoneCandidates.find((record) => sameName(record.district, query.district));
+      if (exactZoneWithDistrict) return exactZoneWithDistrict;
+    }
+
+    if (zoneCandidates.length) return zoneCandidates[0];
+
     const exactZone = candidates.find(
       (record) =>
         isZoneRecord(record) &&
@@ -315,27 +378,27 @@ function findBestCandidateFromCandidates(candidates, query) {
 
   if (query.district) {
     const district = candidates.find(
-      (record) => record.geo_level === "district" && sameName(record.district, query.district)
+      (record) => canonicalGeoLevel(record) === "district" && sameName(record.district, query.district)
     );
     if (district) return district;
   }
 
   if (query.municipality) {
     const municipality = candidates.find(
-      (record) => record.geo_level === "municipality" && sameName(record.municipality, query.municipality)
+      (record) => canonicalGeoLevel(record) === "municipality" && sameName(record.municipality, query.municipality)
     );
     if (municipality) return municipality;
   }
 
   if (query.province) {
-    const province = candidates.find((record) => record.geo_level === "province" && sameName(record.province, query.province));
+    const province = candidates.find((record) => canonicalGeoLevel(record) === "province" && sameName(record.province, query.province));
     if (province) return province;
   }
 
   if (query.autonomous_community) {
     const autonomous = candidates.find(
       (record) =>
-        record.geo_level === "autonomous_community" &&
+        canonicalGeoLevel(record) === "autonomous_community" &&
         sameName(record.autonomous_community, query.autonomous_community)
     );
     if (autonomous) return autonomous;
@@ -356,6 +419,45 @@ function findBestGroupFromRecords(records, query) {
 function findBestFromRecords(records, query) {
   const group = findBestGroupFromRecords(records, query);
   return group?.[0] || null;
+}
+
+function matchedByForRecord(record, query) {
+  const level = canonicalGeoLevel(record || {});
+
+  if (level === "neighbourhood") {
+    const hasDistrictMatch = query.district && sameName(record.district, query.district);
+    if (query.municipality && hasDistrictMatch && query.zone) return "municipality+district+zone_name";
+    if (query.municipality && query.zone) return "municipality+zone_name";
+    if (query.zone) return "zone_name";
+    return "neighbourhood";
+  }
+
+  if (level === "district") {
+    if (query.municipality && query.district) return "municipality+district";
+    if (query.district) return "district";
+  }
+
+  if (level === "municipality") return query.province ? "municipality+province" : "municipality";
+  if (level === "province") return "province";
+  if (level === "autonomous_community") return "autonomous_community";
+  if (level === "country") return "country";
+  return "unknown";
+}
+
+function fallbackInfoForRecord(record, query) {
+  if (!record) {
+    return {
+      matched_by: null,
+      matched_level: null,
+      steps_tried: FALLBACK_STEPS
+    };
+  }
+
+  return {
+    matched_by: matchedByForRecord(record, query),
+    matched_level: canonicalGeoLevel(record),
+    steps_tried: FALLBACK_STEPS
+  };
 }
 
 async function fetchSupabaseCandidates(query) {
@@ -775,6 +877,25 @@ function noDataResponse(query, error, message, extra = {}) {
   };
 }
 
+function formatSignedPct(value) {
+  const rounded = roundTo(Math.abs(Number(value)), 1);
+  return String(rounded).replace(".", ",");
+}
+
+function comparisonMessageForMarket(comparison, differencePct, record) {
+  if (!comparison || differencePct === null || differencePct === undefined) return comparison?.message || "";
+  const geo = geoName(record) || "la referencia disponible";
+  const pct = formatSignedPct(differencePct);
+
+  if (differencePct > 0) {
+    return `El anuncio est\u00e1 un ${pct} % por encima de la referencia de mercado de ${geo}.`;
+  }
+  if (differencePct < 0) {
+    return `El anuncio est\u00e1 un ${pct} % por debajo de la referencia de mercado de ${geo}.`;
+  }
+  return `El anuncio est\u00e1 alineado con la referencia de mercado de ${geo}.`;
+}
+
 function queryFromRequest(req) {
   if (req.query) return req.query;
   const url = new URL(req.url || "/", `https://${req.headers?.host || "www.inmoradar.app"}`);
@@ -807,6 +928,13 @@ async function findMarketPrice(query) {
       const records = await fetchSupabaseCandidates(query);
       const group = findBestGroupFromRecords(records, query);
       const match = buildConsensusRecord(group);
+      const fallbackMatch = buildConsensusRecord(findBestGroupFromRecords(FALLBACK_MARKET_PRICES, query));
+      if (
+        fallbackMatch &&
+        (!match || geoPrecisionWeight(canonicalGeoLevel(fallbackMatch)) > geoPrecisionWeight(canonicalGeoLevel(match)))
+      ) {
+        return fallbackMatch;
+      }
       if (match) return match;
     } catch (error) {
       console.warn("[market-price] Supabase lookup failed, using fallback seed", error.message);
@@ -838,11 +966,17 @@ function buildResponse(query, record, kpiSettings = defaultKpiSettings()) {
     confidenceScore,
     kpiSettings
   );
+  if (comparison && ["neighbourhood", "district"].includes(geoLevel)) {
+    comparison.message = comparisonMessageForMarket(comparison, differencePct, record);
+  }
   const caveats = buildCaveats(query, record, confidenceScore, differencePct);
   const market = {
     price_eur_m2: marketPrice,
     geo_level: geoLevel,
     geo_name: geoName(record),
+    zone_name: record.zone_name || null,
+    neighbourhood: record.neighbourhood || null,
+    district: record.district || null,
     municipality: record.municipality || null,
     province: record.province || null,
     autonomous_community: record.autonomous_community || null,
@@ -895,18 +1029,25 @@ function buildResponse(query, record, kpiSettings = defaultKpiSettings()) {
     extracted_at: record.extracted_at || null,
     scoring: comparison?.label || null,
     score: comparison,
-    market_score: comparison
+    market_score: comparison,
+    zone_name: market.zone_name,
+    neighbourhood: market.neighbourhood,
+    district: market.district,
+    fallback: fallbackInfoForRecord(record, query)
   };
 }
 
 function buildBaseQuery(params = {}) {
+  const zone = params.zone || params.zone_name || params.neighbourhood || "";
   return {
     operation: parseOperation(params.operation),
     municipality: params.municipality || "",
     province: params.province || "",
     autonomous_community: params.autonomous_community || "",
     district: params.district || "",
-    zone: params.zone || "",
+    zone,
+    zone_name: params.zone_name || zone,
+    neighbourhood: params.neighbourhood || zone,
     listing_price_total: params.listing_price_total,
     listing_area_m2: params.listing_area_m2,
     property_type: params.property_type || "",

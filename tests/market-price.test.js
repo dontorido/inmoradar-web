@@ -5,7 +5,9 @@ const marketPriceHandler = require("../api/market-price");
 const {
   calculateDifferencePct,
   calculateListingPriceEurM2,
+  buildConsensusRecord,
   classifyComparison,
+  findBestGroupFromRecords,
   findBestFromRecords,
   precisionLabel
 } = require("../api/market-price")._internal;
@@ -68,9 +70,161 @@ test("findBestFromRecords prioriza zona y cae a municipio si no hay zona", () =>
   assert.equal(findBestFromRecords(records, { operation: "sale", municipality: "Logroño", province: "La Rioja", zone: "" }).price_eur_m2, 1769);
 });
 
+test("findBestFromRecords prioriza barrio con distrito antes de distrito y municipio", () => {
+  const records = [
+    {
+      source: "idealista_public_report",
+      operation: "sale",
+      autonomous_community: "Madrid Comunidad",
+      province: "Madrid",
+      municipality: "Madrid",
+      geo_level: "municipality",
+      price_eur_m2: 5286,
+      period_date: "2026-04-01"
+    },
+    {
+      source: "idealista_public_report",
+      operation: "sale",
+      autonomous_community: "Madrid Comunidad",
+      province: "Madrid",
+      municipality: "Madrid",
+      district: "Puente de Vallecas",
+      geo_level: "district",
+      price_eur_m2: 3325,
+      period_date: "2026-04-01"
+    },
+    {
+      source: "idealista_public_report",
+      operation: "sale",
+      autonomous_community: "Madrid Comunidad",
+      province: "Madrid",
+      municipality: "Madrid",
+      district: "Puente de Vallecas",
+      neighbourhood: "Portazgo",
+      zone_name: "Portazgo",
+      geo_level: "neighbourhood",
+      price_eur_m2: 3290,
+      period_date: "2026-04-01"
+    }
+  ];
+
+  const match = findBestFromRecords(records, {
+    operation: "sale",
+    municipality: "Madrid",
+    district: "Puente de Vallecas",
+    zone: "Portazgo"
+  });
+
+  assert.equal(match.price_eur_m2, 3290);
+  assert.equal(match.geo_level, "neighbourhood");
+  assert.equal(match.zone_name, "Portazgo");
+});
+
+test("findBestFromRecords cae a distrito si no existe barrio", () => {
+  const records = [
+    {
+      source: "idealista_public_report",
+      operation: "sale",
+      municipality: "Madrid",
+      district: "Puente de Vallecas",
+      geo_level: "district",
+      price_eur_m2: 3325,
+      period_date: "2026-04-01"
+    },
+    {
+      source: "idealista_public_report",
+      operation: "sale",
+      municipality: "Madrid",
+      geo_level: "municipality",
+      price_eur_m2: 5286,
+      period_date: "2026-04-01"
+    }
+  ];
+
+  const match = findBestFromRecords(records, {
+    operation: "sale",
+    municipality: "Madrid",
+    district: "Puente de Vallecas",
+    zone: "Portazgo"
+  });
+
+  assert.equal(match.price_eur_m2, 3325);
+  assert.equal(match.geo_level, "district");
+});
+
 test("findBestFromRecords devuelve null si no hay dato compatible", () => {
   const records = [{ operation: "rent", municipality: "Madrid", geo_level: "municipality", price_eur_m2: 22 }];
   assert.equal(findBestFromRecords(records, { operation: "sale", municipality: "Madrid" }), null);
+});
+
+test("findBestGroupFromRecords agrupa fuentes del mismo nivel geografico", () => {
+  const records = [
+    {
+      source: "idealista_public_report",
+      operation: "sale",
+      municipality: "Madrid",
+      geo_level: "municipality",
+      price_eur_m2: 4300,
+      period_date: "2026-04-01"
+    },
+    {
+      source: "fotocasa_index",
+      operation: "sale",
+      municipality: "Madrid",
+      geo_level: "municipality",
+      price_eur_m2: 4500,
+      period_date: "2026-04-01"
+    },
+    {
+      source: "mivau_appraisal",
+      operation: "sale",
+      province: "Madrid",
+      geo_level: "province",
+      price_eur_m2: 3100,
+      period_date: "2025-10-01"
+    }
+  ];
+
+  const group = findBestGroupFromRecords(records, { operation: "sale", municipality: "Madrid", province: "Madrid" });
+  assert.equal(group.length, 2);
+  assert.deepEqual(
+    group.map((record) => record.source).sort(),
+    ["fotocasa_index", "idealista_public_report"]
+  );
+});
+
+test("buildConsensusRecord calcula referencia combinada y conserva fuentes", () => {
+  const consensus = buildConsensusRecord([
+    {
+      source: "idealista_public_report",
+      operation: "sale",
+      municipality: "Madrid",
+      geo_level: "municipality",
+      price_eur_m2: 4300,
+      period_label: "abril 2026",
+      period_date: "2026-04-01",
+      confidence_score: 0.65
+    },
+    {
+      source: "fotocasa_index",
+      operation: "sale",
+      municipality: "Madrid",
+      geo_level: "municipality",
+      price_eur_m2: 4500,
+      period_label: "abril 2026",
+      period_date: "2026-04-01",
+      confidence_score: 0.65
+    }
+  ]);
+
+  assert.equal(consensus.source, "market_consensus");
+  assert.equal(consensus.source_count, 2);
+  assert.equal(consensus.price_range_eur_m2.min, 4300);
+  assert.equal(consensus.price_range_eur_m2.max, 4500);
+  assert.ok(consensus.price_eur_m2 > 4300);
+  assert.ok(consensus.price_eur_m2 < 4500);
+  assert.ok(consensus.confidence_score > 0.65);
+  assert.equal(consensus.sources.length, 2);
 });
 
 test("handler devuelve ok=false con mensaje claro si no hay dato de mercado", async () => {
@@ -116,6 +270,28 @@ test("handler modera el veredicto y score cuando la referencia es municipal", as
   assert.equal(response.body.comparison.confidence_adjusted, true);
   assert.ok(response.body.comparison.price_score <= 8.2);
   assert.ok(response.body.caveats.some((text) => text.includes("referencia amplia")));
+});
+
+test("handler devuelve referencia Portazgo para el caso 109503975", async () => {
+  const response = await invokeMarketPrice({
+    operation: "sale",
+    municipality: "Madrid",
+    district: "Puente de Vallecas",
+    zone: "Portazgo",
+    listing_price_total: "305000",
+    listing_area_m2: "74"
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.listing.price_eur_m2, 4121.62);
+  assert.equal(response.body.market.price_eur_m2, 3290);
+  assert.equal(response.body.market.geo_level, "neighbourhood");
+  assert.equal(response.body.market.geo_name, "Portazgo");
+  assert.equal(response.body.market.zone_name, "Portazgo");
+  assert.equal(response.body.comparison.difference_pct, 25.28);
+  assert.equal(response.body.comparison.label, "caro");
+  assert.equal(response.body.comparison.severity, "danger");
+  assert.equal(response.body.fallback.matched_by, "municipality+district+zone_name");
 });
 
 async function invokeMarketPrice(query) {

@@ -24,6 +24,12 @@ function clampLimit(value, fallback = 50, max = 100) {
   return Math.max(1, Math.min(max, parsed));
 }
 
+function clampPage(value) {
+  const parsed = Number.parseInt(String(value || 1), 10);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.max(1, parsed);
+}
+
 function countBy(rows, key) {
   return rows.reduce((acc, row) => {
     const value = String(row[key] || "unknown");
@@ -260,22 +266,34 @@ async function handleSeoLandings(req, url) {
     return handleSeoLandingAction(await readJsonBody(req));
   }
 
-  const limit = clampLimit(url.searchParams.get("limit"), 50, 100);
+  const pageSize = clampLimit(url.searchParams.get("limit"), 10, 50);
+  const page = clampPage(url.searchParams.get("page"));
+  const offset = (page - 1) * pageSize;
   const status = String(url.searchParams.get("status") || "").trim().toLowerCase();
   const params = new URLSearchParams({
     select: LANDING_SELECT,
     order: "updated_at.desc",
-    limit: String(limit)
+    limit: String(pageSize + 1),
+    offset: String(offset)
   });
   if (status && status !== "all") params.set("status", `eq.${status}`);
 
   const rows = await supabaseFetch(`seo_landings?${params.toString()}`);
+  const allRows = Array.isArray(rows) ? rows : [];
+  const hasNextPage = allRows.length > pageSize;
+  const landings = allRows.slice(0, pageSize);
   return {
     status: 200,
     payload: {
       ok: true,
-      count: Array.isArray(rows) ? rows.length : 0,
-      landings: Array.isArray(rows) ? rows : []
+      count: landings.length,
+      page,
+      page_size: pageSize,
+      has_next_page: hasNextPage,
+      has_previous_page: page > 1,
+      from: landings.length ? offset + 1 : 0,
+      to: offset + landings.length,
+      landings
     }
   };
 }
