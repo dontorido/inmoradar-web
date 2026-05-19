@@ -19,7 +19,7 @@ const SUPPORTED_CITY_CONFIG = {
         type: "municipal_open_data"
       },
       {
-        name: "Datos Madrid - ocupacion de aparcamientos rotacionales",
+        name: "Datos Madrid - ocupación de aparcamientos rotacionales",
         url: "https://datos.madrid.es/",
         type: "municipal_open_data"
       }

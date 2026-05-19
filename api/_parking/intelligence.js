@@ -21,7 +21,7 @@ const MADRID_RESIDENT_PARKINGS = [
 ];
 
 const DISCLAIMER =
-  "Estimacion orientativa. La dificultad real puede variar segun portal, horario, permisos de residente y disponibilidad puntual.";
+  "Estimación orientativa. La dificultad real puede variar según portal, horario, permisos de residente y disponibilidad puntual.";
 
 function normalizeText(value) {
   return String(value || "")
@@ -135,7 +135,7 @@ function streetParkingAssessment(params = {}) {
 
   if (municipality === "madrid") {
     difficulty += 0.7;
-    signals.push("Ciudad con presion estructural de aparcamiento");
+    signals.push("Ciudad con presión estructural de aparcamiento");
   }
   if (/puente de vallecas/.test(district) || /portazgo/.test(zone)) {
     difficulty += 1.1;
@@ -144,14 +144,14 @@ function streetParkingAssessment(params = {}) {
   }
   if (!exact) {
     difficulty += 0.25;
-    signals.push("Ubicacion exacta no publicada");
+    signals.push("Ubicación exacta no publicada");
   }
 
   difficulty = roundTo(clamp(difficulty, 1, 10), 1);
 
   return {
     difficulty_score: difficulty,
-    label: difficulty >= 8 ? "probablemente muy dificil" : difficulty >= 6 ? "probablemente dificil" : difficulty >= 4 ? "media" : "favorable",
+    label: difficulty >= 8 ? "probablemente muy difícil" : difficulty >= 6 ? "probablemente difícil" : difficulty >= 4 ? "media" : "favorable",
     regulated_zone: {
       detected: exact ? null : null,
       type: null,
@@ -221,7 +221,7 @@ function buildPaidParking() {
     price_2h: null,
     price_day: null,
     source: "not_available",
-    message: "No se ha confirmado informacion de parkings de rotacion o precios cercanos."
+    message: "No se ha confirmado información de parkings de rotación o precios cercanos."
   };
 }
 
@@ -231,22 +231,22 @@ function buildTransportOffset(params = {}) {
     has_good_public_transport: detected === true,
     message:
       detected === true
-        ? "La cercania a transporte publico puede reducir la dependencia del coche."
-        : "No se ha podido confirmar una alternativa de transporte publico suficientemente fuerte."
+        ? "La cercanía a transporte público puede reducir la dependencia del coche."
+        : "No se ha podido confirmar una alternativa de transporte público suficientemente fuerte."
   };
 }
 
 function buildRecommendations({ residentParking, garage, streetParking }) {
   const recommendations = [
     "Preguntar si existe plaza de garaje disponible en el edificio o en la zona.",
-    "Comprobar si la direccion exacta esta dentro de zona SER.",
-    "Visitar la zona en horario nocturno y laborable para comprobar presion real de aparcamiento."
+    "Comprobar si la dirección exacta está dentro de zona SER.",
+    "Visitar la zona en horario nocturno y laborable para comprobar presión real de aparcamiento."
   ];
   if (residentParking.nearby_detected) {
     recommendations.splice(2, 0, "Revisar disponibilidad de plaza en aparcamientos de residentes cercanos.");
   }
   if (garage.included_detected) {
-    recommendations.unshift("Confirmar que la plaza de garaje esta incluida en el precio y vinculada a la vivienda.");
+    recommendations.unshift("Confirmar que la plaza de garaje está incluida en el precio y vinculada a la vivienda.");
   }
   if (streetParking.regulated_zone.detected === null) {
     recommendations.push("Sin portal exacto, validar manualmente si aplica SER/ORA/OTA.");
@@ -277,8 +277,8 @@ function buildOverallMessage({ garage, residentParking, streetParking, transport
       garage.message,
       "La vivienda se ubica en una zona residencial consolidada y densa.",
       residentParking.message,
-      exactLocation ? "La ubicacion permite una lectura mas concreta, aunque la disponibilidad debe verificarse." : "Sin portal exacto no podemos confirmar zona SER ni distancia exacta a parkings.",
-      transportOffset.has_good_public_transport ? "La alternativa de transporte publico reduce dependencia del coche." : "",
+      exactLocation ? "La ubicación permite una lectura más concreta, aunque la disponibilidad debe verificarse." : "Sin portal exacto no podemos confirmar zona SER ni distancia exacta a parkings.",
+      transportOffset.has_good_public_transport ? "La alternativa de transporte público reduce dependencia del coche." : "",
       "Si dependes del coche, conviene revisar este punto antes de avanzar."
     ]
       .filter(Boolean)
@@ -294,7 +294,7 @@ function calculateParkingAssessment(params = {}) {
     return {
       ok: false,
       reason: "missing_location",
-      message: "No hay ubicacion suficiente para valorar aparcamiento."
+      message: "No hay ubicación suficiente para valorar aparcamiento."
     };
   }
 

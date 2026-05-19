@@ -37,7 +37,7 @@ test("garaje incluido baja claramente el riesgo global", () => {
   assert.equal(withGarage.garage.included_detected, true);
 });
 
-test("sin ubicacion exacta baja la confianza", () => {
+test("sin ubicación exacta baja la confianza", () => {
   const result = calculateParkingAssessment(ARROYO_OLIVAR);
   assert.ok(result.parking_assessment.confidence_score <= 0.55);
 });
@@ -50,7 +50,7 @@ test("parking de residentes cercano no se comunica como plaza disponible", () =>
   assert.match(text, /disponibilidad/);
 });
 
-test("si falta ubicacion devuelve missing_location", () => {
+test("si falta ubicación devuelve missing_location", () => {
   const result = calculateParkingAssessment({});
   assert.equal(result.ok, false);
   assert.equal(result.reason, "missing_location");
