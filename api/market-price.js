@@ -1,5 +1,5 @@
 const crypto = require("node:crypto");
-const { handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
+const { fetchWithTimeout, handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
 const { coerceKpiSettings, defaultKpiSettings } = require("./_kpi/settings");
 const {
   buildAddressIntelligenceResponse,
@@ -68,6 +68,7 @@ const MARKET_SELECT = [
 
 const DISCLAIMER =
   "Referencia orientativa basada en datos agregados de mercado. No sustituye una valoración profesional.";
+const CONTACT_TO_EMAIL = "hola@inmoradar.app";
 
 const FALLBACK_STEPS = [
   "neighbourhood_with_district",
@@ -1193,6 +1194,100 @@ function isEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
 }
 
+function escapeEmailHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function cloudflareContactEmailConfig() {
+  return {
+    accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+    apiToken: process.env.CLOUDFLARE_EMAIL_API_TOKEN,
+    from: process.env.CLOUDFLARE_EMAIL_FROM || CONTACT_TO_EMAIL,
+    to: CONTACT_TO_EMAIL
+  };
+}
+
+function buildContactEmailPayload(item) {
+  const topic = item.topic || "general";
+  const subject = `Nuevo mensaje InmoRadar · ${topic}`;
+  const lines = [
+    "Nuevo mensaje desde el formulario de InmoRadar",
+    "",
+    `Nombre: ${item.name}`,
+    `Email: ${item.email}`,
+    `Tema: ${topic}`,
+    `Fecha: ${item.created_at}`,
+    "",
+    item.message
+  ];
+
+  return {
+    to: cloudflareContactEmailConfig().to,
+    from: cloudflareContactEmailConfig().from,
+    subject,
+    text: lines.join("\n"),
+    html: `<!doctype html>
+<html lang="es">
+<body style="margin:0;background:#FAFAFA;color:#09090B;font-family:Arial,Helvetica,sans-serif;">
+  <main style="max-width:680px;margin:0 auto;padding:32px 18px;">
+    <p style="margin:0 0 10px;color:#FF4500;font-size:11px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;">INMORADAR · CONTACTO</p>
+    <h1 style="margin:0 0 20px;color:#09090B;font-size:32px;line-height:1.05;letter-spacing:-.04em;">Nuevo mensaje</h1>
+    <section style="background:#FFFFFF;border:1px solid #E4E4E7;border-radius:20px;padding:22px;">
+      <p><strong>Nombre:</strong> ${escapeEmailHtml(item.name)}</p>
+      <p><strong>Email:</strong> <a href="mailto:${escapeEmailHtml(item.email)}">${escapeEmailHtml(item.email)}</a></p>
+      <p><strong>Tema:</strong> ${escapeEmailHtml(topic)}</p>
+      <p><strong>Fecha:</strong> ${escapeEmailHtml(item.created_at)}</p>
+      <hr style="border:0;border-top:1px solid #E4E4E7;margin:20px 0;">
+      <p style="white-space:pre-wrap;line-height:1.55;">${escapeEmailHtml(item.message)}</p>
+    </section>
+  </main>
+</body>
+</html>`,
+    reply_to: item.email,
+    headers: {
+      "Reply-To": item.email,
+      "X-InmoRadar-Contact": "website"
+    }
+  };
+}
+
+async function sendContactEmail(item) {
+  const config = cloudflareContactEmailConfig();
+  if (!config.accountId || !config.apiToken) {
+    return { ok: false, skipped: true, reason: "cloudflare_email_not_configured" };
+  }
+
+  const payload = buildContactEmailPayload(item);
+  const response = await fetchWithTimeout(
+    `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/email/sending/send`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${config.apiToken}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(payload),
+      timeoutMs: 12000
+    }
+  );
+  const body = await response.json().catch(() => null);
+  if (!response.ok || body?.success === false) {
+    return {
+      ok: false,
+      skipped: false,
+      reason: body?.errors?.[0]?.message || `cloudflare_email_http_${response.status}`,
+      status: response.status
+    };
+  }
+
+  return { ok: true, provider: "cloudflare_email_service", response: body };
+}
+
 async function contactPayload(req) {
   let payload = {};
   try {
@@ -1239,9 +1334,29 @@ async function contactPayload(req) {
     }
   }
 
+  let emailNotification = { ok: false, skipped: true, reason: "not_attempted" };
+  try {
+    emailNotification = await sendContactEmail(item);
+    if (!emailNotification.ok && !emailNotification.skipped) {
+      console.warn("[contact] Email notification failed", emailNotification.reason || "unknown_error");
+    }
+  } catch (error) {
+    emailNotification = { ok: false, skipped: false, reason: error.message || "email_send_failed" };
+    console.warn("[contact] Email notification failed", error.message);
+  }
+
   return {
     status: 200,
-    body: { ok: true, ...item }
+    body: {
+      ok: true,
+      ...item,
+      notification_email: CONTACT_TO_EMAIL,
+      email_notification: {
+        ok: Boolean(emailNotification.ok),
+        skipped: Boolean(emailNotification.skipped),
+        reason: emailNotification.ok ? null : emailNotification.reason || null
+      }
+    }
   };
 }
 
@@ -1313,6 +1428,7 @@ module.exports._internal = {
   calculateDifferencePct,
   calculateListingPriceEurM2,
   buildConsensusRecord,
+  buildContactEmailPayload,
   classifyComparison,
   confidenceFromRecord,
   findBestGroupFromRecords,

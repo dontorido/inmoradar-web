@@ -6,6 +6,7 @@ const {
   calculateDifferencePct,
   calculateListingPriceEurM2,
   buildConsensusRecord,
+  buildContactEmailPayload,
   classifyComparison,
   findBestGroupFromRecords,
   findBestFromRecords,
@@ -40,6 +41,24 @@ test("precisionLabel describe el nivel geografico sin prometer precio de calle",
   assert.equal(precisionLabel("municipality"), "Referencia municipal");
   assert.equal(precisionLabel("neighbourhood"), "Referencia de zona");
   assert.equal(precisionLabel("province"), "Referencia provincial");
+});
+
+test("buildContactEmailPayload envia mensajes de contacto a hola@inmoradar.app", () => {
+  const payload = buildContactEmailPayload({
+    id: "contact-test",
+    name: "Sergio",
+    email: "sergio@example.com",
+    topic: "premium",
+    message: "Necesito ayuda con Premium.",
+    created_at: "2026-05-19T12:00:00.000Z"
+  });
+
+  assert.equal(payload.to, "hola@inmoradar.app");
+  assert.equal(payload.reply_to, "sergio@example.com");
+  assert.equal(payload.headers["Reply-To"], "sergio@example.com");
+  assert.match(payload.subject, /premium/);
+  assert.match(payload.text, /Necesito ayuda con Premium/);
+  assert.match(payload.html, /Nuevo mensaje/);
 });
 
 test("findBestFromRecords prioriza zona y cae a municipio si no hay zona", () => {
