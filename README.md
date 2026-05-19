@@ -17,9 +17,11 @@ Web estatica de lanzamiento para InmoRadar.
 - `api/check-premium.js`: endpoint para que la extension compruebe si un email tiene Premium.
 - `api/lemonsqueezy-checkout.js`: crea checkouts y abre el Customer Portal de Lemon Squeezy en modo prueba o produccion sin exponer la API key.
 - `api/lemonsqueezy-webhook.js`: webhook preparado para sincronizar suscripciones de Lemon Squeezy.
+- `api/check-premium.js?resource=saved-properties-email-report`: envio Premium de comparativa de inmuebles guardados por Cloudflare Email Service.
 - `admin.html`, `assets/admin.js` y `assets/admin.css`: backoffice protegido por `ADMIN_IMPORT_TOKEN`.
 - `api/admin.js`: backoffice API compacta para Premium, SEO, KPIs, Parking y estado de integraciones. Se usa una sola serverless function para respetar el limite de Vercel Hobby.
 - `database/premium-subscriptions.sql`: tabla Supabase para guardar suscripciones Premium.
+- `database/saved-property-email-reports.sql`: auditoria y limite diario de emails Premium enviados.
 - `database/kpi-settings.sql`: tabla Supabase para guardar reglas, pesos, umbrales y visibilidad de KPIs.
 - `api/market-price.js`: endpoint agregado para que la extension consulte precios de mercado por zona.
 - `database/market-price-sources.sql`: tabla Supabase `market_price_sources` y seed minimo de mercado.
@@ -80,6 +82,9 @@ LEMONSQUEEZY_STORE_ID=
 LEMONSQUEEZY_VARIANT_ID=
 LEMONSQUEEZY_TEST_MODE=true
 LEMONSQUEEZY_WEBHOOK_SECRET=
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_EMAIL_API_TOKEN=
+CLOUDFLARE_EMAIL_FROM=hola@inmoradar.app
 ADMIN_IMPORT_TOKEN=
 CRON_SECRET=
 PUBLIC_SITE_URL=https://inmoradar.app

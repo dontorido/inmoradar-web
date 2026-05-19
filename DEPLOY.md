@@ -36,6 +36,7 @@ Para la primera version de pago en Lemon Squeezy test mode:
 5. Copiar el `store_id` y el `variant_id` de la variante semanal.
 6. Crear una API key en Lemon Squeezy test mode.
 7. Configurar en Vercel `LEMONSQUEEZY_API_KEY`, `LEMONSQUEEZY_STORE_ID`, `LEMONSQUEEZY_VARIANT_ID` y `LEMONSQUEEZY_TEST_MODE=true`.
+8. Para enviar informes Premium por email, activar Cloudflare Email Service y configurar `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_EMAIL_API_TOKEN` y `CLOUDFLARE_EMAIL_FROM`.
 8. El checkout se crea desde `https://TU-DOMINIO/api/lemonsqueezy-checkout` y redirige a `https://TU-DOMINIO/success`.
 
 ## Siguiente fase tecnica
@@ -61,6 +62,9 @@ LEMONSQUEEZY_STORE_ID=
 LEMONSQUEEZY_VARIANT_ID=
 LEMONSQUEEZY_TEST_MODE=true
 LEMONSQUEEZY_WEBHOOK_SECRET=
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_EMAIL_API_TOKEN=
+CLOUDFLARE_EMAIL_FROM=hola@inmoradar.app
 PUBLIC_SITE_URL=https://TU-DOMINIO
 ```
 

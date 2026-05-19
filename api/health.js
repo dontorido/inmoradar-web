@@ -34,7 +34,8 @@ module.exports = async function handler(req, res) {
       ["premium_subscriptions", "premium_subscriptions?select=id&limit=1"],
       ["photo_condition_analysis_cache", "photo_condition_analysis_cache?select=id&limit=1"],
       ["address_intelligence_cache", "address_intelligence_cache?select=id&limit=1"],
-      ["parking_difficulty_cache", "parking_difficulty_cache?select=id&limit=1"]
+      ["parking_difficulty_cache", "parking_difficulty_cache?select=id&limit=1"],
+      ["saved_property_email_reports", "saved_property_email_reports?select=id&limit=1"]
     ].map(async ([name, path]) => [name, await checkSupabaseTable(path)]));
 
     for (const [name, result] of checks) {
@@ -57,6 +58,7 @@ module.exports = async function handler(req, res) {
         process.env.LEMONSQUEEZY_VARIANT_ID
     ),
     lemonsqueezy_test_mode: String(process.env.LEMONSQUEEZY_TEST_MODE || "true").toLowerCase() !== "false",
-    lemonsqueezy_webhook_configured: Boolean(process.env.LEMONSQUEEZY_WEBHOOK_SECRET)
+    lemonsqueezy_webhook_configured: Boolean(process.env.LEMONSQUEEZY_WEBHOOK_SECRET),
+    cloudflare_email_configured: Boolean(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_EMAIL_API_TOKEN)
   });
 };
