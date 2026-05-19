@@ -118,6 +118,10 @@ function ogImageUrl(landing) {
   return `${siteUrl()}/api/og/price-city?${params.toString()}`;
 }
 
+function brandMarkIcon() {
+  return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5.2"/><circle cx="12" cy="12" r="1.25" fill="currentColor" stroke="none"/><path d="M12 12l3.2-3.6M12 4.5v1.6M12 17.9v1.6M4.5 12h1.6M17.9 12h1.6M8.9 8.9l1.1 1.1M15.1 15.1 14 14"/></svg>`;
+}
+
 function seoPageScript() {
   return `<script>
   (() => {
@@ -202,7 +206,7 @@ function renderLandingHtml(landing) {
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="${escapeHtml(imageUrl)}">
   <link rel="canonical" href="${escapeHtml(canonical)}">
-  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/inmoradar-brand-mark.svg?v=20260519" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/styles.css">
   <style>
     .seo-page {
@@ -219,12 +223,12 @@ function renderLandingHtml(landing) {
     .seo-page a {
       color: #FFFFFF;
       text-decoration: underline;
-      text-decoration-color: rgba(204,255,0,.55);
+      text-decoration-color: rgba(255,69,0,.55);
       text-decoration-thickness: 1.5px;
       text-underline-offset: 4px;
       transition: color 120ms ease, text-decoration-color 120ms ease, border-color 120ms ease, background 120ms ease;
     }
-    .seo-page a:hover { color: #CCFF00; text-decoration-color: #CCFF00; }
+    .seo-page a:hover { color: #FF4500; text-decoration-color: #FF4500; }
     .seo-shell { width: min(1100px, calc(100% - 40px)); margin: 0 auto; padding: 96px 0; }
     .seo-global-footer {
       border-top: 1px solid #1F1F1F;
@@ -249,7 +253,7 @@ function renderLandingHtml(landing) {
     .seo-page-eyebrow,
     .seo-sidebar-kicker,
     .seo-disclaimer-kicker {
-      color: #CCFF00;
+      color: #FF4500;
       font-family: var(--mono);
       font-size: 10.5px;
       font-weight: 700;
@@ -334,7 +338,7 @@ function renderLandingHtml(landing) {
       text-decoration: none;
     }
     .seo-toc a.is-active {
-      border-left: 2px solid #CCFF00;
+      border-left: 2px solid #FF4500;
       color: #FFFFFF;
       padding-left: 10px;
     }
@@ -397,7 +401,7 @@ function renderLandingHtml(landing) {
       outline: none;
       padding: 0 12px;
     }
-    .seo-calculator input:focus { border-color: #CCFF00; }
+    .seo-calculator input:focus { border-color: #FF4500; }
     .seo-calc-result {
       background: #1A1A1A;
       border: 1px solid #1F1F1F;
@@ -455,7 +459,7 @@ function renderLandingHtml(landing) {
     .seo-section code {
       background: #1A1A1A;
       border: 1px solid #262626;
-      color: #CCFF00;
+      color: #FF4500;
       font-family: var(--mono);
       font-size: .92em;
       padding: 2px 6px;
@@ -463,7 +467,7 @@ function renderLandingHtml(landing) {
     .seo-section ul { display: grid; gap: 12px; list-style: none; margin: 0 0 1.2em; padding: 0; }
     .seo-section li { display: grid; grid-template-columns: 6px minmax(0, 1fr); gap: 12px; margin: 0; }
     .seo-section li::before {
-      background: #CCFF00;
+      background: #FF4500;
       content: "";
       height: 6px;
       margin-top: 11px;
@@ -509,13 +513,13 @@ function renderLandingHtml(landing) {
     }
     .seo-formula {
       background: #1D1D1D;
-      border-left: 3px solid #CCFF00;
+      border-left: 3px solid #FF4500;
       margin: 32px 0;
       max-width: 68ch;
       padding: 20px 24px;
     }
     .seo-formula p {
-      color: #CCFF00;
+      color: #FF4500;
       font-family: var(--mono);
       font-size: 10.5px;
       font-weight: 700;
@@ -568,10 +572,10 @@ function renderLandingHtml(landing) {
       text-transform: uppercase;
     }
     .seo-button-secondary { border: 1px solid #262626; color: #FFFFFF; }
-    .seo-button-secondary:hover { border-color: #CCFF00; color: #CCFF00; }
+    .seo-button-secondary:hover { border-color: #FF4500; color: #FF4500; }
     .seo-button-primary {
-      background: #CCFF00;
-      border: 1px solid #CCFF00;
+      background: #FF4500;
+      border: 1px solid #FF4500;
       box-shadow: 0 0 24px rgba(204,255,0,.18);
       color: #0A0A0A;
     }
@@ -592,7 +596,7 @@ function renderLandingHtml(landing) {
       text-decoration: none;
     }
     .seo-link-bento a:hover { background: #1D1D1D; }
-    .seo-link-bento .seo-icon { color: #CCFF00; }
+    .seo-link-bento .seo-icon { color: #FF4500; }
     .seo-link-bento a:hover .seo-icon { color: #FFFFFF; }
     .seo-link-bento span { color: #FFFFFF; font-size: 15px; }
     .seo-link-bento small {
@@ -619,7 +623,7 @@ function renderLandingHtml(landing) {
       font-weight: 700;
       line-height: 1.35;
     }
-    .seo-faq summary:hover { color: #CCFF00; }
+    .seo-faq summary:hover { color: #FF4500; }
     .seo-faq p { color: #D4D4D4; font-size: 16px; margin-top: 12px; }
     .seo-final-cta {
       margin-top: 96px;
@@ -679,7 +683,7 @@ function renderLandingHtml(landing) {
   <header class="site-header">
     <nav class="nav" aria-label="Principal">
       <a class="brand" href="/" aria-label="InmoRadar">
-        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-mark" aria-hidden="true">${brandMarkIcon()}</span>
         <span><strong>Inmo</strong><em>Radar</em></span>
       </a>
       <div class="nav-links">
@@ -698,7 +702,7 @@ function renderLandingHtml(landing) {
   </main>
   <footer class="seo-global-footer">
     <div class="container footer-grid">
-      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span><span><strong>Inmo</strong><em>Radar</em></span></a>
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">${brandMarkIcon()}</span><span><strong>Inmo</strong><em>Radar</em></span></a>
       <div class="footer-links">
         <a href="/privacidad">Privacidad</a>
         <a href="/terminos">Términos</a>
