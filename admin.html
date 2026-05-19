@@ -43,104 +43,113 @@
           <span class="admin-kicker">Panel operativo</span>
           <h1>Backoffice</h1>
         </div>
-        <div class="admin-actions">
-          <button class="admin-button ghost" type="button" data-admin-refresh>Actualizar</button>
-          <button class="admin-button" type="button" data-seo-generate>Generar draft SEO</button>
-          <button class="admin-button" type="button" data-seo-publish>Publicar 1 SEO elegible</button>
+        <div class="admin-tabs" aria-label="Secciones del backoffice">
+          <button class="admin-tab active" type="button" data-admin-section-button="marketing" aria-pressed="true">Marketing</button>
+          <button class="admin-tab" type="button" data-admin-section-button="kpis" aria-pressed="false">KPIs</button>
         </div>
       </div>
 
       <p class="admin-status" data-admin-live-status></p>
 
-      <section class="admin-stat-grid" data-admin-stats></section>
+      <section class="admin-view" data-admin-view="marketing">
+        <div class="admin-view-toolbar">
+          <button class="admin-button ghost" type="button" data-admin-refresh>Actualizar</button>
+          <button class="admin-button" type="button" data-seo-generate>Generar draft SEO</button>
+          <button class="admin-button" type="button" data-seo-publish>Publicar 1 SEO elegible</button>
+        </div>
 
-      <section class="admin-grid">
-        <article class="admin-panel">
-          <div class="admin-panel-head">
-            <div>
-              <span class="admin-kicker muted">Premium</span>
-              <h2>Suscripciones</h2>
-            </div>
-            <form class="admin-filter" data-premium-filter>
-              <input type="search" name="q" placeholder="Buscar email">
-              <select name="status">
-                <option value="all">Todos</option>
-                <option value="active">Active</option>
-                <option value="on_trial">On trial</option>
-                <option value="cancelled">Cancelled</option>
-                <option value="expired">Expired</option>
-                <option value="paid">Paid</option>
-              </select>
-              <button class="admin-button tiny ghost" type="submit">Filtrar</button>
-            </form>
-          </div>
-          <div class="admin-table-wrap">
-            <table class="admin-table">
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Estado</th>
-                  <th>Renueva</th>
-                  <th>Evento</th>
-                  <th>Actualizado</th>
-                </tr>
-              </thead>
-              <tbody data-premium-rows></tbody>
-            </table>
-          </div>
-        </article>
+        <section class="admin-stat-grid" data-admin-stats></section>
 
-        <article class="admin-panel">
-          <div class="admin-panel-head">
-            <div>
-              <span class="admin-kicker muted">SEO</span>
-              <h2>Landings</h2>
+        <section class="admin-grid">
+          <article class="admin-panel">
+            <div class="admin-panel-head">
+              <div>
+                <span class="admin-kicker muted">Premium</span>
+                <h2>Suscripciones</h2>
+              </div>
+              <form class="admin-filter" data-premium-filter>
+                <input type="search" name="q" placeholder="Buscar email">
+                <select name="status">
+                  <option value="all">Todos</option>
+                  <option value="active">Active</option>
+                  <option value="on_trial">On trial</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="expired">Expired</option>
+                  <option value="paid">Paid</option>
+                </select>
+                <button class="admin-button tiny ghost" type="submit">Filtrar</button>
+              </form>
             </div>
-            <form class="admin-filter" data-seo-filter>
-              <select name="status">
-                <option value="all">Todos</option>
-                <option value="published">Published</option>
-                <option value="ready_to_publish">Ready</option>
-                <option value="needs_review">Needs review</option>
-                <option value="draft">Draft</option>
-                <option value="noindex">Noindex</option>
-                <option value="archived">Archived</option>
-              </select>
-              <button class="admin-button tiny ghost" type="submit">Filtrar</button>
-            </form>
-          </div>
-          <div class="admin-table-wrap">
-            <table class="admin-table">
-              <thead>
-                <tr>
-                  <th>Landing</th>
-                  <th>Ciudad</th>
-                  <th>Score</th>
-                  <th>Estado</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody data-seo-rows></tbody>
-            </table>
-          </div>
-        </article>
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th>Estado</th>
+                    <th>Renueva</th>
+                    <th>Evento</th>
+                    <th>Actualizado</th>
+                  </tr>
+                </thead>
+                <tbody data-premium-rows></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="admin-panel">
+            <div class="admin-panel-head">
+              <div>
+                <span class="admin-kicker muted">SEO</span>
+                <h2>Landings</h2>
+              </div>
+              <form class="admin-filter" data-seo-filter>
+                <select name="status">
+                  <option value="all">Todos</option>
+                  <option value="published">Published</option>
+                  <option value="ready_to_publish">Ready</option>
+                  <option value="needs_review">Needs review</option>
+                  <option value="draft">Draft</option>
+                  <option value="noindex">Noindex</option>
+                  <option value="archived">Archived</option>
+                </select>
+                <button class="admin-button tiny ghost" type="submit">Filtrar</button>
+              </form>
+            </div>
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Landing</th>
+                    <th>Ciudad</th>
+                    <th>Score</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody data-seo-rows></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
       </section>
 
-      <section class="admin-panel admin-kpi-panel" data-kpi-panel>
-        <div class="admin-panel-head">
-          <div>
-            <span class="admin-kicker muted">KPIs</span>
-            <h2>KPIs</h2>
+      <section class="admin-view" data-admin-view="kpis" hidden>
+        <section class="admin-panel admin-kpi-panel" data-kpi-panel>
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">KPIs</span>
+              <h2>KPIs</h2>
+            </div>
+            <div class="admin-row-actions">
+              <button class="admin-button tiny ghost" type="button" data-kpi-reset>Restaurar defaults</button>
+              <button class="admin-button tiny" type="submit" form="admin-kpi-form">Guardar KPIs</button>
+            </div>
           </div>
-          <div class="admin-row-actions">
-            <button class="admin-button tiny ghost" type="button" data-kpi-reset>Restaurar defaults</button>
-            <button class="admin-button tiny" type="submit" form="admin-kpi-form">Guardar KPIs</button>
-          </div>
-        </div>
-        <p class="admin-kpi-note">
-          Ajusta pesos, umbrales y reglas de visibilidad para que los KPIs de InmoRadar sean mas fiables y menos estaticos.
-        </p>
-        <form class="admin-kpi-form" id="admin-kpi-form" data-kpi-form></form>
+          <p class="admin-kpi-note">
+            Ajusta pesos, umbrales y reglas de visibilidad para que los KPIs de InmoRadar sean mas fiables y menos estaticos.
+          </p>
+          <form class="admin-kpi-form" id="admin-kpi-form" data-kpi-form></form>
+        </section>
       </section>
     </section>
   </main>

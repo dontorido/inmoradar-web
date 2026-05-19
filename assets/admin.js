@@ -2,6 +2,7 @@ const TOKEN_KEY = "inmoradar_admin_token";
 
 const state = {
   token: sessionStorage.getItem(TOKEN_KEY) || "",
+  activeSection: "marketing",
   premium: {
     q: "",
     status: "all"
@@ -23,6 +24,8 @@ const els = {
   status: document.querySelector("[data-admin-status]"),
   liveStatus: document.querySelector("[data-admin-live-status]"),
   logout: document.querySelector("[data-admin-logout]"),
+  sectionButtons: document.querySelectorAll("[data-admin-section-button]"),
+  views: document.querySelectorAll("[data-admin-view]"),
   refresh: document.querySelector("[data-admin-refresh]"),
   env: document.querySelector("[data-admin-env]"),
   stats: document.querySelector("[data-admin-stats]"),
@@ -89,6 +92,18 @@ function requireLogin() {
   els.login.hidden = Boolean(state.token);
   els.app.hidden = !state.token;
   els.logout.hidden = !state.token;
+}
+
+function setAdminSection(section) {
+  state.activeSection = section === "kpis" ? "kpis" : "marketing";
+  els.views.forEach((view) => {
+    view.hidden = view.dataset.adminView !== state.activeSection;
+  });
+  els.sectionButtons.forEach((button) => {
+    const active = button.dataset.adminSectionButton === state.activeSection;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
 }
 
 function chip(value, variant = "") {
@@ -437,6 +452,12 @@ els.logout.addEventListener("click", () => {
 
 els.refresh.addEventListener("click", loadAll);
 
+els.sectionButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    setAdminSection(button.dataset.adminSectionButton);
+  });
+});
+
 els.premiumFilter.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = new FormData(els.premiumFilter);
@@ -474,4 +495,5 @@ els.seoRows.addEventListener("click", (event) => {
 });
 
 requireLogin();
+setAdminSection(state.activeSection);
 loadAll();
