@@ -137,10 +137,16 @@ async function handleSummary() {
 }
 
 async function handleParkingSummary() {
-  const result = await safeFetch(
-    "parking_difficulty_cache?select=id,geohash,city,radius_m,perspective,score,label,confidence_score,calculated_at,expires_at&order=calculated_at.desc&limit=100"
-  );
+  const [result, assessmentResult] = await Promise.all([
+    safeFetch(
+      "parking_difficulty_cache?select=id,geohash,city,radius_m,perspective,score,label,confidence_score,calculated_at,expires_at&order=calculated_at.desc&limit=100"
+    ),
+    safeFetch(
+      "parking_assessments?select=id,source_url,address_text,street,zone_name,district,municipality,profile,overall_score,overall_label,confidence_score,confidence_label,status,last_checked_at&order=last_checked_at.desc&limit=100"
+    )
+  ]);
   const rows = Array.isArray(result) ? result : result.rows;
+  const assessmentRows = Array.isArray(assessmentResult) ? assessmentResult : assessmentResult.rows;
   const validRows = rows.filter((row) => !row.expires_at || new Date(row.expires_at).getTime() > Date.now());
 
   return {
@@ -153,8 +159,10 @@ async function handleParkingSummary() {
     average_confidence: average(validRows, "confidence_score"),
     by_label: countBy(validRows, "label"),
     by_perspective: countBy(validRows, "perspective"),
-    recent: rows,
-    error: result.error || null
+    assessments_total: assessmentRows.length,
+    assessments_recent: assessmentRows,
+    recent: assessmentRows.length ? assessmentRows : rows,
+    error: result.error || assessmentResult.error || null
   };
 }
 

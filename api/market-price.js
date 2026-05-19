@@ -5,6 +5,7 @@ const {
   calculateAddressPriceAdjustment,
   checkAddressRateLimit
 } = require("./_address/intelligence");
+const { calculateParkingAssessment, parkingAssessmentPayload } = require("./_parking/intelligence");
 
 const GEO_CONFIDENCE = {
   neighbourhood: 0.85,
@@ -1226,6 +1227,12 @@ async function handler(req, res) {
       return;
     }
 
+    if (resource === "parking-assessment") {
+      const result = await parkingAssessmentPayload(params);
+      json(res, result.status, result.body);
+      return;
+    }
+
     const result = await marketPricePayload(params);
     json(res, result.status, result.body);
   } catch (error) {
@@ -1243,7 +1250,9 @@ module.exports._internal = {
   confidenceFromRecord,
   findBestGroupFromRecords,
   findBestFromRecords,
+  calculateParkingAssessment,
   marketPricePayload,
   propertyAssessmentPayload,
+  parkingAssessmentPayload,
   precisionLabel
 };

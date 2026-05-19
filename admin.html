@@ -158,37 +158,58 @@
         <section class="admin-panel admin-parking-panel">
           <div class="admin-panel-head">
             <div>
-              <span class="admin-kicker muted">Parking Difficulty Score</span>
+              <span class="admin-kicker muted">Parking Intelligence</span>
               <h2>Parking</h2>
             </div>
             <button class="admin-button tiny ghost" type="button" data-parking-refresh>Actualizar Parking</button>
           </div>
           <p class="admin-kpi-note">
-            Supervisa la cache, prueba una coordenada y revisa que el resultado se muestre siempre como estimacion orientativa.
+            Separa calle, SER, residentes, rotacion y garaje. El resultado es orientativo y auditable.
           </p>
           <section class="admin-stat-grid compact" data-parking-stats></section>
           <div class="admin-parking-grid">
             <form class="admin-parking-probe" data-parking-probe-form>
               <label>
-                <span>Latitud</span>
-                <input type="number" step="0.000001" name="lat" value="40.416775" required>
+                <span>Calle</span>
+                <input type="text" name="street" value="Calle del Arroyo del Olivar">
               </label>
               <label>
-                <span>Longitud</span>
-                <input type="number" step="0.000001" name="lng" value="-3.703790" required>
+                <span>Numero</span>
+                <input type="text" name="street_number" value="">
               </label>
               <label>
-                <span>Ciudad</span>
-                <input type="text" name="city" value="Madrid">
+                <span>Barrio / zona</span>
+                <input type="text" name="zone" value="Portazgo">
               </label>
               <label>
-                <span>Perspectiva</span>
-                <select name="perspective">
-                  <option value="visitor">Visitante</option>
+                <span>Distrito</span>
+                <input type="text" name="district" value="Puente de Vallecas">
+              </label>
+              <label>
+                <span>Municipio</span>
+                <input type="text" name="municipality" value="Madrid">
+              </label>
+              <label>
+                <span>Garaje incluido</span>
+                <select name="garage_included">
+                  <option value="false">No detectado</option>
+                  <option value="true">Si</option>
+                  <option value="">Desconocido</option>
+                </select>
+              </label>
+              <label>
+                <span>Perfil</span>
+                <select name="profile">
+                  <option value="general">General</option>
+                  <option value="car_owner">Con coche</option>
                   <option value="resident">Residente</option>
                 </select>
               </label>
-              <button class="admin-button" type="submit">Probar score</button>
+              <label>
+                <span>URL anuncio</span>
+                <input type="url" name="source_url" value="https://www.idealista.com/inmueble/109503975/">
+              </label>
+              <button class="admin-button" type="submit">Probar Parking Intelligence</button>
             </form>
             <pre class="admin-parking-result" data-parking-result>{}</pre>
           </div>
@@ -200,7 +221,7 @@
                   <th>Score</th>
                   <th>Confianza</th>
                   <th>Perspectiva</th>
-                  <th>Caduca</th>
+                  <th>Fecha / estado</th>
                 </tr>
               </thead>
               <tbody data-parking-rows></tbody>

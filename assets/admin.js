@@ -176,6 +176,7 @@ function renderParkingStats(payload) {
   els.parkingStats.innerHTML = [
     stat("Cache total", payload.total_cache_rows || 0),
     stat("Cache vigente", payload.valid_cache_rows || 0),
+    stat("Assessments", payload.assessments_total || 0),
     stat("Score medio", payload.average_score || 0),
     stat("Confianza media", payload.average_confidence || 0)
   ].join("");
@@ -190,6 +191,26 @@ function renderParkingRows(rows) {
 
   els.parkingRows.innerHTML = rows
     .map((row) => {
+      if (Object.prototype.hasOwnProperty.call(row, "overall_score")) {
+        const score = Number(row.overall_score || 0);
+        const confidence = Number(row.confidence_score || 0);
+        return `
+          <tr>
+            <td>
+              <strong>${escapeHtml(row.address_text || row.street || row.source_url || "-")}</strong>
+              <div class="admin-subtle">${escapeHtml([row.zone_name, row.district, row.municipality].filter(Boolean).join(" / ") || "-")}</div>
+            </td>
+            <td>${chip(`${score}/10 - ${row.overall_label || "-"}`, score >= 7 ? "bad" : score <= 4 ? "good" : "")}</td>
+            <td>${chip(confidence.toFixed(2), confidence >= 0.7 ? "good" : "")}</td>
+            <td>${escapeHtml(row.profile || "general")}</td>
+            <td>
+              ${escapeHtml(formatDate(row.last_checked_at))}
+              <div class="admin-subtle">${escapeHtml(row.status || "-")}</div>
+            </td>
+          </tr>
+        `;
+      }
+
       const score = Number(row.score || 0);
       const confidence = Number(row.confidence_score || 0);
       const expired = row.expires_at && new Date(row.expires_at).getTime() <= Date.now();
@@ -443,14 +464,18 @@ async function loadAll() {
 async function runParkingProbe(form) {
   const data = new FormData(form);
   const params = new URLSearchParams({
-    lat: String(data.get("lat") || ""),
-    lng: String(data.get("lng") || ""),
-    city: String(data.get("city") || ""),
-    perspective: String(data.get("perspective") || "visitor")
+    street: String(data.get("street") || ""),
+    street_number: String(data.get("street_number") || ""),
+    zone: String(data.get("zone") || ""),
+    district: String(data.get("district") || ""),
+    municipality: String(data.get("municipality") || ""),
+    garage_included: String(data.get("garage_included") || ""),
+    profile: String(data.get("profile") || "general"),
+    source_url: String(data.get("source_url") || "")
   });
 
-  showStatus("Calculando Parking Difficulty Score...");
-  const response = await fetch(`/api/parking-difficulty?${params.toString()}`, {
+  showStatus("Calculando Parking Intelligence...");
+  const response = await fetch(`/api/parking-assessment?${params.toString()}`, {
     headers: { accept: "application/json" }
   });
   const payload = await response.json().catch(() => ({}));
@@ -461,11 +486,17 @@ async function runParkingProbe(form) {
   if (els.parkingResult) {
     els.parkingResult.textContent = JSON.stringify(
       {
-        score: payload.score,
-        label: payload.label,
-        confidence_score: payload.confidence_score,
-        perspective: payload.perspective,
-        explanation: payload.explanation,
+        score: payload.parking_assessment?.overall_score,
+        label: payload.parking_assessment?.overall_label,
+        confidence_score: payload.parking_assessment?.confidence_score,
+        confidence_label: payload.parking_assessment?.confidence_label,
+        garage: payload.garage,
+        street_parking: payload.street_parking,
+        resident_parking: payload.resident_parking,
+        paid_parking: payload.paid_parking,
+        transport_offset: payload.transport_offset,
+        recommendations: payload.recommendations,
+        sources: payload.sources,
         disclaimer: payload.disclaimer
       },
       null,
@@ -473,7 +504,7 @@ async function runParkingProbe(form) {
     );
   }
   await loadParking();
-  showStatus(`Parking ${payload.score}/10 - ${payload.label} (${payload.perspective})`, "good");
+  showStatus(`Parking ${payload.parking_assessment?.overall_score}/10 - ${payload.parking_assessment?.overall_label}`, "good");
 }
 
 function collectKpiValues() {
