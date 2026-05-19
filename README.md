@@ -18,8 +18,9 @@ Web estatica de lanzamiento para InmoRadar.
 - `api/lemonsqueezy-checkout.js`: crea checkouts de Lemon Squeezy en modo prueba o produccion sin exponer la API key.
 - `api/lemonsqueezy-webhook.js`: webhook preparado para sincronizar suscripciones de Lemon Squeezy.
 - `admin.html`, `assets/admin.js` y `assets/admin.css`: backoffice protegido por `ADMIN_IMPORT_TOKEN`.
-- `api/admin.js`: backoffice API compacta para Premium, SEO y estado de integraciones. Se usa una sola serverless function para respetar el limite de Vercel Hobby.
+- `api/admin.js`: backoffice API compacta para Premium, SEO, KPIs y estado de integraciones. Se usa una sola serverless function para respetar el limite de Vercel Hobby.
 - `database/premium-subscriptions.sql`: tabla Supabase para guardar suscripciones Premium.
+- `database/kpi-settings.sql`: tabla Supabase para guardar reglas, pesos, umbrales y visibilidad de KPIs.
 - `api/market-price.js`: endpoint agregado para que la extension consulte precios de mercado por zona.
 - `database/market-price-sources.sql`: tabla Supabase `market_price_sources` y seed minimo de mercado.
 - `database/seo-landings.sql`: tablas `seo_landing_opportunities` y `seo_landings`, con seed de 5 oportunidades `price_city`.
@@ -105,7 +106,23 @@ El panel no indexa y los datos se cargan desde endpoints protegidos con `ADMIN_I
 - revisar landings SEO, quality score, estado e indexacion;
 - generar un draft SEO;
 - publicar una landing elegible;
-- cambiar una landing a `noindex` o regenerarla.
+- cambiar una landing a `noindex` o regenerarla;
+- administrar reglas KPI: pesos de inmueble/zona, umbrales de precio, caps por nivel geografico, costes, entorno, parking y visibilidad de KPIs estaticos.
+
+Migracion KPI:
+
+```bash
+database/kpi-settings.sql
+```
+
+Endpoint admin KPI:
+
+```text
+GET/POST /api/admin?resource=kpis/settings
+Authorization: Bearer ADMIN_IMPORT_TOKEN
+```
+
+El endpoint publico `/api/kpi-settings` devuelve los valores activos sin secretos. `property-assessment` ya usa la configuracion guardada para umbrales de precio, caps por precision geografica y formula de `price_score`.
 
 El endpoint de comprobacion quedara en:
 

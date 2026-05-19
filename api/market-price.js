@@ -1,4 +1,5 @@
 const { handleCors, hasSupabaseConfig, json, supabaseFetch } = require("./_utils");
+const { coerceKpiSettings, defaultKpiSettings } = require("./_kpi/settings");
 const {
   buildAddressIntelligenceResponse,
   calculateAddressPriceAdjustment,
@@ -65,6 +66,11 @@ const MARKET_SELECT = [
 
 const DISCLAIMER =
   "Estimación orientativa basada en la referencia de mercado disponible. No sustituye una valoración profesional ni refleja el precio exacto de una calle o portal.";
+
+let kpiSettingsCache = {
+  expiresAt: 0,
+  value: defaultKpiSettings()
+};
 
 const FALLBACK_MARKET_PRICES = [
   {
@@ -152,6 +158,35 @@ function asNumber(value) {
   }
   const parsed = Number.parseFloat(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function settingNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+async function loadKpiSettings() {
+  if (kpiSettingsCache.expiresAt > Date.now()) return kpiSettingsCache.value;
+  if (!hasSupabaseConfig()) return kpiSettingsCache.value;
+
+  try {
+    const rows = await supabaseFetch(
+      "kpi_settings?id=eq.default&select=settings_json&limit=1",
+      { timeoutMs: 2500 }
+    );
+    const row = Array.isArray(rows) ? rows[0] || null : null;
+    kpiSettingsCache = {
+      expiresAt: Date.now() + 5 * 60 * 1000,
+      value: coerceKpiSettings(row?.settings_json || {})
+    };
+  } catch {
+    kpiSettingsCache = {
+      expiresAt: Date.now() + 60 * 1000,
+      value: defaultKpiSettings()
+    };
+  }
+
+  return kpiSettingsCache.value;
 }
 
 function normalizeText(value) {
@@ -387,28 +422,36 @@ function geoPrecisionWeight(geoLevel) {
   return 0.35;
 }
 
-function scoreCapForGeoLevel(geoLevel) {
+function scoreCapForGeoLevel(geoLevel, kpiSettings = defaultKpiSettings()) {
   const level = canonicalGeoLevel({ geo_level: geoLevel });
-  if (level === "neighbourhood") return 9.4;
-  if (level === "district") return 8.8;
-  if (level === "municipality") return 8.2;
-  if (level === "province") return 7.2;
-  if (level === "autonomous_community") return 6.8;
-  if (level === "country") return 6.5;
-  return 7;
+  const caps = kpiSettings.property_score?.geo_caps || {};
+  if (level === "neighbourhood") return settingNumber(caps.neighbourhood, 9.2);
+  if (level === "district") return settingNumber(caps.district, 8.4);
+  if (level === "municipality") return settingNumber(caps.municipality, 7.8);
+  if (level === "province") return settingNumber(caps.province, 7);
+  if (level === "autonomous_community") return settingNumber(caps.autonomous_community, 6.7);
+  if (level === "country") return settingNumber(caps.country, 6.5);
+  return settingNumber(caps.unknown, 6.5);
 }
 
-function priceScoreFromDifference(differencePct, operation, geoLevel = "country", confidenceScore = 0.35) {
+function priceScoreFromDifference(differencePct, operation, geoLevel = "country", confidenceScore = 0.35, kpiSettings = defaultKpiSettings()) {
   if (differencePct === null || differencePct === undefined) return null;
-  const affordableSide = differencePct < 0 ? Math.min(Math.abs(differencePct), operation === "rent" ? 18 : 25) : 0;
-  const expensiveSide = differencePct > 0 ? Math.min(differencePct, operation === "rent" ? 18 : 25) : 0;
-  const reliability = geoPrecisionWeight(geoLevel) * clamp(Number(confidenceScore) || 0.35, 0.2, 0.95);
-  const rawScore = 6.4 + affordableSide * 0.14 * reliability - expensiveSide * 0.16;
-  return roundTo(clamp(rawScore, 1, scoreCapForGeoLevel(geoLevel)), 1);
+  const priceSettings = kpiSettings.price_score || {};
+  const affordableCap = operation === "rent" ? priceSettings.rent_affordable_cap_pct : priceSettings.sale_affordable_cap_pct;
+  const expensiveCap = operation === "rent" ? priceSettings.rent_expensive_cap_pct : priceSettings.sale_expensive_cap_pct;
+  const affordableSide = differencePct < 0 ? Math.min(Math.abs(differencePct), settingNumber(affordableCap, 18)) : 0;
+  const expensiveSide = differencePct > 0 ? Math.min(differencePct, settingNumber(expensiveCap, 18)) : 0;
+  const reliability = geoPrecisionWeight(geoLevel) * clamp(settingNumber(confidenceScore, 0.35), 0.2, 0.95);
+  const baseline = settingNumber(priceSettings.baseline, 6.4);
+  const affordableMultiplier = settingNumber(priceSettings.affordable_multiplier, 0.14);
+  const expensiveMultiplier = settingNumber(priceSettings.expensive_multiplier, 0.16);
+  const rawScore = baseline + affordableSide * affordableMultiplier * reliability - expensiveSide * expensiveMultiplier;
+  return roundTo(clamp(rawScore, 1, scoreCapForGeoLevel(geoLevel, kpiSettings)), 1);
 }
 
-function classifySale(differencePct) {
-  if (differencePct <= -15) {
+function classifySale(differencePct, kpiSettings = defaultKpiSettings()) {
+  const thresholds = kpiSettings.market?.sale_thresholds || {};
+  if (differencePct <= settingNumber(thresholds.very_good_pct, -15)) {
     return {
       label: "muy_buen_precio",
       severity: "success",
@@ -416,21 +459,21 @@ function classifySale(differencePct) {
         "El anuncio está claramente por debajo de la referencia de mercado disponible. Puede ser una buena oportunidad si el estado y la ubicación concreta acompañan."
     };
   }
-  if (differencePct <= -5) {
+  if (differencePct <= settingNumber(thresholds.good_pct, -5)) {
     return {
       label: "buen_precio",
       severity: "success",
       message: "El precio está por debajo de la referencia de mercado disponible."
     };
   }
-  if (differencePct <= 5) {
+  if (differencePct <= settingNumber(thresholds.market_pct, 5)) {
     return {
       label: "en_mercado",
       severity: "neutral",
       message: "El precio está alineado con la referencia de mercado disponible."
     };
   }
-  if (differencePct <= 15) {
+  if (differencePct <= settingNumber(thresholds.expensive_pct, 15)) {
     return {
       label: "algo_caro",
       severity: "warning",
@@ -446,8 +489,9 @@ function classifySale(differencePct) {
   };
 }
 
-function classifyRent(differencePct) {
-  if (differencePct <= -10) {
+function classifyRent(differencePct, kpiSettings = defaultKpiSettings()) {
+  const thresholds = kpiSettings.market?.rent_thresholds || {};
+  if (differencePct <= settingNumber(thresholds.very_good_pct, -10)) {
     return {
       label: "muy_buen_precio",
       severity: "success",
@@ -455,21 +499,21 @@ function classifyRent(differencePct) {
         "El alquiler está claramente por debajo de la referencia de mercado disponible. Puede ser una buena oportunidad si el estado y la ubicación concreta acompañan."
     };
   }
-  if (differencePct <= -3) {
+  if (differencePct <= settingNumber(thresholds.good_pct, -3)) {
     return {
       label: "buen_precio",
       severity: "success",
       message: "El alquiler está por debajo de la referencia de mercado disponible."
     };
   }
-  if (differencePct <= 5) {
+  if (differencePct <= settingNumber(thresholds.market_pct, 5)) {
     return {
       label: "en_mercado",
       severity: "neutral",
       message: "El alquiler está alineado con la referencia de mercado disponible."
     };
   }
-  if (differencePct <= 12) {
+  if (differencePct <= settingNumber(thresholds.expensive_pct, 12)) {
     return {
       label: "algo_caro",
       severity: "warning",
@@ -485,26 +529,29 @@ function classifyRent(differencePct) {
   };
 }
 
-function classifyComparison(differencePct, operation) {
+function classifyComparison(differencePct, operation, kpiSettings = defaultKpiSettings()) {
   if (differencePct === null || differencePct === undefined) return null;
-  const classification = operation === "rent" ? classifyRent(differencePct) : classifySale(differencePct);
+  const classification = operation === "rent" ? classifyRent(differencePct, kpiSettings) : classifySale(differencePct, kpiSettings);
   return {
     difference_pct: differencePct,
     ...classification,
-    price_score: priceScoreFromDifference(differencePct, operation)
+    price_score: priceScoreFromDifference(differencePct, operation, "country", 0.35, kpiSettings)
   };
 }
 
-function adjustComparisonForPrecision(comparison, operation, geoLevel, confidenceScore) {
+function adjustComparisonForPrecision(comparison, operation, geoLevel, confidenceScore, kpiSettings = defaultKpiSettings()) {
   if (!comparison) return null;
   const level = canonicalGeoLevel({ geo_level: geoLevel });
   const broadReference = !["neighbourhood", "district"].includes(level);
-  const veryCheap = comparison.difference_pct <= -15;
+  const veryGoodThreshold = operation === "rent"
+    ? kpiSettings.market?.rent_thresholds?.very_good_pct
+    : kpiSettings.market?.sale_thresholds?.very_good_pct;
+  const veryCheap = comparison.difference_pct <= settingNumber(veryGoodThreshold, -15);
 
   if (!broadReference || !veryCheap) {
     return {
       ...comparison,
-      price_score: priceScoreFromDifference(comparison.difference_pct, operation, geoLevel, confidenceScore),
+      price_score: priceScoreFromDifference(comparison.difference_pct, operation, geoLevel, confidenceScore, kpiSettings),
       confidence_adjusted: false
     };
   }
@@ -516,7 +563,7 @@ function adjustComparisonForPrecision(comparison, operation, geoLevel, confidenc
     severity: "success",
     message:
       "El anuncio está por debajo de la referencia disponible, pero la referencia no es de barrio. Trátalo como señal positiva a validar con comparables cercanos, no como oportunidad cerrada.",
-    price_score: priceScoreFromDifference(comparison.difference_pct, operation, geoLevel, confidenceScore),
+    price_score: priceScoreFromDifference(comparison.difference_pct, operation, geoLevel, confidenceScore, kpiSettings),
     confidence_adjusted: true
   };
 }
@@ -769,7 +816,7 @@ async function findMarketPrice(query) {
   return buildConsensusRecord(findBestGroupFromRecords(FALLBACK_MARKET_PRICES, query));
 }
 
-function buildResponse(query, record) {
+function buildResponse(query, record, kpiSettings = defaultKpiSettings()) {
   const listing = buildListing(query);
 
   if (!record) {
@@ -784,7 +831,13 @@ function buildResponse(query, record) {
   const differencePct = calculateDifferencePct(listing.price_eur_m2, marketPrice);
   const geoLevel = canonicalGeoLevel(record);
   const confidenceScore = confidenceFromRecord(record);
-  const comparison = adjustComparisonForPrecision(classifyComparison(differencePct, query.operation), query.operation, geoLevel, confidenceScore);
+  const comparison = adjustComparisonForPrecision(
+    classifyComparison(differencePct, query.operation, kpiSettings),
+    query.operation,
+    geoLevel,
+    confidenceScore,
+    kpiSettings
+  );
   const caveats = buildCaveats(query, record, confidenceScore, differencePct);
   const market = {
     price_eur_m2: marketPrice,
@@ -899,10 +952,13 @@ async function marketPricePayload(params = {}) {
     };
   }
 
-  const record = await findMarketPrice(baseQuery);
+  const [record, kpiSettings] = await Promise.all([
+    findMarketPrice(baseQuery),
+    loadKpiSettings()
+  ]);
   return {
     status: record ? 200 : 404,
-    body: buildResponse(baseQuery, record)
+    body: buildResponse(baseQuery, record, kpiSettings)
   };
 }
 
@@ -1009,6 +1065,11 @@ async function handler(req, res) {
 
     if (req.method !== "GET") {
       json(res, 405, { ok: false, error: "method_not_allowed" });
+      return;
+    }
+
+    if (resource === "kpi-settings") {
+      json(res, 200, { ok: true, settings: await loadKpiSettings() });
       return;
     }
 

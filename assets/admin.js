@@ -8,6 +8,11 @@ const state = {
   },
   seo: {
     status: "all"
+  },
+  kpis: {
+    schema: [],
+    settings: {},
+    defaults: {}
   }
 };
 
@@ -26,7 +31,9 @@ const els = {
   premiumFilter: document.querySelector("[data-premium-filter]"),
   seoFilter: document.querySelector("[data-seo-filter]"),
   seoGenerate: document.querySelector("[data-seo-generate]"),
-  seoPublish: document.querySelector("[data-seo-publish]")
+  seoPublish: document.querySelector("[data-seo-publish]"),
+  kpiForm: document.querySelector("[data-kpi-form]"),
+  kpiReset: document.querySelector("[data-kpi-reset]")
 };
 
 function escapeHtml(value) {
@@ -106,6 +113,24 @@ function stat(label, value) {
   `;
 }
 
+function getPath(source, path) {
+  return String(path)
+    .split(".")
+    .reduce((acc, key) => (acc && Object.prototype.hasOwnProperty.call(acc, key) ? acc[key] : undefined), source);
+}
+
+function setPath(target, path, value) {
+  const keys = String(path).split(".");
+  let cursor = target;
+  keys.slice(0, -1).forEach((key) => {
+    if (!cursor[key] || typeof cursor[key] !== "object" || Array.isArray(cursor[key])) {
+      cursor[key] = {};
+    }
+    cursor = cursor[key];
+  });
+  cursor[keys[keys.length - 1]] = value;
+}
+
 function renderStats(summary) {
   const premium = summary.premium || {};
   const seo = summary.seo || {};
@@ -179,6 +204,93 @@ function renderSeo(rows) {
     .join("");
 }
 
+function fieldOptions(field, value) {
+  if (field.type === "boolean") {
+    return [
+      { value: "true", label: "Si" },
+      { value: "false", label: "No" }
+    ]
+      .map((option) => {
+        const selected = String(value === true) === option.value ? " selected" : "";
+        return `<option value="${option.value}"${selected}>${escapeHtml(option.label)}</option>`;
+      })
+      .join("");
+  }
+
+  return (field.options || [])
+    .map((option) => {
+      const selected = String(value) === String(option.value) ? " selected" : "";
+      return `<option value="${escapeHtml(option.value)}"${selected}>${escapeHtml(option.label)}</option>`;
+    })
+    .join("");
+}
+
+function renderKpiControl(field, value) {
+  const path = escapeHtml(field.path);
+  const common = `name="${path}" data-kpi-path="${path}" data-kpi-type="${escapeHtml(field.type)}"`;
+
+  if (field.type === "select" || field.type === "boolean") {
+    return `<select ${common}>${fieldOptions(field, value)}</select>`;
+  }
+
+  if (field.type === "textarea") {
+    return `<textarea ${common} rows="3">${escapeHtml(value ?? "")}</textarea>`;
+  }
+
+  if (field.type === "number") {
+    const min = typeof field.min === "number" ? ` min="${field.min}"` : "";
+    const max = typeof field.max === "number" ? ` max="${field.max}"` : "";
+    const step = typeof field.step === "number" ? ` step="${field.step}"` : "";
+    return `<input ${common} type="number"${min}${max}${step} value="${escapeHtml(value ?? field.defaultValue ?? "")}">`;
+  }
+
+  return `<input ${common} type="text" value="${escapeHtml(value ?? "")}">`;
+}
+
+function renderKpis(payload) {
+  state.kpis.schema = payload.schema || [];
+  state.kpis.settings = payload.settings || {};
+  state.kpis.defaults = payload.defaults || {};
+
+  const note = payload.table_missing
+    ? `<div class="admin-kpi-alert">Falta la tabla <strong>kpi_settings</strong>. Ejecuta <strong>database/kpi-settings.sql</strong> en Supabase para guardar cambios.</div>`
+    : payload.error
+      ? `<div class="admin-kpi-alert">Aviso KPI: ${escapeHtml(payload.error)}</div>`
+      : `<div class="admin-kpi-meta">Ultima actualizacion KPI: ${escapeHtml(formatDate(payload.updated_at))}</div>`;
+
+  els.kpiForm.innerHTML =
+    note +
+    state.kpis.schema
+      .map(
+        (group) => `
+        <section class="admin-kpi-group">
+          <div class="admin-kpi-group-title">
+            <span>${escapeHtml(group.label)}</span>
+            <small>${escapeHtml(group.description || "")}</small>
+          </div>
+          <div class="admin-kpi-fields">
+            ${(group.fields || [])
+              .map((field) => {
+                const value = getPath(state.kpis.settings, field.path);
+                return `
+                  <label class="admin-kpi-field">
+                    <span>
+                      ${escapeHtml(field.label)}
+                      ${field.suffix ? `<em>${escapeHtml(field.suffix)}</em>` : ""}
+                    </span>
+                    ${renderKpiControl(field, value)}
+                    <small>${escapeHtml(field.description || "")}</small>
+                  </label>
+                `;
+              })
+              .join("")}
+          </div>
+        </section>
+      `
+      )
+      .join("");
+}
+
 async function loadSummary() {
   const summary = await api("/api/admin?resource=summary");
   renderStats(summary);
@@ -203,11 +315,16 @@ async function loadSeo() {
   renderSeo(payload.landings || []);
 }
 
+async function loadKpis() {
+  const payload = await api("/api/admin?resource=kpis/settings");
+  renderKpis(payload);
+}
+
 async function loadAll() {
   if (!state.token) return;
   showStatus("Cargando backoffice...");
   try {
-    await Promise.all([loadSummary(), loadPremium(), loadSeo()]);
+    await Promise.all([loadSummary(), loadPremium(), loadSeo(), loadKpis()]);
     showStatus(`Actualizado ${formatDate(new Date().toISOString())}`, "good");
   } catch (error) {
     if (error.status === 401) {
@@ -219,6 +336,29 @@ async function loadAll() {
     }
     showStatus(`Error: ${error.message}`, "bad");
   }
+}
+
+function collectKpiValues() {
+  const values = {};
+  els.kpiForm.querySelectorAll("[data-kpi-path]").forEach((field) => {
+    const path = field.dataset.kpiPath;
+    const type = field.dataset.kpiType;
+    let value = field.value;
+    if (type === "boolean") value = value === "true";
+    if (type === "number") value = Number(value);
+    setPath(values, path, value);
+  });
+  return values;
+}
+
+async function saveKpis(settings) {
+  showStatus("Guardando reglas KPI...");
+  const payload = await api("/api/admin?resource=kpis/settings", {
+    method: "POST",
+    body: JSON.stringify({ settings })
+  });
+  renderKpis(payload);
+  showStatus("KPIs guardados.", "good");
 }
 
 async function runSeoGeneration(mode) {
@@ -314,6 +454,16 @@ els.seoFilter.addEventListener("submit", async (event) => {
 
 els.seoGenerate.addEventListener("click", () => runSeoGeneration("generate").catch((error) => showStatus(error.message, "bad")));
 els.seoPublish.addEventListener("click", () => runSeoGeneration("publish").catch((error) => showStatus(error.message, "bad")));
+
+els.kpiForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveKpis(collectKpiValues()).catch((error) => showStatus(error.message, "bad"));
+});
+
+els.kpiReset.addEventListener("click", () => {
+  if (!window.confirm("Restaurar los valores recomendados de KPIs?")) return;
+  saveKpis(state.kpis.defaults).catch((error) => showStatus(error.message, "bad"));
+});
 
 els.seoRows.addEventListener("click", (event) => {
   const button = event.target.closest("[data-seo-action]");

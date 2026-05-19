@@ -125,6 +125,23 @@
           </div>
         </article>
       </section>
+
+      <section class="admin-panel admin-kpi-panel" data-kpi-panel>
+        <div class="admin-panel-head">
+          <div>
+            <span class="admin-kicker muted">KPIs</span>
+            <h2>KPIs</h2>
+          </div>
+          <div class="admin-row-actions">
+            <button class="admin-button tiny ghost" type="button" data-kpi-reset>Restaurar defaults</button>
+            <button class="admin-button tiny" type="submit" form="admin-kpi-form">Guardar KPIs</button>
+          </div>
+        </div>
+        <p class="admin-kpi-note">
+          Ajusta pesos, umbrales y reglas de visibilidad para que los KPIs de InmoRadar sean mas fiables y menos estaticos.
+        </p>
+        <form class="admin-kpi-form" id="admin-kpi-form" data-kpi-form></form>
+      </section>
     </section>
   </main>
 

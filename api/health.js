@@ -30,6 +30,7 @@ module.exports = async function handler(req, res) {
     const checks = await Promise.all([
       ["market_price_sources", "market_price_sources?select=id&limit=1"],
       ["seo_landings", "seo_landings?select=id&limit=1"],
+      ["kpi_settings", "kpi_settings?select=id&limit=1"],
       ["premium_subscriptions", "premium_subscriptions?select=id&limit=1"],
       ["photo_condition_analysis_cache", "photo_condition_analysis_cache?select=id&limit=1"],
       ["address_intelligence_cache", "address_intelligence_cache?select=id&limit=1"],
