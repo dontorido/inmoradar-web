@@ -117,11 +117,11 @@ test("la home tiene seccion Noticias con enlaces a publicaciones", () => {
   assert.match(html, /data-news-archive/);
   assert.match(html, /data-news-track/);
   assert.match(html, /Noticias/);
-  assert.match(html, /\/precio-metro-cuadrado\/logrono\//);
+  assert.match(html, /data-articles-grid/);
 
   const script = fs.readFileSync(path.join(__dirname, "..", "assets", "app.js"), "utf8");
-  assert.match(script, /items\.slice\(0, 5\)/);
-  assert.match(script, /archiveLoopItems/);
+  assert.match(script, /precio-metro-cuadrado-madrid/);
+  assert.match(script, /articleCard/);
 });
 
 test("el endpoint de noticias publica landings publicadas e indexables", async () => {
@@ -159,10 +159,16 @@ test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () 
 
   assert.match(vercel, /precio-alquiler\/:city/);
   assert.match(vercel, /saber-si-piso-esta-caro\/:city/);
+  assert.match(vercel, /"source": "\/datos"/);
+  assert.match(vercel, /"source": "\/noticias\/:slug"/);
   assert.match(redirects, /precio-alquiler\/:city/);
   assert.match(redirects, /saber-si-piso-esta-caro\/:city/);
+  assert.match(redirects, /\/datos \/datos\.html/);
+  assert.match(redirects, /\/noticias\/:slug \/article\.html/);
   assert.match(localServer, /precio-alquiler/);
   assert.match(localServer, /saber-si-piso-esta-caro/);
+  assert.match(localServer, /\/datos\.html/);
+  assert.match(localServer, /article\.html/);
 });
 
 test("la primera landing seed queda publicada e indexable", async () => {

@@ -35,7 +35,8 @@ module.exports = async function handler(req, res) {
       ["photo_condition_analysis_cache", "photo_condition_analysis_cache?select=id&limit=1"],
       ["address_intelligence_cache", "address_intelligence_cache?select=id&limit=1"],
       ["parking_difficulty_cache", "parking_difficulty_cache?select=id&limit=1"],
-      ["saved_property_email_reports", "saved_property_email_reports?select=id&limit=1"]
+      ["saved_property_email_reports", "saved_property_email_reports?select=id&limit=1"],
+      ["contact_messages", "contact_messages?select=id&limit=1"]
     ].map(async ([name, path]) => [name, await checkSupabaseTable(path)]));
 
     for (const [name, result] of checks) {
@@ -45,6 +46,8 @@ module.exports = async function handler(req, res) {
 
   json(res, 200, {
     ok: true,
+    message: "InmoRadar API",
+    status: "ok",
     service: "inmoradar-web",
     generated_at: new Date().toISOString(),
     premium_api: true,

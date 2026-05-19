@@ -18,6 +18,9 @@ const types = {
 const rewrites = {
   "/sitemap.xml": "/api/sitemap",
   "/api/news": "/api/sitemap?format=news",
+  "/api": "/api/health",
+  "/api/": "/api/health",
+  "/api/contact": "/api/market-price?resource=contact",
   "/api/admin/summary": "/api/admin?resource=summary",
   "/api/admin/premium/subscriptions": "/api/admin?resource=premium/subscriptions",
   "/api/admin/seo/landings": "/api/admin?resource=seo/landings",
@@ -26,7 +29,12 @@ const rewrites = {
   "/api/property-assessment": "/api/market-price?resource=property-assessment",
   "/api/photo-condition-analysis": "/api/market-price?resource=photo-condition-analysis",
   "/admin": "/admin.html",
+  "/que-analiza": "/que-analiza.html",
+  "/datos": "/datos.html",
   "/premium": "/premium.html",
+  "/noticias": "/noticias.html",
+  "/faq": "/faq.html",
+  "/contacto": "/contacto.html",
   "/privacidad": "/privacidad.html",
   "/terminos": "/terminos.html",
   "/success": "/success.html",
@@ -34,6 +42,10 @@ const rewrites = {
 };
 
 function routeDynamic(pathname) {
+  const article = pathname.match(/^\/noticias\/([^/]+)\/?$/);
+  if (article) {
+    return `/article.html?slug=${encodeURIComponent(article[1])}`;
+  }
   const seoCity = pathname.match(/^\/(precio-metro-cuadrado|precio-alquiler|saber-si-piso-esta-caro)\/([^/]+)\/?$/);
   if (seoCity) {
     return `/api/seo-page?slug=${seoCity[1]}/${encodeURIComponent(seoCity[2])}`;

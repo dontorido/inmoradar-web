@@ -7,7 +7,6 @@
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
-
     gtag('config', 'G-DN6123E9KV');
   </script>
   <!-- Google Tag Manager -->
@@ -19,12 +18,11 @@
   <!-- End Google Tag Manager -->
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>InmoRadar | Analiza inmuebles antes de contactar</title>
-  <meta name="description" content="InmoRadar analiza anuncios inmobiliarios antes de contactar: precio real, zona, aparcamiento, logistica diaria y comparativa de inmuebles guardados.">
-  <meta property="og:title" content="InmoRadar">
-  <meta property="og:description" content="Analiza inmuebles antes de contactar y no pierdas el tiempo.">
-  <meta property="og:image" content="assets/hero-inmoradar.png">
-  <meta name="theme-color" content="#111315">
+  <title>InmoRadar · Analiza inmuebles antes de contactar</title>
+  <meta name="description" content="InmoRadar analiza anuncios inmobiliarios antes de contactar: precio real, zona, aparcamiento, transporte y señales clave. Compatible con Idealista, Fotocasa, Pisos.com y Habitaclia.">
+  <meta property="og:title" content="InmoRadar · Analiza inmuebles antes de contactar">
+  <meta property="og:description" content="Precio real, zona, aparcamiento, transporte y señales clave antes de contactar.">
+  <meta name="theme-color" content="#FAFAFA">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="assets/styles.css">
 </head>
@@ -33,180 +31,256 @@
   <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NWHKRNMD"
   height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <!-- End Google Tag Manager (noscript) -->
-  <header class="site-header">
-    <nav class="nav" aria-label="Principal">
-      <a class="brand" href="index.html" aria-label="InmoRadar">
-        <span class="brand-mark" aria-hidden="true"></span>
+
+  <header class="site-header" data-site-header data-testid="site-navbar">
+    <nav class="nav container" aria-label="Principal">
+      <a class="brand" href="/" data-testid="nav-logo" aria-label="InmoRadar">
+        <span class="brand-mark" data-icon="Radar" aria-hidden="true"></span>
         <span><strong>Inmo</strong><em>Radar</em></span>
       </a>
-      <div class="nav-links">
-        <a href="#analisis" data-i18n="nav.analysis">Qu&eacute; analiza</a>
-        <a href="#api" data-i18n="nav.apis">APIs</a>
-        <a href="#noticias" data-i18n="nav.news">Noticias</a>
-        <a href="#premium" data-i18n="nav.premium">Premium</a>
-        <a href="#faq" data-i18n="nav.faq">FAQ</a>
+      <div class="nav-links" aria-label="Secciones">
+        <a href="/que-analiza" data-testid="nav-link-que-analiza" data-i18n-key="navAnalysis">Que analiza</a>
+        <a href="/datos" data-testid="nav-link-datos" data-i18n-key="navApis">APIs</a>
+        <a href="/premium" data-testid="nav-link-premium" data-i18n-key="navPremium">Premium</a>
+        <a href="/noticias" data-testid="nav-link-noticias" data-i18n-key="navNews">Noticias</a>
+        <a href="/faq" data-testid="nav-link-faq" data-i18n-key="navFaq">FAQ</a>
+        <a href="/contacto" data-testid="nav-link-contacto" data-i18n-key="navContact">Contacto</a>
       </div>
       <div class="nav-actions">
         <div class="language-switch" aria-label="Idioma">
-          <button type="button" data-lang="es" aria-pressed="true"><span aria-hidden="true">&#127466;&#127480;</span><span>ES</span></button>
-          <button type="button" data-lang="en" aria-pressed="false"><span aria-hidden="true">&#127468;&#127463;</span><span>EN</span></button>
+          <button type="button" data-lang="es" aria-pressed="true"><span class="flag flag-es" aria-hidden="true"></span><span>ES</span></button>
+          <button type="button" data-lang="en" aria-pressed="false"><span class="flag flag-en" aria-hidden="true"></span><span>EN</span></button>
         </div>
-        <a class="button secondary" href="premium.html" data-i18n="nav.premium">Premium</a>
-        <a class="button" href="#premium" data-i18n="nav.freeAccess">2 d&iacute;as gratis</a>
+        <a class="button" href="/premium" data-testid="nav-cta-premium" data-i18n-key="navCta">Probar 2 dias gratis</a>
       </div>
+      <button class="mobile-toggle" type="button" data-mobile-toggle data-testid="nav-mobile-toggle" aria-label="Abrir menu" aria-expanded="false">
+        <span data-icon="Radar"></span>
+      </button>
     </nav>
+    <div class="mobile-panel" data-mobile-panel data-testid="nav-mobile-panel">
+      <a href="/que-analiza" data-testid="nav-mobile-link-que-analiza">Que analiza</a>
+      <a href="/datos" data-testid="nav-mobile-link-datos">APIs</a>
+      <a href="/premium" data-testid="nav-mobile-link-premium">Premium</a>
+      <a href="/noticias" data-testid="nav-mobile-link-noticias">Noticias</a>
+      <a href="/faq" data-testid="nav-mobile-link-faq">FAQ</a>
+      <a href="/contacto" data-testid="nav-mobile-link-contacto">Contacto</a>
+    </div>
   </header>
 
   <main>
-    <section class="hero">
-      <div class="hero-grid container">
-        <div class="hero-copy">
-          <span class="eyebrow" data-i18n="home.hero.eyebrow">Extensi&oacute;n Chrome para buscar vivienda con m&aacute;s criterio</span>
-          <h1 data-i18n="home.hero.title">Analiza inmuebles antes de contactar.</h1>
-          <p class="hero-lead" data-i18n="home.hero.lead">InmoRadar convierte cada anuncio en una ficha clara: precio real, entrada estimada, zona, aparcamiento, transporte y se&ntilde;ales que conviene revisar.</p>
+    <section class="hero grid-bg" data-testid="section-hero">
+      <div class="container hero-layout">
+        <div class="reveal">
+          <p class="pill"><span class="dot-radar"></span>Extension Chrome · Compatible con Idealista, Fotocasa, Pisos.com y Habitaclia</p>
+          <h1>Analiza pisos<br><span class="accent">antes de</span><br>contactar.</h1>
+          <p class="lead">InmoRadar convierte cada anuncio en una ficha clara: precio real, entrada estimada, zona, aparcamiento, transporte y senales que conviene revisar antes de gastar una llamada.</p>
           <div class="hero-actions">
-            <a class="button" href="#premium" data-i18n="home.hero.ctaPrimary">Probar 2 d&iacute;as gratis</a>
-            <a class="button secondary" href="#analisis" data-i18n="home.hero.ctaSecondary">Ver qu&eacute; analiza</a>
-            <a class="button secondary" href="#noticias" data-i18n="nav.news">Noticias</a>
+            <a class="button" href="/premium" data-testid="hero-cta-primary">Probar 2 dias gratis <span data-icon="ArrowRight"></span></a>
+            <a class="button secondary" href="/que-analiza" data-testid="hero-cta-secondary">Ver que analiza</a>
           </div>
-          <div class="hero-metrics" aria-label="Metricas destacadas">
-            <div class="metric-pill"><strong data-i18n="home.metric.freeValue">2 d&iacute;as</strong><span data-i18n="home.metric.freeLabel">acceso gratis por defecto</span></div>
-            <div class="metric-pill"><strong data-i18n="home.metric.priceValue">1,99 &euro;</strong><span data-i18n="home.metric.priceLabel">Premium semanal despu&eacute;s</span></div>
-            <div class="metric-pill"><strong>10</strong><span data-i18n="home.metric.scoreLabel">&iacute;ndice de valoraci&oacute;n</span></div>
+          <div class="metrics" aria-label="Metricas principales">
+            <div class="metric"><strong>2 dias</strong><span>acceso inicial sin pagar</span></div>
+            <div class="metric"><strong>1,99 &euro;</strong><span>Premium semanal despues</span></div>
+            <div class="metric"><strong>10/10</strong><span>indice de valoracion</span></div>
           </div>
-          <p class="free-access-note" data-i18n="home.freeNote">Los 2 d&iacute;as gratis son acceso inicial para todos. No tienes que pagar Premium para probar InmoRadar; si despu&eacute;s quieres seguir analizando, activas Premium.</p>
         </div>
-        <div class="product-frame" aria-label="Vista de InmoRadar">
-          <img src="assets/hero-inmoradar.png" alt="Panel de InmoRadar analizando inmuebles">
+        <div class="preview-wrap reveal-2">
+          <div class="radar-rings" aria-hidden="true"></div>
+          <article class="preview-card" aria-label="Vista previa de InmoRadar">
+            <div class="browser-bar"><span class="browser-dot"></span><span class="browser-dot"></span><span class="browser-dot"></span>Vista previa · InmoRadar</div>
+            <div class="preview-body">
+              <div class="preview-head">
+                <div><span class="overline">Calle Goya · Madrid</span><div class="preview-title">Piso · 78 m²</div></div>
+                <span class="badge">Oportunidad</span>
+              </div>
+              <div class="mini-grid">
+                <div class="mini-card"><span>Precio</span><strong>295.000 €</strong><small>-7% vs zona</small></div>
+                <div class="mini-card"><span>€/m²</span><strong>3.782 €</strong><small>media 4.080</small></div>
+                <div class="mini-card"><span>Entrada est.</span><strong>59.000 €</strong><small>LTV 80%</small></div>
+                <div class="mini-card"><span>Distancia M.</span><strong>240 m</strong><small>Linea 2</small></div>
+              </div>
+              <div class="score-line">
+                <div class="score-top"><span>Indice InmoRadar</span><strong>8.4/10</strong></div>
+                <div class="score-track"><div class="score-fill"></div></div>
+              </div>
+              <div class="chip-row">
+                <span class="chip">Ascensor</span><span class="chip">Exterior</span><span class="chip">Sin reforma</span><span class="chip">ZBR baja</span><span class="chip">Aparc. medio</span>
+              </div>
+            </div>
+          </article>
+          <aside class="floating-signal"><span>Senal detectada</span><p>Precio 7% bajo la media de la zona en los ultimos 90 dias.</p></aside>
         </div>
+      </div>
+    </section>
+
+    <section class="marquee" aria-label="Senales InmoRadar">
+      <div class="marquee-track">
+        <span><i class="dot-radar"></i>Coste real</span><span><i class="dot-radar"></i>Entorno urbano</span><span><i class="dot-radar"></i>Comparativa</span><span><i class="dot-radar"></i>Market Price</span><span><i class="dot-radar"></i>Address Intelligence</span><span><i class="dot-radar"></i>Logistica diaria</span><span><i class="dot-radar"></i>Idealista</span><span><i class="dot-radar"></i>Fotocasa</span><span><i class="dot-radar"></i>Pisos.com</span><span><i class="dot-radar"></i>Habitaclia</span><span><i class="dot-radar"></i>Datos abiertos</span>
+        <span><i class="dot-radar"></i>Coste real</span><span><i class="dot-radar"></i>Entorno urbano</span><span><i class="dot-radar"></i>Comparativa</span><span><i class="dot-radar"></i>Market Price</span><span><i class="dot-radar"></i>Address Intelligence</span><span><i class="dot-radar"></i>Logistica diaria</span><span><i class="dot-radar"></i>Idealista</span><span><i class="dot-radar"></i>Fotocasa</span><span><i class="dot-radar"></i>Pisos.com</span><span><i class="dot-radar"></i>Habitaclia</span><span><i class="dot-radar"></i>Datos abiertos</span>
+      </div>
+    </section>
+
+    <section class="section" id="analisis" data-testid="section-que-analiza">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-label">[ 01 ] Analisis inmediato</span>
+          <h2>Precio, zona y coste real<br><span class="accent">en una sola vista.</span></h2>
+          <p class="lead">Una ficha para decidir si merece la pena contactar, guardar o descartar antes de invertir tiempo.</p>
+        </div>
+        <div class="bento">
+          <article class="card large">
+            <span class="card-icon" data-icon="Radar"></span>
+            <h3>Lo que <span class="accent">de verdad</span> vas a pagar.</h3>
+            <div class="stat-grid">
+              <div class="stat-tile"><span>Precio</span><strong>295.000€</strong></div>
+              <div class="stat-tile"><span>€/m²</span><strong>3.782€</strong></div>
+              <div class="stat-tile"><span>Entrada</span><strong>59.000€</strong></div>
+              <div class="stat-tile"><span>Cuota</span><strong>1.180€/mes</strong></div>
+              <div class="stat-tile"><span>Comunidad</span><strong>78€/mes</strong></div>
+              <div class="stat-tile"><span>IBI</span><strong>412€/año</strong></div>
+            </div>
+          </article>
+          <article class="card side dark-card">
+            <span class="card-icon" data-icon="MapPin"></span>
+            <h3>Lo que el anuncio<br><span class="accent">nunca te cuenta.</span></h3>
+            <div class="signal-list">
+              <div class="signal-row"><span data-icon="Radar"></span><strong>Ruido nocturno</strong><span>Bajo</span></div>
+              <div class="signal-row"><span data-icon="MapPin"></span><strong>Aparcamiento</strong><span>Medio · ZBR no</span></div>
+              <div class="signal-row"><span data-icon="ArrowRight"></span><strong>Metro/Bus</strong><span>240 m · 4 lineas</span></div>
+            </div>
+          </article>
+          <article class="card wide">
+            <span class="card-icon" data-icon="ArrowRight"></span>
+            <h3>Guarda. Compara. Decide.</h3>
+            <table class="compare-table">
+              <thead><tr><th>Inmueble</th><th>€/m²</th><th>Metros</th><th>Score</th><th>Lectura</th></tr></thead>
+              <tbody>
+                <tr><td>Goya 142</td><td>3.782€</td><td>78</td><td>8.4</td><td><span class="badge">Oportunidad</span></td></tr>
+                <tr><td>Velazquez 88</td><td>4.120€</td><td>71</td><td>7.2</td><td><span class="chip">Equilibrado</span></td></tr>
+                <tr><td>Lista 17</td><td>4.880€</td><td>64</td><td>5.6</td><td><span class="chip">Caro</span></td></tr>
+              </tbody>
+            </table>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section grid-bg" id="datos">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-label">[ 02 ] Datos enriquecidos</span>
+          <h2>APIs propias<br><span class="accent">para señales urbanas.</span></h2>
+          <p class="lead">Precio de mercado, datos de edificio, logistica diaria y aparcamiento con fuentes, confianza y caveats.</p>
+        </div>
+        <div class="control-room">
+          <article class="control-card"><span class="card-icon" data-icon="Radar"></span><h3>MP-01 Market Price</h3><p>Referencia por operacion y nivel geografico.</p><div class="control-meta"><div><span>Cobertura</span><strong>España</strong></div><div><span>Granularidad</span><strong>Barrio</strong></div><div><span>Update</span><strong>Semanal</strong></div></div></article>
+          <article class="control-card"><span class="card-icon" data-icon="MapPin"></span><h3>AI-02 Address Intelligence</h3><p>Contexto publico de direccion y edificio.</p><div class="control-meta"><div><span>Fuentes</span><strong>Catastro+</strong></div><div><span>Campos</span><strong>12 señales</strong></div><div><span>Tiempo</span><strong>&lt;300 ms</strong></div></div></article>
+          <article class="control-card"><span class="card-icon" data-icon="ArrowRight"></span><h3>LD-03 Logistica diaria</h3><p>Trayectos a destinos habituales.</p><div class="control-meta"><div><span>Modos</span><strong>Coche·Bus·Pie</strong></div><div><span>Picos</span><strong>Hora punta</strong></div><div><span>Calculo</span><strong>Multi-origen</strong></div></div></article>
+        </div>
+        <p style="margin-top:28px"><a class="button ghost" href="/datos">Documentacion tecnica <span data-icon="ArrowRight"></span></a></p>
+      </div>
+    </section>
+
+    <section class="section dark" id="premium">
+      <div class="container premium-grid">
+        <div class="premium-copy">
+          <span class="section-label">[ 03 ] Para busquedas intensivas</span>
+          <h2>Pruébalo gratis.<br><span class="accent">Si engancha, paga por semana.</span></h2>
+          <p class="lead">Los 2 dias gratis son acceso inicial para todos: no son una prueba Premium de pago. Premium solo empieza si decides continuar.</p>
+        </div>
+        <article class="pricing-card">
+          <span class="badge">Mas popular</span>
+          <div class="price"><strong>1,99 €</strong><span>/ semana</span></div>
+          <p>+ 2 dias iniciales · sin tarjeta para probar</p>
+          <ul class="check-list">
+            <li>2 dias gratis por defecto, sin activar Premium.</li>
+            <li>Premium semanal solo si decides continuar.</li>
+            <li>Analisis ilimitados de fichas.</li>
+            <li>Comparativa de inmuebles guardados.</li>
+            <li>Señales urbanas y precio por zona.</li>
+            <li>Cancelacion inmediata, sin permanencia.</li>
+          </ul>
+          <button class="button secondary full" type="button" data-checkout-button>Activar Premium <span data-icon="ArrowRight"></span></button>
+        </article>
       </div>
     </section>
 
     <section class="section" id="noticias">
       <div class="container">
         <div class="section-head">
-          <span class="section-kicker" data-i18n="news.kicker">Noticias</span>
-          <h2 data-i18n="news.title">Publicaciones y gu&iacute;as inmobiliarias.</h2>
-          <p data-i18n="news.lead">En esta secci&oacute;n iremos enlazando las nuevas p&aacute;ginas de datos, gu&iacute;as y an&aacute;lisis publicados por InmoRadar.</p>
+          <span class="section-label">[ 04 ] Noticias</span>
+          <h2>Guias para leer<br><span class="accent">mejor el mercado.</span></h2>
+          <p class="lead">Articulos sobre precio por metro cuadrado, alquiler y metodologia de analisis.</p>
         </div>
-        <div class="news-list" data-news-list>
-          <article class="news-item">
-            <div>
-              <span class="news-meta" data-i18n="news.sample.meta">Precio por m2</span>
-              <h3><a href="/precio-metro-cuadrado/logrono/" data-i18n="news.sample.title">Precio del metro cuadrado en Logro&ntilde;o</a></h3>
-            </div>
-            <p data-i18n="news.sample.desc">Referencia de venta y alquiler con fuente, fecha del dato y pautas para comparar anuncios antes de contactar.</p>
-          </article>
+        <div class="article-grid" data-articles-grid data-limit="6" data-large-first="true" data-news-list></div>
+        <div data-news-archive hidden><div data-news-track></div></div>
+      </div>
+    </section>
+
+    <section class="section grid-bg" id="faq">
+      <div class="container faq-wrap">
+        <div class="section-head" style="display:block">
+          <span class="section-label">[ 05 ] Preguntas frecuentes</span>
+          <h2>Lo que la gente<br><span class="accent">siempre pregunta.</span></h2>
         </div>
-        <div class="news-archive" data-news-archive hidden>
-          <div class="news-archive-head">
-            <span class="news-meta" data-i18n="news.archive">Archivo</span>
-            <span data-news-archive-count data-i18n="news.previous">Publicaciones anteriores</span>
-          </div>
-          <div class="news-rail" aria-label="Publicaciones anteriores">
-            <div class="news-track" data-news-track></div>
-          </div>
+        <div data-testid="faq-accordion">
+          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-1" aria-expanded="true" aria-controls="faq-1">Los 2 dias gratis, ¿son una prueba Premium?<span>+</span></button><div class="faq-panel open" id="faq-1">No. Son acceso inicial gratuito para todos los usuarios. No tienes que pagar Premium para probar InmoRadar durante esos 2 dias.</div></div>
+          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-2" aria-expanded="false" aria-controls="faq-2">¿InmoRadar mide datos exactos?<span>+</span></button><div class="faq-panel" id="faq-2">No. Son estimaciones orientativas basadas en datos abiertos, informacion visible del anuncio y señales urbanas.</div></div>
+          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-3" aria-expanded="false" aria-controls="faq-3">¿Funciona con cualquier portal?<span>+</span></button><div class="faq-panel" id="faq-3">Compatible con Idealista, Fotocasa, Pisos.com y Habitaclia. Iremos sumando otros portales en proximas versiones.</div></div>
+          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-4" aria-expanded="false" aria-controls="faq-4">¿Dónde se guardan mis inmuebles?<span>+</span></button><div class="faq-panel" id="faq-4">Localmente en el navegador salvo que actives funciones que requieran servicios externos.</div></div>
+          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-5" aria-expanded="false" aria-controls="faq-5">¿Puedo cancelar Premium cuando quiera?<span>+</span></button><div class="faq-panel" id="faq-5">Si. Es semanal y sin permanencia.</div></div>
+          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-6" aria-expanded="false" aria-controls="faq-6">¿Necesito crear cuenta para probar?<span>+</span></button><div class="faq-panel" id="faq-6">No para los 2 dias iniciales.</div></div>
         </div>
       </div>
     </section>
 
-    <section class="section" id="analisis">
-      <div class="container">
-        <div class="section-head">
-          <span class="section-kicker" data-i18n="analysis.kicker">An&aacute;lisis inmediato</span>
-          <h2 data-i18n="analysis.title">Precio, zona y coste real en una sola vista.</h2>
-          <p data-i18n="analysis.lead">Dise&ntilde;ado para compradores, inquilinos e inversores peque&ntilde;os que quieren filtrar mejor antes de llamar, escribir o visitar.</p>
-        </div>
-        <div class="feature-grid">
-          <article class="feature">
-            <span class="feature-index">01</span>
-            <h3 data-i18n="analysis.card1.title">Coste real</h3>
-            <p data-i18n="analysis.card1.copy">Precio, superficie, &euro;/m2, entrada estimada, hipoteca orientativa, comunidad e IBI cuando hay datos suficientes.</p>
-          </article>
-          <article class="feature">
-            <span class="feature-index">02</span>
-            <h3 data-i18n="analysis.card2.title">Entorno</h3>
-            <p data-i18n="analysis.card2.copy">Ruido esperado, dificultad para aparcar, rotaci&oacute;n, ZBR, servicios cercanos y transporte p&uacute;blico.</p>
-          </article>
-          <article class="feature">
-            <span class="feature-index">03</span>
-            <h3 data-i18n="analysis.card3.title">Comparativa</h3>
-            <p data-i18n="analysis.card3.copy">Guarda inmuebles y compara precio, metros, habitaciones, zona, log&iacute;stica diaria y valoraci&oacute;n.</p>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section class="section alt" id="api">
-      <div class="container split">
+    <section class="section" id="contacto">
+      <div class="container contact-grid">
         <div>
-          <span class="section-kicker" data-i18n="api.kicker">Datos enriquecidos</span>
-          <h2 data-i18n="api.title">APIs propias para se&ntilde;ales urbanas.</h2>
-          <p data-i18n="api.lead">InmoRadar consulta servicios propios para precio de mercado, datos de edificio y dificultad de aparcamiento. Cada anuncio gana contexto &uacute;til sin prometer mediciones exactas.</p>
+          <span class="section-label">[ 06 ] Contacto</span>
+          <h2>Cuéntanos qué te<br><span class="accent">trae por aquí.</span></h2>
+          <p class="lead">Soporte, prensa, partners o feedback de producto. Leemos todo desde hola@inmoradar.app.</p>
+          <div class="contact-points">
+            <div class="contact-point"><span data-icon="Mail"></span><a href="mailto:hola@inmoradar.app">hola@inmoradar.app</a></div>
+            <div class="contact-point"><span data-icon="MapPin"></span><p>Madrid · operamos 100% remoto</p></div>
+          </div>
         </div>
-        <div class="signal-grid">
-          <div class="signal"><strong>Market Price</strong><span data-i18n="api.signal1">Comparaci&oacute;n por zona y operaci&oacute;n para detectar precio alto, medio u oportunidad.</span></div>
-          <div class="signal"><strong>Address Intelligence</strong><span data-i18n="api.signal2">Datos p&uacute;blicos de edificio como a&ntilde;o, ascensor, plantas y contexto de direcci&oacute;n cuando est&aacute;n disponibles.</span></div>
-          <div class="signal"><strong>Log&iacute;stica diaria</strong><span data-i18n="api.signal3">Tiempos orientativos a trabajo, colegio y destinos habituales.</span></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="premium">
-      <div class="container pricing-band">
-        <div>
-          <span class="section-kicker" data-i18n="premium.kicker">Premium</span>
-          <h2 data-i18n="premium.title">Para b&uacute;squedas intensivas.</h2>
-          <p data-i18n="premium.lead">Empieza con 2 d&iacute;as de acceso inicial gratuito para todos. Despu&eacute;s, si quieres seguir, activa Premium por 1,99 &euro; a la semana mientras dure tu b&uacute;squeda.</p>
-        </div>
-        <div class="price-card">
-          <span class="section-kicker" data-i18n="premium.card.kicker">Acceso inicial</span>
-          <div class="price"><strong data-i18n="premium.card.price">1,99 &euro;</strong><span data-i18n="premium.card.period">/ semana</span></div>
-          <ul class="check-list">
-            <li data-i18n="premium.card.li1">2 d&iacute;as gratis por defecto, sin activar Premium.</li>
-            <li data-i18n="premium.card.li2">Premium semanal solo si decides continuar.</li>
-            <li data-i18n="premium.card.li3">An&aacute;lisis ilimitados de fichas.</li>
-            <li data-i18n="premium.card.li4">Comparativa de inmuebles guardados.</li>
-          </ul>
-          <a class="button full" href="premium.html" data-i18n="premium.card.cta">Ver Premium</a>
-        </div>
-      </div>
-    </section>
-
-    <section class="section alt" id="faq">
-      <div class="container faq-grid">
-        <details open>
-          <summary data-i18n="faq.q1">Los 2 d&iacute;as gratis, &iquest;son una prueba Premium?</summary>
-          <p data-i18n="faq.a1">No. Son acceso inicial gratuito para todos los usuarios. No se cobra nada ni tienes que activar Premium para probarlo durante esos 2 d&iacute;as.</p>
-        </details>
-        <details>
-          <summary data-i18n="faq.q2">&iquest;InmoRadar mide datos exactos?</summary>
-          <p data-i18n="faq.a2">No. Ofrece estimaciones orientativas basadas en datos abiertos, informaci&oacute;n visible del anuncio y se&ntilde;ales urbanas.</p>
-        </details>
-        <details>
-          <summary data-i18n="faq.q3">&iquest;Funciona con cualquier portal?</summary>
-          <p data-i18n="faq.a3">La primera versi&oacute;n est&aacute; orientada a Idealista y se ir&aacute; ampliando a otros portales compatibles.</p>
-        </details>
-        <details>
-          <summary data-i18n="faq.q4">&iquest;D&oacute;nde se guardan mis inmuebles?</summary>
-          <p data-i18n="faq.a4">La extensi&oacute;n guarda la lista localmente en tu navegador, salvo que actives funciones que requieran servicios externos.</p>
-        </details>
+        <form class="contact-card" data-contact-form data-testid="contact-form">
+          <div class="field-grid">
+            <label class="field" for="contact-name"><span>Nombre</span><input id="contact-name" name="name" data-testid="contact-input-name" autocomplete="name"></label>
+            <label class="field" for="contact-email"><span>Email</span><input id="contact-email" name="email" type="email" data-testid="contact-input-email" autocomplete="email"></label>
+          </div>
+          <div class="topic-row" aria-label="Tema">
+            <button class="topic-pill active" type="button" data-topic="general" data-testid="contact-topic-general">General</button>
+            <button class="topic-pill" type="button" data-topic="premium" data-testid="contact-topic-premium">Premium</button>
+            <button class="topic-pill" type="button" data-topic="partner" data-testid="contact-topic-partner">Partner</button>
+            <button class="topic-pill" type="button" data-topic="prensa" data-testid="contact-topic-prensa">Prensa</button>
+          </div>
+          <label class="field" for="contact-message"><span>Mensaje</span><textarea id="contact-message" name="message" rows="6" data-testid="contact-input-message"></textarea></label>
+          <button class="button" type="submit" data-contact-submit data-testid="contact-submit" style="margin-top:18px"><span data-icon="Send"></span> Enviar mensaje</button>
+        </form>
       </div>
     </section>
   </main>
 
-  <footer class="site-footer">
-    <div class="container footer-grid">
-      <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"></span><span><strong>Inmo</strong><em>Radar</em></span></a>
-      <div class="footer-links">
-        <a href="privacidad.html" data-i18n="footer.privacy">Privacidad</a>
-        <a href="terminos.html" data-i18n="footer.terms">T&eacute;rminos</a>
-        <a href="#noticias" data-i18n="footer.news">Noticias</a>
-        <a href="mailto:hola@inmoradar.app" data-i18n="footer.contact">Contacto</a>
+  <footer class="site-footer" data-testid="site-footer">
+    <div class="container">
+      <div class="footer-top">
+        <div>
+          <a class="brand" href="/"><span class="brand-mark" data-icon="Radar"></span><span><strong>Inmo</strong><em>Radar</em></span></a>
+          <p class="footer-tagline">Analiza inmuebles antes de contactar: precio real, zona, aparcamiento, transporte y señales clave.</p>
+          <a class="button" href="/premium" data-testid="footer-cta-premium">Probar 2 dias gratis</a>
+        </div>
+        <div class="footer-col"><h4>Producto</h4><a href="/que-analiza" data-testid="footer-link-que-analiza">Que analiza</a><a href="/datos" data-testid="footer-link-datos">APIs</a><a href="/premium" data-testid="footer-link-premium">Premium</a></div>
+        <div class="footer-col"><h4>Contenido</h4><a href="/noticias" data-testid="footer-link-noticias">Noticias</a><a href="/faq" data-testid="footer-link-faq">FAQ</a></div>
+        <div class="footer-col"><h4>Compañia</h4><a href="/contacto" data-testid="footer-link-contacto">Contacto</a><a href="/privacidad" data-testid="footer-link-privacidad">Privacidad</a><a href="/terminos" data-testid="footer-link-terminos">Terminos</a></div>
+        <span class="footer-status">Online</span>
       </div>
-      <span>&copy; <span data-year></span> InmoRadar</span>
+      <div class="footer-word">INMORADAR</div>
+      <div class="footer-meta"><span>&copy; <span data-year></span> InmoRadar</span><span>v1.0 · Chrome extension</span></div>
     </div>
   </footer>
+
   <script src="assets/app.js"></script>
 </body>
 </html>

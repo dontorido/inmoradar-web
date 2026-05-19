@@ -1,4 +1,5 @@
-const { handleCors, hasSupabaseConfig, json, supabaseFetch } = require("./_utils");
+const crypto = require("node:crypto");
+const { handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
 const { coerceKpiSettings, defaultKpiSettings } = require("./_kpi/settings");
 const {
   buildAddressIntelligenceResponse,
@@ -1188,6 +1189,62 @@ async function propertyAssessmentPayload(params = {}) {
   };
 }
 
+function isEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+async function contactPayload(req) {
+  let payload = {};
+  try {
+    const raw = await readRawBody(req);
+    payload = raw ? JSON.parse(raw) : {};
+  } catch {
+    return {
+      status: 400,
+      body: { ok: false, error: "invalid_json", message: "No se ha podido leer el mensaje." }
+    };
+  }
+
+  const name = String(payload.name || "").trim().slice(0, 120);
+  const email = String(payload.email || "").trim().toLowerCase().slice(0, 180);
+  const topic = String(payload.topic || "general").trim().slice(0, 60);
+  const message = String(payload.message || "").trim().slice(0, 4000);
+
+  if (!name || !isEmail(email) || message.length < 4) {
+    return {
+      status: 400,
+      body: { ok: false, error: "invalid_contact_payload", message: "Revisa los campos del formulario." }
+    };
+  }
+
+  const item = {
+    id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name,
+    email,
+    topic,
+    message,
+    created_at: new Date().toISOString()
+  };
+
+  if (hasSupabaseConfig()) {
+    try {
+      await supabaseFetch("contact_messages", {
+        method: "POST",
+        headers: { prefer: "return=minimal" },
+        body: JSON.stringify(item),
+        timeoutMs: 3500
+      });
+    } catch (error) {
+      console.warn("[contact] Supabase insert failed", error.message);
+    }
+  }
+
+  return {
+    status: 200,
+    body: { ok: true, ...item }
+  };
+}
+
 async function handler(req, res) {
   if (handleCors(req, res)) return;
 
@@ -1201,6 +1258,16 @@ async function handler(req, res) {
         return;
       }
       const result = await photoConditionAnalysisPayload(req);
+      json(res, result.status, result.body);
+      return;
+    }
+
+    if (resource === "contact") {
+      if (req.method !== "POST") {
+        json(res, 405, { ok: false, error: "method_not_allowed" });
+        return;
+      }
+      const result = await contactPayload(req);
       json(res, result.status, result.body);
       return;
     }
@@ -1251,6 +1318,7 @@ module.exports._internal = {
   findBestGroupFromRecords,
   findBestFromRecords,
   calculateParkingAssessment,
+  contactPayload,
   marketPricePayload,
   propertyAssessmentPayload,
   parkingAssessmentPayload,

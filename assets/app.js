@@ -1,286 +1,117 @@
 const WAITLIST_EMAIL = "hola@inmoradar.app";
 const CHECKOUT_ENDPOINT = "/api/lemonsqueezy-checkout";
 const PORTAL_ENDPOINT = "/api/lemonsqueezy-portal";
+const CONTACT_ENDPOINT = "/api/contact";
 const LANGUAGE_STORAGE_KEY = "inmoradar_language";
+
+const articles = [
+  {
+    slug: "precio-alquiler-zaragoza",
+    tag: "Alquiler",
+    city: "Zaragoza",
+    title: "Precio del alquiler por metro cuadrado en Zaragoza",
+    excerpt: "Como leer una renta mensual con referencia de zona, superficie y coste real antes de escribir al anunciante."
+  },
+  {
+    slug: "precio-alquiler-granada",
+    tag: "Alquiler",
+    city: "Granada",
+    title: "Precio del alquiler por metro cuadrado en Granada",
+    excerpt: "Una guia para distinguir una renta razonable de una prima dificil de justificar por ubicacion o estado."
+  },
+  {
+    slug: "saber-piso-caro-granada",
+    tag: "Analisis",
+    city: "Granada",
+    title: "Como saber si un piso esta caro en Granada",
+    excerpt: "Precio, reforma probable, transporte y aparcamiento: cuatro capas para no decidir solo por intuicion."
+  },
+  {
+    slug: "precio-metro-cuadrado-madrid",
+    tag: "Precio m2",
+    city: "Madrid",
+    title: "Precio del metro cuadrado en Madrid",
+    excerpt: "Madrid exige granularidad: barrio, distrito, edificio y comparables pesan mas que una media municipal."
+  },
+  {
+    slug: "precio-metro-cuadrado-barcelona",
+    tag: "Precio m2",
+    city: "Barcelona",
+    title: "Precio del metro cuadrado en Barcelona",
+    excerpt: "Lectura de precios por zona y senales urbanas para entender cuando una prima puede tener sentido."
+  },
+  {
+    slug: "precio-metro-cuadrado-valencia",
+    tag: "Precio m2",
+    city: "Valencia",
+    title: "Precio del metro cuadrado en Valencia",
+    excerpt: "Como cruzar precio, barrio, transporte y estado visual para priorizar visitas."
+  },
+  {
+    slug: "precio-metro-cuadrado-malaga",
+    tag: "Precio m2",
+    city: "Malaga",
+    title: "Precio del metro cuadrado en Malaga",
+    excerpt: "Mercado tensionado, ubicacion y reforma: que mirar antes de reservar una visita."
+  },
+  {
+    slug: "precio-metro-cuadrado-salamanca",
+    tag: "Precio m2",
+    city: "Salamanca",
+    title: "Precio del metro cuadrado en Salamanca",
+    excerpt: "Referencias utiles para compradores que quieren comparar anuncios sin perder semanas."
+  },
+  {
+    slug: "precio-metro-cuadrado-logrono",
+    tag: "Precio m2",
+    city: "Logrono",
+    title: "Precio del metro cuadrado en Logrono",
+    excerpt: "Una metodologia sencilla para interpretar precios y evitar conclusiones demasiado rapidas."
+  }
+];
 
 const I18N = {
   es: {
-    "nav.home": "Inicio",
-    "nav.analysis": "Qu\u00e9 analiza",
-    "nav.apis": "APIs",
-    "nav.news": "Noticias",
-    "nav.premium": "Premium",
-    "nav.faq": "FAQ",
-    "nav.freeAccess": "2 d\u00edas gratis",
-    "footer.privacy": "Privacidad",
-    "footer.terms": "T\u00e9rminos",
-    "footer.news": "Noticias",
-    "footer.contact": "Contacto",
-    "home.hero.eyebrow": "Extensi\u00f3n Chrome para buscar vivienda con m\u00e1s criterio",
-    "home.hero.title": "Analiza inmuebles antes de contactar.",
-    "home.hero.lead": "InmoRadar convierte cada anuncio en una ficha clara: precio real, entrada estimada, zona, aparcamiento, transporte y se\u00f1ales que conviene revisar.",
-    "home.hero.ctaPrimary": "Probar 2 d\u00edas gratis",
-    "home.hero.ctaSecondary": "Ver qu\u00e9 analiza",
-    "home.metric.freeValue": "2 d\u00edas",
-    "home.metric.freeLabel": "acceso gratis por defecto",
-    "home.metric.priceValue": "1,99 €",
-    "home.metric.priceLabel": "Premium semanal despu\u00e9s",
-    "home.metric.scoreLabel": "\u00edndice de valoraci\u00f3n",
-    "home.freeNote": "Los 2 d\u00edas gratis son acceso inicial para todos. No tienes que pagar Premium para probar InmoRadar; si despu\u00e9s quieres seguir analizando, activas Premium.",
-    "news.kicker": "Noticias",
-    "news.title": "Publicaciones y gu\u00edas inmobiliarias.",
-    "news.lead": "En esta secci\u00f3n iremos enlazando las nuevas p\u00e1ginas de datos, gu\u00edas y an\u00e1lisis publicados por InmoRadar.",
-    "news.sample.meta": "Precio por m2",
-    "news.sample.title": "Precio del metro cuadrado en Logro\u00f1o",
-    "news.sample.desc": "Referencia de venta y alquiler con fuente, fecha del dato y pautas para comparar anuncios antes de contactar.",
-    "news.archive": "Archivo",
-    "news.previous": "Publicaciones anteriores",
-    "analysis.kicker": "An\u00e1lisis inmediato",
-    "analysis.title": "Precio, zona y coste real en una sola vista.",
-    "analysis.lead": "Dise\u00f1ado para compradores, inquilinos e inversores peque\u00f1os que quieren filtrar mejor antes de llamar, escribir o visitar.",
-    "analysis.card1.title": "Coste real",
-    "analysis.card1.copy": "Precio, superficie, €/m2, entrada estimada, hipoteca orientativa, comunidad e IBI cuando hay datos suficientes.",
-    "analysis.card2.title": "Entorno",
-    "analysis.card2.copy": "Ruido esperado, dificultad para aparcar, rotaci\u00f3n, ZBR, servicios cercanos y transporte p\u00fablico.",
-    "analysis.card3.title": "Comparativa",
-    "analysis.card3.copy": "Guarda inmuebles y compara precio, metros, habitaciones, zona, log\u00edstica diaria y valoraci\u00f3n.",
-    "api.kicker": "Datos enriquecidos",
-    "api.title": "APIs propias para se\u00f1ales urbanas.",
-    "api.lead": "InmoRadar consulta servicios propios para precio de mercado, datos de edificio y dificultad de aparcamiento. Cada anuncio gana contexto \u00fatil sin prometer mediciones exactas.",
-    "api.signal1": "Comparaci\u00f3n por zona y operaci\u00f3n para detectar precio alto, medio u oportunidad.",
-    "api.signal2": "Datos p\u00fablicos de edificio como a\u00f1o, ascensor, plantas y contexto de direcci\u00f3n cuando est\u00e1n disponibles.",
-    "api.signal3": "Tiempos orientativos a trabajo, colegio y destinos habituales.",
-    "premium.kicker": "Premium",
-    "premium.title": "Para b\u00fasquedas intensivas.",
-    "premium.lead": "Empieza con 2 d\u00edas de acceso inicial gratuito para todos. Despu\u00e9s, si quieres seguir, activa Premium por 1,99 \u20ac a la semana mientras dure tu b\u00fasqueda.",
-    "premium.card.kicker": "Acceso inicial",
-    "premium.card.price": "1,99 \u20ac",
-    "premium.card.period": "/ semana",
-    "premium.card.li1": "2 d\u00edas gratis por defecto, sin activar Premium.",
-    "premium.card.li2": "Premium semanal solo si decides continuar.",
-    "premium.card.li3": "An\u00e1lisis ilimitados de fichas.",
-    "premium.card.li4": "Comparativa de inmuebles guardados.",
-    "premium.card.cta": "Ver Premium",
-    "faq.q1": "Los 2 d\u00edas gratis, \u00bfson una prueba Premium?",
-    "faq.a1": "No. Son acceso inicial gratuito para todos los usuarios. No se cobra nada ni tienes que activar Premium para probarlo durante esos 2 d\u00edas.",
-    "faq.q2": "\u00bfInmoRadar mide datos exactos?",
-    "faq.a2": "No. Ofrece estimaciones orientativas basadas en datos abiertos, informaci\u00f3n visible del anuncio y se\u00f1ales urbanas.",
-    "faq.q3": "\u00bfFunciona con cualquier portal?",
-    "faq.a3": "La primera versi\u00f3n est\u00e1 orientada a Idealista y se ir\u00e1 ampliando a otros portales compatibles.",
-    "faq.q4": "\u00bfD\u00f3nde se guardan mis inmuebles?",
-    "faq.a4": "La extensi\u00f3n guarda la lista localmente en tu navegador, salvo que actives funciones que requieran servicios externos.",
-    "premiumPage.navCta": "Activar Premium",
-    "premiumPage.eyebrow": "Plan Premium \u00b7 despu\u00e9s del acceso inicial",
-    "premiumPage.title": "InmoRadar Premium",
-    "premiumPage.lead": "Todos los usuarios tienen 2 d\u00edas de acceso inicial gratuito por defecto. Cuando termine ese periodo, puedes seguir analizando inmuebles con Premium semanal.",
-    "premiumPage.freeNote": "Importante: los 2 d\u00edas gratis no son una prueba Premium de pago. Son acceso inicial gratuito para probar InmoRadar antes de decidir si quieres continuar.",
-    "premiumPage.cardKicker": "Premium semanal",
-    "premiumPage.cardCopy": "Despu\u00e9s de los 2 d\u00edas gratuitos, Premium mantiene el an\u00e1lisis activo por 1,99 \u20ac por semana, sin permanencia.",
-    "premiumPage.li1": "2 d\u00edas gratis por defecto para todos.",
-    "premiumPage.li2": "An\u00e1lisis ilimitado durante tu b\u00fasqueda si activas Premium.",
-    "premiumPage.li3": "Costes estimados de compra o alquiler.",
-    "premiumPage.li4": "Valoraci\u00f3n de inmueble, zona y precio de mercado.",
-    "premiumPage.li5": "Comparativa guardada y log\u00edstica diaria.",
-    "premiumPage.checkout": "Activar Premium",
-    "premiumPage.support": "Contactar soporte",
-    "premiumPage.billingKicker": "Ya eres Premium",
-    "premiumPage.billingTitle": "Gestiona tu suscripci\u00f3n.",
-    "premiumPage.billingCopy": "Cambia tarjeta, revisa facturas o cancela la renovaci\u00f3n desde el portal seguro de Lemon Squeezy.",
-    "premiumPage.emailLabel": "Email de compra",
-    "premiumPage.emailPlaceholder": "tu@email.com",
-    "premiumPage.manage": "Gestionar o cancelar",
-    "privacy.kicker": "Privacidad",
-    "privacy.title": "Politica de privacidad",
-    "privacy.updated": "Ultima actualizacion: 14 de mayo de 2026.",
-    "privacy.intro": "InmoRadar es una extension de navegador y una web de apoyo para analizar anuncios inmobiliarios. Esta politica explica que datos se usan y con que finalidad.",
-    "privacy.h1": "Datos que puede tratar la extension",
-    "privacy.li1": "Texto visible del anuncio inmobiliario para detectar precio, superficie, habitaciones, ubicacion aproximada y senales del inmueble.",
-    "privacy.li2": "Direcciones habituales configuradas por el usuario, como trabajo o colegio, para preparar calculos de logistica diaria.",
-    "privacy.li3": "Inmuebles guardados por el usuario para mostrarlos en una lista comparativa.",
-    "privacy.h2": "Almacenamiento local",
-    "privacy.local": "Las direcciones habituales y la lista de inmuebles se guardan en chrome.storage.local, dentro del navegador del usuario. No vendemos datos personales ni los usamos para publicidad.",
-    "privacy.h3": "Servicios externos",
-    "privacy.external": "InmoRadar puede consultar servicios externos de mapas, geocodificacion, rutas o analisis para calcular ubicaciones aproximadas, transporte, tiempos o contexto del inmueble.",
-    "privacy.h4": "Pagos",
-    "privacy.payments": "Cuando se active la suscripcion Premium, el pago se gestionara mediante un proveedor externo como Lemon Squeezy o Stripe. InmoRadar no almacenara datos completos de tarjeta.",
-    "privacy.contactTitle": "Contacto",
-    "privacy.contactCopy": "Para consultas de privacidad, escribe a",
-    "terms.kicker": "Legal",
-    "terms.title": "Terminos de uso",
-    "terms.updated": "Ultima actualizacion: 14 de mayo de 2026.",
-    "terms.h1": "Servicio",
-    "terms.service": "InmoRadar ayuda a interpretar anuncios inmobiliarios mediante estimaciones y resumenes automaticos. El servicio no sustituye una tasacion, una medicion oficial, una revision legal ni el asesoramiento de un profesional.",
-    "terms.h2": "Estimaciones",
-    "terms.estimates": "Los resultados pueden contener errores o depender de datos incompletos del anuncio. El usuario debe verificar precio, superficie, cargas, costes, estado del inmueble, informacion urbanistica y cualquier dato relevante antes de tomar decisiones.",
-    "terms.h3": "Premium",
-    "terms.premium": "InmoRadar puede ofrecer 2 dias de acceso inicial gratuito por defecto para todos los usuarios. Ese acceso inicial no es una prueba Premium de pago. Una vez finalizado, el usuario puede continuar con Premium por 1,99 € por semana, sin permanencia, mediante el proveedor de pagos configurado.",
-    "terms.h4": "Uso aceptable",
-    "terms.acceptable": "No esta permitido intentar desactivar limites tecnicos, revender el servicio, automatizar consultas abusivas ni usar InmoRadar para recopilar datos de portales de forma contraria a sus condiciones.",
-    "terms.h5": "Responsabilidad",
-    "terms.liability": "InmoRadar se ofrece como herramienta orientativa. No garantizamos disponibilidad continua ni exactitud absoluta de los datos o estimaciones.",
-    "terms.contactTitle": "Contacto",
-    "terms.contactCopy": "Para soporte, escribe a",
-    "success.home": "Volver al inicio",
-    "success.kicker": "Premium",
-    "success.title": "Premium activado",
-    "success.copy1": "Gracias por activar InmoRadar Premium. Vuelve a la extension para seguir analizando inmuebles.",
-    "success.copy2": "La suscripcion se sincroniza mediante Lemon Squeezy y puede tardar unos segundos en aparecer como activa.",
-    "success.cta": "Ir a InmoRadar",
-    "success.manageLabel": "Gestionar suscripcion",
-    "success.portal": "Abrir portal",
-    "cancel.viewPremium": "Ver Premium",
-    "cancel.kicker": "Premium",
-    "cancel.title": "Pago cancelado",
-    "cancel.copy": "No se ha activado ninguna suscripcion. Puedes volver al plan Premium cuando quieras.",
-    "cancel.cta": "Volver a Premium",
-    "checkout.preparing": "Preparando checkout seguro de Lemon Squeezy...",
-    "checkout.openingTest": "Abriendo checkout de prueba...",
-    "checkout.opening": "Abriendo checkout...",
-    "checkout.manual": "Escribenos y lo activamos manualmente.",
-    "portal.opening": "Abriendo portal seguro de Lemon Squeezy...",
-    "portal.magic": "Te llevamos al portal de Lemon Squeezy. Si te lo pide, confirma tu email con magic link.",
-    "portal.help": "Escribenos y te ayudamos con la baja.",
-    "news.metaFallback": "Guia inmobiliaria",
-    "news.archiveCount": "publicaciones anteriores"
+    navAnalysis: "Que analiza",
+    navApis: "APIs",
+    navPremium: "Premium",
+    navNews: "Noticias",
+    navFaq: "FAQ",
+    navContact: "Contacto",
+    navCta: "Probar 2 dias gratis",
+    contactSuccess: "Mensaje enviado. Te respondemos en menos de 24h.",
+    contactError: "Revisa los campos del formulario.",
+    contactSending: "Enviando...",
+    contactSent: "Enviado - enviar otro",
+    checkoutPreparing: "Preparando checkout seguro...",
+    checkoutOpening: "Abriendo checkout...",
+    checkoutManual: "Escribenos y lo activamos manualmente.",
+    portalOpening: "Abriendo portal seguro...",
+    portalHelp: "Escribenos y te ayudamos con la baja.",
+    all: "Todos",
+    read: "Lectura 4 min",
+    updated: "Actualizado may 2026"
   },
   en: {
-    "nav.home": "Home",
-    "nav.analysis": "What it checks",
-    "nav.apis": "APIs",
-    "nav.news": "News",
-    "nav.premium": "Premium",
-    "nav.faq": "FAQ",
-    "nav.freeAccess": "2 days free",
-    "footer.privacy": "Privacy",
-    "footer.terms": "Terms",
-    "footer.news": "News",
-    "footer.contact": "Contact",
-    "home.hero.eyebrow": "Chrome extension for sharper home searches",
-    "home.hero.title": "Analyze homes before you contact.",
-    "home.hero.lead": "InmoRadar turns each listing into a clear brief: real price, estimated cash needed, area context, parking, transport and signals worth checking.",
-    "home.hero.ctaPrimary": "Try 2 days free",
-    "home.hero.ctaSecondary": "See what it checks",
-    "home.metric.freeValue": "2 days",
-    "home.metric.freeLabel": "free access by default",
-    "home.metric.priceValue": "€1.99",
-    "home.metric.priceLabel": "weekly Premium after that",
-    "home.metric.scoreLabel": "rating index",
-    "home.freeNote": "The 2 free days are initial access for everyone. You do not need to pay for Premium to try InmoRadar; if you want to keep analyzing after that, you activate Premium.",
-    "news.kicker": "News",
-    "news.title": "Real-estate posts and guides.",
-    "news.lead": "This section links to new data pages, guides and analysis published by InmoRadar.",
-    "news.sample.meta": "Price per m2",
-    "news.sample.title": "Price per square meter in Logrono",
-    "news.sample.desc": "Sale and rent reference with source, data date and guidance for comparing listings before contacting.",
-    "news.archive": "Archive",
-    "news.previous": "Previous posts",
-    "analysis.kicker": "Instant analysis",
-    "analysis.title": "Price, area and real cost in one view.",
-    "analysis.lead": "Built for buyers, renters and small investors who want to filter better before calling, writing or visiting.",
-    "analysis.card1.title": "Real cost",
-    "analysis.card1.copy": "Price, surface, €/m2, estimated down payment, mortgage estimate, community fees and property tax when data is available.",
-    "analysis.card2.title": "Surroundings",
-    "analysis.card2.copy": "Expected noise, parking difficulty, churn, low-emission zones, nearby services and public transport.",
-    "analysis.card3.title": "Comparison",
-    "analysis.card3.copy": "Save homes and compare price, meters, rooms, area, daily logistics and score.",
-    "api.kicker": "Enriched data",
-    "api.title": "Own APIs for urban signals.",
-    "api.lead": "InmoRadar uses own services for market price, building data and parking difficulty. Each listing gets useful context without promising exact measurements.",
-    "api.signal1": "Comparison by area and operation to detect expensive, average or opportunity pricing.",
-    "api.signal2": "Public building data such as year, lift, floors and address context when available.",
-    "api.signal3": "Indicative travel times to work, school and your usual destinations.",
-    "premium.kicker": "Premium",
-    "premium.title": "For intensive searches.",
-    "premium.lead": "Start with 2 days of initial free access for everyone. After that, if you want to continue, activate Premium for €1.99 per week while your search lasts.",
-    "premium.card.kicker": "Initial access",
-    "premium.card.price": "€1.99",
-    "premium.card.period": "/ week",
-    "premium.card.li1": "2 free days by default, without activating Premium.",
-    "premium.card.li2": "Weekly Premium only if you decide to continue.",
-    "premium.card.li3": "Unlimited listing analyses.",
-    "premium.card.li4": "Saved-home comparison.",
-    "premium.card.cta": "See Premium",
-    "faq.q1": "Are the 2 free days a Premium trial?",
-    "faq.a1": "No. They are initial free access for every user. You are not charged and do not need to activate Premium to try it during those 2 days.",
-    "faq.q2": "Does InmoRadar measure exact data?",
-    "faq.a2": "No. It provides indicative estimates based on open data, visible listing information and urban signals.",
-    "faq.q3": "Does it work with every portal?",
-    "faq.a3": "The first version is focused on Idealista and will expand to other compatible portals.",
-    "faq.q4": "Where are my saved homes stored?",
-    "faq.a4": "The extension stores the list locally in your browser unless you enable features that require external services.",
-    "premiumPage.navCta": "Activate Premium",
-    "premiumPage.eyebrow": "Premium plan · after initial access",
-    "premiumPage.title": "InmoRadar Premium",
-    "premiumPage.lead": "Every user gets 2 days of initial free access by default. When that period ends, you can keep analyzing homes with weekly Premium.",
-    "premiumPage.freeNote": "Important: the 2 free days are not a paid Premium trial. They are free initial access so you can try InmoRadar before deciding whether to continue.",
-    "premiumPage.cardKicker": "Weekly Premium",
-    "premiumPage.cardCopy": "After the 2 free days, Premium keeps analysis active for €1.99 per week, with no lock-in.",
-    "premiumPage.li1": "2 free days by default for everyone.",
-    "premiumPage.li2": "Unlimited analysis during your search if you activate Premium.",
-    "premiumPage.li3": "Estimated buying or rental costs.",
-    "premiumPage.li4": "Home, area and market-price assessment.",
-    "premiumPage.li5": "Saved comparison and daily logistics.",
-    "premiumPage.checkout": "Activate Premium",
-    "premiumPage.support": "Contact support",
-    "premiumPage.billingKicker": "Already Premium",
-    "premiumPage.billingTitle": "Manage your subscription.",
-    "premiumPage.billingCopy": "Change card, review invoices or cancel renewal from the secure Lemon Squeezy portal.",
-    "premiumPage.emailLabel": "Purchase email",
-    "premiumPage.emailPlaceholder": "you@email.com",
-    "premiumPage.manage": "Manage or cancel",
-    "privacy.kicker": "Privacy",
-    "privacy.title": "Privacy policy",
-    "privacy.updated": "Last updated: May 14, 2026.",
-    "privacy.intro": "InmoRadar is a browser extension and support website for analyzing property listings. This policy explains what data is used and why.",
-    "privacy.h1": "Data the extension may process",
-    "privacy.li1": "Visible listing text to detect price, surface, rooms, approximate location and property signals.",
-    "privacy.li2": "Usual addresses configured by the user, such as work or school, to prepare daily logistics calculations.",
-    "privacy.li3": "Homes saved by the user to show them in a comparison list.",
-    "privacy.h2": "Local storage",
-    "privacy.local": "Usual addresses and saved homes are stored in chrome.storage.local inside the user's browser. We do not sell personal data or use it for advertising.",
-    "privacy.h3": "External services",
-    "privacy.external": "InmoRadar may query external map, geocoding, routing or analysis services to calculate approximate locations, transport, travel times or property context.",
-    "privacy.h4": "Payments",
-    "privacy.payments": "When Premium is activated, payment is handled by an external provider such as Lemon Squeezy or Stripe. InmoRadar does not store full card details.",
-    "privacy.contactTitle": "Contact",
-    "privacy.contactCopy": "For privacy questions, write to",
-    "terms.kicker": "Legal",
-    "terms.title": "Terms of use",
-    "terms.updated": "Last updated: May 14, 2026.",
-    "terms.h1": "Service",
-    "terms.service": "InmoRadar helps interpret property listings through automatic estimates and summaries. The service does not replace a valuation, official measurement, legal review or professional advice.",
-    "terms.h2": "Estimates",
-    "terms.estimates": "Results may contain errors or depend on incomplete listing data. Users should verify price, surface, charges, costs, condition, planning information and any relevant data before making decisions.",
-    "terms.h3": "Premium",
-    "terms.premium": "InmoRadar may offer 2 days of initial free access by default for every user. That initial access is not a paid Premium trial. Once it ends, the user can continue with Premium for €1.99 per week, with no lock-in, through the configured payment provider.",
-    "terms.h4": "Acceptable use",
-    "terms.acceptable": "You may not try to disable technical limits, resell the service, automate abusive queries or use InmoRadar to collect portal data against their terms.",
-    "terms.h5": "Liability",
-    "terms.liability": "InmoRadar is provided as an indicative tool. We do not guarantee continuous availability or absolute accuracy of data or estimates.",
-    "terms.contactTitle": "Contact",
-    "terms.contactCopy": "For support, write to",
-    "success.home": "Back home",
-    "success.kicker": "Premium",
-    "success.title": "Premium activated",
-    "success.copy1": "Thanks for activating InmoRadar Premium. Go back to the extension to keep analyzing homes.",
-    "success.copy2": "The subscription syncs through Lemon Squeezy and may take a few seconds to appear as active.",
-    "success.cta": "Go to InmoRadar",
-    "success.manageLabel": "Manage subscription",
-    "success.portal": "Open portal",
-    "cancel.viewPremium": "View Premium",
-    "cancel.kicker": "Premium",
-    "cancel.title": "Payment cancelled",
-    "cancel.copy": "No subscription has been activated. You can return to Premium whenever you want.",
-    "cancel.cta": "Back to Premium",
-    "checkout.preparing": "Preparing secure Lemon Squeezy checkout...",
-    "checkout.openingTest": "Opening test checkout...",
-    "checkout.opening": "Opening checkout...",
-    "checkout.manual": "Email us and we will activate it manually.",
-    "portal.opening": "Opening secure Lemon Squeezy portal...",
-    "portal.magic": "We are taking you to the Lemon Squeezy portal. If asked, confirm your email with the magic link.",
-    "portal.help": "Email us and we will help you cancel.",
-    "news.metaFallback": "Real-estate guide",
-    "news.archiveCount": "previous posts"
+    navAnalysis: "What it checks",
+    navApis: "APIs",
+    navPremium: "Premium",
+    navNews: "News",
+    navFaq: "FAQ",
+    navContact: "Contact",
+    navCta: "Try 2 days free",
+    contactSuccess: "Message sent. We will reply in under 24h.",
+    contactError: "Please review the form fields.",
+    contactSending: "Sending...",
+    contactSent: "Sent - send another",
+    checkoutPreparing: "Preparing secure checkout...",
+    checkoutOpening: "Opening checkout...",
+    checkoutManual: "Email us and we will activate it manually.",
+    portalOpening: "Opening secure portal...",
+    portalHelp: "Email us and we will help you cancel.",
+    all: "All",
+    read: "4 min read",
+    updated: "Updated May 2026"
   }
 };
 
@@ -290,226 +121,277 @@ function t(key) {
   return I18N[currentLanguage]?.[key] || I18N.es[key] || key;
 }
 
-function applyLanguage(language) {
-  currentLanguage = language === "en" ? "en" : "es";
-  document.documentElement.lang = currentLanguage;
-  try {
-    localStorage.setItem(LANGUAGE_STORAGE_KEY, currentLanguage);
-  } catch {
-    // Ignore storage restrictions.
-  }
-
-  document.querySelectorAll("[data-i18n]").forEach((node) => {
-    const key = node.getAttribute("data-i18n");
-    const value = t(key);
-    if (value) node.textContent = value;
-  });
-
-  document.querySelectorAll("[data-i18n-placeholder]").forEach((node) => {
-    const key = node.getAttribute("data-i18n-placeholder");
-    const value = t(key);
-    if (value) node.setAttribute("placeholder", value);
-  });
-
-  document.querySelectorAll("[data-lang]").forEach((button) => {
-    button.setAttribute("aria-pressed", button.dataset.lang === currentLanguage ? "true" : "false");
-  });
+function icon(name) {
+  const paths = {
+    Radar: '<circle cx="12" cy="12" r="8"/><path d="M12 12l5-5M12 4v3M12 17v3M4 12h3M17 12h3"/>',
+    ArrowRight: '<path d="M5 12h14M13 5l7 7-7 7"/>',
+    ArrowUpRight: '<path d="M7 17 17 7M8 7h9v9"/>',
+    Mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+    MapPin: '<path d="M12 21s7-5 7-12a7 7 0 1 0-14 0c0 7 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>',
+    Send: '<path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4z"/>',
+    Clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    Calendar: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/>'
+  };
+  return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.Radar}</svg>`;
 }
-
-function initLanguageSwitcher() {
-  let initial = "es";
-  try {
-    initial = localStorage.getItem(LANGUAGE_STORAGE_KEY) || document.documentElement.lang || "es";
-  } catch {
-    initial = document.documentElement.lang || "es";
-  }
-  applyLanguage(initial);
-
-  document.querySelectorAll("[data-lang]").forEach((button) => {
-    button.addEventListener("click", () => applyLanguage(button.dataset.lang));
-  });
-}
-
-function showCheckoutStatus(message) {
-  document.querySelectorAll("[data-checkout-status]").forEach((node) => {
-    node.textContent = message;
-  });
-}
-
-function setCheckoutButtonsLoading(isLoading) {
-  document.querySelectorAll("[data-checkout-button]").forEach((button) => {
-    button.disabled = isLoading;
-    button.setAttribute("aria-busy", isLoading ? "true" : "false");
-  });
-}
-
-function showPortalStatus(message) {
-  document.querySelectorAll("[data-portal-status]").forEach((node) => {
-    node.textContent = message;
-  });
-}
-
-function setPortalFormsLoading(isLoading) {
-  document.querySelectorAll("[data-portal-form] button").forEach((button) => {
-    button.disabled = isLoading;
-    button.setAttribute("aria-busy", isLoading ? "true" : "false");
-  });
-}
-
-async function openCheckout(source) {
-  showCheckoutStatus(t("checkout.preparing"));
-  setCheckoutButtonsLoading(true);
-
-  try {
-    const response = await fetch(CHECKOUT_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({ source })
-    });
-    const payload = await response.json().catch(() => ({}));
-
-    if (!response.ok || !payload.checkout_url) {
-      if (payload.error === "lemonsqueezy_not_configured") {
-        throw new Error("Falta configurar Lemon Squeezy en Vercel.");
-      }
-      throw new Error(payload.message || "No se ha podido crear el checkout.");
-    }
-
-    showCheckoutStatus(payload.test_mode ? t("checkout.openingTest") : t("checkout.opening"));
-    window.location.href = payload.checkout_url;
-  } catch (error) {
-    showCheckoutStatus(`${error.message} ${t("checkout.manual")}`);
-    window.location.href = `mailto:${WAITLIST_EMAIL}?subject=Quiero%20InmoRadar%20Premium&body=Hola,%20quiero%20activar%20InmoRadar%20Premium.`;
-  } finally {
-    setCheckoutButtonsLoading(false);
-  }
-}
-
-async function openCustomerPortal(email) {
-  showPortalStatus(t("portal.opening"));
-  setPortalFormsLoading(true);
-
-  try {
-    const response = await fetch(PORTAL_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({ email })
-    });
-    const payload = await response.json().catch(() => ({}));
-
-    if (!response.ok || !payload.portal_url) {
-      if (payload.error === "lemonsqueezy_not_configured") {
-        throw new Error("Falta configurar Lemon Squeezy en Vercel.");
-      }
-      throw new Error(payload.message || "No se ha podido abrir el portal.");
-    }
-
-    showPortalStatus(t("portal.magic"));
-    window.location.href = payload.portal_url;
-  } catch (error) {
-    showPortalStatus(`${error.message} ${t("portal.help")}`);
-    window.location.href = `mailto:${WAITLIST_EMAIL}?subject=Gestionar%20o%20cancelar%20InmoRadar%20Premium&body=Hola,%20quiero%20gestionar%20o%20cancelar%20mi%20suscripci%C3%B3n%20Premium.%0AEmail%20de%20compra:%20${encodeURIComponent(email || "")}`;
-  } finally {
-    setPortalFormsLoading(false);
-  }
-}
-
-document.querySelectorAll("[data-checkout-button]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const source = button.dataset.checkoutSource || "premium_page";
-    openCheckout(source);
-  });
-});
-
-document.querySelectorAll("[data-portal-form]").forEach((form) => {
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const data = new FormData(form);
-    const email = String(data.get("email") || "").trim();
-    openCustomerPortal(email);
-  });
-});
 
 function escapeHtml(value) {
-  return String(value || "")
+  return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
 
-function renderNewsItem(item, className) {
+function applyLanguage(language) {
+  currentLanguage = language === "en" ? "en" : "es";
+  document.documentElement.lang = currentLanguage;
+  try {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, currentLanguage);
+  } catch {
+    // Storage may be blocked.
+  }
+  document.querySelectorAll("[data-i18n-key]").forEach((node) => {
+    const value = t(node.dataset.i18nKey);
+    if (value) node.textContent = value;
+  });
+  document.querySelectorAll("[data-lang]").forEach((button) => {
+    button.setAttribute("aria-pressed", button.dataset.lang === currentLanguage ? "true" : "false");
+  });
+  renderArticles();
+  renderArticlePage();
+}
+
+function initLanguage() {
+  let language = "es";
+  try {
+    language = localStorage.getItem(LANGUAGE_STORAGE_KEY) || "es";
+  } catch {
+    language = "es";
+  }
+  applyLanguage(language);
+  document.querySelectorAll("[data-lang]").forEach((button) => {
+    button.addEventListener("click", () => applyLanguage(button.dataset.lang));
+  });
+}
+
+function initHeader() {
+  const header = document.querySelector("[data-site-header]");
+  const toggle = document.querySelector("[data-mobile-toggle]");
+  const panel = document.querySelector("[data-mobile-panel]");
+  const onScroll = () => header?.classList.toggle("is-scrolled", window.scrollY > 8);
+  onScroll();
+  window.addEventListener("scroll", onScroll, { passive: true });
+  toggle?.addEventListener("click", () => {
+    const open = !panel.classList.contains("open");
+    panel.classList.toggle("open", open);
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+}
+
+function renderArticles() {
+  document.querySelectorAll("[data-articles-grid]").forEach((grid) => {
+    const limit = Number(grid.dataset.limit || articles.length);
+    const filter = grid.dataset.activeFilter || "Todos";
+    const items = articles
+      .filter((item) => filter === "Todos" || item.tag === filter)
+      .slice(0, limit);
+    grid.innerHTML = items.map((item, index) => articleCard(item, index === 0 && grid.dataset.largeFirst === "true")).join("");
+  });
+}
+
+function articleCard(item, large = false) {
   return `
-    <article class="${className}">
+    <a class="article-card ${large ? "large" : ""}" href="/noticias/${escapeHtml(item.slug)}" data-testid="article-card-${escapeHtml(item.slug)}">
       <div>
-        <span class="news-meta">${escapeHtml(item.meta || t("news.metaFallback"))}</span>
-        <h3><a href="${escapeHtml(item.url)}">${escapeHtml(item.title)}</a></h3>
+        <div class="article-meta"><span>${escapeHtml(item.tag)}</span><span>${icon("ArrowUpRight")}</span></div>
+        <h3>${escapeHtml(item.title)}</h3>
+        <p>${escapeHtml(item.excerpt)}</p>
       </div>
-      <p>${escapeHtml(item.description)}</p>
-    </article>
+      <div class="article-meta"><span>${t("read")}</span><span>${t("updated")}</span></div>
+    </a>
   `;
 }
 
-function archiveLoopItems(items) {
-  const base = [];
-  while (base.length < Math.max(items.length, 4)) {
-    base.push(...items);
-  }
-  const visibleLoop = base.slice(0, Math.max(items.length, 4));
-  return [...visibleLoop, ...visibleLoop];
+function initArticleFilters() {
+  const wrap = document.querySelector("[data-news-filters]");
+  const grid = document.querySelector("[data-articles-grid]");
+  if (!wrap || !grid) return;
+  wrap.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-filter]");
+    if (!button) return;
+    wrap.querySelectorAll("[data-filter]").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+    grid.dataset.activeFilter = button.dataset.filter;
+    renderArticles();
+  });
 }
 
-function renderLatestAndArchiveNews(items) {
-  const list = document.querySelector("[data-news-list]");
-  const archive = document.querySelector("[data-news-archive]");
-  const archiveTrack = document.querySelector("[data-news-track]");
-  const archiveCount = document.querySelector("[data-news-archive-count]");
-  if (!list || !Array.isArray(items) || !items.length) return;
-
-  const latest = items.slice(0, 5);
-  const older = items.slice(5);
-
-  list.innerHTML = latest.map((item) => renderNewsItem(item, "news-item")).join("");
-
-  if (!archive || !archiveTrack) return;
-  if (!older.length) {
-    archive.hidden = true;
-    archiveTrack.innerHTML = "";
-    return;
-  }
-
-  archive.hidden = false;
-  if (archiveCount) {
-    archiveCount.textContent = `${older.length} ${t("news.archiveCount")}`;
-  }
-  archiveTrack.innerHTML = archiveLoopItems(older)
-    .map((item) => renderNewsItem(item, "news-archive-item"))
-    .join("");
+function renderArticlePage() {
+  const target = document.querySelector("[data-article-page]");
+  if (!target) return;
+  const slug = target.dataset.slug || new URLSearchParams(location.search).get("slug") || location.pathname.split("/").filter(Boolean).pop();
+  const article = articles.find((item) => item.slug === slug) || articles[0];
+  const related = articles.filter((item) => item.slug !== article.slug).slice(0, 3);
+  target.innerHTML = `
+    <section class="page-header grid-bg">
+      <div class="container article-layout">
+        <a class="button ghost" href="/noticias">${currentLanguage === "en" ? "All posts" : "Todas las publicaciones"}</a>
+        <p class="pill" style="margin-top:28px"><span class="dot-radar"></span>${escapeHtml(article.tag)} · ${escapeHtml(article.city)}</p>
+        <h1>${escapeHtml(article.title)}</h1>
+        <p class="lead">${escapeHtml(article.excerpt)}</p>
+        <div class="article-meta" style="margin-top:24px"><span>${icon("Clock")} ${t("read")}</span><span>${icon("Calendar")} ${t("updated")}</span></div>
+      </div>
+    </section>
+    <section class="section">
+      <article class="container article-layout article-body">
+        <p class="article-summary">${escapeHtml(article.excerpt)} La clave es no mirar solo el precio total: la lectura mejora al cruzar euros por metro, barrio, estado, transporte y aparcamiento.</p>
+        <h2>Resumen rapido</h2>
+        <p>Un anuncio puede parecer atractivo por precio absoluto y seguir estando por encima de mercado si la superficie, la ubicacion concreta o el estado del edificio no acompanan. InmoRadar ordena esas senales para que decidas si merece una llamada.</p>
+        <h2>Metodologia</h2>
+        <ol class="number-list">
+          <li><span>01</span><p>Calculamos el precio por metro cuadrado del anuncio y lo comparamos con referencias agregadas disponibles.</p></li>
+          <li><span>02</span><p>Mostramos el nivel geografico usado: zona, distrito, municipio o provincia. Nunca lo presentamos como precio exacto de calle.</p></li>
+          <li><span>03</span><p>Cruzamos coste inicial, financiacion orientativa, transporte y aparcamiento para evitar una lectura incompleta.</p></li>
+          <li><span>04</span><p>Anadimos caveats cuando la confianza baja o faltan datos del anuncio.</p></li>
+        </ol>
+        <h2>Como usarlo con InmoRadar</h2>
+        <p>Abre un anuncio compatible, revisa la ficha de precio y zona, guarda los candidatos fuertes y compara los inmuebles antes de contactar. La extension no sustituye una tasacion ni una visita, pero ayuda a filtrar mejor.</p>
+        <div class="callout"><strong>Tip InmoRadar</strong><p>Si una vivienda sale cara y ademas la finca no tiene ascensor, el parking es dificil o la reforma visual parece probable, pide mas informacion antes de avanzar.</p></div>
+      </article>
+      <div class="container">
+        <div class="article-grid">${related.map((item) => articleCard(item)).join("")}</div>
+      </div>
+    </section>
+  `;
 }
 
-async function loadPublishedNews() {
-  const list = document.querySelector("[data-news-list]");
-  if (!list) return;
-
-  try {
-    const response = await fetch("/api/news", {
-      headers: { accept: "application/json" },
-      cache: "no-store"
+function initFaq() {
+  document.querySelectorAll("[data-faq-trigger]").forEach((trigger) => {
+    trigger.addEventListener("click", () => {
+      const panel = document.getElementById(trigger.getAttribute("aria-controls"));
+      const open = trigger.getAttribute("aria-expanded") === "true";
+      trigger.setAttribute("aria-expanded", open ? "false" : "true");
+      panel?.classList.toggle("open", !open);
     });
-    const payload = await response.json();
-    if (response.ok && payload.ok) renderLatestAndArchiveNews(payload.news);
-  } catch {
-    // Si falla la API, se mantiene el contenido editorial estatico.
-  }
+  });
 }
 
-initLanguageSwitcher();
-loadPublishedNews();
+function showToast(message, tone = "success") {
+  let toast = document.querySelector("[data-toast]");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.className = "toast";
+    toast.dataset.toast = "true";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.toggle("error", tone === "error");
+  toast.classList.add("show");
+  setTimeout(() => toast.classList.remove("show"), 3800);
+}
 
-document.querySelectorAll("[data-year]").forEach((node) => {
-  node.textContent = String(new Date().getFullYear());
-});
+function initContactForm() {
+  const form = document.querySelector("[data-contact-form]");
+  if (!form) return;
+  let topic = form.querySelector("[data-topic].active")?.dataset.topic || "general";
+  form.querySelectorAll("[data-topic]").forEach((button) => {
+    button.addEventListener("click", () => {
+      topic = button.dataset.topic;
+      form.querySelectorAll("[data-topic]").forEach((item) => item.classList.remove("active"));
+      button.classList.add("active");
+    });
+  });
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = form.querySelector("[data-contact-submit]");
+    const payload = {
+      name: String(form.name.value || "").trim(),
+      email: String(form.email.value || "").trim(),
+      topic,
+      message: String(form.message.value || "").trim()
+    };
+    if (!payload.name || !payload.email || payload.message.length < 4) {
+      showToast(t("contactError"), "error");
+      return;
+    }
+    submit.disabled = true;
+    submit.textContent = t("contactSending");
+    try {
+      const response = await fetch(CONTACT_ENDPOINT, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error("contact_failed");
+      showToast(t("contactSuccess"));
+      form.reset();
+      submit.textContent = t("contactSent");
+    } catch {
+      showToast("No hemos podido enviar el mensaje. Escribe a hola@inmoradar.app.", "error");
+      submit.textContent = "Enviar";
+    } finally {
+      submit.disabled = false;
+    }
+  });
+}
+
+function initCheckout() {
+  document.querySelectorAll("[data-checkout-button]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        showToast(t("checkoutPreparing"));
+        const response = await fetch(CHECKOUT_ENDPOINT, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ source: button.dataset.checkoutSource || "web" })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.checkout_url) throw new Error("checkout_failed");
+        showToast(t("checkoutOpening"));
+        location.href = payload.checkout_url;
+      } catch {
+        location.href = `mailto:${WAITLIST_EMAIL}?subject=Quiero%20InmoRadar%20Premium`;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+  document.querySelectorAll("[data-portal-form]").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const email = String(new FormData(form).get("email") || "").trim();
+      try {
+        showToast(t("portalOpening"));
+        const response = await fetch(PORTAL_ENDPOINT, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.portal_url) throw new Error("portal_failed");
+        location.href = payload.portal_url;
+      } catch {
+        location.href = `mailto:${WAITLIST_EMAIL}?subject=Gestionar%20Premium&body=Email:%20${encodeURIComponent(email)}`;
+      }
+    });
+  });
+}
+
+function init() {
+  document.querySelectorAll("[data-year]").forEach((node) => {
+    node.textContent = String(new Date().getFullYear());
+  });
+  document.querySelectorAll("[data-icon]").forEach((node) => {
+    node.innerHTML = icon(node.dataset.icon);
+  });
+  initHeader();
+  initLanguage();
+  initArticleFilters();
+  initFaq();
+  initContactForm();
+  initCheckout();
+}
+
+init();
