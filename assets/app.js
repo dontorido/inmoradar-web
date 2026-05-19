@@ -123,9 +123,18 @@ function t(key) {
 
 function icon(name) {
   const paths = {
-    Radar: '<circle cx="12" cy="12" r="8"/><path d="M12 12l5-5M12 4v3M12 17v3M4 12h3M17 12h3"/>',
+    Radar: '<rect x="3" y="3" width="18" height="18" rx="3"/><rect x="8" y="8" width="8" height="8" rx="1.5"/>',
     ArrowRight: '<path d="M5 12h14M13 5l7 7-7 7"/>',
     ArrowUpRight: '<path d="M7 17 17 7M8 7h9v9"/>',
+    BarChart3: '<path d="M3 3v18h18"/><path d="M8 17V9"/><path d="M13 17V5"/><path d="M18 17v-4"/>',
+    BedDouble: '<path d="M2 20v-8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8"/><path d="M4 10V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v4"/><path d="M12 10V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v4"/><path d="M2 18h20"/>',
+    Eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    Heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/>',
+    House: '<path d="m3 10 9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
+    Ruler: '<path d="M21 15 9 3l-6 6 12 12 6-6z"/><path d="M8 7 5 10M12 11l-3 3M16 15l-3 3"/>',
+    Settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+    Minus: '<path d="M5 12h14"/>',
+    Tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
     Mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
     MapPin: '<path d="M12 21s7-5 7-12a7 7 0 1 0-14 0c0 7 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>',
     Send: '<path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4z"/>',
@@ -385,6 +394,14 @@ function init() {
   });
   document.querySelectorAll("[data-icon]").forEach((node) => {
     node.innerHTML = icon(node.dataset.icon);
+  });
+  document.querySelectorAll(".site-footer").forEach((footer) => {
+    if (!footer.querySelector(".info-marker")) {
+      const marker = document.createElement("div");
+      marker.className = "info-marker footer-info-marker";
+      marker.innerHTML = "<span>⊕ Más información en</span><strong>InmoRadar.app</strong>";
+      footer.appendChild(marker);
+    }
   });
   initHeader();
   initLanguage();
