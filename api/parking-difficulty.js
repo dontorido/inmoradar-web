@@ -1,14 +1,27 @@
-const { handleCors, json } = require("./_utils");
+const { handleCors, hasSupabaseConfig, json, supabaseFetch } = require("./_utils");
 const { calculateParkingDifficulty } = require("./_parking/calculateParkingDifficulty");
-const { getCachedParkingDifficulty, parkingCacheKey, setCachedParkingDifficulty } = require("./_parking/cache");
+const {
+  DEFAULT_TTL_MS,
+  getCachedParkingDifficulty,
+  parkingCacheKey,
+  parkingGeohash,
+  setCachedParkingDifficulty
+} = require("./_parking/cache");
 const { getMunicipalParkingSignals } = require("./_parking/municipalAdapters");
-const { buildParkingExplanation, buildParkingSignals, confidenceFromSignals } = require("./_parking/parkingSignals");
+const {
+  buildParkingExplanation,
+  buildParkingSignals,
+  confidenceFromSignals,
+  normalizePerspective
+} = require("./_parking/parkingSignals");
 const { fetchOverpassParking, mockOverpassParkingResponse } = require("./_parking/overpassClient");
 const { parseOverpassParkingSignals } = require("./_parking/parseOverpassParkingSignals");
 
 const DEFAULT_RADIUS_M = 500;
 const NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search";
 const PHOTON_ENDPOINT = "https://photon.komoot.io/api/";
+const PARKING_DISCLAIMER =
+  "Estimaci\u00f3n orientativa. La dificultad real puede variar seg\u00fan hora, d\u00eda, eventos y disponibilidad puntual.";
 
 function parseCoordinate(value) {
   if (value === null || value === undefined || value === "") return null;
@@ -22,10 +35,18 @@ function parseRadius(value) {
   return Math.max(100, Math.min(1500, parsed));
 }
 
+function parseRequestedAt(value) {
+  if (!value) return null;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function validateRequest(query) {
   const lat = parseCoordinate(query.get("lat"));
   const lng = parseCoordinate(query.get("lng") || query.get("lon"));
   const address = String(query.get("address") || "").trim();
+  const perspective = normalizePerspective(String(query.get("perspective") || "visitor"));
+  const requestedAt = parseRequestedAt(query.get("at") || query.get("datetime"));
   if (lat === null || lng === null) {
     if (!address) return { ok: false, status: 400, error: "lat_lng_or_address_required" };
     return {
@@ -35,6 +56,8 @@ function validateRequest(query) {
       address,
       city: String(query.get("city") || "").trim(),
       radiusM: parseRadius(query.get("radius_m")),
+      perspective,
+      requestedAt,
       useMock: query.get("mock") === "1" || query.get("mock") === "true"
     };
   }
@@ -48,6 +71,8 @@ function validateRequest(query) {
     address,
     city: String(query.get("city") || "").trim(),
     radiusM: parseRadius(query.get("radius_m")),
+    perspective,
+    requestedAt,
     useMock: query.get("mock") === "1" || query.get("mock") === "true"
   };
 }
@@ -171,7 +196,99 @@ function sourceList({ overpassOk, usedMock, municipalSignals }) {
   return sources;
 }
 
-async function buildParkingDifficultyResponse({ lat, lng, city, radiusM, useMock }) {
+function cacheTtlMsForSources(sources) {
+  const hasOsm = sources.some((source) => source.type === "osm" || source.type === "mock");
+  const hasMunicipal = sources.some((source) => source.type === "municipal_open_data");
+  if (hasMunicipal && !hasOsm) return 30 * 24 * 60 * 60 * 1000;
+  return DEFAULT_TTL_MS;
+}
+
+function cachedPayloadFromRow(row) {
+  const signals = row.signals_json || {};
+  const perspective = normalizePerspective(row.perspective || signals.perspective);
+  return {
+    ok: true,
+    score: Number(row.score),
+    label: row.label,
+    confidence_score: Number(row.confidence_score),
+    radius_m: Number(row.radius_m || DEFAULT_RADIUS_M),
+    perspective,
+    signals,
+    explanation: buildParkingExplanation({ signals, overpassOk: true, perspective }),
+    sources: Array.isArray(row.sources_json) ? row.sources_json : [],
+    disclaimer: PARKING_DISCLAIMER,
+    meta: {
+      lat: row.lat,
+      lng: row.lng,
+      city: row.city || null,
+      persistent_cache: true,
+      calculated_at: row.calculated_at
+    },
+    cache: {
+      hit: true,
+      layer: "supabase",
+      geohash: row.geohash,
+      expires_at: row.expires_at
+    }
+  };
+}
+
+async function getPersistentParkingDifficulty({ lat, lng, radiusM, perspective }) {
+  if (!hasSupabaseConfig()) return null;
+  const geohash = parkingGeohash({ lat, lng });
+  const params = new URLSearchParams({
+    select:
+      "id,geohash,lat,lng,city,radius_m,perspective,score,label,confidence_score,signals_json,sources_json,calculated_at,expires_at",
+    geohash: `eq.${geohash}`,
+    radius_m: `eq.${radiusM}`,
+    perspective: `eq.${normalizePerspective(perspective)}`,
+    expires_at: `gt.${new Date().toISOString()}`,
+    order: "calculated_at.desc",
+    limit: "1"
+  });
+  try {
+    const rows = await supabaseFetch(`parking_difficulty_cache?${params.toString()}`, { timeoutMs: 2500 });
+    const row = Array.isArray(rows) ? rows[0] || null : null;
+    return row ? cachedPayloadFromRow(row) : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function setPersistentParkingDifficulty({ lat, lng, city, radiusM, perspective, payload, ttlMs }) {
+  if (!hasSupabaseConfig()) return false;
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + ttlMs).toISOString();
+  const row = {
+    geohash: parkingGeohash({ lat, lng }),
+    lat,
+    lng,
+    city: city || null,
+    radius_m: radiusM,
+    perspective: normalizePerspective(perspective),
+    score: payload.score,
+    label: payload.label,
+    confidence_score: payload.confidence_score,
+    signals_json: payload.signals || {},
+    sources_json: payload.sources || [],
+    calculated_at: now.toISOString(),
+    expires_at: expiresAt
+  };
+
+  try {
+    await supabaseFetch("parking_difficulty_cache?on_conflict=geohash,radius_m,perspective", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify([row]),
+      timeoutMs: 2500
+    });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function buildParkingDifficultyResponse({ lat, lng, city, radiusM, perspective, requestedAt, useMock }) {
   let overpassPayload = null;
   let overpassOk = false;
   let overpassError = null;
@@ -188,9 +305,10 @@ async function buildParkingDifficultyResponse({ lat, lng, city, radiusM, useMock
 
   const osmSummary = parseOverpassParkingSignals(overpassPayload);
   const municipalSignals = await getMunicipalParkingSignals({ city, lat, lng });
-  const signals = buildParkingSignals({ osmSummary, municipalSignals, city });
+  const signals = buildParkingSignals({ osmSummary, municipalSignals, city, perspective, requestedAt });
   const scoring = calculateParkingDifficulty(signals);
   const confidenceScore = confidenceFromSignals({ signals, osmSummary, municipalSignals, usedMock, overpassOk });
+  const sources = sourceList({ overpassOk, usedMock, municipalSignals });
 
   return {
     ok: true,
@@ -198,9 +316,11 @@ async function buildParkingDifficultyResponse({ lat, lng, city, radiusM, useMock
     label: scoring.label,
     confidence_score: confidenceScore,
     radius_m: radiusM,
+    perspective: normalizePerspective(perspective),
     signals,
-    explanation: buildParkingExplanation({ signals, overpassOk }),
-    sources: sourceList({ overpassOk, usedMock, municipalSignals }),
+    explanation: buildParkingExplanation({ signals, overpassOk, perspective }),
+    sources,
+    disclaimer: PARKING_DISCLAIMER,
     meta: {
       lat,
       lng,
@@ -208,7 +328,9 @@ async function buildParkingDifficultyResponse({ lat, lng, city, radiusM, useMock
       raw_score: scoring.raw_score,
       osm_relevant_elements: osmSummary.relevantElements,
       overpass_status: overpassOk ? "ok" : "failed",
-      overpass_error: overpassOk ? null : overpassError
+      overpass_error: overpassOk ? null : overpassError,
+      requested_at: requestedAt || null,
+      ttl_ms: cacheTtlMsForSources(sources)
     },
     cache: {
       hit: false
@@ -246,12 +368,22 @@ module.exports = async function handler(req, res) {
     lat: validation.lat,
     lng: validation.lng,
     city: validation.city,
-    radiusM: validation.radiusM
+    radiusM: validation.radiusM,
+    perspective: validation.perspective
   });
 
   if (!validation.useMock) {
     const cached = getCachedParkingDifficulty(cacheKey);
     if (cached) return json(res, 200, cached);
+    const persistentCached = await getPersistentParkingDifficulty(validation);
+    if (persistentCached) {
+      setCachedParkingDifficulty(cacheKey, persistentCached);
+      if (geocodedLocation) {
+        persistentCached.location = geocodedLocation;
+        persistentCached.meta.address = validation.address;
+      }
+      return json(res, 200, persistentCached);
+    }
   }
 
   try {
@@ -260,7 +392,19 @@ module.exports = async function handler(req, res) {
       payload.location = geocodedLocation;
       payload.meta.address = validation.address;
     }
-    if (!validation.useMock) setCachedParkingDifficulty(cacheKey, payload);
+    if (!validation.useMock) {
+      const ttlMs = payload.meta?.ttl_ms || DEFAULT_TTL_MS;
+      setCachedParkingDifficulty(cacheKey, payload, ttlMs);
+      await setPersistentParkingDifficulty({
+        lat: validation.lat,
+        lng: validation.lng,
+        city: validation.city,
+        radiusM: validation.radiusM,
+        perspective: validation.perspective,
+        payload,
+        ttlMs
+      });
+    }
     return json(res, 200, payload);
   } catch (error) {
     return json(res, 500, {

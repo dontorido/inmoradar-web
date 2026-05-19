@@ -32,6 +32,12 @@ function countBy(rows, key) {
   }, {});
 }
 
+function average(rows, key) {
+  const values = rows.map((row) => Number(row[key])).filter(Number.isFinite);
+  if (!values.length) return 0;
+  return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 100) / 100;
+}
+
 function normalizeSlug(slug) {
   return String(slug || "").trim().replace(/^\/+|\/+$/g, "");
 }
@@ -63,7 +69,7 @@ function routeFromRequest(req) {
 }
 
 async function handleSummary() {
-  const [premiumResult, recentPremiumResult, landingResult, recentLandingResult, opportunityResult] =
+  const [premiumResult, recentPremiumResult, landingResult, recentLandingResult, opportunityResult, parkingResult] =
     await Promise.all([
       safeFetch("premium_subscriptions?select=status,updated_at&limit=1000"),
       safeFetch(
@@ -73,12 +79,15 @@ async function handleSummary() {
       safeFetch(
         "seo_landings?select=id,slug,title,city,template_type,status,index_status,quality_score,word_count,updated_at,published_at&order=updated_at.desc&limit=8"
       ),
-      safeFetch("seo_landing_opportunities?select=status,template_type&limit=1000")
+      safeFetch("seo_landing_opportunities?select=status,template_type&limit=1000"),
+      safeFetch("parking_difficulty_cache?select=score,label,confidence_score,perspective,expires_at&limit=1000")
     ]);
 
   const premiumRows = Array.isArray(premiumResult) ? premiumResult : premiumResult.rows;
   const landingRows = Array.isArray(landingResult) ? landingResult : landingResult.rows;
   const opportunityRows = Array.isArray(opportunityResult) ? opportunityResult : opportunityResult.rows;
+  const parkingRows = Array.isArray(parkingResult) ? parkingResult : parkingResult.rows;
+  const validParkingRows = parkingRows.filter((row) => !row.expires_at || new Date(row.expires_at).getTime() > Date.now());
 
   return {
     ok: true,
@@ -108,7 +117,38 @@ async function handleSummary() {
       opportunities_by_status: countBy(opportunityRows, "status"),
       recent_landings: Array.isArray(recentLandingResult) ? recentLandingResult : recentLandingResult.rows,
       error: landingResult.error || recentLandingResult.error || opportunityResult.error || null
+    },
+    parking: {
+      total_cache_rows: parkingRows.length,
+      valid_cache_rows: validParkingRows.length,
+      average_score: average(validParkingRows, "score"),
+      average_confidence: average(validParkingRows, "confidence_score"),
+      by_label: countBy(validParkingRows, "label"),
+      by_perspective: countBy(validParkingRows, "perspective"),
+      error: parkingResult.error || null
     }
+  };
+}
+
+async function handleParkingSummary() {
+  const result = await safeFetch(
+    "parking_difficulty_cache?select=id,geohash,city,radius_m,perspective,score,label,confidence_score,calculated_at,expires_at&order=calculated_at.desc&limit=100"
+  );
+  const rows = Array.isArray(result) ? result : result.rows;
+  const validRows = rows.filter((row) => !row.expires_at || new Date(row.expires_at).getTime() > Date.now());
+
+  return {
+    ok: true,
+    generated_at: new Date().toISOString(),
+    total_cache_rows: rows.length,
+    valid_cache_rows: validRows.length,
+    expired_cache_rows: rows.length - validRows.length,
+    average_score: average(validRows, "score"),
+    average_confidence: average(validRows, "confidence_score"),
+    by_label: countBy(validRows, "label"),
+    by_perspective: countBy(validRows, "perspective"),
+    recent: rows,
+    error: result.error || null
   };
 }
 
@@ -367,6 +407,10 @@ module.exports = async function handler(req, res) {
     if (resource === "kpis/settings") {
       const result = await handleKpiSettings(req);
       return json(res, result.status, result.payload);
+    }
+    if (resource === "parking/summary") {
+      if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
+      return json(res, 200, await handleParkingSummary());
     }
 
     return json(res, 404, { ok: false, error: "admin_resource_not_found", resource });

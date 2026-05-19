@@ -18,7 +18,7 @@ Web estatica de lanzamiento para InmoRadar.
 - `api/lemonsqueezy-checkout.js`: crea checkouts y abre el Customer Portal de Lemon Squeezy en modo prueba o produccion sin exponer la API key.
 - `api/lemonsqueezy-webhook.js`: webhook preparado para sincronizar suscripciones de Lemon Squeezy.
 - `admin.html`, `assets/admin.js` y `assets/admin.css`: backoffice protegido por `ADMIN_IMPORT_TOKEN`.
-- `api/admin.js`: backoffice API compacta para Premium, SEO, KPIs y estado de integraciones. Se usa una sola serverless function para respetar el limite de Vercel Hobby.
+- `api/admin.js`: backoffice API compacta para Premium, SEO, KPIs, Parking y estado de integraciones. Se usa una sola serverless function para respetar el limite de Vercel Hobby.
 - `database/premium-subscriptions.sql`: tabla Supabase para guardar suscripciones Premium.
 - `database/kpi-settings.sql`: tabla Supabase para guardar reglas, pesos, umbrales y visibilidad de KPIs.
 - `api/market-price.js`: endpoint agregado para que la extension consulte precios de mercado por zona.
@@ -32,7 +32,7 @@ Web estatica de lanzamiento para InmoRadar.
 - `api/sitemap.js`: sitemap dinamico con landings publicadas e indexables.
 - `scripts/seo-generate.js`: dry run local del generador SEO.
 - La home incluye una seccion `Noticias` para enlazar publicaciones y guias nuevas.
-- `api/parking-difficulty.js`: MVP del Parking Difficulty Score con Overpass/OpenStreetMap, scoring y cache en memoria.
+- `api/parking-difficulty.js`: Parking Difficulty Score con Overpass/OpenStreetMap, perspectiva visitante/residente, scoring y cache en memoria + Supabase.
 - `api/_parking/*`: servicios internos para scoring, parser Overpass, adaptadores municipales y cache.
 - `types/parking.ts`: tipos TypeScript preparados para migrar el endpoint a TS.
 - `database/parking-difficulty.sql`: tablas preparadas para zonas de aparcamiento regulado y cache persistente.
@@ -159,7 +159,7 @@ El endpoint devuelve solo datos agregados procesados. No expone `raw_payload` ni
 MVP disponible en:
 
 ```text
-https://www.inmoradar.app/api/parking-difficulty?lat=40.356&lng=-3.520&city=Rivas-Vaciamadrid
+https://www.inmoradar.app/api/parking-difficulty?lat=40.356&lng=-3.520&city=Rivas-Vaciamadrid&perspective=visitor
 ```
 
 Tambien acepta direccion si no hay coordenadas:
@@ -174,7 +174,9 @@ Para probar sin depender de Overpass:
 https://www.inmoradar.app/api/parking-difficulty?lat=40.356&lng=-3.520&city=Rivas-Vaciamadrid&mock=1
 ```
 
-Devuelve un indice orientativo de dificultad para aparcar de 1 a 10 con senales y explicaciones. No promete disponibilidad real de plaza ni medicion exacta.
+Devuelve un indice orientativo de dificultad para aparcar de 1 a 10 con `label`, `confidence_score`, perspectiva `visitor|resident`, senales, explicaciones, fuentes y disclaimer. Usa OpenStreetMap/Overpass para parkings, plazas, calles peatonales, living streets y densidad de amenities; Madrid deja preparado el adaptador SER municipal sin afirmar calle regulada si no hay geometria.
+
+La cache persistente vive en `parking_difficulty_cache`. Ejecuta `database/parking-difficulty.sql` en Supabase para activar columnas `city`, `perspective`, RLS e indice unico por contexto. El TTL normal de OSM/heuristica es 7 dias.
 
 Variable opcional:
 

@@ -228,6 +228,11 @@
   margin: 26px 0;
 }
 
+.admin-stat-grid.compact {
+  margin: 0;
+  border-width: 0 0 1px;
+}
+
 .admin-stat {
   background: #151515;
   padding: 18px;
@@ -465,9 +470,76 @@
   border-color: var(--accent);
 }
 
+.admin-parking-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, .42fr) minmax(0, 1fr);
+  gap: 1px;
+  background: #242424;
+  border-bottom: 1px solid #242424;
+}
+
+.admin-parking-probe {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-content: start;
+  background: #151515;
+  padding: 18px;
+}
+
+.admin-parking-probe label {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-parking-probe span {
+  color: #737373;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.admin-parking-probe input,
+.admin-parking-probe select {
+  min-height: 40px;
+  border: 1px solid #2a2a2a;
+  background: #0a0a0a;
+  color: #fff;
+  padding: 0 12px;
+  font-family: var(--body);
+  font-size: 14px;
+  outline: none;
+}
+
+.admin-parking-probe input:focus,
+.admin-parking-probe select:focus {
+  border-color: var(--accent);
+}
+
+.admin-parking-probe .admin-button {
+  grid-column: 1 / -1;
+}
+
+.admin-parking-result {
+  min-height: 220px;
+  max-height: 360px;
+  margin: 0;
+  overflow: auto;
+  background: #101010;
+  color: #d4d4d4;
+  padding: 18px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 1100px) {
   .admin-grid,
   .admin-stat-grid,
+  .admin-parking-grid,
   .admin-kpi-group,
   .admin-kpi-fields {
     grid-template-columns: 1fr;
@@ -482,6 +554,10 @@
 
   .admin-view-toolbar .admin-button {
     width: 100%;
+  }
+
+  .admin-parking-probe {
+    grid-template-columns: 1fr;
   }
 }
 

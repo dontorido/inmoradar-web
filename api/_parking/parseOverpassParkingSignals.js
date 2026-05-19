@@ -25,6 +25,33 @@ function isParkingLane(tags) {
   );
 }
 
+const DEMAND_AMENITIES = new Set([
+  "bar",
+  "biergarten",
+  "cafe",
+  "cinema",
+  "clinic",
+  "college",
+  "community_centre",
+  "doctors",
+  "fast_food",
+  "hospital",
+  "kindergarten",
+  "marketplace",
+  "nightclub",
+  "pharmacy",
+  "pub",
+  "restaurant",
+  "school",
+  "theatre",
+  "university"
+]);
+
+const NIGHTLIFE_AMENITIES = new Set(["bar", "biergarten", "cinema", "nightclub", "pub", "restaurant", "theatre"]);
+const EDUCATION_AMENITIES = new Set(["college", "kindergarten", "school", "university"]);
+const HEALTH_AMENITIES = new Set(["clinic", "doctors", "hospital"]);
+const MARKET_AMENITIES = new Set(["marketplace"]);
+
 function parseOverpassParkingSignals(payload) {
   const elements = Array.isArray(payload?.elements) ? payload.elements : [];
   const summary = {
@@ -37,6 +64,15 @@ function parseOverpassParkingSignals(payload) {
     countPaidParkings: 0,
     countParkingLaneWays: 0,
     countMainRoads: 0,
+    countAmenities: 0,
+    countDemandAmenities: 0,
+    countRestaurants: 0,
+    countNightlifeAmenities: 0,
+    countOffices: 0,
+    countSchools: 0,
+    countHospitals: 0,
+    countMarkets: 0,
+    countShops: 0,
     relevantElements: 0
   };
 
@@ -49,6 +85,31 @@ function parseOverpassParkingSignals(payload) {
     const highway = String(tags.highway || "").toLowerCase();
     const access = String(tags.access || "").toLowerCase();
     const fee = String(tags.fee || "").toLowerCase();
+    const shop = String(tags.shop || "").toLowerCase();
+    const office = String(tags.office || "").toLowerCase();
+
+    if (amenity && !["parking", "parking_space"].includes(amenity)) {
+      summary.countAmenities += 1;
+      if (DEMAND_AMENITIES.has(amenity)) summary.countDemandAmenities += 1;
+      if (amenity === "restaurant" || amenity === "fast_food" || amenity === "cafe") summary.countRestaurants += 1;
+      if (NIGHTLIFE_AMENITIES.has(amenity)) summary.countNightlifeAmenities += 1;
+      if (EDUCATION_AMENITIES.has(amenity)) summary.countSchools += 1;
+      if (HEALTH_AMENITIES.has(amenity)) summary.countHospitals += 1;
+      if (MARKET_AMENITIES.has(amenity)) summary.countMarkets += 1;
+      summary.relevantElements += DEMAND_AMENITIES.has(amenity) ? 1 : 0;
+    }
+
+    if (shop) {
+      summary.countShops += 1;
+      summary.countDemandAmenities += 1;
+      summary.relevantElements += 1;
+    }
+
+    if (office) {
+      summary.countOffices += 1;
+      summary.countDemandAmenities += 1;
+      summary.relevantElements += 1;
+    }
 
     if (amenity === "parking") {
       summary.countParkings += 1;

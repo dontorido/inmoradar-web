@@ -20,6 +20,12 @@ function buildOverpassParkingQuery({ lat, lng, radiusM = 500 }) {
   way["highway"="pedestrian"](around:${streetRadius},${latValue},${lngValue});
   way["highway"="living_street"](around:${streetRadius},${latValue},${lngValue});
   way["highway"~"^(primary|secondary|tertiary|trunk)$"](around:${streetRadius},${latValue},${lngValue});
+  node["amenity"](around:${radius},${latValue},${lngValue});
+  way["amenity"](around:${radius},${latValue},${lngValue});
+  node["shop"](around:${radius},${latValue},${lngValue});
+  way["shop"](around:${radius},${latValue},${lngValue});
+  node["office"](around:${radius},${latValue},${lngValue});
+  way["office"](around:${radius},${latValue},${lngValue});
 );
 out center tags;`;
 }
@@ -61,7 +67,11 @@ function mockOverpassParkingResponse() {
       { type: "way", id: 3, tags: { highway: "living_street" } },
       { type: "way", id: 4, tags: { highway: "primary" } },
       { type: "node", id: 5, tags: { amenity: "parking", capacity: "40", fee: "yes" } },
-      { type: "way", id: 6, tags: { "parking:right": "lane" } }
+      { type: "way", id: 6, tags: { "parking:right": "lane" } },
+      { type: "node", id: 7, tags: { amenity: "restaurant" } },
+      { type: "node", id: 8, tags: { amenity: "school" } },
+      { type: "node", id: 9, tags: { shop: "supermarket" } },
+      { type: "node", id: 10, tags: { office: "company" } }
     ]
   };
 }

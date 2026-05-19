@@ -8,11 +8,11 @@ function roundTo(value, decimals = 2) {
 }
 
 function labelFromParkingScore(score) {
-  if (score <= 2) return "muy fácil";
-  if (score <= 4) return "fácil";
+  if (score <= 2) return "muy f\u00e1cil";
+  if (score <= 4) return "f\u00e1cil";
   if (score <= 6) return "media";
-  if (score <= 8) return "difícil";
-  return "muy difícil";
+  if (score <= 8) return "dif\u00edcil";
+  return "muy dif\u00edcil";
 }
 
 function normalizeImpact(value) {
@@ -21,11 +21,14 @@ function normalizeImpact(value) {
 }
 
 function calculateParkingDifficulty(signals) {
+  const streetParkingPressure =
+    signals?.street_parking_pressure?.impact ?? signals?.osm_parkings_500m?.impact;
+  const publicParking = signals?.public_parking?.impact ?? signals?.public_parkings_500m?.impact;
   const rawScore =
     3 +
     normalizeImpact(signals?.regulated_zone?.impact) +
-    normalizeImpact(signals?.osm_parkings_500m?.impact) +
-    normalizeImpact(signals?.public_parkings_500m?.impact) +
+    normalizeImpact(streetParkingPressure) +
+    normalizeImpact(publicParking) +
     normalizeImpact(signals?.urban_density?.impact) +
     normalizeImpact(signals?.urban_morphology?.impact) +
     normalizeImpact(signals?.restrictions?.impact) +

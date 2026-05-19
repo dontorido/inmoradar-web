@@ -10,6 +10,9 @@ const state = {
   seo: {
     status: "all"
   },
+  parking: {
+    lastProbe: null
+  },
   kpis: {
     schema: [],
     settings: {},
@@ -36,7 +39,12 @@ const els = {
   seoGenerate: document.querySelector("[data-seo-generate]"),
   seoPublish: document.querySelector("[data-seo-publish]"),
   kpiForm: document.querySelector("[data-kpi-form]"),
-  kpiReset: document.querySelector("[data-kpi-reset]")
+  kpiReset: document.querySelector("[data-kpi-reset]"),
+  parkingStats: document.querySelector("[data-parking-stats]"),
+  parkingRows: document.querySelector("[data-parking-rows]"),
+  parkingRefresh: document.querySelector("[data-parking-refresh]"),
+  parkingProbeForm: document.querySelector("[data-parking-probe-form]"),
+  parkingResult: document.querySelector("[data-parking-result]")
 };
 
 function escapeHtml(value) {
@@ -95,7 +103,7 @@ function requireLogin() {
 }
 
 function setAdminSection(section) {
-  state.activeSection = section === "kpis" ? "kpis" : "marketing";
+  state.activeSection = ["marketing", "kpis", "parking"].includes(section) ? section : "marketing";
   els.views.forEach((view) => {
     view.hidden = view.dataset.adminView !== state.activeSection;
   });
@@ -156,6 +164,47 @@ function renderStats(summary) {
     stat("SEO publicadas", seo.published || 0),
     stat("SEO ready", seo.ready_to_publish || 0)
   ].join("");
+}
+
+function renderParkingStats(payload) {
+  if (!els.parkingStats) return;
+  els.parkingStats.innerHTML = [
+    stat("Cache total", payload.total_cache_rows || 0),
+    stat("Cache vigente", payload.valid_cache_rows || 0),
+    stat("Score medio", payload.average_score || 0),
+    stat("Confianza media", payload.average_confidence || 0)
+  ].join("");
+}
+
+function renderParkingRows(rows) {
+  if (!els.parkingRows) return;
+  if (!rows.length) {
+    els.parkingRows.innerHTML = `<tr><td colspan="5">No hay calculos de parking cacheados todavia.</td></tr>`;
+    return;
+  }
+
+  els.parkingRows.innerHTML = rows
+    .map((row) => {
+      const score = Number(row.score || 0);
+      const confidence = Number(row.confidence_score || 0);
+      const expired = row.expires_at && new Date(row.expires_at).getTime() <= Date.now();
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(row.city || row.geohash || "-")}</strong>
+            <div class="admin-subtle">${escapeHtml(row.geohash || "-")} - ${escapeHtml(row.radius_m || 500)} m</div>
+          </td>
+          <td>${chip(`${score}/10 - ${row.label || "-"}`, score >= 7 ? "bad" : score <= 4 ? "good" : "")}</td>
+          <td>${chip(confidence.toFixed(2), confidence >= 0.7 ? "good" : "")}</td>
+          <td>${escapeHtml(row.perspective || "visitor")}</td>
+          <td>
+            ${escapeHtml(formatDate(row.expires_at))}
+            <div class="admin-subtle">${expired ? "caducado" : "vigente"}</div>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
 }
 
 function renderPremium(rows) {
@@ -335,11 +384,17 @@ async function loadKpis() {
   renderKpis(payload);
 }
 
+async function loadParking() {
+  const payload = await api("/api/admin?resource=parking/summary");
+  renderParkingStats(payload);
+  renderParkingRows(payload.recent || []);
+}
+
 async function loadAll() {
   if (!state.token) return;
   showStatus("Cargando backoffice...");
   try {
-    await Promise.all([loadSummary(), loadPremium(), loadSeo(), loadKpis()]);
+    await Promise.all([loadSummary(), loadPremium(), loadSeo(), loadKpis(), loadParking()]);
     showStatus(`Actualizado ${formatDate(new Date().toISOString())}`, "good");
   } catch (error) {
     if (error.status === 401) {
@@ -351,6 +406,42 @@ async function loadAll() {
     }
     showStatus(`Error: ${error.message}`, "bad");
   }
+}
+
+async function runParkingProbe(form) {
+  const data = new FormData(form);
+  const params = new URLSearchParams({
+    lat: String(data.get("lat") || ""),
+    lng: String(data.get("lng") || ""),
+    city: String(data.get("city") || ""),
+    perspective: String(data.get("perspective") || "visitor")
+  });
+
+  showStatus("Calculando Parking Difficulty Score...");
+  const response = await fetch(`/api/parking-difficulty?${params.toString()}`, {
+    headers: { accept: "application/json" }
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.ok === false) {
+    throw new Error(payload.message || payload.error || "parking_probe_failed");
+  }
+  state.parking.lastProbe = payload;
+  if (els.parkingResult) {
+    els.parkingResult.textContent = JSON.stringify(
+      {
+        score: payload.score,
+        label: payload.label,
+        confidence_score: payload.confidence_score,
+        perspective: payload.perspective,
+        explanation: payload.explanation,
+        disclaimer: payload.disclaimer
+      },
+      null,
+      2
+    );
+  }
+  await loadParking();
+  showStatus(`Parking ${payload.score}/10 - ${payload.label} (${payload.perspective})`, "good");
 }
 
 function collectKpiValues() {
@@ -485,6 +576,17 @@ els.kpiReset.addEventListener("click", () => {
   if (!window.confirm("Restaurar los valores recomendados de KPIs?")) return;
   saveKpis(state.kpis.defaults).catch((error) => showStatus(error.message, "bad"));
 });
+
+if (els.parkingRefresh) {
+  els.parkingRefresh.addEventListener("click", () => loadParking().catch((error) => showStatus(error.message, "bad")));
+}
+
+if (els.parkingProbeForm) {
+  els.parkingProbeForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    runParkingProbe(els.parkingProbeForm).catch((error) => showStatus(error.message, "bad"));
+  });
+}
 
 els.seoRows.addEventListener("click", (event) => {
   const button = event.target.closest("[data-seo-action]");
