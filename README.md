@@ -20,6 +20,7 @@ Web estatica de lanzamiento para InmoRadar.
 - `api/check-premium.js?resource=saved-properties-email-report`: envio Premium de comparativa de inmuebles guardados por Cloudflare Email Service.
 - `admin.html`, `assets/admin.js` y `assets/admin.css`: backoffice protegido por `ADMIN_IMPORT_TOKEN`.
 - `api/admin.js`: backoffice API compacta para Premium, SEO, KPIs, Parking y estado de integraciones. Se usa una sola serverless function para respetar el limite de Vercel Hobby.
+- `lib/social-video/*`: generador de guion, storyboard, preview vertical y paquete exportable para Videos IA, con branding global obligatorio.
 - `database/premium-subscriptions.sql`: tabla Supabase para guardar suscripciones Premium.
 - `database/saved-property-email-reports.sql`: auditoria y limite diario de emails Premium enviados.
 - `database/kpi-settings.sql`: tabla Supabase para guardar reglas, pesos, umbrales y visibilidad de KPIs.
@@ -121,6 +122,7 @@ El panel no indexa y los datos se cargan desde endpoints protegidos con `ADMIN_I
 - publicar una landing elegible;
 - cambiar una landing a `noindex` o regenerarla;
 - administrar reglas KPI: pesos de inmueble/zona, umbrales de precio, caps por nivel geografico, costes, entorno, parking y visibilidad de KPIs estaticos.
+- generar paquetes de video IA con logo InmoRadar arriba derecha y firma `Inmoradar.app` abajo derecha en todas las escenas.
 
 Migracion KPI:
 

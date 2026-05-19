@@ -1,4 +1,5 @@
 const TOKEN_KEY = "inmoradar_admin_token";
+const VIDEO_PROJECT_KEY = "inmoradar_social_video_project";
 
 const state = {
   token: sessionStorage.getItem(TOKEN_KEY) || "",
@@ -21,6 +22,10 @@ const state = {
     schema: [],
     settings: {},
     defaults: {}
+  },
+  video: {
+    lastProject: null,
+    selectedSceneIndex: 0
   }
 };
 
@@ -49,7 +54,19 @@ const els = {
   parkingRows: document.querySelector("[data-parking-rows]"),
   parkingRefresh: document.querySelector("[data-parking-refresh]"),
   parkingProbeForm: document.querySelector("[data-parking-probe-form]"),
-  parkingResult: document.querySelector("[data-parking-result]")
+  parkingResult: document.querySelector("[data-parking-result]"),
+  videoForm: document.querySelector("[data-video-form]"),
+  videoPreview: document.querySelector("[data-video-preview]"),
+  videoPreviewTopic: document.querySelector("[data-video-preview-topic]"),
+  videoPreviewHeadline: document.querySelector("[data-video-preview-headline]"),
+  videoPreviewBody: document.querySelector("[data-video-preview-body]"),
+  videoPreviewTitle: document.querySelector("[data-video-preview-title]"),
+  videoPreviewMeta: document.querySelector("[data-video-preview-meta]"),
+  videoStoryboard: document.querySelector("[data-video-storyboard]"),
+  videoCopyPrompt: document.querySelector("[data-video-copy-prompt]"),
+  videoDownloadJson: document.querySelector("[data-video-download-json]"),
+  videoDownloadHtml: document.querySelector("[data-video-download-html]"),
+  videoExport: document.querySelector("[data-video-export]")
 };
 
 function escapeHtml(value) {
@@ -108,7 +125,7 @@ function requireLogin() {
 }
 
 function setAdminSection(section) {
-  state.activeSection = ["marketing", "kpis", "parking"].includes(section) ? section : "marketing";
+  state.activeSection = ["marketing", "kpis", "parking", "videos"].includes(section) ? section : "marketing";
   els.views.forEach((view) => {
     view.hidden = view.dataset.adminView !== state.activeSection;
   });
@@ -441,6 +458,429 @@ function renderKpis(payload) {
       .join("");
 }
 
+function setVideoActions(enabled) {
+  [els.videoCopyPrompt, els.videoDownloadJson, els.videoDownloadHtml, els.videoExport].forEach((button) => {
+    if (button) button.disabled = !enabled;
+  });
+}
+
+function videoFormPayload(form) {
+  const data = new FormData(form);
+  return {
+    topic: String(data.get("topic") || "random"),
+    city: String(data.get("city") || "").trim(),
+    duration_seconds: Number(data.get("duration_seconds") || 24),
+    tone: String(data.get("tone") || "directo"),
+    audience: String(data.get("audience") || "general"),
+    cta: String(data.get("cta") || "install")
+  };
+}
+
+function renderVideoProject(project) {
+  state.video.lastProject = project;
+  state.video.selectedSceneIndex = Math.min(state.video.selectedSceneIndex || 0, Math.max((project.scenes || []).length - 1, 0));
+  sessionStorage.setItem(VIDEO_PROJECT_KEY, JSON.stringify(project));
+  renderVideoPreview();
+  renderVideoStoryboard();
+  setVideoActions(Boolean(project));
+}
+
+function renderVideoPreview() {
+  const project = state.video.lastProject;
+  if (!project || !els.videoPreview) return;
+  const scenes = project.scenes || [];
+  const scene = scenes[state.video.selectedSceneIndex] || scenes[0] || {};
+  els.videoPreview.dataset.videoTopic = project.topic || "";
+  if (els.videoPreviewTopic) els.videoPreviewTopic.textContent = project.topic_label || "Video IA";
+  if (els.videoPreviewHeadline) els.videoPreviewHeadline.textContent = scene.headline || project.title || "Video InmoRadar";
+  if (els.videoPreviewBody) els.videoPreviewBody.textContent = scene.body || project.caption || "";
+  if (els.videoPreviewTitle) els.videoPreviewTitle.textContent = project.title || "Video InmoRadar";
+  if (els.videoPreviewMeta) {
+    els.videoPreviewMeta.textContent = `${project.duration_seconds || 24}s - ${project.format?.width || 1080}x${project.format?.height || 1920} - ${project.scenes?.length || 0} escenas`;
+  }
+}
+
+function renderVideoStoryboard() {
+  const project = state.video.lastProject;
+  if (!els.videoStoryboard) return;
+  if (!project) {
+    els.videoStoryboard.innerHTML = `<p class="admin-empty-state">Genera un video para ver aqui el storyboard completo.</p>`;
+    return;
+  }
+  els.videoStoryboard.innerHTML = `
+    <section class="admin-video-output-head">
+      <div>
+        <span class="admin-kicker muted">Paquete IA</span>
+        <h3>${escapeHtml(project.title)}</h3>
+        <p>${escapeHtml(project.caption || "")}</p>
+      </div>
+      <div class="admin-video-output-meta">
+        ${chip(project.status || "storyboard_ready", "ready")}
+        ${chip(`${project.duration_seconds || 24}s`, "draft")}
+      </div>
+    </section>
+    <section class="admin-video-branding-card">
+      <strong>Branding global obligatorio</strong>
+      <p>Logo arriba derecha (${escapeHtml(project.branding?.logoSizePx || 72)} px) y texto exacto "${escapeHtml(project.branding?.websiteText || "Inmoradar.app")}" abajo derecha durante todo el video.</p>
+    </section>
+    <div class="admin-video-scenes">
+      ${(project.scenes || [])
+        .map(
+          (scene, index) => `
+          <button class="admin-video-scene${index === state.video.selectedSceneIndex ? " active" : ""}" type="button" data-video-scene="${index}" data-testid="admin-video-scene-${index + 1}">
+            <span>${String(index + 1).padStart(2, "0")} - ${escapeHtml(scene.role || "scene")}</span>
+            <strong>${escapeHtml(scene.headline || "")}</strong>
+            <p>${escapeHtml(scene.body || "")}</p>
+            <small><b>Voz:</b> ${escapeHtml(scene.voiceover || "")}</small>
+            <small><b>Visual IA:</b> ${escapeHtml(scene.visual_prompt || "")}</small>
+            <small><b>Movimiento:</b> ${escapeHtml(scene.motion || "")}</small>
+          </button>
+        `
+        )
+        .join("")}
+    </div>
+    <section class="admin-video-prompt">
+      <span class="admin-kicker muted">Prompt maestro IA</span>
+      <pre>${escapeHtml(project.global_ai_prompt || "")}</pre>
+    </section>
+  `;
+}
+
+function downloadText(filename, mimeType, text) {
+  const blob = new Blob([text], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function buildVideoPreviewHtml(project) {
+  const firstScene = project.scenes?.[0] || {};
+  const scenes = (project.scenes || [])
+    .map(
+      (scene, index) => `
+      <article class="scene">
+        <span>${String(index + 1).padStart(2, "0")} / ${escapeHtml(scene.role || "scene")}</span>
+        <h2>${escapeHtml(scene.headline || "")}</h2>
+        <p>${escapeHtml(scene.body || "")}</p>
+      </article>
+    `
+    )
+    .join("");
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(project.title || "Video InmoRadar")}</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#09090B;color:#fff;font-family:Inter,system-ui,sans-serif}.canvas{position:relative;width:1080px;height:1920px;overflow:hidden;background:radial-gradient(circle at 25% 15%,rgba(255,69,0,.28),transparent 34%),linear-gradient(145deg,#09090B,#18181B 58%,#0A140F)}.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.055) 1px,transparent 1px);background-size:72px 72px}.content{position:absolute;left:76px;right:160px;top:260px;display:grid;gap:36px}.eyebrow{color:#FF4500;font:700 28px/1 monospace;letter-spacing:.22em;text-transform:uppercase}.content h1{margin:0;font-size:112px;line-height:.9;letter-spacing:-.07em}.content p{margin:0;color:rgba(255,255,255,.78);font-size:38px;line-height:1.35;max-width:760px}.scene-list{position:absolute;left:76px;right:76px;bottom:180px;display:grid;gap:18px}.scene{padding:24px 28px;border:1px solid rgba(255,255,255,.14);border-radius:28px;background:rgba(255,255,255,.08);backdrop-filter:blur(12px)}.scene span{color:#FF4500;font:700 18px/1 monospace;letter-spacing:.18em;text-transform:uppercase}.scene h2{margin:10px 0 6px;font-size:36px;line-height:1}.scene p{margin:0;color:rgba(255,255,255,.72);font-size:24px}.brand-logo{position:absolute;top:${project.branding?.logoMarginTopPx || 48}px;right:${project.branding?.logoMarginRightPx || 48}px;width:${project.branding?.logoSizePx || 72}px;height:${project.branding?.logoSizePx || 72}px;border-radius:22px}.brand-site{position:absolute;right:${project.branding?.websiteMarginRightPx || 48}px;bottom:${project.branding?.websiteMarginBottomPx || 48}px;font-size:${project.branding?.websiteFontSizePx || 32}px;font-weight:800;letter-spacing:-.02em}.safe{position:absolute;inset:96px;border:1px dashed rgba(255,255,255,.18);border-radius:42px;pointer-events:none}
+  </style>
+</head>
+<body>
+  <main class="canvas">
+    <div class="grid"></div>
+    <div class="safe"></div>
+    <section class="content">
+      <span class="eyebrow">${escapeHtml(project.topic_label || "InmoRadar")}</span>
+      <h1>${escapeHtml(firstScene.headline || project.title || "Analiza antes de contactar.")}</h1>
+      <p>${escapeHtml(project.caption || "")}</p>
+    </section>
+    <section class="scene-list">${scenes}</section>
+    <img class="brand-logo" src="https://www.inmoradar.app/assets/favicon.svg" alt="InmoRadar">
+    <span class="brand-site">Inmoradar.app</span>
+  </main>
+</body>
+</html>`;
+}
+
+function supportedVideoMimeType() {
+  if (!window.MediaRecorder) return "";
+  return [
+    "video/mp4;codecs=h264",
+    "video/mp4",
+    "video/webm;codecs=vp9",
+    "video/webm;codecs=vp8",
+    "video/webm"
+  ].find((type) => window.MediaRecorder.isTypeSupported(type)) || "";
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
+}
+
+function roundRect(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+}
+
+function wrapCanvasText(ctx, text, maxWidth) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = "";
+  words.forEach((word) => {
+    const next = line ? `${line} ${word}` : word;
+    if (ctx.measureText(next).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  });
+  if (line) lines.push(line);
+  return lines;
+}
+
+function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
+  const lines = wrapCanvasText(ctx, text, maxWidth).slice(0, maxLines);
+  lines.forEach((line, index) => ctx.fillText(line, x, y + index * lineHeight));
+  return y + lines.length * lineHeight;
+}
+
+function drawVideoBranding(ctx, project, logoImage) {
+  const branding = project.branding || {};
+  const width = project.format?.width || 1080;
+  const height = project.format?.height || 1920;
+  const logoSize = Number(branding.logoSizePx || 72);
+  const logoX = width - Number(branding.logoMarginRightPx || 48) - logoSize;
+  const logoY = Number(branding.logoMarginTopPx || 48);
+
+  if (branding.showLogo !== false) {
+    if (logoImage) {
+      ctx.save();
+      roundRect(ctx, logoX, logoY, logoSize, logoSize, 18);
+      ctx.clip();
+      ctx.drawImage(logoImage, logoX, logoY, logoSize, logoSize);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#09090B";
+      roundRect(ctx, logoX, logoY, logoSize, logoSize, 18);
+      ctx.fill();
+      ctx.strokeStyle = "#FF4500";
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "800 18px Arial";
+      ctx.fillText("IR", logoX + 22, logoY + 46);
+    }
+  }
+
+  if (branding.showWebsite !== false) {
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = `900 ${Number(branding.websiteFontSizePx || 32)}px Arial`;
+    ctx.textAlign = "right";
+    ctx.shadowColor = "rgba(0,0,0,.55)";
+    ctx.shadowBlur = 18;
+    ctx.fillText(
+      branding.websiteText || "Inmoradar.app",
+      width - Number(branding.websiteMarginRightPx || 48),
+      height - Number(branding.websiteMarginBottomPx || 48)
+    );
+    ctx.shadowBlur = 0;
+    ctx.textAlign = "left";
+  }
+}
+
+function drawVideoFrame(ctx, project, elapsedMs, logoImage) {
+  const width = project.format?.width || 1080;
+  const height = project.format?.height || 1920;
+  const scenes = project.scenes || [];
+  const scene =
+    scenes.find((item) => elapsedMs >= Number(item.start_ms || 0) && elapsedMs < Number(item.end_ms || 0)) ||
+    scenes[scenes.length - 1] ||
+    {};
+  const sceneIndex = Math.max(0, scenes.indexOf(scene));
+  const progress = Math.max(0, Math.min(1, elapsedMs / Math.max(1, (project.duration_seconds || 24) * 1000)));
+
+  const bg = ctx.createLinearGradient(0, 0, width, height);
+  bg.addColorStop(0, "#09090B");
+  bg.addColorStop(0.55, "#18181B");
+  bg.addColorStop(1, "#0A140F");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, width, height);
+
+  const orangeGlow = ctx.createRadialGradient(270, 240, 0, 270, 240, 520);
+  orangeGlow.addColorStop(0, "rgba(255,69,0,.38)");
+  orangeGlow.addColorStop(1, "rgba(255,69,0,0)");
+  ctx.fillStyle = orangeGlow;
+  ctx.fillRect(0, 0, width, height);
+
+  const limeGlow = ctx.createRadialGradient(900, 340, 0, 900, 340, 420);
+  limeGlow.addColorStop(0, "rgba(212,255,63,.14)");
+  limeGlow.addColorStop(1, "rgba(212,255,63,0)");
+  ctx.fillStyle = limeGlow;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = "rgba(255,255,255,.055)";
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= width; x += 72) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= height; y += 72) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "#FF4500";
+  ctx.font = "800 30px 'JetBrains Mono', monospace";
+  ctx.letterSpacing = "4px";
+  ctx.fillText(String(project.topic_label || "InmoRadar").toUpperCase(), 78, 278);
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "900 112px Arial";
+  let nextY = drawWrappedText(ctx, scene.headline || project.title, 76, 410, 760, 104, 5);
+
+  ctx.fillStyle = "rgba(255,255,255,.78)";
+  ctx.font = "500 42px Arial";
+  nextY = drawWrappedText(ctx, scene.body || project.caption, 80, nextY + 34, 760, 58, 4);
+
+  ctx.fillStyle = "rgba(255,255,255,.09)";
+  roundRect(ctx, 76, 1328, 928, 250, 34);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,.14)";
+  ctx.stroke();
+  ctx.fillStyle = "#FF4500";
+  ctx.font = "800 22px 'JetBrains Mono', monospace";
+  ctx.fillText(`${String(sceneIndex + 1).padStart(2, "0")} / ${String(scene.role || "scene").toUpperCase()}`, 116, 1390);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "900 44px Arial";
+  drawWrappedText(ctx, scene.on_screen_text || scene.headline || "", 116, 1460, 820, 52, 2);
+
+  ctx.fillStyle = "rgba(255,255,255,.18)";
+  roundRect(ctx, 76, 1632, 928, 12, 8);
+  ctx.fill();
+  ctx.fillStyle = "#FF4500";
+  roundRect(ctx, 76, 1632, 928 * progress, 12, 8);
+  ctx.fill();
+
+  drawVideoBranding(ctx, project, logoImage);
+}
+
+async function exportVideoProject() {
+  const project = state.video.lastProject;
+  if (!project) return;
+  if (!HTMLCanvasElement.prototype.captureStream || !window.MediaRecorder) {
+    throw new Error("video_export_not_supported");
+  }
+  const mimeType = supportedVideoMimeType();
+  if (!mimeType) throw new Error("video_mime_not_supported");
+
+  const canvas = document.createElement("canvas");
+  canvas.width = project.format?.width || 1080;
+  canvas.height = project.format?.height || 1920;
+  const ctx = canvas.getContext("2d");
+  const stream = canvas.captureStream(project.format?.fps || 30);
+  const chunks = [];
+  const recorder = new MediaRecorder(stream, { mimeType });
+  const extension = mimeType.includes("mp4") ? "mp4" : "webm";
+  let logoImage = null;
+
+  try {
+    logoImage = await loadImage("assets/favicon.svg");
+  } catch (error) {
+    logoImage = null;
+  }
+
+  const finished = new Promise((resolve) => {
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size) chunks.push(event.data);
+    };
+    recorder.onstop = () => resolve();
+  });
+
+  const button = els.videoExport;
+  if (button) button.disabled = true;
+  showStatus(`Exportando video ${extension.toUpperCase()}... manten esta pestana abierta.`);
+  const durationMs = Math.max(1000, (project.duration_seconds || 24) * 1000);
+  const start = performance.now();
+
+  recorder.start(500);
+  await new Promise((resolve) => {
+    function frame(now) {
+      const elapsed = Math.min(durationMs, now - start);
+      drawVideoFrame(ctx, project, elapsed, logoImage);
+      if (elapsed < durationMs) {
+        requestAnimationFrame(frame);
+      } else {
+        recorder.stop();
+        resolve();
+      }
+    }
+    requestAnimationFrame(frame);
+  });
+  await finished;
+  stream.getTracks().forEach((track) => track.stop());
+
+  const blob = new Blob(chunks, { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${project.id || "inmoradar-video"}.${extension}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  if (button) button.disabled = false;
+  showStatus(`Video exportado en ${extension.toUpperCase()} con branding obligatorio.`, "good");
+}
+
+async function runVideoGeneration(form) {
+  const payload = videoFormPayload(form);
+  showStatus("Generando storyboard de video IA...");
+  const project = await api("/api/admin?resource=social-video/generate", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  renderVideoProject(project);
+  showStatus(`Video IA preparado: ${project.title}`, "good");
+}
+
+async function copyVideoPrompt() {
+  const project = state.video.lastProject;
+  if (!project) return;
+  const text = project.global_ai_prompt || "";
+  try {
+    await navigator.clipboard.writeText(text);
+    showStatus("Prompt IA copiado.", "good");
+  } catch (error) {
+    downloadText(`${project.id || "inmoradar-video"}-prompt.txt`, "text/plain;charset=utf-8", text);
+    showStatus("No pude copiar al portapapeles; he descargado el prompt.", "neutral");
+  }
+}
+
+function downloadVideoJson() {
+  const project = state.video.lastProject;
+  if (!project) return;
+  downloadText(`${project.id || "inmoradar-video"}-storyboard.json`, "application/json;charset=utf-8", JSON.stringify(project, null, 2));
+}
+
+function downloadVideoHtml() {
+  const project = state.video.lastProject;
+  if (!project) return;
+  downloadText(`${project.id || "inmoradar-video"}-preview.html`, "text/html;charset=utf-8", buildVideoPreviewHtml(project));
+}
+
 async function loadSummary() {
   const summary = await api("/api/admin?resource=summary");
   renderStats(summary);
@@ -686,6 +1126,44 @@ if (els.parkingProbeForm) {
   });
 }
 
+if (els.videoForm) {
+  els.videoForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    runVideoGeneration(els.videoForm).catch((error) => showStatus(error.message, "bad"));
+  });
+}
+
+if (els.videoStoryboard) {
+  els.videoStoryboard.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-video-scene]");
+    if (!button) return;
+    state.video.selectedSceneIndex = Number(button.dataset.videoScene || 0);
+    renderVideoPreview();
+    renderVideoStoryboard();
+  });
+}
+
+if (els.videoCopyPrompt) {
+  els.videoCopyPrompt.addEventListener("click", () => copyVideoPrompt().catch((error) => showStatus(error.message, "bad")));
+}
+
+if (els.videoDownloadJson) {
+  els.videoDownloadJson.addEventListener("click", downloadVideoJson);
+}
+
+if (els.videoDownloadHtml) {
+  els.videoDownloadHtml.addEventListener("click", downloadVideoHtml);
+}
+
+if (els.videoExport) {
+  els.videoExport.addEventListener("click", () =>
+    exportVideoProject().catch((error) => {
+      els.videoExport.disabled = false;
+      showStatus(error.message, "bad");
+    })
+  );
+}
+
 els.seoRows.addEventListener("click", (event) => {
   const button = event.target.closest("[data-seo-action]");
   if (!button) return;
@@ -707,4 +1185,10 @@ if (els.seoPagination) {
 
 requireLogin();
 setAdminSection(state.activeSection);
+try {
+  const storedProject = JSON.parse(sessionStorage.getItem(VIDEO_PROJECT_KEY) || "null");
+  if (storedProject) renderVideoProject(storedProject);
+} catch (error) {
+  sessionStorage.removeItem(VIDEO_PROJECT_KEY);
+}
 loadAll();

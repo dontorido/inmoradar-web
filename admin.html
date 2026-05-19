@@ -48,6 +48,7 @@
           <button class="admin-tab active" type="button" data-admin-section-button="marketing" data-testid="admin-tab-marketing" aria-pressed="true">Marketing</button>
           <button class="admin-tab" type="button" data-admin-section-button="kpis" data-testid="admin-tab-kpis" aria-pressed="false">KPIs</button>
           <button class="admin-tab" type="button" data-admin-section-button="parking" data-testid="admin-tab-parking" aria-pressed="false">Parking</button>
+          <button class="admin-tab" type="button" data-admin-section-button="videos" data-testid="admin-tab-videos" aria-pressed="false">Videos</button>
         </div>
       </div>
 
@@ -239,6 +240,112 @@
             </table>
           </div>
           <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
+        </section>
+      </section>
+      <section class="admin-view" data-admin-view="videos" hidden>
+        <section class="admin-panel admin-video-panel">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Social Video Studio</span>
+              <h2>Videos IA</h2>
+              <p class="admin-panel-sub">Genera un guion vertical, storyboard y preview con branding obligatorio de InmoRadar.</p>
+            </div>
+            <div class="admin-row-actions">
+              <button class="admin-button tiny ghost" type="button" data-video-copy-prompt data-testid="admin-action-copy-video-prompt" disabled>Copiar prompt IA</button>
+              <button class="admin-button tiny ghost" type="button" data-video-download-json data-testid="admin-action-download-video-json" disabled>Descargar storyboard</button>
+              <button class="admin-button tiny" type="button" data-video-download-html data-testid="admin-action-download-video-html" disabled>Descargar preview HTML</button>
+              <button class="admin-button tiny" type="button" data-video-export data-testid="admin-action-export-video" disabled>Exportar video</button>
+            </div>
+          </div>
+          <div class="admin-video-grid">
+            <form class="admin-video-form" data-video-form>
+              <label>
+                <span>Tema</span>
+                <select name="topic">
+                  <option value="random">Aleatorio controlado</option>
+                  <option value="precio_m2">Precio por m2</option>
+                  <option value="alquiler">Alquiler</option>
+                  <option value="compra">Compra</option>
+                  <option value="zona">Zona y entorno</option>
+                  <option value="parking">Aparcamiento</option>
+                  <option value="errores">Errores frecuentes</option>
+                </select>
+              </label>
+              <label>
+                <span>Ciudad opcional</span>
+                <input type="text" name="city" placeholder="Madrid, Logrono, Valencia...">
+              </label>
+              <label>
+                <span>Duracion</span>
+                <select name="duration_seconds">
+                  <option value="18">18 segundos</option>
+                  <option value="24" selected>24 segundos</option>
+                  <option value="30">30 segundos</option>
+                  <option value="40">40 segundos</option>
+                </select>
+              </label>
+              <label>
+                <span>Tono</span>
+                <select name="tone">
+                  <option value="directo">Directo</option>
+                  <option value="experto">Experto</option>
+                  <option value="premium">Premium</option>
+                </select>
+              </label>
+              <label>
+                <span>Audiencia</span>
+                <select name="audience">
+                  <option value="general">General</option>
+                  <option value="comprador">Comprador</option>
+                  <option value="inquilino">Inquilino</option>
+                  <option value="inversor">Inversor</option>
+                </select>
+              </label>
+              <label>
+                <span>CTA</span>
+                <select name="cta">
+                  <option value="install">Instalar InmoRadar</option>
+                  <option value="premium">Premium</option>
+                  <option value="news">Noticias y guias</option>
+                  <option value="soft">Guardar y comparar</option>
+                </select>
+              </label>
+              <button class="admin-button" type="submit" data-testid="admin-action-generate-video">Generar video IA</button>
+              <p class="admin-video-note">El logo y la firma Inmoradar.app se colocan a nivel global, no escena por escena.</p>
+            </form>
+
+            <section class="admin-video-preview-shell" aria-label="Preview vertical">
+              <div class="admin-video-preview" data-video-preview data-testid="admin-video-preview">
+                <div class="admin-video-preview-bg"></div>
+                <div class="admin-video-preview-content">
+                  <span class="admin-video-overline" data-video-preview-topic>Social Video Studio</span>
+                  <h3 data-video-preview-headline>Genera un video inmobiliario listo para redes.</h3>
+                  <p data-video-preview-body>El preview siempre reserva zona segura para logo arriba derecha y web abajo derecha.</p>
+                </div>
+                <div class="video-branding-overlay" aria-hidden="true">
+                  <img class="video-branding-logo" src="assets/favicon.svg" alt="">
+                  <span class="video-branding-site">Inmoradar.app</span>
+                </div>
+              </div>
+              <div class="admin-video-preview-meta">
+                <strong data-video-preview-title>Sin video generado todavia</strong>
+                <span data-video-preview-meta>1080x1920 - branding obligatorio - MP4 preparado para renderer</span>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="admin-panel admin-video-storyboard-panel">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Storyboard</span>
+              <h2>Escenas y prompts IA</h2>
+              <p class="admin-panel-sub">Cada escena incluye texto, voz, prompt visual y movimiento sugerido.</p>
+            </div>
+          </div>
+          <div class="admin-video-storyboard" data-video-storyboard>
+            <p class="admin-empty-state">Genera un video para ver aqui el storyboard completo.</p>
+          </div>
         </section>
       </section>
       <p class="admin-info-marker">Más información en InmoRadar.app</p>

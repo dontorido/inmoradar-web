@@ -6,6 +6,8 @@ const {
   coerceKpiSettings,
   defaultKpiSettings
 } = require("./_kpi/settings");
+const { generateSocialVideoProject, TOPICS } = require("../lib/social-video/generator");
+const { getVideoBrandingConfig } = require("../lib/social-video/branding");
 
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at";
@@ -403,6 +405,29 @@ async function handleKpiSettings(req) {
   return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
 }
 
+async function handleSocialVideoGenerate(req) {
+  if (req.method === "GET") {
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        branding: getVideoBrandingConfig(),
+        topics: Object.entries(TOPICS).map(([value, config]) => ({ value, label: config.label }))
+      }
+    };
+  }
+
+  if (req.method !== "POST") {
+    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  }
+
+  const body = await readJsonBody(req);
+  return {
+    status: 200,
+    payload: generateSocialVideoProject(body)
+  };
+}
+
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
   if (!assertAdmin(req, res)) return;
@@ -437,6 +462,10 @@ module.exports = async function handler(req, res) {
     if (resource === "parking/summary") {
       if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
       return json(res, 200, await handleParkingSummary());
+    }
+    if (resource === "social-video/generate") {
+      const result = await handleSocialVideoGenerate(req);
+      return json(res, result.status, result.payload);
     }
 
     return json(res, 404, { ok: false, error: "admin_resource_not_found", resource });
