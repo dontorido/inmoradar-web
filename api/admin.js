@@ -1,4 +1,4 @@
-const { assertAdmin, handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
+const { assertAdmin, fetchWithTimeout, handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
 const { runSeoLandingGeneration } = require("./_seo/generator");
 const {
   KPI_SCHEMA_VERSION,
@@ -8,6 +8,14 @@ const {
 } = require("./_kpi/settings");
 const { generateSocialVideoProject, MUSIC_STYLES, TOPICS, VISUAL_BACKDROPS } = require("../lib/social-video/generator");
 const { getVideoBrandingConfig } = require("../lib/social-video/branding");
+const {
+  RUNWAY_VIDEO_PRICING,
+  buildRunwayTextToVideoRequest,
+  createRunwayTextToVideo,
+  estimateRunwayCost,
+  getRunwayTask,
+  runwaySettings
+} = require("../lib/social-video/runway");
 
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at";
@@ -449,6 +457,237 @@ async function handleSocialVideoGenerate(req) {
   };
 }
 
+function runwayPublicConfig() {
+  const settings = runwaySettings();
+  return {
+    ok: true,
+    provider: "runway",
+    enabled: settings.enabled,
+    api_secret_configured: settings.apiSecretConfigured,
+    dry_run_only: settings.dryRunOnly,
+    default_model: settings.model,
+    default_duration_seconds: settings.durationSeconds,
+    default_ratio: settings.ratio,
+    max_cost_usd: settings.maxCostUsd,
+    daily_budget_usd: settings.dailyBudgetUsd,
+    credit_usd: 0.01,
+    pricing: RUNWAY_VIDEO_PRICING
+  };
+}
+
+async function readSocialVideoJob(id) {
+  const params = new URLSearchParams({
+    id: `eq.${id}`,
+    select: "*",
+    limit: "1"
+  });
+  const rows = await supabaseFetch(`social_video_jobs?${params.toString()}`);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function insertSocialVideoJob(job) {
+  const rows = await supabaseFetch("social_video_jobs", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(job)
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+async function patchSocialVideoJob(id, patch) {
+  const rows = await supabaseFetch(`social_video_jobs?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      ...patch,
+      updated_at: new Date().toISOString()
+    })
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+async function runwayCreditsSpentToday() {
+  const since = new Date();
+  since.setUTCHours(0, 0, 0, 0);
+  const params = new URLSearchParams({
+    select: "estimated_credits,status",
+    provider: "eq.runway",
+    created_at: `gte.${since.toISOString()}`
+  });
+  const rows = await supabaseFetch(`social_video_jobs?${params.toString()}`);
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => String(row.status || "").toLowerCase() !== "failed")
+    .reduce((sum, row) => sum + Number(row.estimated_credits || 0), 0);
+}
+
+function socialVideoJobPayload(job, extra = {}) {
+  return {
+    ok: true,
+    job: {
+      id: job.id,
+      project_id: job.project_id,
+      provider: job.provider,
+      provider_task_id: job.provider_task_id,
+      status: job.status,
+      model: job.model,
+      duration_seconds: job.duration_seconds,
+      ratio: job.ratio,
+      estimated_credits: Number(job.estimated_credits || 0),
+      estimated_cost_usd: Number(job.estimated_cost_usd || 0),
+      result_url: job.result_url || null,
+      failure: job.failure || null,
+      created_at: job.created_at,
+      updated_at: job.updated_at
+    },
+    ...extra
+  };
+}
+
+function runwayOutputUrl(output) {
+  const first = Array.isArray(output) ? output[0] : output;
+  if (typeof first === "string") return first;
+  if (first && typeof first === "object") return first.url || first.uri || first.download_url || null;
+  return null;
+}
+
+async function handleSocialVideoRender(req, url) {
+  const settings = runwaySettings();
+
+  if (req.method === "GET") {
+    const jobId = String(url.searchParams.get("job_id") || "").trim();
+    if (!jobId) return { status: 400, payload: { ok: false, error: "job_id_required" } };
+    const job = await readSocialVideoJob(jobId);
+    if (!job) return { status: 404, payload: { ok: false, error: "social_video_job_not_found" } };
+    if (!job.provider_task_id || ["succeeded", "failed"].includes(String(job.status || "").toLowerCase())) {
+      return { status: 200, payload: socialVideoJobPayload(job) };
+    }
+
+    const task = await getRunwayTask({
+      apiSecret: settings.apiSecret,
+      taskId: job.provider_task_id,
+      fetchImpl: fetchWithTimeout
+    });
+    const status = String(task.status || "").toLowerCase();
+    const outputUrl = runwayOutputUrl(task.output);
+    const failure = task.failure || task.error || null;
+    const updated = await patchSocialVideoJob(job.id, {
+      status,
+      result_url: outputUrl || job.result_url || null,
+      failure: failure ? String(failure) : null,
+      raw_response: task
+    });
+    return { status: 200, payload: socialVideoJobPayload(updated || job, { runway_status: task.status || null }) };
+  }
+
+  if (req.method !== "POST") {
+    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  }
+
+  const body = await readJsonBody(req);
+  const project = body.project || {};
+  const model = body.model || settings.model;
+  const durationSeconds = body.duration_seconds || settings.durationSeconds;
+  const estimate = estimateRunwayCost({ model, durationSeconds });
+  const request = buildRunwayTextToVideoRequest({
+    project,
+    model: estimate.model,
+    durationSeconds: estimate.duration_seconds,
+    ratio: body.ratio || settings.ratio,
+    sceneIndex: body.scene_index || 0
+  });
+  const estimatePayload = {
+    ok: true,
+    dry_run: Boolean(body.dry_run),
+    provider: "runway",
+    request,
+    estimate,
+    max_cost_usd: settings.maxCostUsd,
+    daily_budget_usd: settings.dailyBudgetUsd
+  };
+
+  if (body.dry_run) {
+    return { status: 200, payload: estimatePayload };
+  }
+  if (!settings.enabled || settings.dryRunOnly) {
+    return { status: 403, payload: { ...estimatePayload, ok: false, error: "runway_render_disabled" } };
+  }
+  if (!settings.apiSecretConfigured) {
+    return { status: 500, payload: { ...estimatePayload, ok: false, error: "runway_api_secret_missing" } };
+  }
+  if (estimate.estimated_cost_usd > settings.maxCostUsd) {
+    return { status: 400, payload: { ...estimatePayload, ok: false, error: "runway_estimate_above_max_cost" } };
+  }
+  if (Number(body.confirm_cost_usd || 0) < estimate.estimated_cost_usd) {
+    return { status: 400, payload: { ...estimatePayload, ok: false, error: "runway_cost_confirmation_required" } };
+  }
+
+  const usedCredits = await runwayCreditsSpentToday();
+  const budgetCredits = Math.floor(settings.dailyBudgetUsd / 0.01);
+  if (usedCredits + estimate.estimated_credits > budgetCredits) {
+    return {
+      status: 400,
+      payload: {
+        ...estimatePayload,
+        ok: false,
+        error: "runway_daily_budget_exceeded",
+        used_credits_today: usedCredits,
+        budget_credits: budgetCredits
+      }
+    };
+  }
+
+  const job = await insertSocialVideoJob({
+    project_id: project.id || null,
+    provider: "runway",
+    status: "queued",
+    model: request.model,
+    duration_seconds: request.duration,
+    ratio: request.ratio,
+    prompt_text: request.promptText,
+    estimated_credits: estimate.estimated_credits,
+    estimated_cost_usd: estimate.estimated_cost_usd,
+    raw_request: request
+  });
+
+  try {
+    const task = await createRunwayTextToVideo({
+      apiSecret: settings.apiSecret,
+      fetchImpl: fetchWithTimeout,
+      request
+    });
+    const updated = await patchSocialVideoJob(job.id, {
+      provider_task_id: task.id || task.task_id || null,
+      status: String(task.status || "submitted").toLowerCase(),
+      raw_response: task
+    });
+    return { status: 200, payload: socialVideoJobPayload(updated || job, { estimate }) };
+  } catch (error) {
+    await patchSocialVideoJob(job.id, {
+      status: "failed",
+      failure: error.message
+    }).catch(() => {});
+    return { status: 502, payload: { ...estimatePayload, ok: false, error: "runway_create_failed", message: error.message } };
+  }
+}
+
+async function handleSocialVideoRenderContent(req, res, url) {
+  if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
+  const jobId = String(url.searchParams.get("job_id") || "").trim();
+  if (!jobId) return json(res, 400, { ok: false, error: "job_id_required" });
+  const job = await readSocialVideoJob(jobId);
+  if (!job || !job.result_url) return json(res, 404, { ok: false, error: "runway_result_not_ready" });
+
+  const response = await fetchWithTimeout(job.result_url, { timeoutMs: 30000 });
+  if (!response.ok) return json(res, 502, { ok: false, error: "runway_result_fetch_failed", status: response.status });
+  const contentType = response.headers.get("content-type") || "video/mp4";
+  const buffer = Buffer.from(await response.arrayBuffer());
+  res.statusCode = 200;
+  res.setHeader("content-type", contentType);
+  res.setHeader("cache-control", "no-store, max-age=0");
+  res.setHeader("content-length", String(buffer.length));
+  res.end(buffer);
+}
+
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
   if (!assertAdmin(req, res)) return;
@@ -487,6 +726,17 @@ module.exports = async function handler(req, res) {
     if (resource === "social-video/generate") {
       const result = await handleSocialVideoGenerate(req);
       return json(res, result.status, result.payload);
+    }
+    if (resource === "social-video/runway-config") {
+      if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
+      return json(res, 200, runwayPublicConfig());
+    }
+    if (resource === "social-video/render") {
+      const result = await handleSocialVideoRender(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "social-video/render-content") {
+      return handleSocialVideoRenderContent(req, res, url);
     }
 
     return json(res, 404, { ok: false, error: "admin_resource_not_found", resource });

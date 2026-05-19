@@ -2084,6 +2084,71 @@
   }
 }
 
+.admin-video-runway {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(255, 69, 0, .22);
+  border-radius: 24px;
+  background: rgba(255, 69, 0, .055);
+  padding: 16px;
+}
+
+.admin-video-runway > div:first-child {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-video-runway > div:first-child span,
+.admin-video-runway label > span {
+  color: var(--radar);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+.admin-video-runway strong {
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -.03em;
+  line-height: 1;
+}
+
+.admin-video-runway p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-video-runway-confirm {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.admin-video-runway-confirm input {
+  width: 18px;
+  min-height: 18px;
+  accent-color: var(--radar);
+}
+
+.admin-video-runway-status {
+  border: 1px solid rgba(9, 9, 11, .08);
+  border-radius: 16px;
+  background: #ffffff;
+  color: var(--ink);
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 /* Give the Parking Intelligence probe enough room for street names and listing URLs. */
 .admin-parking-grid {
   grid-template-columns: minmax(560px, .58fr) minmax(420px, 1fr);

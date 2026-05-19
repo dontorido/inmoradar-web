@@ -3,6 +3,7 @@ const test = require("node:test");
 
 const { VIDEO_BRANDING_CONFIG } = require("../lib/social-video/branding");
 const { generateSocialVideoProject } = require("../lib/social-video/generator");
+const { buildRunwayTextToVideoRequest, estimateRunwayCost, runwaySettings } = require("../lib/social-video/runway");
 
 test("video branding config exige logo y web en posiciones fijas", () => {
   assert.equal(VIDEO_BRANDING_CONFIG.showLogo, true);
@@ -49,4 +50,53 @@ test("generateSocialVideoProject genera storyboard con branding obligatorio", ()
   assert.ok(project.quality_checks.includes("people_background_present"));
   assert.ok(project.quality_checks.includes("real_people_ai_pack_ready"));
   assert.ok(project.quality_checks.includes("music_track_present"));
+});
+
+test("runway estimate clamps duration and exposes cost before spending", () => {
+  const estimate = estimateRunwayCost({
+    model: "gen4.5",
+    durationSeconds: 5
+  });
+
+  assert.equal(estimate.model, "gen4.5");
+  assert.equal(estimate.duration_seconds, 5);
+  assert.equal(estimate.estimated_credits, 60);
+  assert.equal(estimate.estimated_cost_usd, 0.6);
+
+  const clamped = estimateRunwayCost({
+    model: "unknown",
+    durationSeconds: 60
+  });
+  assert.equal(clamped.model, "gen4.5");
+  assert.equal(clamped.duration_seconds, 15);
+});
+
+test("runway request uses InmoRadar safe-zone prompt and vertical ratio", () => {
+  const project = generateSocialVideoProject({
+    topic: "parking",
+    city: "Madrid",
+    duration_seconds: 24
+  });
+  const request = buildRunwayTextToVideoRequest({
+    project,
+    model: "gen4.5",
+    durationSeconds: 5,
+    ratio: "720:1280"
+  });
+
+  assert.equal(request.model, "gen4.5");
+  assert.equal(request.duration, 5);
+  assert.equal(request.ratio, "720:1280");
+  assert.match(request.promptText, /Dejar espacio libre arriba derecha/);
+  assert.match(request.promptText, /Inmoradar\.app/);
+  assert.match(request.promptText, /No incluir texto legible, logos externos/);
+});
+
+test("runway settings are disabled by default to avoid accidental cost", () => {
+  const settings = runwaySettings({});
+  assert.equal(settings.enabled, false);
+  assert.equal(settings.apiSecretConfigured, false);
+  assert.equal(settings.model, "gen4.5");
+  assert.equal(settings.maxCostUsd, 0.75);
+  assert.equal(settings.dailyBudgetUsd, 3);
 });

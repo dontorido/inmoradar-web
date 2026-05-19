@@ -33,7 +33,10 @@ const state = {
     busy: false,
     backgroundClipUrl: "",
     backgroundClipName: "",
-    backgroundClipType: ""
+    backgroundClipType: "",
+    runwayEstimate: null,
+    runwayJob: null,
+    runwayConfig: null
   }
 };
 
@@ -81,7 +84,16 @@ const els = {
   videoDownloadHtml: document.querySelector("[data-video-download-html]"),
   videoExport: document.querySelector("[data-video-export]"),
   videoBusy: document.querySelector("[data-video-busy]"),
-  videoBusyMessage: document.querySelector("[data-video-busy-message]")
+  videoBusyMessage: document.querySelector("[data-video-busy-message]"),
+  videoRunwayPanel: document.querySelector("[data-video-runway-panel]"),
+  videoRunwayModel: document.querySelector("[data-video-runway-model]"),
+  videoRunwayDuration: document.querySelector("[data-video-runway-duration]"),
+  videoRunwayConfirm: document.querySelector("[data-video-runway-confirm]"),
+  videoRunwayStatus: document.querySelector("[data-video-runway-status]"),
+  videoRunwayEstimate: document.querySelector("[data-video-runway-estimate]"),
+  videoRunwayRender: document.querySelector("[data-video-runway-render]"),
+  videoRunwayPoll: document.querySelector("[data-video-runway-poll]"),
+  videoRunwayImport: document.querySelector("[data-video-runway-import]")
 };
 
 function escapeHtml(value) {
@@ -601,6 +613,7 @@ function setVideoActions(enabled) {
   [els.videoCopyPrompt, els.videoDownloadAiPack, els.videoDownloadJson, els.videoDownloadHtml, els.videoExport].forEach((button) => {
     if (button) button.disabled = !enabled || state.video.busy;
   });
+  setRunwayActions();
 }
 
 function setVideoBusy(isBusy, message = "Trabajando...") {
@@ -617,6 +630,124 @@ function setVideoBusy(isBusy, message = "Trabajando...") {
     });
   }
   setVideoActions(Boolean(state.video.lastProject));
+}
+
+function setRunwayStatus(message, tone = "neutral") {
+  if (!els.videoRunwayStatus) return;
+  els.videoRunwayStatus.textContent = message || "";
+  els.videoRunwayStatus.dataset.tone = tone;
+}
+
+function setRunwayActions() {
+  const hasProject = Boolean(state.video.lastProject);
+  const hasEstimate = Boolean(state.video.runwayEstimate);
+  const hasJob = Boolean(state.video.runwayJob?.id);
+  const hasResult = Boolean(state.video.runwayJob?.result_url);
+  const isBusy = Boolean(state.video.busy);
+  if (els.videoRunwayEstimate) els.videoRunwayEstimate.disabled = !hasProject || isBusy;
+  if (els.videoRunwayRender) els.videoRunwayRender.disabled = !hasProject || !hasEstimate || isBusy;
+  if (els.videoRunwayPoll) els.videoRunwayPoll.disabled = !hasJob || isBusy || hasResult;
+  if (els.videoRunwayImport) els.videoRunwayImport.disabled = !hasResult || isBusy;
+}
+
+function runwayPayload(extra = {}) {
+  return {
+    project: state.video.lastProject,
+    model: els.videoRunwayModel?.value || "gen4.5",
+    duration_seconds: Number(els.videoRunwayDuration?.value || 5),
+    scene_index: state.video.selectedSceneIndex || 0,
+    ...extra
+  };
+}
+
+function formatRunwayEstimate(estimate, limits = {}) {
+  if (!estimate) return "Sin estimacion.";
+  const maxCost = limits.max_cost_usd !== undefined ? ` Limite/render: $${Number(limits.max_cost_usd).toFixed(2)}.` : "";
+  const dailyBudget = limits.daily_budget_usd !== undefined ? ` Presupuesto diario: $${Number(limits.daily_budget_usd).toFixed(2)}.` : "";
+  return `Estimacion Runway: ${estimate.model}, ${estimate.duration_seconds}s, ${estimate.estimated_credits} creditos, $${Number(estimate.estimated_cost_usd).toFixed(2)}.${maxCost}${dailyBudget}`;
+}
+
+async function estimateRunwayRender() {
+  if (!state.video.lastProject) {
+    setRunwayStatus("Genera primero un storyboard.", "bad");
+    return null;
+  }
+  const payload = await api("/api/admin?resource=social-video/render", {
+    method: "POST",
+    body: JSON.stringify(runwayPayload({ dry_run: true }))
+  });
+  state.video.runwayEstimate = payload.estimate;
+  state.video.runwayJob = null;
+  setRunwayStatus(formatRunwayEstimate(payload.estimate, payload), "good");
+  setRunwayActions();
+  return payload;
+}
+
+async function startRunwayRender() {
+  if (!state.video.runwayEstimate) await estimateRunwayRender();
+  if (!els.videoRunwayConfirm?.checked) {
+    setRunwayStatus("Marca la confirmacion de coste antes de lanzar Runway.", "bad");
+    return;
+  }
+  setVideoBusy(true, "Enviando render a Runway con limite de coste.");
+  try {
+    const payload = await api("/api/admin?resource=social-video/render", {
+      method: "POST",
+      body: JSON.stringify(
+        runwayPayload({
+          confirm_cost_usd: state.video.runwayEstimate?.estimated_cost_usd || 0
+        })
+      )
+    });
+    state.video.runwayJob = payload.job;
+    setRunwayStatus(`Runway lanzado. Job ${payload.job?.id || "-"} en estado ${payload.job?.status || "submitted"}.`, "good");
+    showStatus("Render Runway lanzado. Usa Comprobar estado para traer el clip cuando termine.", "good");
+  } finally {
+    setVideoBusy(false);
+    setRunwayActions();
+  }
+}
+
+async function pollRunwayRender() {
+  const jobId = state.video.runwayJob?.id;
+  if (!jobId) return;
+  const payload = await api(`/api/admin?resource=social-video/render&job_id=${encodeURIComponent(jobId)}`);
+  state.video.runwayJob = payload.job;
+  if (payload.job?.result_url) {
+    setRunwayStatus("Runway ha terminado. Pulsa Usar clip IA para cargarlo como fondo.", "good");
+  } else if (payload.job?.failure) {
+    setRunwayStatus(`Runway fallo: ${payload.job.failure}`, "bad");
+  } else {
+    setRunwayStatus(`Runway sigue en estado ${payload.job?.status || "pendiente"}.`, "neutral");
+  }
+  setRunwayActions();
+}
+
+async function importRunwayClip() {
+  const jobId = state.video.runwayJob?.id;
+  if (!jobId) return;
+  setVideoBusy(true, "Importando clip Runway para usarlo como fondo.");
+  try {
+    const response = await fetch(`/api/admin?resource=social-video/render-content&job_id=${encodeURIComponent(jobId)}`, {
+      headers: authHeaders()
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.message || payload.error || "runway_clip_import_failed");
+    }
+    const blob = await response.blob();
+    if (state.video.backgroundClipUrl) URL.revokeObjectURL(state.video.backgroundClipUrl);
+    state.video.backgroundClipUrl = URL.createObjectURL(blob);
+    state.video.backgroundClipName = `runway-${jobId}.mp4`;
+    state.video.backgroundClipType = blob.type || "video/mp4";
+    renderVideoPreview();
+    renderVideoStoryboard();
+    setRunwayStatus("Clip Runway cargado como fondo. Ya puedes exportar la maqueta final con marca InmoRadar.", "good");
+    showStatus("Clip Runway cargado como fondo.", "good");
+  } finally {
+    setVideoBusy(false);
+    setRunwayActions();
+  }
 }
 
 function videoFormPayload(form) {
@@ -689,7 +820,13 @@ function realVideoPackText(project) {
 }
 
 function renderVideoProject(project) {
+  const isNewProject = project?.id && project.id !== state.video.lastProject?.id;
   state.video.lastProject = project;
+  if (isNewProject) {
+    state.video.runwayEstimate = null;
+    state.video.runwayJob = null;
+    if (els.videoRunwayConfirm) els.videoRunwayConfirm.checked = false;
+  }
   state.video.selectedSceneIndex = Math.min(state.video.selectedSceneIndex || 0, Math.max((project.scenes || []).length - 1, 0));
   sessionStorage.setItem(VIDEO_PROJECT_KEY, JSON.stringify(storedVideoProject(project)));
   renderVideoPreview();
@@ -1434,11 +1571,32 @@ async function loadParking() {
   renderParkingRows(payload.recent || []);
 }
 
+async function loadRunwayConfig() {
+  if (!els.videoRunwayPanel) return;
+  try {
+    const payload = await api("/api/admin?resource=social-video/runway-config");
+    state.video.runwayConfig = payload;
+    if (payload.default_model && els.videoRunwayModel) els.videoRunwayModel.value = payload.default_model;
+    if (payload.default_duration_seconds && els.videoRunwayDuration) {
+      els.videoRunwayDuration.value = String(payload.default_duration_seconds);
+    }
+    setRunwayStatus(
+      payload.enabled
+        ? `Runway activo. Limite/render $${Number(payload.max_cost_usd || 0).toFixed(2)} y presupuesto diario $${Number(payload.daily_budget_usd || 0).toFixed(2)}.`
+        : "Runway esta en modo estimacion. Para render real activa RUNWAY_RENDER_ENABLED=true y configura la API key.",
+      payload.enabled ? "good" : "neutral"
+    );
+  } catch (error) {
+    setRunwayStatus("No pude leer la configuracion de Runway. La estimacion se activara al generar storyboard.", "neutral");
+  }
+  setRunwayActions();
+}
+
 async function loadAll() {
   if (!state.token) return;
   showStatus("Cargando backoffice...");
   try {
-    await Promise.all([loadSummary(), loadPremium(), loadSeo(), loadKpis(), loadParking()]);
+    await Promise.all([loadSummary(), loadPremium(), loadSeo(), loadKpis(), loadParking(), loadRunwayConfig()]);
     showStatus(`Actualizado ${formatDate(new Date().toISOString())}`, "good");
   } catch (error) {
     if (error.status === 401) {
@@ -1699,6 +1857,44 @@ if (els.videoExport) {
       showStatus(error.message, "bad");
     })
   );
+}
+
+if (els.videoRunwayEstimate) {
+  els.videoRunwayEstimate.addEventListener("click", () => estimateRunwayRender().catch((error) => setRunwayStatus(error.message, "bad")));
+}
+
+if (els.videoRunwayRender) {
+  els.videoRunwayRender.addEventListener("click", () => startRunwayRender().catch((error) => {
+    setVideoBusy(false);
+    setRunwayStatus(error.message, "bad");
+  }));
+}
+
+if (els.videoRunwayPoll) {
+  els.videoRunwayPoll.addEventListener("click", () => pollRunwayRender().catch((error) => setRunwayStatus(error.message, "bad")));
+}
+
+if (els.videoRunwayImport) {
+  els.videoRunwayImport.addEventListener("click", () => importRunwayClip().catch((error) => {
+    setVideoBusy(false);
+    setRunwayStatus(error.message, "bad");
+  }));
+}
+
+if (els.videoRunwayModel) {
+  els.videoRunwayModel.addEventListener("change", () => {
+    state.video.runwayEstimate = null;
+    setRunwayStatus("Modelo cambiado. Vuelve a estimar el coste.", "neutral");
+    setRunwayActions();
+  });
+}
+
+if (els.videoRunwayDuration) {
+  els.videoRunwayDuration.addEventListener("change", () => {
+    state.video.runwayEstimate = null;
+    setRunwayStatus("Duracion cambiada. Vuelve a estimar el coste.", "neutral");
+    setRunwayActions();
+  });
 }
 
 els.seoRows.addEventListener("click", (event) => {

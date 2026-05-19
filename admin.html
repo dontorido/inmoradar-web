@@ -383,6 +383,39 @@
               </label>
               <button class="admin-button" type="submit" data-testid="admin-action-generate-video">Generar video IA</button>
               <p class="admin-video-note">Para personas reales, sube un clip vertical generado con IA o grabado. Si no subes clip, el export local es una maqueta visual; el Pack IA real contiene prompts para generar el video final en una IA de video.</p>
+              <section class="admin-video-runway" data-video-runway-panel>
+                <div>
+                  <span>Runway IA</span>
+                  <strong>Clip real con coste controlado</strong>
+                  <p>Primero estima el coste. El render real exige confirmacion y respeta los limites configurados en backend.</p>
+                </div>
+                <label>
+                  <span>Modelo</span>
+                  <select name="runway_model" data-video-runway-model>
+                    <option value="gen4.5" selected>Gen-4.5 - 12 creditos/s</option>
+                    <option value="veo3.1_fast_no_audio">Veo 3.1 Fast sin audio - 10 creditos/s</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Duracion clip IA</span>
+                  <select name="runway_duration_seconds" data-video-runway-duration>
+                    <option value="5" selected>5 segundos</option>
+                    <option value="10">10 segundos</option>
+                    <option value="15">15 segundos</option>
+                  </select>
+                </label>
+                <label class="admin-video-runway-confirm">
+                  <input type="checkbox" name="runway_confirm_cost" data-video-runway-confirm>
+                  <span>Confirmo lanzar Runway con el coste estimado</span>
+                </label>
+                <div class="admin-video-runway-status" data-video-runway-status>Genera un storyboard y estima coste antes de renderizar.</div>
+                <div class="admin-row-actions">
+                  <button class="admin-button tiny ghost" type="button" data-video-runway-estimate disabled>Estimar coste</button>
+                  <button class="admin-button tiny" type="button" data-video-runway-render disabled>Generar clip Runway</button>
+                  <button class="admin-button tiny ghost" type="button" data-video-runway-poll disabled>Comprobar estado</button>
+                  <button class="admin-button tiny ghost" type="button" data-video-runway-import disabled>Usar clip IA</button>
+                </div>
+              </section>
             </form>
 
             <section class="admin-video-preview-shell" aria-label="Preview vertical">
