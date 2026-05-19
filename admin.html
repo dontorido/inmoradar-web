@@ -302,6 +302,24 @@
                 </select>
               </label>
               <label>
+                <span>Fondo humano</span>
+                <select name="visual_style">
+                  <option value="hogar_cotidiano" selected>Hogar cotidiano</option>
+                  <option value="familia_casa">Familia en casa</option>
+                  <option value="amigos_piso">Amigos en piso</option>
+                  <option value="pareja_visita">Pareja visitando vivienda</option>
+                </select>
+              </label>
+              <label>
+                <span>Musica</span>
+                <select name="music_style">
+                  <option value="warm_house" selected>House suave</option>
+                  <option value="calm_pop">Pop tranquilo</option>
+                  <option value="urban_soft">Urbano suave</option>
+                  <option value="editorial_ambient">Ambient editorial</option>
+                </select>
+              </label>
+              <label>
                 <span>CTA</span>
                 <select name="cta">
                   <option value="install">Instalar InmoRadar</option>
@@ -311,12 +329,13 @@
                 </select>
               </label>
               <button class="admin-button" type="submit" data-testid="admin-action-generate-video">Generar video IA</button>
-              <p class="admin-video-note">El logo y la firma Inmoradar.app se colocan a nivel global, no escena por escena.</p>
+              <p class="admin-video-note">El video se genera con personas de fondo, musica, logo arriba derecha y firma Inmoradar.app abajo derecha.</p>
             </form>
 
             <section class="admin-video-preview-shell" aria-label="Preview vertical">
               <div class="admin-video-preview" data-video-preview data-testid="admin-video-preview">
                 <div class="admin-video-preview-bg"></div>
+                <div aria-hidden="true" style="position:absolute;left:0;right:0;bottom:0;height:54%;opacity:.62;background:radial-gradient(circle at 26% 36%,rgba(255,255,255,.28) 0 18px,transparent 19px),radial-gradient(circle at 50% 32%,rgba(255,69,0,.22) 0 17px,transparent 18px),radial-gradient(circle at 72% 38%,rgba(255,255,255,.22) 0 16px,transparent 17px),linear-gradient(90deg,transparent 12%,rgba(255,255,255,.10) 12% 30%,transparent 30% 36%,rgba(255,255,255,.08) 36% 58%,transparent 58% 64%,rgba(255,255,255,.08) 64% 84%,transparent 84%);"></div>
                 <div class="admin-video-preview-content">
                   <span class="admin-video-overline" data-video-preview-topic>Social Video Studio</span>
                   <h3 data-video-preview-headline>Genera un video inmobiliario listo para redes.</h3>

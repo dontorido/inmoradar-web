@@ -6,7 +6,7 @@ const {
   coerceKpiSettings,
   defaultKpiSettings
 } = require("./_kpi/settings");
-const { generateSocialVideoProject, TOPICS } = require("../lib/social-video/generator");
+const { generateSocialVideoProject, MUSIC_STYLES, TOPICS, VISUAL_BACKDROPS } = require("../lib/social-video/generator");
 const { getVideoBrandingConfig } = require("../lib/social-video/branding");
 
 const LANDING_SELECT =
@@ -412,7 +412,9 @@ async function handleSocialVideoGenerate(req) {
       payload: {
         ok: true,
         branding: getVideoBrandingConfig(),
-        topics: Object.entries(TOPICS).map(([value, config]) => ({ value, label: config.label }))
+        topics: Object.entries(TOPICS).map(([value, config]) => ({ value, label: config.label })),
+        visual_backdrops: Object.entries(VISUAL_BACKDROPS).map(([value, config]) => ({ value, label: config.label })),
+        music_styles: Object.entries(MUSIC_STYLES).map(([value, config]) => ({ value, label: config.label }))
       }
     };
   }

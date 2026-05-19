@@ -472,6 +472,8 @@ function videoFormPayload(form) {
     duration_seconds: Number(data.get("duration_seconds") || 24),
     tone: String(data.get("tone") || "directo"),
     audience: String(data.get("audience") || "general"),
+    visual_style: String(data.get("visual_style") || "hogar_cotidiano"),
+    music_style: String(data.get("music_style") || "warm_house"),
     cta: String(data.get("cta") || "install")
   };
 }
@@ -496,7 +498,7 @@ function renderVideoPreview() {
   if (els.videoPreviewBody) els.videoPreviewBody.textContent = scene.body || project.caption || "";
   if (els.videoPreviewTitle) els.videoPreviewTitle.textContent = project.title || "Video InmoRadar";
   if (els.videoPreviewMeta) {
-    els.videoPreviewMeta.textContent = `${project.duration_seconds || 24}s - ${project.format?.width || 1080}x${project.format?.height || 1920} - ${project.scenes?.length || 0} escenas`;
+    els.videoPreviewMeta.textContent = `${project.duration_seconds || 24}s - ${project.format?.width || 1080}x${project.format?.height || 1920} - ${project.visual_style_label || "hogar"} - ${project.music_label || "musica"}`;
   }
 }
 
@@ -520,8 +522,10 @@ function renderVideoStoryboard() {
       </div>
     </section>
     <section class="admin-video-branding-card">
-      <strong>Branding global obligatorio</strong>
-      <p>Logo arriba derecha (${escapeHtml(project.branding?.logoSizePx || 72)} px) y texto exacto "${escapeHtml(project.branding?.websiteText || "Inmoradar.app")}" abajo derecha durante todo el video.</p>
+      <strong>Reglas globales del video</strong>
+      <p>Fondo humano: ${escapeHtml(project.visual_style_label || "Hogar cotidiano")} - ${escapeHtml(project.visual_backdrop || "")}</p>
+      <p>Musica: ${escapeHtml(project.music_label || "House suave")} - ${escapeHtml(project.music_direction || "")}</p>
+      <p>Branding: logo arriba derecha (${escapeHtml(project.branding?.logoSizePx || 72)} px) y texto exacto "${escapeHtml(project.branding?.websiteText || "Inmoradar.app")}" abajo derecha durante todo el video.</p>
     </section>
     <div class="admin-video-scenes">
       ${(project.scenes || [])
@@ -578,13 +582,14 @@ function buildVideoPreviewHtml(project) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(project.title || "Video InmoRadar")}</title>
   <style>
-    *{box-sizing:border-box}body{margin:0;background:#09090B;color:#fff;font-family:Inter,system-ui,sans-serif}.canvas{position:relative;width:1080px;height:1920px;overflow:hidden;background:radial-gradient(circle at 25% 15%,rgba(255,69,0,.28),transparent 34%),linear-gradient(145deg,#09090B,#18181B 58%,#0A140F)}.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.055) 1px,transparent 1px);background-size:72px 72px}.content{position:absolute;left:76px;right:160px;top:260px;display:grid;gap:36px}.eyebrow{color:#FF4500;font:700 28px/1 monospace;letter-spacing:.22em;text-transform:uppercase}.content h1{margin:0;font-size:112px;line-height:.9;letter-spacing:-.07em}.content p{margin:0;color:rgba(255,255,255,.78);font-size:38px;line-height:1.35;max-width:760px}.scene-list{position:absolute;left:76px;right:76px;bottom:180px;display:grid;gap:18px}.scene{padding:24px 28px;border:1px solid rgba(255,255,255,.14);border-radius:28px;background:rgba(255,255,255,.08);backdrop-filter:blur(12px)}.scene span{color:#FF4500;font:700 18px/1 monospace;letter-spacing:.18em;text-transform:uppercase}.scene h2{margin:10px 0 6px;font-size:36px;line-height:1}.scene p{margin:0;color:rgba(255,255,255,.72);font-size:24px}.brand-logo{position:absolute;top:${project.branding?.logoMarginTopPx || 48}px;right:${project.branding?.logoMarginRightPx || 48}px;width:${project.branding?.logoSizePx || 72}px;height:${project.branding?.logoSizePx || 72}px;border-radius:22px}.brand-site{position:absolute;right:${project.branding?.websiteMarginRightPx || 48}px;bottom:${project.branding?.websiteMarginBottomPx || 48}px;font-size:${project.branding?.websiteFontSizePx || 32}px;font-weight:800;letter-spacing:-.02em}.safe{position:absolute;inset:96px;border:1px dashed rgba(255,255,255,.18);border-radius:42px;pointer-events:none}
+    *{box-sizing:border-box}body{margin:0;background:#09090B;color:#fff;font-family:Inter,system-ui,sans-serif}.canvas{position:relative;width:1080px;height:1920px;overflow:hidden;background:radial-gradient(circle at 25% 15%,rgba(255,69,0,.28),transparent 34%),linear-gradient(145deg,#09090B,#18181B 58%,#0A140F)}.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.055) 1px,transparent 1px);background-size:72px 72px}.people{position:absolute;inset:auto 0 0 0;height:54%;opacity:.72;background:radial-gradient(circle at 22% 38%,rgba(255,255,255,.20) 0 42px,transparent 43px),radial-gradient(circle at 46% 34%,rgba(255,255,255,.18) 0 36px,transparent 37px),radial-gradient(circle at 70% 40%,rgba(255,255,255,.17) 0 39px,transparent 40px),linear-gradient(90deg,transparent 12%,rgba(255,255,255,.10) 12% 28%,transparent 28% 35%,rgba(255,255,255,.09) 35% 55%,transparent 55% 62%,rgba(255,255,255,.08) 62% 82%,transparent 82%);filter:blur(.2px)}.content{position:absolute;left:76px;right:160px;top:260px;display:grid;gap:36px}.eyebrow{color:#FF4500;font:700 28px/1 monospace;letter-spacing:.22em;text-transform:uppercase}.content h1{margin:0;font-size:112px;line-height:.9;letter-spacing:-.07em}.content p{margin:0;color:rgba(255,255,255,.78);font-size:38px;line-height:1.35;max-width:760px}.scene-list{position:absolute;left:76px;right:76px;bottom:180px;display:grid;gap:18px}.scene{padding:24px 28px;border:1px solid rgba(255,255,255,.14);border-radius:28px;background:rgba(255,255,255,.08);backdrop-filter:blur(12px)}.scene span{color:#FF4500;font:700 18px/1 monospace;letter-spacing:.18em;text-transform:uppercase}.scene h2{margin:10px 0 6px;font-size:36px;line-height:1}.scene p{margin:0;color:rgba(255,255,255,.72);font-size:24px}.brand-logo{position:absolute;top:${project.branding?.logoMarginTopPx || 48}px;right:${project.branding?.logoMarginRightPx || 48}px;width:${project.branding?.logoSizePx || 72}px;height:${project.branding?.logoSizePx || 72}px;border-radius:22px}.brand-site{position:absolute;right:${project.branding?.websiteMarginRightPx || 48}px;bottom:${project.branding?.websiteMarginBottomPx || 48}px;font-size:${project.branding?.websiteFontSizePx || 32}px;font-weight:800;letter-spacing:-.02em}.safe{position:absolute;inset:96px;border:1px dashed rgba(255,255,255,.18);border-radius:42px;pointer-events:none}
   </style>
 </head>
 <body>
   <main class="canvas">
     <div class="grid"></div>
     <div class="safe"></div>
+    <div class="people" aria-hidden="true"></div>
     <section class="content">
       <span class="eyebrow">${escapeHtml(project.topic_label || "InmoRadar")}</span>
       <h1>${escapeHtml(firstScene.headline || project.title || "Analiza antes de contactar.")}</h1>
@@ -651,6 +656,72 @@ function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
   const lines = wrapCanvasText(ctx, text, maxWidth).slice(0, maxLines);
   lines.forEach((line, index) => ctx.fillText(line, x, y + index * lineHeight));
   return y + lines.length * lineHeight;
+}
+
+function drawPerson(ctx, x, y, scale, tone, phase) {
+  ctx.save();
+  ctx.translate(x, y + Math.sin(phase) * 4);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = tone;
+  ctx.globalAlpha = 0.72;
+  ctx.beginPath();
+  ctx.arc(0, -64, 34, 0, Math.PI * 2);
+  ctx.fill();
+  roundRect(ctx, -42, -24, 84, 130, 38);
+  ctx.fill();
+  ctx.globalAlpha = 0.28;
+  roundRect(ctx, -88, 8, 176, 36, 18);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawPeopleBackground(ctx, project, elapsedMs) {
+  const width = project.format?.width || 1080;
+  const height = project.format?.height || 1920;
+  const phase = elapsedMs / 900;
+
+  ctx.save();
+  ctx.globalAlpha = 0.92;
+  const windowGlow = ctx.createLinearGradient(0, 620, width, 1180);
+  windowGlow.addColorStop(0, "rgba(255,255,255,.08)");
+  windowGlow.addColorStop(0.45, "rgba(255,69,0,.09)");
+  windowGlow.addColorStop(1, "rgba(255,255,255,.03)");
+  ctx.fillStyle = windowGlow;
+  roundRect(ctx, 72, 640, 936, 520, 44);
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(255,255,255,.08)";
+  roundRect(ctx, 108, 1120, 864, 260, 72);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,.22)";
+  roundRect(ctx, 78, 1310, 924, 148, 46);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.09)";
+  roundRect(ctx, 220, 1440, 640, 92, 46);
+  ctx.fill();
+
+  const style = String(project.visual_style || "hogar_cotidiano");
+  const palette =
+    style === "amigos_piso"
+      ? ["rgba(255,255,255,.34)", "rgba(255,69,0,.24)", "rgba(212,255,63,.18)"]
+      : style === "familia_casa"
+        ? ["rgba(255,255,255,.32)", "rgba(255,205,180,.28)", "rgba(255,255,255,.22)"]
+        : ["rgba(255,255,255,.30)", "rgba(255,69,0,.22)", "rgba(255,255,255,.18)"];
+
+  drawPerson(ctx, 270, 1198, 1.1, palette[0], phase);
+  drawPerson(ctx, 526, 1170, 1.0, palette[1], phase + 0.8);
+  drawPerson(ctx, 760, 1210, 0.92, palette[2], phase + 1.4);
+
+  ctx.fillStyle = "rgba(9,9,11,.34)";
+  roundRect(ctx, 346, 1222, 360, 196, 30);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.16)";
+  roundRect(ctx, 384, 1264, 284, 88, 20);
+  ctx.fill();
+  ctx.fillStyle = "#FF4500";
+  roundRect(ctx, 404, 1370, 128, 10, 5);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawVideoBranding(ctx, project, logoImage) {
@@ -739,6 +810,8 @@ function drawVideoFrame(ctx, project, elapsedMs, logoImage) {
   ctx.fillStyle = limeGlow;
   ctx.fillRect(0, 0, width, height);
 
+  drawPeopleBackground(ctx, project, elapsedMs);
+
   ctx.strokeStyle = "rgba(255,255,255,.055)";
   ctx.lineWidth = 1;
   for (let x = 0; x <= width; x += 72) {
@@ -789,6 +862,85 @@ function drawVideoFrame(ctx, project, elapsedMs, logoImage) {
   drawVideoBranding(ctx, project, logoImage);
 }
 
+function musicNotesForStyle(style) {
+  const maps = {
+    warm_house: [196, 246.94, 293.66, 329.63, 293.66, 246.94, 220, 246.94],
+    calm_pop: [174.61, 220, 261.63, 329.63, 261.63, 220],
+    urban_soft: [146.83, 196, 233.08, 261.63, 233.08, 196],
+    editorial_ambient: [130.81, 196, 261.63, 392]
+  };
+  return maps[style] || maps.warm_house;
+}
+
+async function createVideoMusicTrack(project, durationMs) {
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) return null;
+
+  const audioContext = new AudioContextCtor();
+  await audioContext.resume();
+  const destination = audioContext.createMediaStreamDestination();
+  const master = audioContext.createGain();
+  const compressor = audioContext.createDynamicsCompressor();
+  master.gain.setValueAtTime(0.06, audioContext.currentTime);
+  master.connect(compressor);
+  compressor.connect(destination);
+
+  const start = audioContext.currentTime + 0.08;
+  const durationSeconds = durationMs / 1000;
+  const style = String(project.music_style || "warm_house");
+  const notes = musicNotesForStyle(style);
+  const step = style === "editorial_ambient" ? 1.6 : 0.48;
+
+  const pad = audioContext.createOscillator();
+  const padGain = audioContext.createGain();
+  pad.type = "sine";
+  pad.frequency.setValueAtTime(notes[0] / 2, start);
+  padGain.gain.setValueAtTime(0, start);
+  padGain.gain.linearRampToValueAtTime(0.035, start + 0.8);
+  padGain.gain.linearRampToValueAtTime(0.02, start + Math.max(1, durationSeconds - 1));
+  padGain.gain.linearRampToValueAtTime(0, start + durationSeconds);
+  pad.connect(padGain);
+  padGain.connect(master);
+  pad.start(start);
+  pad.stop(start + durationSeconds + 0.1);
+
+  for (let t = 0; t < durationSeconds; t += step) {
+    const index = Math.floor(t / step) % notes.length;
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    osc.type = style === "urban_soft" ? "triangle" : "sine";
+    osc.frequency.setValueAtTime(notes[index], start + t);
+    gain.gain.setValueAtTime(0, start + t);
+    gain.gain.linearRampToValueAtTime(style === "editorial_ambient" ? 0.025 : 0.045, start + t + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + t + Math.max(0.18, step * 0.86));
+    osc.connect(gain);
+    gain.connect(master);
+    osc.start(start + t);
+    osc.stop(start + t + step);
+
+    if (style !== "editorial_ambient" && Math.floor(t / step) % 2 === 0) {
+      const kick = audioContext.createOscillator();
+      const kickGain = audioContext.createGain();
+      kick.type = "sine";
+      kick.frequency.setValueAtTime(86, start + t);
+      kick.frequency.exponentialRampToValueAtTime(48, start + t + 0.12);
+      kickGain.gain.setValueAtTime(0.055, start + t);
+      kickGain.gain.exponentialRampToValueAtTime(0.001, start + t + 0.18);
+      kick.connect(kickGain);
+      kickGain.connect(master);
+      kick.start(start + t);
+      kick.stop(start + t + 0.2);
+    }
+  }
+
+  return {
+    stream: destination.stream,
+    close: async () => {
+      await audioContext.close().catch(() => {});
+    }
+  };
+}
+
 async function exportVideoProject() {
   const project = state.video.lastProject;
   if (!project) return;
@@ -804,15 +956,25 @@ async function exportVideoProject() {
   const ctx = canvas.getContext("2d");
   const stream = canvas.captureStream(project.format?.fps || 30);
   const chunks = [];
-  const recorder = new MediaRecorder(stream, { mimeType });
   const extension = mimeType.includes("mp4") ? "mp4" : "webm";
   let logoImage = null;
+  let musicTrack = null;
 
   try {
     logoImage = await loadImage("assets/inmoradar-brand-mark.svg");
   } catch (error) {
     logoImage = null;
   }
+
+  const durationMs = Math.max(1000, (project.duration_seconds || 24) * 1000);
+  try {
+    musicTrack = await createVideoMusicTrack(project, durationMs);
+    musicTrack?.stream?.getAudioTracks().forEach((track) => stream.addTrack(track));
+  } catch (error) {
+    musicTrack = null;
+  }
+
+  const recorder = new MediaRecorder(stream, { mimeType });
 
   const finished = new Promise((resolve) => {
     recorder.ondataavailable = (event) => {
@@ -823,8 +985,7 @@ async function exportVideoProject() {
 
   const button = els.videoExport;
   if (button) button.disabled = true;
-  showStatus(`Exportando video ${extension.toUpperCase()}... manten esta pestana abierta.`);
-  const durationMs = Math.max(1000, (project.duration_seconds || 24) * 1000);
+  showStatus(`Exportando video ${extension.toUpperCase()} con musica... manten esta pestana abierta.`);
   const start = performance.now();
 
   recorder.start(500);
@@ -843,6 +1004,7 @@ async function exportVideoProject() {
   });
   await finished;
   stream.getTracks().forEach((track) => track.stop());
+  if (musicTrack) await musicTrack.close();
 
   const blob = new Blob(chunks, { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -854,7 +1016,7 @@ async function exportVideoProject() {
   link.remove();
   URL.revokeObjectURL(url);
   if (button) button.disabled = false;
-  showStatus(`Video exportado en ${extension.toUpperCase()} con branding obligatorio.`, "good");
+  showStatus(`Video exportado en ${extension.toUpperCase()} con personas de fondo, musica y branding obligatorio.`, "good");
 }
 
 async function runVideoGeneration(form) {
