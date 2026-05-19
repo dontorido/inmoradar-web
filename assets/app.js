@@ -10,21 +10,21 @@ const articles = [
     tag: "Alquiler",
     city: "Zaragoza",
     title: "Precio del alquiler por metro cuadrado en Zaragoza",
-    excerpt: "Como leer una renta mensual con referencia de zona, superficie y coste real antes de escribir al anunciante."
+    excerpt: "Cómo leer una renta mensual con referencia de zona, superficie y coste real antes de escribir al anunciante."
   },
   {
     slug: "precio-alquiler-granada",
     tag: "Alquiler",
     city: "Granada",
     title: "Precio del alquiler por metro cuadrado en Granada",
-    excerpt: "Una guia para distinguir una renta razonable de una prima dificil de justificar por ubicacion o estado."
+    excerpt: "Una guía para distinguir una renta razonable de una prima difícil de justificar por ubicación o estado."
   },
   {
     slug: "saber-piso-caro-granada",
-    tag: "Analisis",
+    tag: "Análisis",
     city: "Granada",
-    title: "Como saber si un piso esta caro en Granada",
-    excerpt: "Precio, reforma probable, transporte y aparcamiento: cuatro capas para no decidir solo por intuicion."
+    title: "Cómo saber si un piso está caro en Granada",
+    excerpt: "Precio, reforma probable, transporte y aparcamiento: cuatro capas para no decidir solo por intuición."
   },
   {
     slug: "precio-metro-cuadrado-madrid",
@@ -38,47 +38,47 @@ const articles = [
     tag: "Precio m2",
     city: "Barcelona",
     title: "Precio del metro cuadrado en Barcelona",
-    excerpt: "Lectura de precios por zona y senales urbanas para entender cuando una prima puede tener sentido."
+    excerpt: "Lectura de precios por zona y señales urbanas para entender cuándo una prima puede tener sentido."
   },
   {
     slug: "precio-metro-cuadrado-valencia",
     tag: "Precio m2",
     city: "Valencia",
     title: "Precio del metro cuadrado en Valencia",
-    excerpt: "Como cruzar precio, barrio, transporte y estado visual para priorizar visitas."
+    excerpt: "Cómo cruzar precio, barrio, transporte y estado visual para priorizar visitas."
   },
   {
     slug: "precio-metro-cuadrado-malaga",
     tag: "Precio m2",
-    city: "Malaga",
-    title: "Precio del metro cuadrado en Malaga",
-    excerpt: "Mercado tensionado, ubicacion y reforma: que mirar antes de reservar una visita."
+    city: "Málaga",
+    title: "Precio del metro cuadrado en Málaga",
+    excerpt: "Mercado tensionado, ubicación y reforma: qué mirar antes de reservar una visita."
   },
   {
     slug: "precio-metro-cuadrado-salamanca",
     tag: "Precio m2",
     city: "Salamanca",
     title: "Precio del metro cuadrado en Salamanca",
-    excerpt: "Referencias utiles para compradores que quieren comparar anuncios sin perder semanas."
+    excerpt: "Referencias útiles para compradores que quieren comparar anuncios sin perder semanas."
   },
   {
     slug: "precio-metro-cuadrado-logrono",
     tag: "Precio m2",
-    city: "Logrono",
-    title: "Precio del metro cuadrado en Logrono",
-    excerpt: "Una metodologia sencilla para interpretar precios y evitar conclusiones demasiado rapidas."
+    city: "Logroño",
+    title: "Precio del metro cuadrado en Logroño",
+    excerpt: "Una metodología sencilla para interpretar precios y evitar conclusiones demasiado rápidas."
   }
 ];
 
 const I18N = {
   es: {
-    navAnalysis: "Que analiza",
+    navAnalysis: "Qué analiza",
     navApis: "APIs",
     navPremium: "Premium",
     navNews: "Noticias",
     navFaq: "FAQ",
     navContact: "Contacto",
-    navCta: "Probar 2 dias gratis",
+    navCta: "Probar 2 días gratis",
     contactSuccess: "Mensaje enviado. Te respondemos en menos de 24h.",
     contactError: "Revisa los campos del formulario.",
     contactSending: "Enviando...",
@@ -236,7 +236,7 @@ function renderArticlePage() {
   target.innerHTML = `
     <section class="page-header grid-bg">
       <div class="container article-layout">
-        <a class="button ghost" href="/noticias">${currentLanguage === "en" ? "All posts" : "Todas las publicaciones"}</a>
+        <a class="button ghost" href="/noticias">${currentLanguage === "en" ? "All posts" : "Todas las públicaciones"}</a>
         <p class="pill" style="margin-top:28px"><span class="dot-radar"></span>${escapeHtml(article.tag)} · ${escapeHtml(article.city)}</p>
         <h1>${escapeHtml(article.title)}</h1>
         <p class="lead">${escapeHtml(article.excerpt)}</p>
@@ -246,18 +246,18 @@ function renderArticlePage() {
     <section class="section">
       <article class="container article-layout article-body">
         <p class="article-summary">${escapeHtml(article.excerpt)} La clave es no mirar solo el precio total: la lectura mejora al cruzar euros por metro, barrio, estado, transporte y aparcamiento.</p>
-        <h2>Resumen rapido</h2>
-        <p>Un anuncio puede parecer atractivo por precio absoluto y seguir estando por encima de mercado si la superficie, la ubicacion concreta o el estado del edificio no acompanan. InmoRadar ordena esas senales para que decidas si merece una llamada.</p>
-        <h2>Metodologia</h2>
+        <h2>Resumen rápido</h2>
+        <p>Un anuncio puede parecer atractivo por precio absoluto y seguir estando por encima de mercado si la superficie, la ubicación concreta o el estado del edificio no acompañan. InmoRadar ordena esas señales para que decidas si merece una llamada.</p>
+        <h2>Metodología</h2>
         <ol class="number-list">
           <li><span>01</span><p>Calculamos el precio por metro cuadrado del anuncio y lo comparamos con referencias agregadas disponibles.</p></li>
-          <li><span>02</span><p>Mostramos el nivel geografico usado: zona, distrito, municipio o provincia. Nunca lo presentamos como precio exacto de calle.</p></li>
-          <li><span>03</span><p>Cruzamos coste inicial, financiacion orientativa, transporte y aparcamiento para evitar una lectura incompleta.</p></li>
-          <li><span>04</span><p>Anadimos caveats cuando la confianza baja o faltan datos del anuncio.</p></li>
+          <li><span>02</span><p>Mostramos el nivel geográfico usado: zona, distrito, municipio o provincia. Nunca lo presentamos como precio exacto de calle.</p></li>
+          <li><span>03</span><p>Cruzamos coste inicial, financiación orientativa, transporte y aparcamiento para evitar una lectura incompleta.</p></li>
+          <li><span>04</span><p>Añadimos caveats cuando la confianza baja o faltan datos del anuncio.</p></li>
         </ol>
-        <h2>Como usarlo con InmoRadar</h2>
-        <p>Abre un anuncio compatible, revisa la ficha de precio y zona, guarda los candidatos fuertes y compara los inmuebles antes de contactar. La extension no sustituye una tasacion ni una visita, pero ayuda a filtrar mejor.</p>
-        <div class="callout"><strong>Tip InmoRadar</strong><p>Si una vivienda sale cara y ademas la finca no tiene ascensor, el parking es dificil o la reforma visual parece probable, pide mas informacion antes de avanzar.</p></div>
+        <h2>Cómo usarlo con InmoRadar</h2>
+        <p>Abre un anuncio compatible, revisa la ficha de precio y zona, guarda los candidatos fuertes y compara los inmuebles antes de contactar. La extensión no sustituye una tasación ni una visita, pero ayuda a filtrar mejor.</p>
+        <div class="callout"><strong>Tip InmoRadar</strong><p>Si una vivienda sale cara y además la finca no tiene ascensor, el parking es difícil o la reforma visual parece probable, pide más información antes de avanzar.</p></div>
       </article>
       <div class="container">
         <div class="article-grid">${related.map((item) => articleCard(item)).join("")}</div>

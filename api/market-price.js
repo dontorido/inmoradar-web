@@ -919,7 +919,7 @@ async function photoConditionAnalysisPayload() {
     body: {
       ok: false,
       error: "photo_analysis_disabled",
-      message: "El analisis visual de fotos esta desactivado temporalmente."
+      message: "El análisis visual de fotos está desactivado temporalmente."
     }
   };
 }
@@ -1076,7 +1076,7 @@ async function marketPricePayload(params = {}) {
   if (!asNumber(baseQuery.listing_price_total)) {
     return {
       status: 400,
-      body: noDataResponse(baseQuery, "missing_price", "No se ha podido calcular â‚¬/mÂ² porque no se ha detectado el precio.")
+      body: noDataResponse(baseQuery, "missing_price", "No se ha podido calcular €/m² porque no se ha detectado el precio.")
     };
   }
 
@@ -1084,7 +1084,7 @@ async function marketPricePayload(params = {}) {
   if (!area || area <= 0) {
     return {
       status: 400,
-      body: noDataResponse(baseQuery, "missing_surface", "No se ha podido calcular â‚¬/mÂ² porque no se ha detectado la superficie.")
+      body: noDataResponse(baseQuery, "missing_surface", "No se ha podido calcular €/m² porque no se ha detectado la superficie.")
     };
   }
 
