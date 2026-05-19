@@ -7,27 +7,49 @@ function safeError(error) {
     .slice(0, 240);
 }
 
+async function checkSupabaseTable(path) {
+  try {
+    const rows = await supabaseFetch(path, { timeoutMs: 4000 });
+    return {
+      ok: Array.isArray(rows),
+      error: null
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: safeError(error)
+    };
+  }
+}
+
 module.exports = async function handler(req, res) {
   const supabaseConfigured = hasSupabaseConfig();
-  let marketPricesReadable = false;
-  let marketPricesError = null;
+  const supabaseChecks = {};
 
   if (supabaseConfigured) {
-    try {
-      const rows = await supabaseFetch("market_price_sources?select=id&limit=1");
-      marketPricesReadable = Array.isArray(rows);
-    } catch (error) {
-      marketPricesError = safeError(error);
+    const checks = await Promise.all([
+      ["market_price_sources", "market_price_sources?select=id&limit=1"],
+      ["seo_landings", "seo_landings?select=id&limit=1"],
+      ["premium_subscriptions", "premium_subscriptions?select=id&limit=1"],
+      ["photo_condition_analysis_cache", "photo_condition_analysis_cache?select=id&limit=1"],
+      ["address_intelligence_cache", "address_intelligence_cache?select=id&limit=1"],
+      ["parking_difficulty_cache", "parking_difficulty_cache?select=id&limit=1"]
+    ].map(async ([name, path]) => [name, await checkSupabaseTable(path)]));
+
+    for (const [name, result] of checks) {
+      supabaseChecks[name] = result;
     }
   }
 
   json(res, 200, {
     ok: true,
     service: "inmoradar-web",
+    generated_at: new Date().toISOString(),
     premium_api: true,
     supabase_configured: supabaseConfigured,
-    supabase_market_prices_readable: marketPricesReadable,
-    supabase_market_prices_error: marketPricesError,
+    supabase_checks: supabaseChecks,
+    supabase_market_prices_readable: Boolean(supabaseChecks.market_price_sources?.ok),
+    supabase_market_prices_error: supabaseChecks.market_price_sources?.error || null,
     lemonsqueezy_checkout_configured: Boolean(
       process.env.LEMONSQUEEZY_API_KEY &&
         process.env.LEMONSQUEEZY_STORE_ID &&

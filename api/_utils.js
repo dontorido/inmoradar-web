@@ -18,6 +18,27 @@ function handleCors(req, res) {
   return true;
 }
 
+async function fetchWithTimeout(url, options = {}) {
+  const timeoutMs = Number(options.timeoutMs || process.env.API_FETCH_TIMEOUT_MS || 10000);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const { timeoutMs: _timeoutMs, ...fetchOptions } = options;
+
+  try {
+    return await fetch(url, {
+      ...fetchOptions,
+      signal: fetchOptions.signal || controller.signal
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`fetch_timeout_${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function adminTokenFromRequest(req) {
   const authorization = req.headers.authorization || "";
   if (authorization.toLowerCase().startsWith("bearer ")) {
@@ -100,9 +121,10 @@ async function supabaseFetch(path, options = {}) {
     headers.authorization = `Bearer ${key}`;
   }
 
-  const response = await fetch(`${normalizeSupabaseUrl(url)}/rest/v1/${path}`, {
+  const response = await fetchWithTimeout(`${normalizeSupabaseUrl(url)}/rest/v1/${path}`, {
     ...options,
-    headers
+    headers,
+    timeoutMs: options.timeoutMs || process.env.SUPABASE_FETCH_TIMEOUT_MS || 9000
   });
 
   if (!response.ok) {
@@ -127,6 +149,7 @@ module.exports = {
   ACTIVE_STATUSES,
   adminTokenFromRequest,
   assertAdmin,
+  fetchWithTimeout,
   handleCors,
   hasSupabaseConfig,
   isEmail,
