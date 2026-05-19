@@ -916,6 +916,7 @@
   font-size: clamp(28px, 3vw, 38px);
   line-height: 1;
   letter-spacing: -.035em;
+  word-spacing: .04em;
 }
 
 .admin-view-toolbar {
