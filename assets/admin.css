@@ -2083,3 +2083,32 @@
     justify-content: flex-start;
   }
 }
+
+/* Give the Parking Intelligence probe enough room for street names and listing URLs. */
+.admin-parking-grid {
+  grid-template-columns: minmax(560px, .58fr) minmax(420px, 1fr);
+}
+
+.admin-parking-probe {
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 16px;
+  padding: 28px;
+}
+
+.admin-parking-probe label:first-child,
+.admin-parking-probe label:nth-of-type(8) {
+  grid-column: 1 / -1;
+}
+
+.admin-parking-probe input,
+.admin-parking-probe select,
+.admin-parking-result {
+  min-width: 0;
+}
+
+@media (max-width: 1180px) {
+  .admin-parking-grid,
+  .admin-parking-probe {
+    grid-template-columns: 1fr;
+  }
+}
