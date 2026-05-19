@@ -227,8 +227,8 @@ async function runSeoGeneration(mode) {
       ? {
           mode: "publish",
           limit: 1,
-          candidateLimit: 10,
-          template_type: "price_city",
+          candidateLimit: 25,
+          template_type: "random",
           autoPublish: true,
           includeExistingDrafts: true,
           publishFirstEligible: true
@@ -236,7 +236,7 @@ async function runSeoGeneration(mode) {
       : {
           mode: "generate",
           limit: 1,
-          template_type: "price_city",
+          template_type: "random",
           autoPublish: false
         };
 

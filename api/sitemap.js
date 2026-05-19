@@ -42,6 +42,7 @@ function urlEntry(loc, lastmod) {
 function newsMeta(landing) {
   if (landing.template_type === "price_city") return "Precio por m²";
   if (landing.template_type === "rent_city") return "Alquiler";
+  if (landing.template_type === "expensive_listing_city") return "Analisis de precio";
   if (landing.template_type === "parking_city") return "Aparcamiento";
   if (landing.template_type === "noise_city") return "Ruido";
   return "Guía inmobiliaria";
@@ -51,6 +52,12 @@ function newsDescription(landing) {
   if (landing.meta_description) return landing.meta_description;
   if (landing.template_type === "price_city") {
     return `Referencia de precio por metro cuadrado en ${landing.city || "España"} con fuente, fecha del dato y pautas para comparar anuncios.`;
+  }
+  if (landing.template_type === "rent_city") {
+    return `Referencia de alquiler por metro cuadrado en ${landing.city || "España"} con fuente, fecha del dato y pautas para comparar anuncios.`;
+  }
+  if (landing.template_type === "expensive_listing_city") {
+    return `Guia para saber si un piso esta caro en ${landing.city || "España"} comparando precio por metro cuadrado y señales del anuncio.`;
   }
   return "Guía publicada por InmoRadar para buscar vivienda con más contexto antes de contactar.";
 }

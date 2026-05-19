@@ -243,7 +243,7 @@ async function handleSeoGenerate(req) {
     mode: body.mode || "dry_run",
     limit: body.limit || 5,
     candidateLimit: body.candidateLimit,
-    template_type: body.template_type || "price_city",
+    template_type: body.template_type || "random",
     autoPublish: body.autoPublish === true,
     includeExistingDrafts: body.includeExistingDrafts === true,
     publishFirstEligible: body.publishFirstEligible === true,

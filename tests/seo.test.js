@@ -60,6 +60,35 @@ test("dry_run usa la semilla de 5 oportunidades y no guarda cambios", async () =
   assert.equal(result.results.every((landing) => landing.saved === false), true);
 });
 
+test("el generador SEO soporta contenidos aleatorios controlados de alquiler y analisis de precio", async () => {
+  const base = {
+    city: "Logroño",
+    province: "La Rioja",
+    autonomous_community: "La Rioja",
+    intent: "informational",
+    search_priority: 80
+  };
+  const rent = await runSeoLandingGeneration({
+    mode: "dry_run",
+    limit: 1,
+    template_type: "rent_city",
+    opportunities: [{ ...base, keyword: "precio alquiler metro cuadrado Logroño", template_type: "rent_city" }]
+  });
+  const expensive = await runSeoLandingGeneration({
+    mode: "dry_run",
+    limit: 1,
+    template_type: "expensive_listing_city",
+    opportunities: [{ ...base, keyword: "saber si un piso esta caro en Logroño", template_type: "expensive_listing_city" }]
+  });
+
+  assert.equal(rent.results[0].slug, "precio-alquiler/logrono");
+  assert.equal(expensive.results[0].slug, "saber-si-piso-esta-caro/logrono");
+  assert.ok(rent.results[0].quality_score >= 75);
+  assert.ok(expensive.results[0].quality_score >= 75);
+  assert.equal(rent.results[0].saved, false);
+  assert.equal(expensive.results[0].saved, false);
+});
+
 test("las landings publicas incluyen Google Tag Manager", () => {
   const html = renderLandingHtml({
     slug: "precio-metro-cuadrado/logrono",
@@ -121,6 +150,19 @@ test("el endpoint de noticias publica landings publicadas e indexables", async (
   assert.equal(payload.ok, true);
   assert.equal(payload.latest_limit, 5);
   assert.equal(payload.news.some((item) => item.slug === "precio-metro-cuadrado/logrono"), true);
+});
+
+test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () => {
+  const vercel = fs.readFileSync(path.join(__dirname, "..", "vercel.json"), "utf8");
+  const redirects = fs.readFileSync(path.join(__dirname, "..", "_redirects"), "utf8");
+  const localServer = fs.readFileSync(path.join(__dirname, "..", "scripts", "serve-static.js"), "utf8");
+
+  assert.match(vercel, /precio-alquiler\/:city/);
+  assert.match(vercel, /saber-si-piso-esta-caro\/:city/);
+  assert.match(redirects, /precio-alquiler\/:city/);
+  assert.match(redirects, /saber-si-piso-esta-caro\/:city/);
+  assert.match(localServer, /precio-alquiler/);
+  assert.match(localServer, /saber-si-piso-esta-caro/);
 });
 
 test("la primera landing seed queda publicada e indexable", async () => {

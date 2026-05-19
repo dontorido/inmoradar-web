@@ -31,9 +31,9 @@ module.exports = async function handler(req, res) {
   try {
     const result = await runSeoLandingGeneration({
       mode: "publish",
-      template_type: "price_city",
+      template_type: "random",
       limit: 1,
-      candidateLimit: 10,
+      candidateLimit: 25,
       autoPublish: true,
       includeExistingDrafts: true,
       publishFirstEligible: true,

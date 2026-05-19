@@ -5,7 +5,7 @@ function parseArgs(argv) {
   const args = {
     mode: "dry_run",
     limit: 5,
-    template_type: "price_city",
+    template_type: "random",
     autoPublish: false
   };
 

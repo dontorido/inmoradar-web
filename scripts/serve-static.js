@@ -31,9 +31,9 @@ const rewrites = {
 };
 
 function routeDynamic(pathname) {
-  const priceCity = pathname.match(/^\/precio-metro-cuadrado\/([^/]+)\/?$/);
-  if (priceCity) {
-    return `/api/seo-page?slug=precio-metro-cuadrado/${encodeURIComponent(priceCity[1])}`;
+  const seoCity = pathname.match(/^\/(precio-metro-cuadrado|precio-alquiler|saber-si-piso-esta-caro)\/([^/]+)\/?$/);
+  if (seoCity) {
+    return `/api/seo-page?slug=${seoCity[1]}/${encodeURIComponent(seoCity[2])}`;
   }
   return rewrites[pathname] || pathname;
 }
