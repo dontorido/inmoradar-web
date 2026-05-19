@@ -2,7 +2,18 @@ const { hasSupabaseConfig, supabaseFetch } = require("./_utils");
 const { getSeedPublishedLanding } = require("./_seo/seedPublished");
 const { escapeHtml, siteUrl } = require("./_seo/text");
 
-const STATIC_PATHS = ["/", "/premium", "/privacidad", "/terminos"];
+const STATIC_PATHS = [
+  "/",
+  "/que-analiza",
+  "/datos",
+  "/metodologia",
+  "/noticias",
+  "/premium",
+  "/faq",
+  "/contacto",
+  "/privacidad",
+  "/terminos"
+];
 
 async function fetchPublishedLandings() {
   const seed = await getSeedPublishedLanding("precio-metro-cuadrado/logrono");

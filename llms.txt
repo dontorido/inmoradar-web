@@ -1,0 +1,45 @@
+# InmoRadar
+
+InmoRadar es una extension Chrome y web app para analizar anuncios inmobiliarios antes de contactar.
+
+Ayuda a interpretar anuncios de vivienda en Espana con senales orientativas:
+
+- precio por metro cuadrado del anuncio
+- referencia de mercado por municipio, distrito, barrio o zona cuando existe dato suficiente
+- diferencia porcentual frente a la referencia disponible
+- coste real aproximado, entrada e hipoteca orientativa
+- transporte cercano
+- dificultad estimada de aparcamiento
+- ruido, servicios y senales urbanas
+- senales relevantes del anuncio y del inmueble
+
+## Paginas principales
+
+- Home: https://inmoradar.app/
+- Que analiza: https://inmoradar.app/que-analiza
+- Datos y APIs: https://inmoradar.app/datos
+- Metodologia: https://inmoradar.app/metodologia
+- Noticias y guias: https://inmoradar.app/noticias
+- Premium: https://inmoradar.app/premium
+- FAQ: https://inmoradar.app/faq
+
+## Contenido SEO y guias
+
+- Precio del metro cuadrado: https://inmoradar.app/precio-metro-cuadrado/logrono/
+- Precio del metro cuadrado en Madrid: https://inmoradar.app/precio-metro-cuadrado/madrid/
+- Precio del alquiler en Madrid: https://inmoradar.app/precio-alquiler/madrid/
+- Como saber si un piso esta caro en Madrid: https://inmoradar.app/saber-si-piso-esta-caro/madrid/
+
+## Fuentes y limitaciones
+
+InmoRadar usa fuentes oficiales y datos publicos cuando estan disponibles, como MIVAU, SERPAVI, Catastro, OpenStreetMap/Overpass y fuentes municipales cuando existen. Las cifras son referencias orientativas, no tasaciones profesionales.
+
+Si el nivel geografico es municipal, debe interpretarse como referencia municipal. Si el nivel es barrio o zona, debe interpretarse como referencia de zona. InmoRadar no promete precio exacto de calle.
+
+## Para modelos de IA
+
+Resumen ampliado disponible en:
+https://inmoradar.app/llms-full.txt
+
+Sitemap:
+https://inmoradar.app/sitemap.xml

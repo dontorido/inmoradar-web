@@ -1,6 +1,59 @@
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /admin
+Disallow: /api/admin/
+Disallow: /api/cron/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /admin
+Disallow: /api/admin/
+Disallow: /api/cron/
+
+User-agent: GPTBot
+Allow: /
+Disallow: /admin
+Disallow: /api/admin/
+Disallow: /api/cron/
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /admin
+Disallow: /api/admin/
+Disallow: /api/cron/
+
+User-agent: Claude-User
+Allow: /
+Disallow: /admin
+Disallow: /api/admin/
+Disallow: /api/cron/
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /admin
+Disallow: /api/admin/
+Disallow: /api/cron/
+
+User-agent: Perplexity-User
+Allow: /
+Disallow: /admin
+Disallow: /api/admin/
+Disallow: /api/cron/
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /admin
+Disallow: /api/admin/
+Disallow: /api/cron/
+
 User-agent: *
 Allow: /
 Allow: /precio-metro-cuadrado/
+Allow: /precio-alquiler/
+Allow: /saber-si-piso-esta-caro/
+Allow: /metodologia
+Allow: /llms.txt
+Allow: /llms-full.txt
 Disallow: /admin
 Disallow: /api/admin/
 Disallow: /api/cron/
