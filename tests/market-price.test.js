@@ -7,6 +7,7 @@ const {
   calculateListingPriceEurM2,
   buildConsensusRecord,
   buildContactEmailPayload,
+  buildResendContactEmailPayload,
   classifyComparison,
   findBestGroupFromRecords,
   findBestFromRecords,
@@ -94,6 +95,32 @@ test("buildContactEmailPayload evita usar el mismo buzon como remitente y destin
   else process.env.CLOUDFLARE_EMAIL_FROM = previousFrom;
   if (previousContactFrom === undefined) delete process.env.CLOUDFLARE_CONTACT_EMAIL_FROM;
   else process.env.CLOUDFLARE_CONTACT_EMAIL_FROM = previousContactFrom;
+});
+
+test("buildResendContactEmailPayload prepara el email de contacto para Resend", () => {
+  const previousFrom = process.env.RESEND_EMAIL_FROM;
+  const previousContactFrom = process.env.RESEND_CONTACT_EMAIL_FROM;
+  delete process.env.RESEND_EMAIL_FROM;
+  delete process.env.RESEND_CONTACT_EMAIL_FROM;
+
+  const payload = buildResendContactEmailPayload({
+    id: "contact-test",
+    name: "Sergio",
+    email: "sergio@example.com",
+    topic: "general",
+    message: "Hola desde Resend.",
+    created_at: "2026-05-19T12:00:00.000Z"
+  });
+
+  assert.deepEqual(payload.to, ["hola@inmoradar.app"]);
+  assert.equal(payload.from, "InmoRadar <noreply@inmoradar.app>");
+  assert.equal(payload.reply_to, "sergio@example.com");
+  assert.match(payload.text, /Hola desde Resend/);
+
+  if (previousFrom === undefined) delete process.env.RESEND_EMAIL_FROM;
+  else process.env.RESEND_EMAIL_FROM = previousFrom;
+  if (previousContactFrom === undefined) delete process.env.RESEND_CONTACT_EMAIL_FROM;
+  else process.env.RESEND_CONTACT_EMAIL_FROM = previousContactFrom;
 });
 
 test("findBestFromRecords prioriza zona y cae a municipio si no hay zona", () => {

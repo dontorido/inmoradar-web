@@ -70,6 +70,7 @@ const DISCLAIMER =
   "Referencia orientativa basada en datos agregados de mercado. No sustituye una valoración profesional.";
 const CONTACT_TO_EMAIL = "hola@inmoradar.app";
 const CONTACT_FALLBACK_FROM_EMAIL = "noreply@inmoradar.app";
+const RESEND_CONTACT_FROM_EMAIL = `InmoRadar <${CONTACT_FALLBACK_FROM_EMAIL}>`;
 
 const FALLBACK_STEPS = [
   "neighbourhood_with_district",
@@ -1228,6 +1229,17 @@ function cloudflareContactEmailConfig() {
   };
 }
 
+function resendContactEmailConfig() {
+  return {
+    apiToken: process.env.RESEND_API_KEY,
+    from:
+      process.env.RESEND_CONTACT_EMAIL_FROM ||
+      process.env.RESEND_EMAIL_FROM ||
+      RESEND_CONTACT_FROM_EMAIL,
+    to: CONTACT_TO_EMAIL
+  };
+}
+
 function buildContactEmailPayload(item) {
   const topic = item.topic || "general";
   const subject = `Nuevo mensaje InmoRadar · ${topic}`;
@@ -1271,6 +1283,20 @@ function buildContactEmailPayload(item) {
   };
 }
 
+function buildResendContactEmailPayload(item) {
+  const payload = buildContactEmailPayload(item);
+  const config = resendContactEmailConfig();
+  return {
+    to: [config.to],
+    from: config.from,
+    subject: payload.subject,
+    html: payload.html,
+    text: payload.text,
+    reply_to: item.email,
+    headers: payload.headers
+  };
+}
+
 function buildMinimalContactEmailPayload(item) {
   const config = cloudflareContactEmailConfig();
   return {
@@ -1290,6 +1316,20 @@ function buildMinimalContactEmailPayload(item) {
   };
 }
 
+async function postResendContactEmail(config, payload) {
+  const response = await fetchWithTimeout("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${config.apiToken}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(payload),
+    timeoutMs: 12000
+  });
+  const body = await response.json().catch(() => null);
+  return { response, body };
+}
+
 async function postCloudflareContactEmail(config, payload) {
   const response = await fetchWithTimeout(
     `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/email/sending/send`,
@@ -1307,10 +1347,34 @@ async function postCloudflareContactEmail(config, payload) {
   return { response, body };
 }
 
+async function sendResendContactEmail(item) {
+  const config = resendContactEmailConfig();
+  if (!config.apiToken) {
+    return { ok: false, skipped: true, reason: "resend_not_configured" };
+  }
+
+  const payload = buildResendContactEmailPayload(item);
+  const { response, body } = await postResendContactEmail(config, payload);
+  if (!response.ok || body?.error) {
+    return {
+      ok: false,
+      skipped: false,
+      provider: "resend",
+      reason: body?.message || body?.error?.message || `resend_http_${response.status}`,
+      status: response.status
+    };
+  }
+
+  return { ok: true, provider: "resend", response: body };
+}
+
 async function sendContactEmail(item) {
+  const resendNotification = await sendResendContactEmail(item);
+  if (!resendNotification.skipped) return resendNotification;
+
   const config = cloudflareContactEmailConfig();
   if (!config.accountId || !config.apiToken) {
-    return { ok: false, skipped: true, reason: "cloudflare_email_not_configured" };
+    return { ok: false, skipped: true, reason: "email_provider_not_configured" };
   }
 
   const payload = buildContactEmailPayload(item);
@@ -1474,6 +1538,7 @@ module.exports._internal = {
   calculateListingPriceEurM2,
   buildConsensusRecord,
   buildContactEmailPayload,
+  buildResendContactEmailPayload,
   classifyComparison,
   confidenceFromRecord,
   findBestGroupFromRecords,
