@@ -1,4 +1,4 @@
-const { handleCors, isEmail, json, normalizeEmail, readRawBody } = require("./_utils");
+const { handleCors, hasSupabaseConfig, isEmail, json, normalizeEmail, readRawBody, supabaseFetch } = require("./_utils");
 
 const LEMON_API_URL = "https://api.lemonsqueezy.com/v1/checkouts";
 const LEMON_BASE_API_URL = "https://api.lemonsqueezy.com/v1";
@@ -139,7 +139,7 @@ async function lemonRequest(url, apiKey, options = {}) {
   return data;
 }
 
-async function getCustomerPortalUrl(config) {
+async function getUnsignedCustomerPortalUrl(config) {
   if (portalUrlCache.expiresAt > Date.now() && portalUrlCache.value) {
     return portalUrlCache.value;
   }
@@ -156,6 +156,69 @@ async function getCustomerPortalUrl(config) {
     value: portalUrl
   };
   return portalUrl;
+}
+
+async function findStoredSubscriptionId(email) {
+  if (!email || !hasSupabaseConfig()) return null;
+
+  try {
+    const params = new URLSearchParams({
+      email: `eq.${email}`,
+      select: "provider_subscription_id,status,updated_at",
+      order: "updated_at.desc",
+      limit: "1"
+    });
+    const rows = await supabaseFetch(`premium_subscriptions?${params.toString()}`, { timeoutMs: 3000 });
+    const row = Array.isArray(rows) ? rows[0] : null;
+    return row?.provider_subscription_id || null;
+  } catch {
+    return null;
+  }
+}
+
+async function getSignedCustomerPortalUrl(config, email) {
+  const storedSubscriptionId = await findStoredSubscriptionId(email);
+  const urls = [];
+  if (storedSubscriptionId) {
+    urls.push(`${LEMON_BASE_API_URL}/subscriptions/${encodeURIComponent(storedSubscriptionId)}`);
+  }
+
+  if (email) {
+    const params = new URLSearchParams({
+      "filter[store_id]": String(config.storeId),
+      "filter[user_email]": email,
+      "page[size]": "1"
+    });
+    urls.push(`${LEMON_BASE_API_URL}/subscriptions?${params.toString()}`);
+  }
+
+  for (const url of urls) {
+    try {
+      const data = await lemonRequest(url, config.apiKey, { method: "GET" });
+      const subscription = Array.isArray(data?.data) ? data.data[0] : data?.data;
+      const portalUrl = subscription?.attributes?.urls?.customer_portal;
+      if (portalUrl) return portalUrl;
+    } catch {
+      // Si el ID local estuviera desfasado, probamos el siguiente metodo.
+    }
+  }
+
+  return null;
+}
+
+async function getCustomerPortal(config, email) {
+  const signedUrl = isEmail(email) ? await getSignedCustomerPortalUrl(config, email) : null;
+  if (signedUrl) {
+    return {
+      portalUrl: signedUrl,
+      signed: true
+    };
+  }
+
+  return {
+    portalUrl: await getUnsignedCustomerPortalUrl(config),
+    signed: false
+  };
 }
 
 function isPortalRequest(req, url, body) {
@@ -193,9 +256,11 @@ module.exports = async function handler(req, res) {
     }
 
     if (isPortalRequest(req, url, body)) {
+      const portal = await getCustomerPortal(config, email);
       json(res, 200, {
         ok: true,
-        portal_url: await getCustomerPortalUrl(config),
+        portal_url: portal.portalUrl,
+        signed: portal.signed,
         test_mode: Boolean(config.testMode)
       });
       return;
@@ -226,5 +291,7 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.buildCheckoutPayload = buildCheckoutPayload;
-module.exports.getCustomerPortalUrl = getCustomerPortalUrl;
+module.exports.getCustomerPortal = getCustomerPortal;
+module.exports.getSignedCustomerPortalUrl = getSignedCustomerPortalUrl;
+module.exports.getUnsignedCustomerPortalUrl = getUnsignedCustomerPortalUrl;
 module.exports.lemonConfig = lemonConfig;

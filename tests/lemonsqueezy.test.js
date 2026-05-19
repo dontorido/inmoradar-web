@@ -2,7 +2,11 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 
-const { buildCheckoutPayload, getCustomerPortalUrl } = require("../api/lemonsqueezy-checkout");
+const {
+  buildCheckoutPayload,
+  getSignedCustomerPortalUrl,
+  getUnsignedCustomerPortalUrl
+} = require("../api/lemonsqueezy-checkout");
 const { isPremiumActive, verifyLemonSignature } = require("../api/_utils");
 
 function mockReq() {
@@ -47,7 +51,7 @@ test("verifyLemonSignature valida HMAC SHA256 de Lemon Squeezy", () => {
   assert.equal(verifyLemonSignature(rawBody, "bad-signature", secret), false);
 });
 
-test("getCustomerPortalUrl construye el portal de cliente desde la tienda", async () => {
+test("getUnsignedCustomerPortalUrl construye el portal de cliente desde la tienda", async () => {
   const originalFetch = global.fetch;
   global.fetch = async (url, options) => {
     assert.equal(url, "https://api.lemonsqueezy.com/v1/stores/123");
@@ -66,8 +70,44 @@ test("getCustomerPortalUrl construye el portal de cliente desde la tienda", asyn
   };
 
   try {
-    const portalUrl = await getCustomerPortalUrl({ storeId: "123", apiKey: "test_key" });
+    const portalUrl = await getUnsignedCustomerPortalUrl({ storeId: "123", apiKey: "test_key" });
     assert.equal(portalUrl, "https://inmoradar.lemonsqueezy.com/billing");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("getSignedCustomerPortalUrl usa el filtro por email de suscripciones", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    assert.match(url, /^https:\/\/api\.lemonsqueezy\.com\/v1\/subscriptions\?/);
+    assert.match(url, /filter%5Buser_email%5D=sergio%40example\.com/);
+    assert.equal(options.headers.authorization, "Bearer test_key");
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        data: [
+          {
+            type: "subscriptions",
+            id: "sub_123",
+            attributes: {
+              urls: {
+                customer_portal: "https://inmoradar.lemonsqueezy.com/billing?expires=1&signature=signed"
+              }
+            }
+          }
+        ]
+      })
+    };
+  };
+
+  try {
+    const portalUrl = await getSignedCustomerPortalUrl(
+      { storeId: "123", apiKey: "test_key" },
+      "sergio@example.com"
+    );
+    assert.equal(portalUrl, "https://inmoradar.lemonsqueezy.com/billing?expires=1&signature=signed");
   } finally {
     global.fetch = originalFetch;
   }
