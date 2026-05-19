@@ -206,7 +206,7 @@ function renderLandingHtml(landing) {
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="${escapeHtml(imageUrl)}">
   <link rel="canonical" href="${escapeHtml(canonical)}">
-  <link rel="icon" href="/assets/inmoradar-brand-mark.svg?v=20260519" type="image/svg+xml">
+  <link rel="icon" href="/assets/favicon-32.png?v=20260519b" type="image/png" sizes="32x32">
   <link rel="stylesheet" href="/assets/styles.css">
   <style>
     .seo-page {
