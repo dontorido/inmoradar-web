@@ -601,7 +601,7 @@ function buildVideoPreviewHtml(project) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(project.title || "Video InmoRadar")}</title>
   <style>
-    *{box-sizing:border-box}body{margin:0;background:#09090B;color:#fff;font-family:Inter,system-ui,sans-serif}.canvas{position:relative;width:1080px;height:1920px;overflow:hidden;background:radial-gradient(circle at 25% 15%,rgba(255,69,0,.28),transparent 34%),linear-gradient(145deg,#09090B,#18181B 58%,#0A140F)}.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.055) 1px,transparent 1px);background-size:72px 72px}.people{position:absolute;inset:auto 0 0 0;height:54%;opacity:.72;background:radial-gradient(circle at 22% 38%,rgba(255,255,255,.20) 0 42px,transparent 43px),radial-gradient(circle at 46% 34%,rgba(255,255,255,.18) 0 36px,transparent 37px),radial-gradient(circle at 70% 40%,rgba(255,255,255,.17) 0 39px,transparent 40px),linear-gradient(90deg,transparent 12%,rgba(255,255,255,.10) 12% 28%,transparent 28% 35%,rgba(255,255,255,.09) 35% 55%,transparent 55% 62%,rgba(255,255,255,.08) 62% 82%,transparent 82%);filter:blur(.2px)}.content{position:absolute;left:76px;right:160px;top:260px;display:grid;gap:36px}.eyebrow{color:#FF4500;font:700 28px/1 monospace;letter-spacing:.22em;text-transform:uppercase}.content h1{margin:0;font-size:112px;line-height:.9;letter-spacing:-.07em}.content p{margin:0;color:rgba(255,255,255,.78);font-size:38px;line-height:1.35;max-width:760px}.scene-list{position:absolute;left:76px;right:76px;bottom:180px;display:grid;gap:18px}.scene{padding:24px 28px;border:1px solid rgba(255,255,255,.14);border-radius:28px;background:rgba(255,255,255,.08);backdrop-filter:blur(12px)}.scene span{color:#FF4500;font:700 18px/1 monospace;letter-spacing:.18em;text-transform:uppercase}.scene h2{margin:10px 0 6px;font-size:36px;line-height:1}.scene p{margin:0;color:rgba(255,255,255,.72);font-size:24px}.brand-logo{position:absolute;top:${project.branding?.logoMarginTopPx || 48}px;right:${project.branding?.logoMarginRightPx || 48}px;width:${project.branding?.logoSizePx || 72}px;height:${project.branding?.logoSizePx || 72}px;border-radius:22px}.brand-site{position:absolute;right:${project.branding?.websiteMarginRightPx || 48}px;bottom:${project.branding?.websiteMarginBottomPx || 48}px;font-size:${project.branding?.websiteFontSizePx || 32}px;font-weight:800;letter-spacing:-.02em}.safe{position:absolute;inset:96px;border:1px dashed rgba(255,255,255,.18);border-radius:42px;pointer-events:none}
+    *{box-sizing:border-box}body{margin:0;background:#09090B;color:#fff;font-family:Inter,system-ui,sans-serif}.canvas{position:relative;width:1080px;height:1920px;overflow:hidden;background:radial-gradient(circle at 25% 15%,rgba(255,69,0,.28),transparent 34%),linear-gradient(145deg,#09090B,#18181B 58%,#0A140F)}.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.055) 1px,transparent 1px);background-size:72px 72px}.people{position:absolute;inset:auto 0 0 0;height:56%;opacity:.9;background:radial-gradient(circle at 24% 34%,rgba(255,210,185,.38) 0 44px,transparent 45px),radial-gradient(circle at 49% 30%,rgba(255,210,185,.36) 0 40px,transparent 41px),radial-gradient(circle at 74% 36%,rgba(255,210,185,.34) 0 42px,transparent 43px),linear-gradient(90deg,transparent 12%,rgba(245,242,234,.22) 12% 28%,transparent 28% 35%,rgba(255,98,44,.22) 35% 55%,transparent 55% 62%,rgba(245,242,234,.18) 62% 82%,transparent 82%);filter:blur(.1px)}.people:before{content:"";position:absolute;left:140px;bottom:230px;width:150px;height:265px;border-radius:56px 56px 36px 36px;background:rgba(245,242,234,.56);box-shadow:270px -28px 0 rgba(255,98,44,.48),540px 16px 0 rgba(245,242,234,.46)}.people:after{content:"";position:absolute;left:356px;bottom:124px;width:370px;height:188px;border-radius:32px;background:rgba(9,9,11,.34);box-shadow:36px 40px 0 rgba(255,255,255,.13)}.content{position:absolute;left:76px;right:160px;top:260px;display:grid;gap:36px}.eyebrow{color:#FF4500;font:700 28px/1 monospace;letter-spacing:.22em;text-transform:uppercase}.content h1{margin:0;font-size:112px;line-height:.9;letter-spacing:-.07em}.content p{margin:0;color:rgba(255,255,255,.78);font-size:38px;line-height:1.35;max-width:760px}.scene-list{position:absolute;left:76px;right:76px;bottom:180px;display:grid;gap:18px}.scene{padding:24px 28px;border:1px solid rgba(255,255,255,.14);border-radius:28px;background:rgba(255,255,255,.08);backdrop-filter:blur(12px)}.scene span{color:#FF4500;font:700 18px/1 monospace;letter-spacing:.18em;text-transform:uppercase}.scene h2{margin:10px 0 6px;font-size:36px;line-height:1}.scene p{margin:0;color:rgba(255,255,255,.72);font-size:24px}.brand-logo{position:absolute;top:${project.branding?.logoMarginTopPx || 48}px;right:${project.branding?.logoMarginRightPx || 48}px;width:${project.branding?.logoSizePx || 72}px;height:${project.branding?.logoSizePx || 72}px;border-radius:22px}.brand-site{position:absolute;right:${project.branding?.websiteMarginRightPx || 48}px;bottom:${project.branding?.websiteMarginBottomPx || 48}px;font-size:${project.branding?.websiteFontSizePx || 32}px;font-weight:800;letter-spacing:-.02em}.safe{position:absolute;inset:96px;border:1px dashed rgba(255,255,255,.18);border-radius:42px;pointer-events:none}
   </style>
 </head>
 <body>
@@ -625,11 +625,14 @@ function buildVideoPreviewHtml(project) {
 function supportedVideoMimeType() {
   if (!window.MediaRecorder) return "";
   return [
-    "video/mp4;codecs=h264",
-    "video/mp4",
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+    "video/mp4;codecs=avc1.64001F,mp4a.40.2",
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
     "video/webm;codecs=vp9",
     "video/webm;codecs=vp8",
-    "video/webm"
+    "video/webm",
+    "video/mp4;codecs=h264"
   ].find((type) => window.MediaRecorder.isTypeSupported(type)) || "";
 }
 
@@ -677,19 +680,54 @@ function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
   return y + lines.length * lineHeight;
 }
 
-function drawPerson(ctx, x, y, scale, tone, phase) {
+function drawPerson(ctx, x, y, scale, tone, phase, accent = "#FF4500") {
   ctx.save();
   ctx.translate(x, y + Math.sin(phase) * 4);
   ctx.scale(scale, scale);
+  ctx.globalAlpha = 0.9;
+
+  ctx.fillStyle = "rgba(0,0,0,.24)";
+  roundRect(ctx, -70, 90, 140, 22, 12);
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(18,18,20,.68)";
+  roundRect(ctx, -34, 74, 24, 108, 12);
+  ctx.fill();
+  roundRect(ctx, 12, 74, 24, 108, 12);
+  ctx.fill();
+
   ctx.fillStyle = tone;
-  ctx.globalAlpha = 0.72;
+  roundRect(ctx, -52, -22, 104, 118, 34);
+  ctx.fill();
+
+  ctx.fillStyle = accent;
+  ctx.globalAlpha = 0.42;
+  roundRect(ctx, -46, 2, 92, 16, 8);
+  ctx.fill();
+  ctx.globalAlpha = 0.9;
+
+  ctx.fillStyle = "rgba(255,210,185,.82)";
   ctx.beginPath();
   ctx.arc(0, -64, 34, 0, Math.PI * 2);
   ctx.fill();
-  roundRect(ctx, -42, -24, 84, 130, 38);
+
+  ctx.fillStyle = "rgba(10,10,11,.72)";
+  ctx.beginPath();
+  ctx.arc(-4, -82, 28, Math.PI, Math.PI * 2);
   ctx.fill();
-  ctx.globalAlpha = 0.28;
-  roundRect(ctx, -88, 8, 176, 36, 18);
+
+  ctx.strokeStyle = "rgba(255,210,185,.64)";
+  ctx.lineWidth = 20;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-48, 10);
+  ctx.lineTo(-92, 56 + Math.sin(phase) * 8);
+  ctx.moveTo(48, 10);
+  ctx.lineTo(92, 56 + Math.cos(phase) * 8);
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(255,255,255,.26)";
+  roundRect(ctx, -24, -8, 48, 10, 5);
   ctx.fill();
   ctx.restore();
 }
@@ -700,42 +738,42 @@ function drawPeopleBackground(ctx, project, elapsedMs) {
   const phase = elapsedMs / 900;
 
   ctx.save();
-  ctx.globalAlpha = 0.92;
+  ctx.globalAlpha = 0.98;
   const windowGlow = ctx.createLinearGradient(0, 620, width, 1180);
-  windowGlow.addColorStop(0, "rgba(255,255,255,.08)");
-  windowGlow.addColorStop(0.45, "rgba(255,69,0,.09)");
-  windowGlow.addColorStop(1, "rgba(255,255,255,.03)");
+  windowGlow.addColorStop(0, "rgba(255,255,255,.12)");
+  windowGlow.addColorStop(0.45, "rgba(255,69,0,.12)");
+  windowGlow.addColorStop(1, "rgba(255,255,255,.05)");
   ctx.fillStyle = windowGlow;
   roundRect(ctx, 72, 640, 936, 520, 44);
   ctx.fill();
 
-  ctx.fillStyle = "rgba(255,255,255,.08)";
-  roundRect(ctx, 108, 1120, 864, 260, 72);
+  ctx.fillStyle = "rgba(255,255,255,.12)";
+  roundRect(ctx, 108, 1080, 864, 300, 72);
   ctx.fill();
   ctx.fillStyle = "rgba(0,0,0,.22)";
-  roundRect(ctx, 78, 1310, 924, 148, 46);
+  roundRect(ctx, 78, 1288, 924, 154, 46);
   ctx.fill();
-  ctx.fillStyle = "rgba(255,255,255,.09)";
+  ctx.fillStyle = "rgba(255,255,255,.14)";
   roundRect(ctx, 220, 1440, 640, 92, 46);
   ctx.fill();
 
   const style = String(project.visual_style || "hogar_cotidiano");
   const palette =
     style === "amigos_piso"
-      ? ["rgba(255,255,255,.34)", "rgba(255,69,0,.24)", "rgba(212,255,63,.18)"]
+      ? ["rgba(245,242,234,.82)", "rgba(255,98,44,.72)", "rgba(212,255,63,.52)"]
       : style === "familia_casa"
-        ? ["rgba(255,255,255,.32)", "rgba(255,205,180,.28)", "rgba(255,255,255,.22)"]
-        : ["rgba(255,255,255,.30)", "rgba(255,69,0,.22)", "rgba(255,255,255,.18)"];
+        ? ["rgba(245,242,234,.78)", "rgba(255,205,180,.74)", "rgba(255,255,255,.66)"]
+        : ["rgba(245,242,234,.78)", "rgba(255,98,44,.68)", "rgba(255,255,255,.62)"];
 
-  drawPerson(ctx, 270, 1198, 1.1, palette[0], phase);
-  drawPerson(ctx, 526, 1170, 1.0, palette[1], phase + 0.8);
-  drawPerson(ctx, 760, 1210, 0.92, palette[2], phase + 1.4);
+  drawPerson(ctx, 250, 1168, 1.28, palette[0], phase, "#FF4500");
+  drawPerson(ctx, 530, 1128, 1.18, palette[1], phase + 0.8, "#D4FF3F");
+  drawPerson(ctx, 790, 1182, 1.08, palette[2], phase + 1.4, "#FF4500");
 
   ctx.fillStyle = "rgba(9,9,11,.34)";
-  roundRect(ctx, 346, 1222, 360, 196, 30);
+  roundRect(ctx, 340, 1230, 380, 188, 30);
   ctx.fill();
   ctx.fillStyle = "rgba(255,255,255,.16)";
-  roundRect(ctx, 384, 1264, 284, 88, 20);
+  roundRect(ctx, 382, 1268, 296, 86, 20);
   ctx.fill();
   ctx.fillStyle = "#FF4500";
   roundRect(ctx, 404, 1370, 128, 10, 5);
@@ -900,7 +938,7 @@ async function createVideoMusicTrack(project, durationMs) {
   const destination = audioContext.createMediaStreamDestination();
   const master = audioContext.createGain();
   const compressor = audioContext.createDynamicsCompressor();
-  master.gain.setValueAtTime(0.06, audioContext.currentTime);
+  master.gain.setValueAtTime(0.18, audioContext.currentTime);
   master.connect(compressor);
   compressor.connect(destination);
 
@@ -915,8 +953,8 @@ async function createVideoMusicTrack(project, durationMs) {
   pad.type = "sine";
   pad.frequency.setValueAtTime(notes[0] / 2, start);
   padGain.gain.setValueAtTime(0, start);
-  padGain.gain.linearRampToValueAtTime(0.035, start + 0.8);
-  padGain.gain.linearRampToValueAtTime(0.02, start + Math.max(1, durationSeconds - 1));
+  padGain.gain.linearRampToValueAtTime(0.08, start + 0.8);
+  padGain.gain.linearRampToValueAtTime(0.055, start + Math.max(1, durationSeconds - 1));
   padGain.gain.linearRampToValueAtTime(0, start + durationSeconds);
   pad.connect(padGain);
   padGain.connect(master);
@@ -930,7 +968,7 @@ async function createVideoMusicTrack(project, durationMs) {
     osc.type = style === "urban_soft" ? "triangle" : "sine";
     osc.frequency.setValueAtTime(notes[index], start + t);
     gain.gain.setValueAtTime(0, start + t);
-    gain.gain.linearRampToValueAtTime(style === "editorial_ambient" ? 0.025 : 0.045, start + t + 0.03);
+    gain.gain.linearRampToValueAtTime(style === "editorial_ambient" ? 0.06 : 0.11, start + t + 0.03);
     gain.gain.exponentialRampToValueAtTime(0.001, start + t + Math.max(0.18, step * 0.86));
     osc.connect(gain);
     gain.connect(master);
@@ -943,7 +981,7 @@ async function createVideoMusicTrack(project, durationMs) {
       kick.type = "sine";
       kick.frequency.setValueAtTime(86, start + t);
       kick.frequency.exponentialRampToValueAtTime(48, start + t + 0.12);
-      kickGain.gain.setValueAtTime(0.055, start + t);
+      kickGain.gain.setValueAtTime(0.13, start + t);
       kickGain.gain.exponentialRampToValueAtTime(0.001, start + t + 0.18);
       kick.connect(kickGain);
       kickGain.connect(master);
@@ -975,7 +1013,7 @@ async function exportVideoProject() {
   const ctx = canvas.getContext("2d");
   const stream = canvas.captureStream(project.format?.fps || 30);
   const chunks = [];
-  const extension = mimeType.includes("mp4") ? "mp4" : "webm";
+  const extension = mimeType.includes("webm") ? "webm" : "mp4";
   let logoImage = null;
   let musicTrack = null;
 
@@ -1003,7 +1041,7 @@ async function exportVideoProject() {
   });
 
   setVideoBusy(true, "Exportando video con personas de fondo, musica y marca fija.");
-  showStatus(`Exportando video ${extension.toUpperCase()} con musica... manten esta pestana abierta.`);
+  showStatus(`Exportando video ${extension.toUpperCase()} con musica audible... manten esta pestana abierta.`);
   const start = performance.now();
 
   recorder.start(500);
