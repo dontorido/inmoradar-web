@@ -44,6 +44,11 @@ test("precisionLabel describe el nivel geografico sin prometer precio de calle",
 });
 
 test("buildContactEmailPayload envia mensajes de contacto a hola@inmoradar.app", () => {
+  const previousFrom = process.env.CLOUDFLARE_EMAIL_FROM;
+  const previousContactFrom = process.env.CLOUDFLARE_CONTACT_EMAIL_FROM;
+  delete process.env.CLOUDFLARE_EMAIL_FROM;
+  delete process.env.CLOUDFLARE_CONTACT_EMAIL_FROM;
+
   const payload = buildContactEmailPayload({
     id: "contact-test",
     name: "Sergio",
@@ -55,10 +60,40 @@ test("buildContactEmailPayload envia mensajes de contacto a hola@inmoradar.app",
 
   assert.equal(payload.to, "hola@inmoradar.app");
   assert.equal(payload.reply_to, "sergio@example.com");
-  assert.equal(payload.headers["Reply-To"], "sergio@example.com");
+  assert.equal(payload.from, "noreply@inmoradar.app");
+  assert.equal(payload.headers["Reply-To"], undefined);
   assert.match(payload.subject, /premium/);
   assert.match(payload.text, /Necesito ayuda con Premium/);
   assert.match(payload.html, /Nuevo mensaje/);
+
+  if (previousFrom === undefined) delete process.env.CLOUDFLARE_EMAIL_FROM;
+  else process.env.CLOUDFLARE_EMAIL_FROM = previousFrom;
+  if (previousContactFrom === undefined) delete process.env.CLOUDFLARE_CONTACT_EMAIL_FROM;
+  else process.env.CLOUDFLARE_CONTACT_EMAIL_FROM = previousContactFrom;
+});
+
+test("buildContactEmailPayload evita usar el mismo buzon como remitente y destino", () => {
+  const previousFrom = process.env.CLOUDFLARE_EMAIL_FROM;
+  const previousContactFrom = process.env.CLOUDFLARE_CONTACT_EMAIL_FROM;
+  process.env.CLOUDFLARE_EMAIL_FROM = "hola@inmoradar.app";
+  delete process.env.CLOUDFLARE_CONTACT_EMAIL_FROM;
+
+  const payload = buildContactEmailPayload({
+    id: "contact-test",
+    name: "Sergio",
+    email: "sergio@example.com",
+    topic: "general",
+    message: "Hola.",
+    created_at: "2026-05-19T12:00:00.000Z"
+  });
+
+  assert.equal(payload.to, "hola@inmoradar.app");
+  assert.equal(payload.from, "noreply@inmoradar.app");
+
+  if (previousFrom === undefined) delete process.env.CLOUDFLARE_EMAIL_FROM;
+  else process.env.CLOUDFLARE_EMAIL_FROM = previousFrom;
+  if (previousContactFrom === undefined) delete process.env.CLOUDFLARE_CONTACT_EMAIL_FROM;
+  else process.env.CLOUDFLARE_CONTACT_EMAIL_FROM = previousContactFrom;
 });
 
 test("findBestFromRecords prioriza zona y cae a municipio si no hay zona", () => {

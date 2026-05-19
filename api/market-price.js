@@ -69,6 +69,7 @@ const MARKET_SELECT = [
 const DISCLAIMER =
   "Referencia orientativa basada en datos agregados de mercado. No sustituye una valoración profesional.";
 const CONTACT_TO_EMAIL = "hola@inmoradar.app";
+const CONTACT_FALLBACK_FROM_EMAIL = "noreply@inmoradar.app";
 
 const FALLBACK_STEPS = [
   "neighbourhood_with_district",
@@ -1203,11 +1204,26 @@ function escapeEmailHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function emailAddressOnly(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/<([^>]+)>/);
+  return (match ? match[1] : text).toLowerCase();
+}
+
 function cloudflareContactEmailConfig() {
+  const configuredFrom =
+    process.env.CLOUDFLARE_CONTACT_EMAIL_FROM ||
+    process.env.CLOUDFLARE_EMAIL_FROM ||
+    CONTACT_FALLBACK_FROM_EMAIL;
+  const from =
+    emailAddressOnly(configuredFrom) === CONTACT_TO_EMAIL
+      ? CONTACT_FALLBACK_FROM_EMAIL
+      : configuredFrom;
+
   return {
     accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
     apiToken: process.env.CLOUDFLARE_EMAIL_API_TOKEN,
-    from: process.env.CLOUDFLARE_EMAIL_FROM || CONTACT_TO_EMAIL,
+    from,
     to: CONTACT_TO_EMAIL
   };
 }
@@ -1250,19 +1266,31 @@ function buildContactEmailPayload(item) {
 </html>`,
     reply_to: item.email,
     headers: {
-      "Reply-To": item.email,
       "X-InmoRadar-Contact": "website"
     }
   };
 }
 
-async function sendContactEmail(item) {
+function buildMinimalContactEmailPayload(item) {
   const config = cloudflareContactEmailConfig();
-  if (!config.accountId || !config.apiToken) {
-    return { ok: false, skipped: true, reason: "cloudflare_email_not_configured" };
-  }
+  return {
+    to: config.to,
+    from: config.from,
+    subject: "Nuevo mensaje InmoRadar",
+    text: [
+      "Nuevo mensaje desde el formulario de InmoRadar",
+      "",
+      `Nombre: ${item.name}`,
+      `Email: ${item.email}`,
+      `Tema: ${item.topic || "general"}`,
+      `Fecha: ${item.created_at}`,
+      "",
+      item.message
+    ].join("\n")
+  };
+}
 
-  const payload = buildContactEmailPayload(item);
+async function postCloudflareContactEmail(config, payload) {
   const response = await fetchWithTimeout(
     `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/email/sending/send`,
     {
@@ -1276,6 +1304,23 @@ async function sendContactEmail(item) {
     }
   );
   const body = await response.json().catch(() => null);
+  return { response, body };
+}
+
+async function sendContactEmail(item) {
+  const config = cloudflareContactEmailConfig();
+  if (!config.accountId || !config.apiToken) {
+    return { ok: false, skipped: true, reason: "cloudflare_email_not_configured" };
+  }
+
+  const payload = buildContactEmailPayload(item);
+  let { response, body } = await postCloudflareContactEmail(config, payload);
+  const firstReason = body?.errors?.[0]?.message || `cloudflare_email_http_${response.status}`;
+
+  if (!response.ok && firstReason === "email.sending.error.email.invalid") {
+    ({ response, body } = await postCloudflareContactEmail(config, buildMinimalContactEmailPayload(item)));
+  }
+
   if (!response.ok || body?.success === false) {
     return {
       ok: false,
