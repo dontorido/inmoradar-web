@@ -116,27 +116,58 @@ function setAdminSection(section) {
     const active = button.dataset.adminSectionButton === state.activeSection;
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", active ? "true" : "false");
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
   });
 }
 
-function chip(value, variant = "") {
+function slugId(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function chip(value, variant = "", kind = "status") {
   const label = escapeHtml(value || "-");
-  const className = variant ? `admin-chip ${variant}` : "admin-chip";
-  return `<span class="${className}">${label}</span>`;
+  const className = ["admin-chip", kind, variant].filter(Boolean).join(" ");
+  const testId = kind === "score" ? `score-pill-${slugId(value)}` : `status-pill-${slugId(value)}`;
+  return `<span class="${className}" data-testid="${escapeHtml(testId)}">${label}</span>`;
 }
 
 function statusTone(value) {
   const normalized = String(value || "").toLowerCase();
-  if (["active", "on_trial", "published", "index", "ready_to_publish"].includes(normalized)) return "good";
-  if (["cancelled", "expired", "noindex", "archived"].includes(normalized)) return "bad";
-  return "";
+  if (["published", "active", "on_trial"].includes(normalized)) return "published";
+  if (["ready_to_publish", "index", "paid"].includes(normalized)) return "ready";
+  if (["cancelled", "expired", "noindex"].includes(normalized)) return "bad";
+  if (["draft", "needs_review"].includes(normalized)) return "draft";
+  if (["archived"].includes(normalized)) return "muted";
+  return "draft";
 }
 
-function stat(label, value) {
+function scoreTone(value) {
+  const score = Number(value || 0);
+  if (score >= 80) return "good";
+  if (score >= 50) return "warn";
+  return "bad";
+}
+
+function stat(label, value, options = {}) {
+  const id = options.id || slugId(label);
+  const isZero = Number(value || 0) === 0;
   return `
-    <div class="admin-stat">
-      <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(value)}</strong>
+    <div class="admin-stat${isZero ? " is-zero" : ""}" data-testid="stat-row-${escapeHtml(id)}">
+      <div>
+        <span>${escapeHtml(label)}</span>
+        ${options.hint ? `<small>${escapeHtml(options.hint)}</small>` : ""}
+      </div>
+      <div class="admin-stat-value">
+        <strong>${escapeHtml(value)}</strong>
+        ${options.unit ? `<em>${escapeHtml(options.unit)}</em>` : ""}
+        ${options.trend !== undefined ? chip(options.trend, scoreTone(options.trend), "score") : ""}
+      </div>
     </div>
   `;
 }
@@ -163,22 +194,25 @@ function renderStats(summary) {
   const premium = summary.premium || {};
   const seo = summary.seo || {};
   els.env.textContent = summary.env?.lemonsqueezy_test_mode ? "Test mode" : "Live mode";
+  els.env.dataset.mode = summary.env?.lemonsqueezy_test_mode ? "test" : "live";
   els.stats.innerHTML = [
-    stat("Premium total", premium.total || 0),
-    stat("Premium active", (premium.by_status?.active || 0) + (premium.by_status?.on_trial || 0)),
-    stat("SEO publicadas", seo.published || 0),
-    stat("SEO ready", seo.ready_to_publish || 0)
+    stat("Premium total", premium.total || 0, { id: "premium-total" }),
+    stat("Premium active", (premium.by_status?.active || 0) + (premium.by_status?.on_trial || 0), {
+      id: "premium-active",
+      hint: "Cuentas con suscripcion activa esta semana"
+    }),
+    stat("SEO publicadas", seo.published || 0, { id: "seo-publicadas" }),
+    stat("SEO ready", seo.ready_to_publish || 0, { id: "seo-ready", trend: 100 })
   ].join("");
 }
 
 function renderParkingStats(payload) {
   if (!els.parkingStats) return;
   els.parkingStats.innerHTML = [
-    stat("Cache total", payload.total_cache_rows || 0),
-    stat("Cache vigente", payload.valid_cache_rows || 0),
-    stat("Assessments", payload.assessments_total || 0),
-    stat("Score medio", payload.average_score || 0),
-    stat("Confianza media", payload.average_confidence || 0)
+    stat("Cache total", payload.total_cache_rows || 0, { id: "cache-total", unit: "entradas" }),
+    stat("Cache vigente", payload.valid_cache_rows || 0, { id: "cache-vigente", hint: "Entradas con TTL activo" }),
+    stat("Assessments", payload.assessments_total || 0, { id: "assessments" }),
+    stat("Score medio", payload.average_score || 0, { id: "score-medio", unit: "/10", trend: payload.average_score || 0 })
   ].join("");
 }
 
@@ -200,8 +234,8 @@ function renderParkingRows(rows) {
               <strong>${escapeHtml(row.address_text || row.street || row.source_url || "-")}</strong>
               <div class="admin-subtle">${escapeHtml([row.zone_name, row.district, row.municipality].filter(Boolean).join(" / ") || "-")}</div>
             </td>
-            <td>${chip(`${score}/10 - ${row.overall_label || "-"}`, score >= 7 ? "bad" : score <= 4 ? "good" : "")}</td>
-            <td>${chip(confidence.toFixed(2), confidence >= 0.7 ? "good" : "")}</td>
+            <td>${chip(`${score}/10 - ${row.overall_label || "-"}`, score >= 7 ? "bad" : score <= 4 ? "published" : "warn")}</td>
+            <td>${chip(confidence.toFixed(2), confidence >= 0.7 ? "published" : "draft")}</td>
             <td>${escapeHtml(row.profile || "general")}</td>
             <td>
               ${escapeHtml(formatDate(row.last_checked_at))}
@@ -220,8 +254,8 @@ function renderParkingRows(rows) {
             <strong>${escapeHtml(row.city || row.geohash || "-")}</strong>
             <div class="admin-subtle">${escapeHtml(row.geohash || "-")} - ${escapeHtml(row.radius_m || 500)} m</div>
           </td>
-          <td>${chip(`${score}/10 - ${row.label || "-"}`, score >= 7 ? "bad" : score <= 4 ? "good" : "")}</td>
-          <td>${chip(confidence.toFixed(2), confidence >= 0.7 ? "good" : "")}</td>
+          <td>${chip(`${score}/10 - ${row.label || "-"}`, score >= 7 ? "bad" : score <= 4 ? "published" : "warn")}</td>
+          <td>${chip(confidence.toFixed(2), confidence >= 0.7 ? "published" : "draft")}</td>
           <td>${escapeHtml(row.perspective || "visitor")}</td>
           <td>
             ${escapeHtml(formatDate(row.expires_at))}
@@ -283,16 +317,16 @@ function renderSeo(payload) {
             <div class="admin-subtle">${escapeHtml(row.slug)} · ${escapeHtml(row.word_count || 0)} palabras</div>
           </td>
           <td>${escapeHtml(row.city || "-")}</td>
-          <td>${chip(Number(row.quality_score || 0).toFixed(0), Number(row.quality_score || 0) >= 75 ? "good" : "bad")}</td>
+        <td>${chip(Number(row.quality_score || 0).toFixed(0), scoreTone(row.quality_score), "score")}</td>
           <td>
             ${chip(row.status, statusTone(row.status))}
             ${chip(row.index_status, statusTone(row.index_status))}
           </td>
           <td>
             <div class="admin-row-actions">
-              <button class="admin-button tiny ghost" type="button" data-seo-action="regenerate" data-slug="${escapeHtml(row.slug)}">Regenerar</button>
-              <button class="admin-button tiny ghost" type="button" data-seo-action="publish" data-slug="${escapeHtml(row.slug)}">Publish</button>
-              <button class="admin-button tiny ghost" type="button" data-seo-action="noindex" data-slug="${escapeHtml(row.slug)}">Noindex</button>
+              <button class="admin-icon-button" type="button" data-seo-action="regenerate" data-slug="${escapeHtml(row.slug)}" aria-label="Regenerar landing">R</button>
+              <button class="admin-icon-button" type="button" data-seo-action="publish" data-slug="${escapeHtml(row.slug)}" aria-label="Publicar landing">P</button>
+              <button class="admin-icon-button" type="button" data-seo-action="noindex" data-slug="${escapeHtml(row.slug)}" aria-label="Marcar noindex">N</button>
             </div>
           </td>
         </tr>
@@ -314,8 +348,8 @@ function renderSeoPagination(payload) {
   els.seoPagination.innerHTML = `
     <span>Pagina ${escapeHtml(page)} - Landings ${escapeHtml(range)} - 10 por pagina</span>
     <div class="admin-pagination-actions">
-      <button class="admin-button tiny ghost" type="button" data-seo-page="previous" ${hasPrevious ? "" : "disabled"}>Anterior</button>
-      <button class="admin-button tiny ghost" type="button" data-seo-page="next" ${hasNext ? "" : "disabled"}>Siguiente</button>
+      <button class="admin-button tiny ghost" type="button" data-seo-page="previous" data-testid="pagination-prev" ${hasPrevious ? "" : "disabled"}>Anterior</button>
+      <button class="admin-button tiny secondary" type="button" data-seo-page="next" data-testid="pagination-next" ${hasNext ? "" : "disabled"}>Siguiente</button>
     </div>
   `;
 }

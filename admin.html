@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Backoffice | InmoRadar</title>
-  <meta name="theme-color" content="#BEBEBE">
+  <meta name="theme-color" content="#0A140F">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="assets/styles.css">
   <link rel="stylesheet" href="assets/admin.css">
@@ -16,10 +16,11 @@
       <a class="brand" href="/">
         <span class="brand-mark" aria-hidden="true"></span>
         <span><strong>Inmo</strong><em>Radar</em></span>
+        <span class="admin-brand-pill">Admin</span>
       </a>
       <div class="admin-topbar-actions">
-        <span class="admin-env" data-admin-env>Backoffice</span>
-        <button class="admin-button ghost" type="button" data-admin-logout>Salir</button>
+        <span class="admin-env" data-admin-env data-testid="admin-test-mode">Backoffice</span>
+        <button class="admin-button ghost" type="button" data-admin-logout data-testid="admin-logout">Salir</button>
       </div>
     </header>
 
@@ -44,22 +45,30 @@
           <h1>Backoffice</h1>
         </div>
         <div class="admin-tabs" aria-label="Secciones del backoffice">
-          <button class="admin-tab active" type="button" data-admin-section-button="marketing" aria-pressed="true">Marketing</button>
-          <button class="admin-tab" type="button" data-admin-section-button="kpis" aria-pressed="false">KPIs</button>
-          <button class="admin-tab" type="button" data-admin-section-button="parking" aria-pressed="false">Parking</button>
+          <button class="admin-tab active" type="button" data-admin-section-button="marketing" data-testid="admin-tab-marketing" aria-pressed="true">Marketing</button>
+          <button class="admin-tab" type="button" data-admin-section-button="kpis" data-testid="admin-tab-kpis" aria-pressed="false">KPIs</button>
+          <button class="admin-tab" type="button" data-admin-section-button="parking" data-testid="admin-tab-parking" aria-pressed="false">Parking</button>
         </div>
       </div>
 
       <p class="admin-status" data-admin-live-status></p>
 
       <section class="admin-view" data-admin-view="marketing">
-        <div class="admin-view-toolbar">
-          <button class="admin-button ghost" type="button" data-admin-refresh>Actualizar</button>
-          <button class="admin-button" type="button" data-seo-generate>Generar draft SEO</button>
-          <button class="admin-button" type="button" data-seo-publish>Publicar 1 SEO elegible</button>
-        </div>
-
-        <section class="admin-stat-grid" data-admin-stats></section>
+        <article class="admin-panel admin-ops-panel">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Marketing & Publishing</span>
+              <h2>Operaciones del dia</h2>
+              <p class="admin-panel-sub">Acciones manuales para refrescar contenido, generar borradores SEO y publicar landings elegibles.</p>
+            </div>
+            <div class="admin-view-toolbar">
+              <button class="admin-button ghost" type="button" data-admin-refresh data-testid="admin-action-refresh">Actualizar</button>
+              <button class="admin-button ghost" type="button" data-seo-generate data-testid="admin-action-generate-seo">Generar draft SEO</button>
+              <button class="admin-button" type="button" data-seo-publish data-testid="admin-action-publish-seo">Publicar 1 SEO elegible</button>
+            </div>
+          </div>
+          <section class="admin-stat-grid" data-admin-stats></section>
+        </article>
 
         <section class="admin-grid">
           <article class="admin-panel">
@@ -78,11 +87,11 @@
                   <option value="expired">Expired</option>
                   <option value="paid">Paid</option>
                 </select>
-                <button class="admin-button tiny ghost" type="submit">Filtrar</button>
+                <button class="admin-button tiny ghost" type="submit" data-testid="admin-premium-filter">Filtrar</button>
               </form>
             </div>
             <div class="admin-table-wrap">
-              <table class="admin-table">
+              <table class="admin-table" data-testid="premium-table">
                 <thead>
                   <tr>
                     <th>Email</th>
@@ -95,6 +104,7 @@
                 <tbody data-premium-rows></tbody>
               </table>
             </div>
+            <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
           </article>
 
           <article class="admin-panel">
@@ -113,11 +123,11 @@
                   <option value="noindex">Noindex</option>
                   <option value="archived">Archived</option>
                 </select>
-                <button class="admin-button tiny ghost" type="submit">Filtrar</button>
+                <button class="admin-button tiny ghost" type="submit" data-testid="admin-seo-filter">Filtrar</button>
               </form>
             </div>
             <div class="admin-table-wrap">
-              <table class="admin-table">
+              <table class="admin-table" data-testid="seo-table">
                 <thead>
                   <tr>
                     <th>Landing</th>
@@ -130,6 +140,7 @@
                 <tbody data-seo-rows></tbody>
               </table>
             </div>
+            <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
             <div class="admin-pagination" data-seo-pagination></div>
           </article>
         </section>
@@ -161,7 +172,7 @@
               <span class="admin-kicker muted">Parking Intelligence</span>
               <h2>Parking</h2>
             </div>
-            <button class="admin-button tiny ghost" type="button" data-parking-refresh>Actualizar Parking</button>
+              <button class="admin-button tiny" type="button" data-parking-refresh data-testid="admin-action-refresh-parking">Actualizar Parking</button>
           </div>
           <p class="admin-kpi-note">
             Separa calle, SER, residentes, rotacion y garaje. El resultado es orientativo y auditable.
@@ -209,12 +220,12 @@
                 <span>URL anuncio</span>
                 <input type="url" name="source_url" value="https://anuncio.local/preview/109503975">
               </label>
-              <button class="admin-button" type="submit">Probar Parking Intelligence</button>
+              <button class="admin-button" type="submit" data-testid="admin-action-probe-parking">Probar Parking Intelligence</button>
             </form>
             <pre class="admin-parking-result" data-parking-result>{}</pre>
           </div>
           <div class="admin-table-wrap">
-            <table class="admin-table">
+            <table class="admin-table" data-testid="parking-table">
               <thead>
                 <tr>
                   <th>Zona</th>
@@ -227,8 +238,10 @@
               <tbody data-parking-rows></tbody>
             </table>
           </div>
+          <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
         </section>
       </section>
+      <p class="admin-info-marker">Mas informacion en InmoRadar.app</p>
     </section>
   </main>
 
