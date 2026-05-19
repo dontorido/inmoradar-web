@@ -9,6 +9,7 @@
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
     { "source": "/api/news", "destination": "/api/sitemap?format=news" },
     { "source": "/api/lemonsqueezy-portal", "destination": "/api/lemonsqueezy-checkout?resource=portal" },
+    { "source": "/api/extension-usage", "destination": "/api/extension-version?resource=usage" },
     { "source": "/api", "destination": "/api/health" },
     { "source": "/api/", "destination": "/api/health" },
     { "source": "/api/contact", "destination": "/api/market-price?resource=contact" },
