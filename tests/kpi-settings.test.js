@@ -15,10 +15,14 @@ test("kpi settings expose editable groups and defaults", () => {
   assert.ok(fieldPaths.includes("property_score.weights.price"));
   assert.ok(fieldPaths.includes("price_score.baseline"));
   assert.ok(fieldPaths.includes("zone_score.fallback_policy"));
+  assert.ok(fieldPaths.includes("pros_cons.market.expensive_pct"));
+  assert.ok(fieldPaths.includes("pros_cons.keywords.negative"));
   assert.ok(fieldPaths.includes("visibility.show_photo_analysis"));
   assert.equal(defaults.property_score.weights.price, 35);
   assert.equal(defaults.price_score.baseline, 6.4);
   assert.equal(defaults.zone_score.fallback_policy, "hide");
+  assert.equal(defaults.pros_cons.max_good, 5);
+  assert.equal(defaults.pros_cons.market.expensive_pct, 8);
   assert.equal(defaults.visibility.show_photo_analysis, false);
 });
 
@@ -39,6 +43,13 @@ test("kpi settings coercion clamps unsafe values", () => {
     },
     visibility: {
       show_static_zone_score: "true"
+    },
+    pros_cons: {
+      max_good: "99",
+      market: {
+        expensive_pct: "500"
+      },
+      fallback_policy: "invent"
     }
   });
 
@@ -48,6 +59,9 @@ test("kpi settings coercion clamps unsafe values", () => {
   assert.equal(settings.property_score.weights.price, 100);
   assert.equal(settings.zone_score.fallback_policy, "show_warning");
   assert.equal(settings.visibility.show_static_zone_score, true);
+  assert.equal(settings.pros_cons.max_good, 8);
+  assert.equal(settings.pros_cons.market.expensive_pct, 80);
+  assert.equal(settings.pros_cons.fallback_policy, "neutral");
 });
 
 test("market scoring uses editable kpi thresholds", () => {

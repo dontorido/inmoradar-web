@@ -744,6 +744,271 @@ const KPI_SETTINGS_SCHEMA = [
     ]
   },
   {
+    key: "pros_cons",
+    label: "Lo bueno / Lo malo",
+    description: "Motor de senales para ventajas, riesgos, confianza y prioridades visibles en la extension.",
+    fields: [
+      {
+        path: "pros_cons.enabled",
+        label: "Activar analisis",
+        type: "boolean",
+        defaultValue: true,
+        description: "Genera Lo bueno / Lo malo con reglas ponderadas en lugar de textos fijos."
+      },
+      {
+        path: "pros_cons.max_good",
+        label: "Maximo ventajas",
+        type: "number",
+        min: 1,
+        max: 8,
+        step: 1,
+        defaultValue: 5,
+        description: "Numero maximo de senales positivas que se muestran."
+      },
+      {
+        path: "pros_cons.max_bad",
+        label: "Maximo riesgos",
+        type: "number",
+        min: 1,
+        max: 8,
+        step: 1,
+        defaultValue: 5,
+        description: "Numero maximo de senales negativas que se muestran."
+      },
+      {
+        path: "pros_cons.minimum_confidence",
+        label: "Confianza minima",
+        type: "number",
+        min: 0,
+        max: 1,
+        step: 0.05,
+        defaultValue: 0.35,
+        description: "Por debajo se descartan senales debiles o puramente decorativas."
+      },
+      {
+        path: "pros_cons.fallback_policy",
+        label: "Si no hay senales",
+        type: "select",
+        defaultValue: "neutral",
+        options: [
+          { value: "neutral", label: "Mostrar neutral" },
+          { value: "hide", label: "Ocultar columna" },
+          { value: "legacy", label: "Fallback antiguo" }
+        ],
+        description: "Evita inventar ventajas o riesgos cuando el anuncio no aporta datos."
+      },
+      {
+        path: "pros_cons.show_details",
+        label: "Mostrar explicacion",
+        type: "boolean",
+        defaultValue: true,
+        description: "Incluye debajo de cada senal el motivo y el nivel de confianza."
+      },
+      {
+        path: "pros_cons.weights.price",
+        label: "Prioridad precio",
+        type: "number",
+        min: 0,
+        max: 5,
+        step: 0.1,
+        defaultValue: 1.5,
+        description: "Multiplicador de senales de precio frente a mercado."
+      },
+      {
+        path: "pros_cons.weights.features",
+        label: "Prioridad atributos",
+        type: "number",
+        min: 0,
+        max: 5,
+        step: 0.1,
+        defaultValue: 1,
+        description: "Multiplicador de terraza, ascensor, garaje, piscina y extras."
+      },
+      {
+        path: "pros_cons.weights.risk",
+        label: "Prioridad riesgos",
+        type: "number",
+        min: 0,
+        max: 5,
+        step: 0.1,
+        defaultValue: 1.4,
+        description: "Multiplicador de planta, reforma, datos pobres o fricciones legales."
+      },
+      {
+        path: "pros_cons.weights.environment",
+        label: "Prioridad entorno",
+        type: "number",
+        min: 0,
+        max: 5,
+        step: 0.1,
+        defaultValue: 1.1,
+        description: "Multiplicador de transporte, parking y senales urbanas."
+      },
+      {
+        path: "pros_cons.market.very_good_pct",
+        label: "Precio muy bueno",
+        type: "number",
+        min: -60,
+        max: 0,
+        step: 1,
+        suffix: "%",
+        defaultValue: -15,
+        description: "Diferencia frente a mercado para marcar una ventaja fuerte."
+      },
+      {
+        path: "pros_cons.market.good_pct",
+        label: "Precio bueno",
+        type: "number",
+        min: -60,
+        max: 0,
+        step: 1,
+        suffix: "%",
+        defaultValue: -5,
+        description: "Diferencia frente a mercado para marcar precio competitivo."
+      },
+      {
+        path: "pros_cons.market.expensive_pct",
+        label: "Precio caro",
+        type: "number",
+        min: 0,
+        max: 80,
+        step: 1,
+        suffix: "%",
+        defaultValue: 8,
+        description: "Diferencia desde la que el precio aparece como riesgo."
+      },
+      {
+        path: "pros_cons.market.very_expensive_pct",
+        label: "Precio muy caro",
+        type: "number",
+        min: 0,
+        max: 100,
+        step: 1,
+        suffix: "%",
+        defaultValue: 18,
+        description: "Diferencia para priorizar sobreprecio como riesgo principal."
+      },
+      {
+        path: "pros_cons.market.low_confidence_threshold",
+        label: "Mercado baja confianza",
+        type: "number",
+        min: 0,
+        max: 1,
+        step: 0.05,
+        defaultValue: 0.45,
+        description: "Por debajo se muestra aviso de referencia poco precisa."
+      },
+      {
+        path: "pros_cons.floor.high_without_lift",
+        label: "Planta alta sin ascensor",
+        type: "number",
+        min: 1,
+        max: 10,
+        step: 1,
+        defaultValue: 3,
+        description: "Desde esta planta, si no hay ascensor detectado, aparece como riesgo."
+      },
+      {
+        path: "pros_cons.floor.low_floor_max",
+        label: "Planta baja sensible",
+        type: "number",
+        min: 0,
+        max: 3,
+        step: 1,
+        defaultValue: 0,
+        description: "Planta maxima considerada baja para privacidad, ruido o luz."
+      },
+      {
+        path: "pros_cons.size.small_m2",
+        label: "Superficie pequena",
+        type: "number",
+        min: 10,
+        max: 120,
+        step: 1,
+        suffix: "m2",
+        defaultValue: 45,
+        description: "Por debajo aparece advertencia de superficie ajustada."
+      },
+      {
+        path: "pros_cons.size.large_m2",
+        label: "Superficie amplia",
+        type: "number",
+        min: 40,
+        max: 250,
+        step: 1,
+        suffix: "m2",
+        defaultValue: 95,
+        description: "Desde aqui se considera una ventaja de amplitud."
+      },
+      {
+        path: "pros_cons.size.tight_m2_per_room",
+        label: "m2/habitacion ajustado",
+        type: "number",
+        min: 8,
+        max: 45,
+        step: 1,
+        defaultValue: 18,
+        description: "Umbral para detectar distribucion apretada."
+      },
+      {
+        path: "pros_cons.size.spacious_m2_per_room",
+        label: "m2/habitacion amplio",
+        type: "number",
+        min: 12,
+        max: 60,
+        step: 1,
+        defaultValue: 28,
+        description: "Umbral para detectar buena relacion superficie/habitaciones."
+      },
+      {
+        path: "pros_cons.description.short_chars",
+        label: "Descripcion escueta",
+        type: "number",
+        min: 50,
+        max: 1200,
+        step: 25,
+        suffix: "chars",
+        defaultValue: 260,
+        description: "Por debajo se avisa de poca informacion en el anuncio."
+      },
+      {
+        path: "pros_cons.environment.transport_good_m",
+        label: "Transporte bueno",
+        type: "number",
+        min: 50,
+        max: 2000,
+        step: 50,
+        suffix: "m",
+        defaultValue: 500,
+        description: "Distancia maxima para marcar buena conexion de transporte."
+      },
+      {
+        path: "pros_cons.environment.parking_hard_threshold",
+        label: "Parking dificil",
+        type: "number",
+        min: 1,
+        max: 10,
+        step: 0.5,
+        defaultValue: 7,
+        description: "Score desde el que aparcar aparece como riesgo."
+      },
+      {
+        path: "pros_cons.keywords.positive",
+        label: "Keywords positivas",
+        type: "textarea",
+        defaultValue: "reformado:Buen estado aparente, a estrenar:Listo para entrar, obra nueva:Obra nueva, exterior:Exterior, luminoso:Buena luminosidad, terraza:Terraza, balcon:Balcon, garaje:Garaje, ascensor:Ascensor, aire acondicionado:Climatizacion",
+        description: "Formato palabra:etiqueta, separadas por coma. Sirve para adaptar copy sin tocar codigo."
+      },
+      {
+        path: "pros_cons.keywords.negative",
+        label: "Keywords negativas",
+        type: "textarea",
+        defaultValue: "a reformar:Necesita reforma, para reformar:Necesita reforma, origen:Estado antiguo, interior:Interior, bajo:Planta baja, sin ascensor:Sin ascensor, ocupado:Riesgo de ocupacion, nuda propiedad:Nuda propiedad, subasta:Subasta, sin posesion:Sin posesion",
+        description: "Formato palabra:etiqueta, separadas por coma. Se usan como riesgos o puntos a revisar."
+      }
+    ]
+  },
+  {
     key: "visibility",
     label: "Visibilidad en extension",
     description: "Interruptores para evitar KPIs decorativos o estaticos.",
