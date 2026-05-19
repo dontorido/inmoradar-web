@@ -21,7 +21,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Premium activado | InmoRadar</title>
   <meta name="robots" content="noindex">
-  <meta name="theme-color" content="#0f172a">
+  <meta name="theme-color" content="#111315">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="assets/styles.css">
 </head>
@@ -32,23 +32,29 @@
   <!-- End Google Tag Manager (noscript) -->
   <header class="site-header">
     <nav class="nav" aria-label="Principal">
-      <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"></span><span>InmoRadar</span></a>
-      <div class="nav-actions"><a class="button" href="index.html">Volver al inicio</a></div>
+      <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"></span><span><strong>Inmo</strong><em>Radar</em></span></a>
+      <div class="nav-actions">
+        <div class="language-switch" aria-label="Idioma">
+          <button type="button" data-lang="es" aria-pressed="true"><span aria-hidden="true">&#127466;&#127480;</span><span>ES</span></button>
+          <button type="button" data-lang="en" aria-pressed="false"><span aria-hidden="true">&#127468;&#127463;</span><span>EN</span></button>
+        </div>
+        <a class="button" href="index.html" data-i18n="success.home">Volver al inicio</a>
+      </div>
     </nav>
   </header>
   <main class="legal-main">
     <article class="legal-doc">
-      <span class="section-kicker">Premium</span>
-      <h1>Premium activado</h1>
-      <p>Gracias por activar InmoRadar Premium. Vuelve a la extensión para seguir analizando inmuebles.</p>
-      <p>La suscripción se sincroniza mediante Lemon Squeezy y puede tardar unos segundos en aparecer como activa.</p>
-      <p><a class="button" href="index.html">Ir a InmoRadar</a></p>
+      <span class="section-kicker" data-i18n="success.kicker">Premium</span>
+      <h1 data-i18n="success.title">Premium activado</h1>
+      <p data-i18n="success.copy1">Gracias por activar InmoRadar Premium. Vuelve a la extension para seguir analizando inmuebles.</p>
+      <p data-i18n="success.copy2">La suscripcion se sincroniza mediante Lemon Squeezy y puede tardar unos segundos en aparecer como activa.</p>
+      <p><a class="button" href="index.html" data-i18n="success.cta">Ir a InmoRadar</a></p>
       <form class="billing-form compact" data-portal-form>
         <label>
-          <span>Gestionar suscripcion</span>
-          <input type="email" name="email" autocomplete="email" placeholder="Email de compra">
+          <span data-i18n="success.manageLabel">Gestionar suscripcion</span>
+          <input type="email" name="email" autocomplete="email" placeholder="Email de compra" data-i18n-placeholder="premiumPage.emailPlaceholder">
         </label>
-        <button class="button secondary" type="submit">Abrir portal</button>
+        <button class="button secondary" type="submit" data-i18n="success.portal">Abrir portal</button>
       </form>
       <p class="status-note" data-portal-status></p>
     </article>
