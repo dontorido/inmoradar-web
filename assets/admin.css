@@ -1,4 +1,6 @@
 .admin-body {
+  --admin-radius: 12px;
+  --admin-radius-sm: 8px;
   min-height: 100vh;
   background: #BEBEBE;
   color: #0a0a0a;
@@ -62,6 +64,7 @@
   width: min(680px, 100%);
   margin: 96px auto 0;
   border: 1px solid #8f8f8f;
+  border-radius: var(--admin-radius);
   background: #ffffff;
   padding: 34px;
 }
@@ -135,6 +138,7 @@
 .admin-filter select {
   min-height: 40px;
   border: 1px solid #8f8f8f;
+  border-radius: var(--admin-radius-sm);
   background: #ffffff;
   color: #0a0a0a;
   padding: 0 12px;
@@ -152,6 +156,7 @@
 .admin-button {
   min-height: 40px;
   border: 1px solid var(--accent);
+  border-radius: var(--admin-radius-sm);
   background: var(--accent);
   color: #0a0a0a;
   cursor: pointer;
@@ -206,6 +211,7 @@
 .admin-tab {
   min-height: 40px;
   border: 1px solid #8f8f8f;
+  border-radius: var(--admin-radius-sm);
   background: rgba(255, 255, 255, .16);
   color: #0a0a0a;
   cursor: pointer;
@@ -255,8 +261,10 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1px;
   border: 1px solid #8f8f8f;
+  border-radius: var(--admin-radius);
   background: #d7d7d7;
   margin: 26px 0;
+  overflow: hidden;
 }
 
 .admin-stat-grid.compact {
@@ -297,7 +305,9 @@
 .admin-panel {
   min-width: 0;
   border: 1px solid #8f8f8f;
+  border-radius: var(--admin-radius);
   background: #ffffff;
+  overflow: hidden;
 }
 
 .admin-panel-head {
@@ -353,6 +363,7 @@
   min-height: 24px;
   padding: 0 8px;
   border: 1px solid #606060;
+  border-radius: 999px;
   background: #ffffff;
   color: #0a0a0a;
 }
@@ -394,6 +405,7 @@
 
 .admin-kpi-alert {
   border: 1px solid #b91c1c;
+  border-radius: var(--admin-radius-sm);
   background: #ffe2e2;
   color: #680c0c;
 }
@@ -410,7 +422,9 @@
 .admin-kpi-form {
   display: grid;
   gap: 1px;
+  border-radius: var(--admin-radius);
   background: #d7d7d7;
+  overflow: hidden;
 }
 
 .admin-kpi-group {
@@ -485,6 +499,7 @@
 .admin-kpi-field textarea {
   width: 100%;
   border: 1px solid #8f8f8f;
+  border-radius: var(--admin-radius-sm);
   background: #ffffff;
   color: #0a0a0a;
   padding: 0 12px;
@@ -514,8 +529,10 @@
   display: grid;
   grid-template-columns: minmax(260px, .42fr) minmax(0, 1fr);
   gap: 1px;
+  border-radius: var(--admin-radius);
   background: #d7d7d7;
   border-bottom: 1px solid #d7d7d7;
+  overflow: hidden;
 }
 
 .admin-parking-probe {
@@ -545,6 +562,7 @@
 .admin-parking-probe select {
   min-height: 40px;
   border: 1px solid #8f8f8f;
+  border-radius: var(--admin-radius-sm);
   background: #ffffff;
   color: #0a0a0a;
   padding: 0 12px;
@@ -568,6 +586,7 @@
   margin: 0;
   overflow: auto;
   border-left: 1px solid #d7d7d7;
+  border-radius: 0 var(--admin-radius) var(--admin-radius) 0;
   background: #ffffff;
   color: #0a0a0a;
   padding: 18px;
