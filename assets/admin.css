@@ -1433,3 +1433,311 @@
     min-height: 112px;
   }
 }
+
+/* Public web visual alignment */
+.admin-body {
+  --admin-cream: var(--bg);
+  --admin-dark: var(--ink);
+  --admin-dark-2: rgba(250, 250, 250, .86);
+  --admin-lime: var(--radar);
+  --admin-lime-deep: var(--radar);
+  --admin-line: rgba(9, 9, 11, .1);
+  --admin-muted: var(--muted);
+  --admin-lime-bg: var(--radar-50);
+  --admin-lime-text: var(--radar-700);
+  min-height: 100vh;
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(to right, rgba(9, 9, 11, .05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(9, 9, 11, .05) 1px, transparent 1px),
+    radial-gradient(rgba(9, 9, 11, .14) 1px, transparent 1px);
+  background-size: 56px 56px, 56px 56px, 18px 18px;
+}
+
+.admin-topbar {
+  min-height: 80px;
+  border-bottom: 1px solid rgba(9, 9, 11, .06);
+  background: rgba(250, 250, 250, .86);
+  color: var(--ink);
+  backdrop-filter: blur(18px);
+  background-image: none;
+}
+
+.admin-topbar .brand {
+  color: var(--ink);
+}
+
+.admin-topbar .brand-mark {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.admin-topbar .brand-mark::before {
+  display: block;
+  inset: 8px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+}
+
+.admin-topbar .brand-mark::after {
+  display: block;
+  top: 7px;
+  right: 7px;
+  bottom: auto;
+  left: auto;
+  width: 6px;
+  height: 6px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--radar);
+}
+
+.admin-topbar .brand em {
+  color: var(--radar);
+}
+
+.admin-brand-pill {
+  border: 1px solid rgba(9, 9, 11, .1);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--muted);
+}
+
+.admin-env {
+  color: var(--radar-700);
+}
+
+.admin-env::before {
+  box-shadow: 0 0 0 4px rgba(255, 69, 0, .12);
+}
+
+.admin-topbar .admin-button.ghost {
+  border: 1px solid rgba(9, 9, 11, .1);
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.admin-topbar .admin-button.ghost:hover {
+  border-color: rgba(9, 9, 11, .18);
+  background: rgba(9, 9, 11, .06);
+  color: var(--ink);
+}
+
+.admin-login,
+.admin-panel {
+  border: 1px solid rgba(9, 9, 11, .1);
+  border-radius: 32px;
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+}
+
+.admin-login {
+  margin-top: 64px;
+  padding: clamp(28px, 4vw, 44px);
+}
+
+.admin-login h1 {
+  font-size: clamp(52px, 8vw, 92px);
+}
+
+.admin-heading h1 {
+  color: var(--ink);
+}
+
+.admin-kicker,
+.admin-heading .admin-kicker,
+.admin-kicker.muted {
+  color: var(--radar);
+}
+
+.admin-tab {
+  border: 1px solid rgba(9, 9, 11, .1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .74);
+  color: var(--ink);
+  box-shadow: none;
+}
+
+.admin-tab:hover {
+  border-color: rgba(9, 9, 11, .18);
+  background: rgba(9, 9, 11, .06);
+}
+
+.admin-tab.active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.admin-button {
+  background: var(--radar);
+  color: #ffffff;
+  box-shadow: var(--shadow-radar);
+}
+
+.admin-button:hover {
+  background: var(--radar-600);
+  color: #ffffff;
+}
+
+.admin-button.ghost {
+  border: 1px solid rgba(9, 9, 11, .1);
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: none;
+}
+
+.admin-button.ghost:hover {
+  border-color: rgba(9, 9, 11, .18);
+  background: rgba(9, 9, 11, .06);
+  color: var(--ink);
+}
+
+.admin-button.secondary {
+  background: var(--ink);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.admin-panel-head,
+.admin-stat,
+.admin-table th,
+.admin-table td,
+.admin-pagination,
+.admin-kpi-note,
+.admin-kpi-meta,
+.admin-kpi-group,
+.admin-kpi-group-title,
+.admin-kpi-field,
+.admin-parking-grid,
+.admin-parking-result,
+.admin-table-hint {
+  border-color: rgba(9, 9, 11, .1);
+}
+
+.admin-panel h2 {
+  color: var(--ink);
+}
+
+.admin-panel-sub,
+.admin-subtle,
+.admin-kpi-note {
+  color: var(--muted);
+}
+
+.admin-stat-grid,
+.admin-stat,
+.admin-kpi-form,
+.admin-kpi-group,
+.admin-kpi-fields,
+.admin-kpi-field,
+.admin-parking-grid,
+.admin-parking-probe,
+.admin-table-wrap {
+  background: #ffffff;
+}
+
+.admin-stat strong {
+  color: var(--ink);
+}
+
+.admin-stat span,
+.admin-filter span,
+.admin-table th,
+.admin-kpi-field > span,
+.admin-parking-probe span {
+  color: var(--muted);
+}
+
+.admin-token-form input,
+.admin-filter input,
+.admin-filter select,
+.admin-kpi-field input,
+.admin-kpi-field select,
+.admin-kpi-field textarea,
+.admin-parking-probe input,
+.admin-parking-probe select {
+  border-color: rgba(9, 9, 11, .1);
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.admin-token-form input:focus,
+.admin-filter input:focus,
+.admin-filter select:focus,
+.admin-kpi-field input:focus,
+.admin-kpi-field select:focus,
+.admin-kpi-field textarea:focus,
+.admin-parking-probe input:focus,
+.admin-parking-probe select:focus {
+  border-color: var(--radar);
+  box-shadow: 0 0 0 4px rgba(255, 69, 0, .12);
+}
+
+.admin-table th,
+.admin-pagination,
+.admin-kpi-meta,
+.admin-table-hint {
+  background: rgba(250, 250, 250, .72);
+}
+
+.admin-table tbody tr:hover {
+  background: rgba(255, 241, 235, .45);
+}
+
+.admin-table a {
+  color: var(--ink);
+  text-decoration-color: rgba(255, 69, 0, .36);
+}
+
+.admin-table a:hover {
+  color: var(--radar-700);
+  text-decoration-color: var(--radar);
+}
+
+.admin-chip.ready {
+  border-color: rgba(255, 69, 0, .22);
+  background: var(--radar-50);
+  color: var(--radar-700);
+}
+
+.admin-chip.score.good {
+  border-color: rgba(22, 163, 74, .28);
+  background: rgba(22, 163, 74, .1);
+  color: #166534;
+}
+
+.admin-chip.published {
+  border-color: rgba(22, 163, 74, .28);
+  background: rgba(22, 163, 74, .1);
+  color: #166534;
+}
+
+.admin-chip.warn {
+  border-color: rgba(244, 165, 35, .36);
+}
+
+.admin-icon-button {
+  border-color: rgba(9, 9, 11, .1);
+  color: var(--ink);
+}
+
+.admin-icon-button:hover {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #ffffff;
+}
+
+.admin-parking-result {
+  background: var(--bg);
+}
+
+.admin-info-marker {
+  color: var(--muted);
+}
