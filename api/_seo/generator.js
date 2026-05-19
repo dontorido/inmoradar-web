@@ -1,5 +1,5 @@
 const { hasSupabaseConfig, supabaseFetch } = require("../_utils");
-const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("./cityGuideTemplates");
+const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../../lib/seo/cityGuideTemplates");
 const { buildPriceCitySourceData } = require("./marketSources");
 const { buildPriceCityLanding } = require("./priceCity");
 const { calculateSeoLandingQuality } = require("./quality");
