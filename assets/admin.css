@@ -357,6 +357,33 @@
   text-decoration-color: var(--accent);
 }
 
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid #d7d7d7;
+  background: #f7f7f7;
+  color: #525252;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.admin-pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-pagination .admin-button[disabled] {
+  cursor: not-allowed;
+  opacity: .35;
+}
+
 .admin-chip {
   display: inline-flex;
   align-items: center;
@@ -607,7 +634,8 @@
 
   .admin-heading,
   .admin-panel-head,
-  .admin-view-toolbar {
+  .admin-view-toolbar,
+  .admin-pagination {
     align-items: flex-start;
     flex-direction: column;
   }
