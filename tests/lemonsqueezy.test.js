@@ -2,8 +2,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 
-const { buildCheckoutPayload } = require("../api/lemonsqueezy-checkout");
-const { verifyLemonSignature } = require("../api/_utils");
+const { buildCheckoutPayload, getCustomerPortalUrl } = require("../api/lemonsqueezy-checkout");
+const { isPremiumActive, verifyLemonSignature } = require("../api/_utils");
 
 function mockReq() {
   return {
@@ -45,4 +45,39 @@ test("verifyLemonSignature valida HMAC SHA256 de Lemon Squeezy", () => {
 
   assert.equal(verifyLemonSignature(rawBody, signature, secret), true);
   assert.equal(verifyLemonSignature(rawBody, "bad-signature", secret), false);
+});
+
+test("getCustomerPortalUrl construye el portal de cliente desde la tienda", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    assert.equal(url, "https://api.lemonsqueezy.com/v1/stores/123");
+    assert.equal(options.headers.authorization, "Bearer test_key");
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        data: {
+          attributes: {
+            url: "https://inmoradar.lemonsqueezy.com"
+          }
+        }
+      })
+    };
+  };
+
+  try {
+    const portalUrl = await getCustomerPortalUrl({ storeId: "123", apiKey: "test_key" });
+    assert.equal(portalUrl, "https://inmoradar.lemonsqueezy.com/billing");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("isPremiumActive mantiene acceso si la suscripcion cancelada aun no ha vencido", () => {
+  const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const past = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  assert.equal(isPremiumActive({ status: "cancelled", ends_at: future }), true);
+  assert.equal(isPremiumActive({ status: "cancelled", ends_at: past }), false);
+  assert.equal(isPremiumActive({ status: "expired", ends_at: future }), false);
 });

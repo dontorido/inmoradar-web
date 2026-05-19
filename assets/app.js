@@ -1,5 +1,6 @@
 const WAITLIST_EMAIL = "hola@inmoradar.app";
 const CHECKOUT_ENDPOINT = "/api/lemonsqueezy-checkout";
+const PORTAL_ENDPOINT = "/api/lemonsqueezy-portal";
 
 function showCheckoutStatus(message) {
   document.querySelectorAll("[data-checkout-status]").forEach((node) => {
@@ -9,6 +10,19 @@ function showCheckoutStatus(message) {
 
 function setCheckoutButtonsLoading(isLoading) {
   document.querySelectorAll("[data-checkout-button]").forEach((button) => {
+    button.disabled = isLoading;
+    button.setAttribute("aria-busy", isLoading ? "true" : "false");
+  });
+}
+
+function showPortalStatus(message) {
+  document.querySelectorAll("[data-portal-status]").forEach((node) => {
+    node.textContent = message;
+  });
+}
+
+function setPortalFormsLoading(isLoading) {
+  document.querySelectorAll("[data-portal-form] button").forEach((button) => {
     button.disabled = isLoading;
     button.setAttribute("aria-busy", isLoading ? "true" : "false");
   });
@@ -45,10 +59,50 @@ async function openCheckout(source) {
   }
 }
 
+async function openCustomerPortal(email) {
+  showPortalStatus("Abriendo portal seguro de Lemon Squeezy...");
+  setPortalFormsLoading(true);
+
+  try {
+    const response = await fetch(PORTAL_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ email })
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok || !payload.portal_url) {
+      if (payload.error === "lemonsqueezy_not_configured") {
+        throw new Error("Falta configurar Lemon Squeezy en Vercel.");
+      }
+      throw new Error(payload.message || "No se ha podido abrir el portal.");
+    }
+
+    showPortalStatus("Te llevamos al portal de Lemon Squeezy. Si te lo pide, confirma tu email con magic link.");
+    window.location.href = payload.portal_url;
+  } catch (error) {
+    showPortalStatus(`${error.message} Escribenos y te ayudamos con la baja.`);
+    window.location.href = `mailto:${WAITLIST_EMAIL}?subject=Gestionar%20o%20cancelar%20InmoRadar%20Premium&body=Hola,%20quiero%20gestionar%20o%20cancelar%20mi%20suscripci%C3%B3n%20Premium.%0AEmail%20de%20compra:%20${encodeURIComponent(email || "")}`;
+  } finally {
+    setPortalFormsLoading(false);
+  }
+}
+
 document.querySelectorAll("[data-checkout-button]").forEach((button) => {
   button.addEventListener("click", () => {
     const source = button.dataset.checkoutSource || "premium_page";
     openCheckout(source);
+  });
+});
+
+document.querySelectorAll("[data-portal-form]").forEach((form) => {
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = new FormData(form);
+    const email = String(data.get("email") || "").trim();
+    openCustomerPortal(email);
   });
 });
 

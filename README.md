@@ -15,7 +15,7 @@ Web estatica de lanzamiento para InmoRadar.
 - `robots.txt` y `sitemap.xml`.
 - `_redirects` y `vercel.json` para que `/premium`, `/privacidad`, `/terminos`, `/success` y `/cancel` funcionen en Netlify/Vercel.
 - `api/check-premium.js`: endpoint para que la extension compruebe si un email tiene Premium.
-- `api/lemonsqueezy-checkout.js`: crea checkouts de Lemon Squeezy en modo prueba o produccion sin exponer la API key.
+- `api/lemonsqueezy-checkout.js`: crea checkouts y abre el Customer Portal de Lemon Squeezy en modo prueba o produccion sin exponer la API key.
 - `api/lemonsqueezy-webhook.js`: webhook preparado para sincronizar suscripciones de Lemon Squeezy.
 - `admin.html`, `assets/admin.js` y `assets/admin.css`: backoffice protegido por `ADMIN_IMPORT_TOKEN`.
 - `api/admin.js`: backoffice API compacta para Premium, SEO, KPIs y estado de integraciones. Se usa una sola serverless function para respetar el limite de Vercel Hobby.
@@ -90,6 +90,14 @@ El endpoint de checkout quedara en:
 ```text
 https://www.inmoradar.app/api/lemonsqueezy-checkout
 ```
+
+Portal de cliente para gestionar o cancelar suscripcion:
+
+```text
+POST /api/lemonsqueezy-portal
+```
+
+Este endpoint reutiliza la funcion de checkout mediante rewrite de Vercel y devuelve el Customer Portal oficial de Lemon Squeezy (`/billing`). El cliente entra con magic link de Lemon, puede cancelar la renovacion, cambiar tarjeta y ver facturas. Si una suscripcion queda `cancelled` pero tiene `ends_at` futuro, InmoRadar mantiene Premium hasta el final del periodo ya pagado.
 
 ## Backoffice
 

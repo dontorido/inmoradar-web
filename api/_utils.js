@@ -140,9 +140,14 @@ async function supabaseFetch(path, options = {}) {
 function isPremiumActive(subscription) {
   if (!subscription) return false;
   const status = String(subscription.status || "").toLowerCase();
-  if (!ACTIVE_STATUSES.has(status)) return false;
-  if (!subscription.ends_at) return true;
-  return new Date(subscription.ends_at).getTime() > Date.now();
+  const endsAt = subscription.ends_at ? new Date(subscription.ends_at).getTime() : null;
+  if (ACTIVE_STATUSES.has(status)) {
+    return !endsAt || endsAt > Date.now();
+  }
+  if (status === "cancelled") {
+    return Boolean(endsAt && endsAt > Date.now());
+  }
+  return false;
 }
 
 module.exports = {

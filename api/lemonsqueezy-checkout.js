@@ -1,6 +1,11 @@
 const { handleCors, isEmail, json, normalizeEmail, readRawBody } = require("./_utils");
 
 const LEMON_API_URL = "https://api.lemonsqueezy.com/v1/checkouts";
+const LEMON_BASE_API_URL = "https://api.lemonsqueezy.com/v1";
+let portalUrlCache = {
+  expiresAt: 0,
+  value: null
+};
 
 function siteUrl(req) {
   const configured = process.env.PUBLIC_SITE_URL || process.env.SITE_URL;
@@ -100,14 +105,21 @@ function buildCheckoutPayload({ config, email, source, req }) {
 }
 
 async function createLemonCheckout(payload, apiKey) {
-  const response = await fetch(LEMON_API_URL, {
+  return lemonRequest(LEMON_API_URL, apiKey, {
     method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+async function lemonRequest(url, apiKey, options = {}) {
+  const response = await fetch(url, {
+    ...options,
     headers: {
       accept: "application/vnd.api+json",
       "content-type": "application/vnd.api+json",
-      authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify(payload)
+      authorization: `Bearer ${apiKey}`,
+      ...(options.headers || {})
+    }
   });
 
   const text = await response.text();
@@ -125,6 +137,31 @@ async function createLemonCheckout(payload, apiKey) {
     throw error;
   }
   return data;
+}
+
+async function getCustomerPortalUrl(config) {
+  if (portalUrlCache.expiresAt > Date.now() && portalUrlCache.value) {
+    return portalUrlCache.value;
+  }
+
+  const store = await lemonRequest(`${LEMON_BASE_API_URL}/stores/${encodeURIComponent(config.storeId)}`, config.apiKey);
+  const baseUrl = String(store?.data?.attributes?.url || "").replace(/\/+$/, "");
+  if (!baseUrl) {
+    throw new Error("No se ha podido obtener la URL de la tienda de Lemon Squeezy.");
+  }
+
+  const portalUrl = `${baseUrl}/billing`;
+  portalUrlCache = {
+    expiresAt: Date.now() + 10 * 60 * 1000,
+    value: portalUrl
+  };
+  return portalUrl;
+}
+
+function isPortalRequest(req, url, body) {
+  const resource = url.searchParams.get("resource");
+  const mode = body.mode || body.action || url.searchParams.get("mode");
+  return resource === "portal" || mode === "portal";
 }
 
 module.exports = async function handler(req, res) {
@@ -155,6 +192,15 @@ module.exports = async function handler(req, res) {
       return;
     }
 
+    if (isPortalRequest(req, url, body)) {
+      json(res, 200, {
+        ok: true,
+        portal_url: await getCustomerPortalUrl(config),
+        test_mode: Boolean(config.testMode)
+      });
+      return;
+    }
+
     const payload = buildCheckoutPayload({ config, email, source, req });
     const checkout = await createLemonCheckout(payload, config.apiKey);
     const checkoutUrl = checkout?.data?.attributes?.url;
@@ -180,4 +226,5 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.buildCheckoutPayload = buildCheckoutPayload;
+module.exports.getCustomerPortalUrl = getCustomerPortalUrl;
 module.exports.lemonConfig = lemonConfig;
