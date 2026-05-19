@@ -17,6 +17,7 @@ const {
   runwaySettings
 } = require("../lib/social-video/runway");
 const { summarizeExtensionUsage } = require("../lib/extension-usage/metrics");
+const { buildRevenueEventFromLemonPayload, summarizeMonthlyRevenue } = require("../lib/sales/revenue");
 
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at";
@@ -86,12 +87,29 @@ function routeFromRequest(req) {
 }
 
 async function handleSummary() {
-  const [premiumResult, recentPremiumResult, landingResult, recentLandingResult, opportunityResult, parkingResult] =
-    await Promise.all([
+  const revenueSince = new Date();
+  revenueSince.setUTCMonth(revenueSince.getUTCMonth() - 11);
+  revenueSince.setUTCDate(1);
+  revenueSince.setUTCHours(0, 0, 0, 0);
+
+  const [
+    premiumResult,
+    recentPremiumResult,
+    revenueResult,
+    legacyRevenueResult,
+    landingResult,
+    recentLandingResult,
+    opportunityResult,
+    parkingResult
+  ] = await Promise.all([
       safeFetch("premium_subscriptions?select=status,updated_at&limit=1000"),
       safeFetch(
         "premium_subscriptions?select=email,status,renews_at,ends_at,trial_ends_at,provider,provider_subscription_id,event_name,updated_at,created_at&order=updated_at.desc&limit=8"
       ),
+      safeFetch(
+        `premium_revenue_events?select=amount_cents,currency,occurred_at,event_name&occurred_at=gte.${revenueSince.toISOString()}&order=occurred_at.asc&limit=5000`
+      ),
+      safeFetch("premium_subscriptions?select=email,event_name,raw_event,created_at,updated_at&limit=1000"),
       safeFetch("seo_landings?select=status,index_status,quality_score,published_at&limit=1000"),
       safeFetch(
         "seo_landings?select=id,slug,title,city,template_type,status,index_status,quality_score,word_count,updated_at,published_at&order=updated_at.desc&limit=8"
@@ -101,6 +119,18 @@ async function handleSummary() {
     ]);
 
   const premiumRows = Array.isArray(premiumResult) ? premiumResult : premiumResult.rows;
+  const revenueRows = Array.isArray(revenueResult) ? revenueResult : revenueResult.rows;
+  const legacyRevenueRows = Array.isArray(legacyRevenueResult) ? legacyRevenueResult : legacyRevenueResult.rows;
+  const legacyRevenueEvents = legacyRevenueRows
+    .map((row) => buildRevenueEventFromLemonPayload(row.raw_event, row.event_name))
+    .filter(Boolean);
+  const useLegacyRevenue = !revenueRows.length && legacyRevenueEvents.length;
+  const revenue = {
+    ...summarizeMonthlyRevenue(useLegacyRevenue ? legacyRevenueEvents : revenueRows, { months: 12 }),
+    source: useLegacyRevenue ? "premium_subscriptions.raw_event" : "premium_revenue_events",
+    table_missing: !Array.isArray(revenueResult) && /premium_revenue_events/.test(revenueResult.error || ""),
+    error: revenueResult.error || null
+  };
   const landingRows = Array.isArray(landingResult) ? landingResult : landingResult.rows;
   const opportunityRows = Array.isArray(opportunityResult) ? opportunityResult : opportunityResult.rows;
   const parkingRows = Array.isArray(parkingResult) ? parkingResult : parkingResult.rows;
@@ -125,6 +155,7 @@ async function handleSummary() {
       recent: Array.isArray(recentPremiumResult) ? recentPremiumResult : recentPremiumResult.rows,
       error: premiumResult.error || recentPremiumResult.error || null
     },
+    revenue,
     seo: {
       total_landings: landingRows.length,
       by_status: countBy(landingRows, "status"),

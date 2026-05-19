@@ -55,6 +55,8 @@ const els = {
   refresh: document.querySelector("[data-admin-refresh]"),
   env: document.querySelector("[data-admin-env]"),
   stats: document.querySelector("[data-admin-stats]"),
+  revenueSummary: document.querySelector("[data-revenue-summary]"),
+  revenueChart: document.querySelector("[data-revenue-chart]"),
   extensionStats: document.querySelector("[data-extension-stats]"),
   extensionBreakdown: document.querySelector("[data-extension-breakdown]"),
   premiumRows: document.querySelector("[data-premium-rows]"),
@@ -307,6 +309,66 @@ function renderStats(summary) {
       hint: "Eventos de pago confirmados"
     })
   ].join("");
+}
+
+function formatMoneyCents(cents, currency = "EUR") {
+  const amount = Number(cents || 0) / 100;
+  try {
+    return new Intl.NumberFormat("es-ES", {
+      style: "currency",
+      currency: currency || "EUR",
+      maximumFractionDigits: Number.isInteger(amount) ? 0 : 2
+    }).format(amount);
+  } catch (error) {
+    return `${amount.toFixed(Number.isInteger(amount) ? 0 : 2)} ${currency || "EUR"}`;
+  }
+}
+
+function renderRevenue(revenue = {}) {
+  if (!els.revenueSummary || !els.revenueChart) return;
+  const currency = revenue.currency || "EUR";
+  const months = revenue.months || [];
+  const maxRevenue = Number(revenue.max_month_revenue_cents || Math.max(0, ...months.map((item) => Number(item.revenue_cents || 0))));
+  const paymentCount = Number(revenue.payment_count || 0);
+
+  els.revenueSummary.innerHTML = [
+    stat("Ingresos 12m", formatMoneyCents(revenue.total_revenue_cents, currency), {
+      id: "revenue-total",
+      hint: `${paymentCount} cobros registrados`
+    }),
+    stat("Mes actual", formatMoneyCents(revenue.current_month_revenue_cents, currency), {
+      id: "revenue-current-month",
+      hint: "Cobros confirmados este mes"
+    }),
+    stat("Media mensual", formatMoneyCents(revenue.average_monthly_revenue_cents, currency), {
+      id: "revenue-average",
+      hint: "Media sobre la ventana visible"
+    })
+  ].join("");
+
+  if (revenue.table_missing) {
+    els.revenueChart.innerHTML = `<p class="admin-empty-state compact">Falta la tabla <strong>premium_revenue_events</strong>. Ejecuta <strong>database/premium-revenue-events.sql</strong> y los siguientes webhooks de Lemon empezaran a llenar la grafica.</p>`;
+    return;
+  }
+
+  const bars = months
+    .map((month) => {
+      const value = Number(month.revenue_cents || 0);
+      const height = maxRevenue ? Math.max(5, Math.round((value / maxRevenue) * 100)) : 3;
+      return `
+        <div class="admin-revenue-month" title="${escapeHtml(month.label)}: ${escapeHtml(formatMoneyCents(value, currency))}">
+          <div class="admin-revenue-track"><i style="--revenue-height:${height}%"></i></div>
+          <strong>${escapeHtml(month.label || "-")}</strong>
+          <span>${escapeHtml(formatMoneyCents(value, currency))}</span>
+        </div>
+      `;
+    })
+    .join("");
+
+  els.revenueChart.innerHTML = `
+    ${paymentCount ? "" : `<p class="admin-empty-state compact">Sin cobros registrados todavia. La grafica se llenara con eventos de pago reales.</p>`}
+    <div class="admin-revenue-bars">${bars}</div>
+  `;
 }
 
 function formatDuration(seconds) {
@@ -1613,6 +1675,7 @@ function downloadVideoHtml() {
 async function loadSummary() {
   const summary = await api("/api/admin?resource=summary");
   renderStats(summary);
+  renderRevenue(summary.revenue);
 }
 
 async function loadPremium() {

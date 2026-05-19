@@ -7,6 +7,7 @@ const {
   supabaseFetch,
   verifyLemonSignature
 } = require("./_utils");
+const { buildRevenueEventFromLemonPayload } = require("../lib/sales/revenue");
 
 function pickEmail(attributes, meta) {
   return normalizeEmail(
@@ -52,6 +53,22 @@ function subscriptionRow(payload, eventName) {
   };
 }
 
+async function storeRevenueEvent(payload, eventName) {
+  const revenueEvent = buildRevenueEventFromLemonPayload(payload, eventName);
+  if (!revenueEvent) return;
+  try {
+    await supabaseFetch("premium_revenue_events?on_conflict=provider_event_id", {
+      method: "POST",
+      headers: {
+        prefer: "resolution=ignore-duplicates,return=minimal"
+      },
+      body: JSON.stringify(revenueEvent)
+    });
+  } catch (error) {
+    console.warn("[lemonsqueezy-webhook] premium_revenue_events not stored", error.message);
+  }
+}
+
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
   if (req.method !== "POST") {
@@ -89,6 +106,7 @@ module.exports = async function handler(req, res) {
       },
       body: JSON.stringify(row)
     });
+    await storeRevenueEvent(payload, eventName);
 
     json(res, 200, { ok: true, event_name: eventName });
   } catch (error) {
