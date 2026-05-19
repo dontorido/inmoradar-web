@@ -16,6 +16,7 @@ const {
   getRunwayTask,
   runwaySettings
 } = require("../lib/social-video/runway");
+const { summarizeExtensionUsage } = require("../lib/extension-usage/metrics");
 
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at";
@@ -215,6 +216,46 @@ async function handlePremiumSubscriptions(url) {
     count: Array.isArray(rows) ? rows.length : 0,
     subscriptions: Array.isArray(rows) ? rows : []
   };
+}
+
+async function handleExtensionUsageSummary() {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const params = new URLSearchParams({
+    select:
+      "event_name,anonymous_id_hash,session_id_hash,browser_name,browser_version,platform,country,extension_version,duration_seconds,active_seconds,created_at",
+    created_at: `gte.${since}`,
+    order: "created_at.desc",
+    limit: "5000"
+  });
+
+  try {
+    const rows = await supabaseFetch(`extension_usage_events?${params.toString()}`);
+    return {
+      ok: true,
+      generated_at: new Date().toISOString(),
+      window_days: 30,
+      ...summarizeExtensionUsage(Array.isArray(rows) ? rows : [])
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      generated_at: new Date().toISOString(),
+      window_days: 30,
+      total_events: 0,
+      unique_users_30d: 0,
+      active_users_7d: 0,
+      active_users_24h: 0,
+      sessions_30d: 0,
+      active_seconds_30d: 0,
+      average_session_seconds: 0,
+      by_browser: [],
+      by_country: [],
+      by_extension_version: [],
+      by_event_name: [],
+      table_missing: /extension_usage_events/.test(error.message),
+      error: error.message
+    };
+  }
 }
 
 async function fetchLanding(slug) {
@@ -705,6 +746,10 @@ module.exports = async function handler(req, res) {
     if (resource === "premium/subscriptions") {
       if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
       return json(res, 200, await handlePremiumSubscriptions(url));
+    }
+    if (resource === "extension/usage") {
+      if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
+      return json(res, 200, await handleExtensionUsageSummary());
     }
     if (resource === "seo/landings") {
       if (!["GET", "POST"].includes(req.method)) return json(res, 405, { ok: false, error: "method_not_allowed" });

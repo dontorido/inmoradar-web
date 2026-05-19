@@ -55,6 +55,8 @@ const els = {
   refresh: document.querySelector("[data-admin-refresh]"),
   env: document.querySelector("[data-admin-env]"),
   stats: document.querySelector("[data-admin-stats]"),
+  extensionStats: document.querySelector("[data-extension-stats]"),
+  extensionBreakdown: document.querySelector("[data-extension-breakdown]"),
   premiumRows: document.querySelector("[data-premium-rows]"),
   seoRows: document.querySelector("[data-seo-rows]"),
   seoPagination: document.querySelector("[data-seo-pagination]"),
@@ -304,6 +306,81 @@ function renderStats(summary) {
       id: "premium-paid",
       hint: "Eventos de pago confirmados"
     })
+  ].join("");
+}
+
+function formatDuration(seconds) {
+  const total = Number(seconds || 0);
+  if (!total) return "0 min";
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.round((total % 3600) / 60);
+  if (hours) return `${hours}h ${minutes}m`;
+  return `${Math.max(1, minutes)} min`;
+}
+
+function renderUsageList(title, rows) {
+  const items = (rows || []).slice(0, 6);
+  const total = items.reduce((sum, item) => sum + Number(item.count || 0), 0) || 1;
+  return `
+    <section class="admin-extension-card">
+      <span>${escapeHtml(title)}</span>
+      ${
+        items.length
+          ? items
+              .map((item) => {
+                const pct = Math.max(4, Math.round((Number(item.count || 0) / total) * 100));
+                return `
+                  <div class="admin-extension-row">
+                    <strong>${escapeHtml(item.label || "unknown")}</strong>
+                    <em>${escapeHtml(item.count || 0)}</em>
+                    <i style="--usage-pct:${pct}%"></i>
+                  </div>
+                `;
+              })
+              .join("")
+          : `<p class="admin-empty-state compact">Sin datos todavia.</p>`
+      }
+    </section>
+  `;
+}
+
+function renderExtensionUsage(payload) {
+  if (!els.extensionStats || !els.extensionBreakdown) return;
+  if (!payload?.ok && payload?.table_missing) {
+    els.extensionStats.innerHTML = [
+      stat("Usuarios 30d", 0, { id: "extension-users", hint: "Ejecuta database/extension-usage-events.sql" }),
+      stat("Activos 7d", 0, { id: "extension-active-7d" }),
+      stat("Sesiones 30d", 0, { id: "extension-sessions" }),
+      stat("Tiempo uso", "0 min", { id: "extension-usage-time" })
+    ].join("");
+    els.extensionBreakdown.innerHTML = `<p class="admin-empty-state compact">Falta la tabla <strong>extension_usage_events</strong>. Cuando exista y la extensión envíe eventos, aquí aparecerán navegador, país, versión y eventos.</p>`;
+    return;
+  }
+
+  els.extensionStats.innerHTML = [
+    stat("Usuarios 30d", payload.unique_users_30d || 0, {
+      id: "extension-users",
+      hint: "Personas anonimas distintas usando la extension"
+    }),
+    stat("Activos 7d", payload.active_users_7d || 0, {
+      id: "extension-active-7d",
+      hint: `${payload.active_users_24h || 0} activos en 24h`
+    }),
+    stat("Sesiones 30d", payload.sessions_30d || 0, {
+      id: "extension-sessions",
+      hint: `${payload.total_events || 0} eventos registrados`
+    }),
+    stat("Tiempo uso", formatDuration(payload.active_seconds_30d), {
+      id: "extension-usage-time",
+      hint: `Media sesion ${formatDuration(payload.average_session_seconds)}`
+    })
+  ].join("");
+
+  els.extensionBreakdown.innerHTML = [
+    renderUsageList("Navegador", payload.by_browser),
+    renderUsageList("Pais", payload.by_country),
+    renderUsageList("Version", payload.by_extension_version),
+    renderUsageList("Evento", payload.by_event_name)
   ].join("");
 }
 
@@ -1550,6 +1627,12 @@ async function loadPremium() {
   renderPremium(payload.subscriptions || []);
 }
 
+async function loadExtensionUsage() {
+  if (!els.extensionStats) return;
+  const payload = await api("/api/admin?resource=extension/usage");
+  renderExtensionUsage(payload);
+}
+
 async function loadSeo() {
   const params = new URLSearchParams({
     limit: String(state.seo.pageSize || 10),
@@ -1596,7 +1679,7 @@ async function loadAll() {
   if (!state.token) return;
   showStatus("Cargando backoffice...");
   try {
-    await Promise.all([loadSummary(), loadPremium(), loadSeo(), loadKpis(), loadParking(), loadRunwayConfig()]);
+    await Promise.all([loadSummary(), loadPremium(), loadExtensionUsage(), loadSeo(), loadKpis(), loadParking(), loadRunwayConfig()]);
     showStatus(`Actualizado ${formatDate(new Date().toISOString())}`, "good");
   } catch (error) {
     if (error.status === 401) {
