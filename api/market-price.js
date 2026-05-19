@@ -1,10 +1,9 @@
-const { handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
+const { handleCors, hasSupabaseConfig, json, supabaseFetch } = require("./_utils");
 const {
   buildAddressIntelligenceResponse,
   calculateAddressPriceAdjustment,
   checkAddressRateLimit
 } = require("./_address/intelligence");
-const { buildPhotoConditionAnalysisResponse } = require("./_photo/analysis");
 
 const GEO_CONFIDENCE = {
   neighbourhood: 0.85,
@@ -744,31 +743,15 @@ function clientKey(req) {
   );
 }
 
-async function jsonBodyFromRequest(req) {
-  if (req.body && typeof req.body === "object") return req.body;
-  const rawBody = await readRawBody(req);
-  if (!rawBody) return {};
-  try {
-    return JSON.parse(rawBody);
-  } catch {
-    return null;
-  }
-}
-
-async function photoConditionAnalysisPayload(req) {
-  const body = await jsonBodyFromRequest(req);
-  if (body === null) {
-    return {
-      status: 400,
-      body: {
-        ok: false,
-        error: "invalid_json",
-        message: "El cuerpo de la peticion no es JSON valido."
-      }
-    };
-  }
-  const result = await buildPhotoConditionAnalysisResponse(body, { clientKey: clientKey(req) });
-  return { status: result.status, body: result.body };
+async function photoConditionAnalysisPayload() {
+  return {
+    status: 410,
+    body: {
+      ok: false,
+      error: "photo_analysis_disabled",
+      message: "El analisis visual de fotos esta desactivado temporalmente."
+    }
+  };
 }
 
 async function findMarketPrice(query) {
