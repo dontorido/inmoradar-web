@@ -54,7 +54,7 @@ function sanitizeSearch(value) {
   return String(value || "")
     .trim()
     .toLowerCase()
-    .replace(/[%*,]/g, "")
+    .replace(/[%*,()]/g, "")
     .slice(0, 80);
 }
 
@@ -172,6 +172,8 @@ async function handlePremiumSubscriptions(url) {
   const limit = clampLimit(url.searchParams.get("limit"), 50, 100);
   const status = String(url.searchParams.get("status") || "").trim().toLowerCase();
   const q = sanitizeSearch(url.searchParams.get("q"));
+  const provider = sanitizeSearch(url.searchParams.get("provider"));
+  const eventName = sanitizeSearch(url.searchParams.get("event_name"));
   const params = new URLSearchParams({
     select:
       "email,status,renews_at,ends_at,trial_ends_at,provider,provider_customer_id,provider_subscription_id,provider_order_id,product_id,variant_id,event_name,created_at,updated_at",
@@ -180,7 +182,24 @@ async function handlePremiumSubscriptions(url) {
   });
 
   if (status && status !== "all") params.set("status", `eq.${status}`);
-  if (q) params.set("email", `ilike.*${q}*`);
+  if (provider) params.set("provider", `ilike.*${provider}*`);
+  if (eventName) params.set("event_name", `ilike.*${eventName}*`);
+  if (q) {
+    params.set(
+      "or",
+      `(${[
+        `email.ilike.*${q}*`,
+        `status.ilike.*${q}*`,
+        `provider.ilike.*${q}*`,
+        `provider_customer_id.ilike.*${q}*`,
+        `provider_subscription_id.ilike.*${q}*`,
+        `provider_order_id.ilike.*${q}*`,
+        `product_id.ilike.*${q}*`,
+        `variant_id.ilike.*${q}*`,
+        `event_name.ilike.*${q}*`
+      ].join(",")})`
+    );
+  }
 
   const rows = await supabaseFetch(`premium_subscriptions?${params.toString()}`);
   return {

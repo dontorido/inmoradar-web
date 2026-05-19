@@ -3,10 +3,14 @@ const VIDEO_PROJECT_KEY = "inmoradar_social_video_project";
 
 const state = {
   token: sessionStorage.getItem(TOKEN_KEY) || "",
-  activeSection: "marketing",
+  activeSection: "ventas",
+  marketingSubsection: "",
+  operacionesSubsection: "",
   premium: {
     q: "",
-    status: "all"
+    status: "all",
+    provider: "",
+    eventName: ""
   },
   seo: {
     status: "all",
@@ -42,6 +46,9 @@ const els = {
   logout: document.querySelector("[data-admin-logout]"),
   sectionButtons: document.querySelectorAll("[data-admin-section-button]"),
   views: document.querySelectorAll("[data-admin-view]"),
+  subsectionButtons: document.querySelectorAll("[data-admin-subsection-button]"),
+  subsectionPanels: document.querySelectorAll("[data-admin-subsection-panel]"),
+  subsectionEmptyStates: document.querySelectorAll("[data-admin-subsection-empty]"),
   refresh: document.querySelector("[data-admin-refresh]"),
   env: document.querySelector("[data-admin-env]"),
   stats: document.querySelector("[data-admin-stats]"),
@@ -132,8 +139,48 @@ function requireLogin() {
   els.logout.hidden = !state.token;
 }
 
-function setAdminSection(section) {
-  state.activeSection = ["marketing", "kpis", "parking", "videos"].includes(section) ? section : "marketing";
+function subsectionStateKey(group) {
+  return group === "operaciones" ? "operacionesSubsection" : "marketingSubsection";
+}
+
+function subsectionGroupFromPanel(panelName) {
+  return String(panelName || "").startsWith("operaciones-") ? "operaciones" : "marketing";
+}
+
+function syncSubsectionPanels() {
+  els.subsectionButtons.forEach((button) => {
+    const group = button.dataset.adminSubsectionGroup || "marketing";
+    const key = subsectionStateKey(group);
+    const active = state.activeSection === group && state[key] === button.dataset.adminSubsectionButton;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+
+  els.subsectionPanels.forEach((panel) => {
+    const panelName = panel.dataset.adminSubsectionPanel || "";
+    const group = subsectionGroupFromPanel(panelName);
+    const key = subsectionStateKey(group);
+    panel.hidden = !(state.activeSection === group && state[key] === panelName);
+  });
+
+  els.subsectionEmptyStates.forEach((emptyState) => {
+    const group = emptyState.dataset.adminSubsectionEmpty || "marketing";
+    const key = subsectionStateKey(group);
+    emptyState.hidden = !(state.activeSection === group && !state[key]);
+  });
+}
+
+function setAdminSubsection(group, subsection) {
+  const normalizedGroup = ["marketing", "operaciones"].includes(group) ? group : "marketing";
+  state[subsectionStateKey(normalizedGroup)] = subsection || "";
+  setAdminSection(normalizedGroup);
+}
+
+function setAdminSection(section, options = {}) {
+  const nextSection = ["ventas", "marketing", "kpis", "operaciones"].includes(section) ? section : "ventas";
+  if (options.resetSubsection && nextSection === "marketing") state.marketingSubsection = "";
+  if (options.resetSubsection && nextSection === "operaciones") state.operacionesSubsection = "";
+  state.activeSection = nextSection;
   els.views.forEach((view) => {
     view.hidden = view.dataset.adminView !== state.activeSection;
   });
@@ -144,6 +191,7 @@ function setAdminSection(section) {
     if (active) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
+  syncSubsectionPanels();
 }
 
 function slugId(value) {
@@ -166,7 +214,8 @@ function statusTone(value) {
   const normalized = String(value || "").toLowerCase();
   if (["published", "active", "on_trial"].includes(normalized)) return "published";
   if (["ready_to_publish", "index", "paid"].includes(normalized)) return "ready";
-  if (["cancelled", "expired", "noindex"].includes(normalized)) return "bad";
+  if (["cancelled", "expired", "noindex", "unpaid", "payment_failed"].includes(normalized)) return "bad";
+  if (["past_due"].includes(normalized)) return "warn";
   if (["draft", "needs_review"].includes(normalized)) return "draft";
   if (["archived"].includes(normalized)) return "muted";
   return "draft";
@@ -217,17 +266,32 @@ function setPath(target, path, value) {
 
 function renderStats(summary) {
   const premium = summary.premium || {};
-  const seo = summary.seo || {};
+  const byStatus = premium.by_status || {};
+  const statusCount = (status) => Number(byStatus[status] || 0);
   els.env.textContent = summary.env?.lemonsqueezy_test_mode ? "Test mode" : "Live mode";
   els.env.dataset.mode = summary.env?.lemonsqueezy_test_mode ? "test" : "live";
   els.stats.innerHTML = [
     stat("Premium total", premium.total || 0, { id: "premium-total" }),
-    stat("Premium active", (premium.by_status?.active || 0) + (premium.by_status?.on_trial || 0), {
+    stat("Premium active", statusCount("active") + statusCount("on_trial"), {
       id: "premium-active",
       hint: "Cuentas con suscripcion activa esta semana"
     }),
-    stat("SEO publicadas", seo.published || 0, { id: "seo-publicadas" }),
-    stat("SEO ready", seo.ready_to_publish || 0, { id: "seo-ready", trend: 100 })
+    stat("On trial", statusCount("on_trial"), {
+      id: "premium-trial",
+      hint: "Pruebas activas pendientes de conversion"
+    }),
+    stat("Unpaid", statusCount("unpaid") + statusCount("past_due") + statusCount("payment_failed"), {
+      id: "premium-unpaid",
+      hint: "Pagos fallidos, pendientes o vencidos"
+    }),
+    stat("Canceladas", statusCount("cancelled") + statusCount("expired"), {
+      id: "premium-cancelled",
+      hint: "Suscripciones canceladas o expiradas"
+    }),
+    stat("Paid", statusCount("paid"), {
+      id: "premium-paid",
+      hint: "Eventos de pago confirmados"
+    })
   ].join("");
 }
 
@@ -292,9 +356,19 @@ function renderParkingRows(rows) {
     .join("");
 }
 
+function premiumDetail(label, value) {
+  if (!value) return "";
+  return `<div class="admin-subtle"><b>${escapeHtml(label)}:</b> ${escapeHtml(value)}</div>`;
+}
+
+function premiumDateDetail(label, value) {
+  if (!value) return "";
+  return premiumDetail(label, formatDate(value));
+}
+
 function renderPremium(rows) {
   if (!rows.length) {
-    els.premiumRows.innerHTML = `<tr><td colspan="5">No hay suscripciones con este filtro.</td></tr>`;
+    els.premiumRows.innerHTML = `<tr><td colspan="6">No hay suscripciones con este filtro.</td></tr>`;
     return;
   }
 
@@ -303,16 +377,27 @@ function renderPremium(rows) {
       (row) => `
       <tr>
         <td>
-          <strong>${escapeHtml(row.email)}</strong>
-          <div class="admin-subtle">${escapeHtml(row.provider_subscription_id || row.provider_order_id || "-")}</div>
+          <strong>${escapeHtml(row.email || "-")}</strong>
+          ${premiumDetail("customer", row.provider_customer_id)}
         </td>
         <td>${chip(row.status, statusTone(row.status))}</td>
         <td>
-          ${escapeHtml(formatDate(row.renews_at || row.trial_ends_at || row.ends_at))}
-          <div class="admin-subtle">${row.trial_ends_at ? "trial" : ""}</div>
+          <strong>${escapeHtml(row.provider || "-")}</strong>
+          ${premiumDetail("product", row.product_id)}
+          ${premiumDetail("variant", row.variant_id)}
+        </td>
+        <td>
+          ${premiumDetail("subscription", row.provider_subscription_id)}
+          ${premiumDetail("order", row.provider_order_id)}
+        </td>
+        <td>
+          ${premiumDateDetail("renueva", row.renews_at)}
+          ${premiumDateDetail("trial", row.trial_ends_at)}
+          ${premiumDateDetail("termina", row.ends_at)}
+          ${premiumDateDetail("creada", row.created_at)}
+          ${premiumDateDetail("actualizada", row.updated_at)}
         </td>
         <td>${escapeHtml(row.event_name || "-")}</td>
-        <td>${escapeHtml(formatDate(row.updated_at))}</td>
       </tr>
     `
     )
@@ -422,6 +507,45 @@ function renderKpiControl(field, value) {
   return `<input ${common} type="text" value="${escapeHtml(value ?? "")}">`;
 }
 
+function defaultKpiValue(field) {
+  const storedDefault = getPath(state.kpis.defaults, field.path);
+  return storedDefault ?? field.defaultValue;
+}
+
+function formatKpiValue(field, value) {
+  if (value === undefined || value === null || value === "") return "-";
+  if (field.type === "boolean") return value ? "Si" : "No";
+  if (field.type === "select") {
+    const option = (field.options || []).find((item) => String(item.value) === String(value));
+    return option ? option.label : value;
+  }
+  if (field.type === "number" && field.suffix) return `${value}${field.suffix}`;
+  return String(value);
+}
+
+function kpiProposalText(field) {
+  const proposedValue = defaultKpiValue(field);
+  const formattedValue = formatKpiValue(field, proposedValue);
+  const path = String(field.path || "");
+
+  if (field.type === "boolean") {
+    return `${formattedValue}. Mi propuesta es mantener esta bandera como punto de control para activar o apagar el bloque sin tocar el calculo interno.`;
+  }
+  if (path.includes("fallback")) {
+    return `Partir de ${formattedValue}. La propuesta evita KPIs fijos cuando falta dato real y deja claro cuando el resultado es orientativo.`;
+  }
+  if (path.includes("weight")) {
+    return `Partir de ${formattedValue}. La propuesta reparte el peso para que ningun factor aislado domine el score sin evidencia suficiente.`;
+  }
+  if (path.includes("threshold") || path.includes("minimum")) {
+    return `Partir de ${formattedValue}. La propuesta fija un umbral prudente y se deberia ajustar solo con datos historicos medidos.`;
+  }
+  if (path.includes("cap") || path.includes("max")) {
+    return `Partir de ${formattedValue}. La propuesta limita el optimismo cuando la precision del dato de partida baja.`;
+  }
+  return `Partir de ${formattedValue}. Es el dato de partida recomendado para medir resultados antes de endurecer o relajar la regla.`;
+}
+
 function renderKpis(payload) {
   state.kpis.schema = payload.schema || [];
   state.kpis.settings = payload.settings || {};
@@ -447,14 +571,21 @@ function renderKpis(payload) {
             ${(group.fields || [])
               .map((field) => {
                 const value = getPath(state.kpis.settings, field.path);
+                const startingValue = defaultKpiValue(field);
+                const currentValue = value ?? startingValue;
                 return `
                   <label class="admin-kpi-field">
                     <span>
                       ${escapeHtml(field.label)}
                       ${field.suffix ? `<em>${escapeHtml(field.suffix)}</em>` : ""}
                     </span>
-                    ${renderKpiControl(field, value)}
-                    <small>${escapeHtml(field.description || "")}</small>
+                    ${renderKpiControl(field, currentValue)}
+                    <small class="admin-kpi-purpose"><strong>Para que sirve:</strong> ${escapeHtml(field.description || "Define como se calcula o se muestra este KPI.")}</small>
+                    <small class="admin-kpi-proposal"><strong>Mi propuesta:</strong> ${escapeHtml(kpiProposalText(field))}</small>
+                    <div class="admin-kpi-field-meta">
+                      <span><strong>Dato actual:</strong> ${escapeHtml(formatKpiValue(field, currentValue))}</span>
+                      <span><strong>Dato de partida:</strong> ${escapeHtml(formatKpiValue(field, startingValue))}</span>
+                    </div>
                   </label>
                 `;
               })
@@ -1272,10 +1403,12 @@ async function loadSummary() {
 
 async function loadPremium() {
   const params = new URLSearchParams({
-    limit: "50",
+    limit: "100",
     status: state.premium.status || "all"
   });
   if (state.premium.q) params.set("q", state.premium.q);
+  if (state.premium.provider) params.set("provider", state.premium.provider);
+  if (state.premium.eventName) params.set("event_name", state.premium.eventName);
   const payload = await api(`/api/admin?resource=premium/subscriptions&${params.toString()}`);
   renderPremium(payload.subscriptions || []);
 }
@@ -1466,7 +1599,13 @@ els.refresh.addEventListener("click", loadAll);
 
 els.sectionButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    setAdminSection(button.dataset.adminSectionButton);
+    setAdminSection(button.dataset.adminSectionButton, { resetSubsection: true });
+  });
+});
+
+els.subsectionButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    setAdminSubsection(button.dataset.adminSubsectionGroup, button.dataset.adminSubsectionButton);
   });
 });
 
@@ -1475,6 +1614,8 @@ els.premiumFilter.addEventListener("submit", async (event) => {
   const form = new FormData(els.premiumFilter);
   state.premium.q = String(form.get("q") || "").trim();
   state.premium.status = String(form.get("status") || "all");
+  state.premium.provider = String(form.get("provider") || "").trim();
+  state.premium.eventName = String(form.get("event_name") || "").trim();
   await loadPremium();
 });
 

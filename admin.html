@@ -45,75 +45,99 @@
           <span class="admin-kicker">Panel operativo</span>
           <h1>Backoffice</h1>
         </div>
-        <div class="admin-tabs" aria-label="Secciones del backoffice">
-          <button class="admin-tab active" type="button" data-admin-section-button="marketing" data-testid="admin-tab-marketing" aria-pressed="true">Marketing</button>
+        <div class="admin-tabs admin-main-menu" aria-label="Secciones del backoffice">
+          <button class="admin-tab active" type="button" data-admin-section-button="ventas" data-testid="admin-tab-ventas" aria-pressed="true">Ventas</button>
+          <button class="admin-tab" type="button" data-admin-section-button="marketing" data-testid="admin-tab-marketing" aria-pressed="false">Marketing</button>
           <button class="admin-tab" type="button" data-admin-section-button="kpis" data-testid="admin-tab-kpis" aria-pressed="false">KPIs</button>
-          <button class="admin-tab" type="button" data-admin-section-button="parking" data-testid="admin-tab-parking" aria-pressed="false">Parking</button>
-          <button class="admin-tab" type="button" data-admin-section-button="videos" data-testid="admin-tab-videos" aria-pressed="false">Videos</button>
+          <button class="admin-tab" type="button" data-admin-section-button="operaciones" data-testid="admin-tab-operaciones" aria-pressed="false">Operaciones</button>
+          <button class="admin-button tiny secondary" type="button" data-admin-refresh data-testid="admin-action-refresh">Actualizar</button>
         </div>
       </div>
 
       <p class="admin-status" data-admin-live-status></p>
 
-      <section class="admin-view" data-admin-view="marketing">
+      <section class="admin-view" data-admin-view="ventas">
         <article class="admin-panel admin-ops-panel">
           <div class="admin-panel-head">
             <div>
-              <span class="admin-kicker muted">Marketing & Publishing</span>
-              <h2>Operaciones del día</h2>
-              <p class="admin-panel-sub">Acciones manuales para refrescar contenido, generar borradores SEO y publicar landings elegibles.</p>
-            </div>
-            <div class="admin-view-toolbar">
-              <button class="admin-button ghost" type="button" data-admin-refresh data-testid="admin-action-refresh">Actualizar</button>
-              <button class="admin-button ghost" type="button" data-seo-generate data-testid="admin-action-generate-seo">Generar draft SEO</button>
-              <button class="admin-button" type="button" data-seo-publish data-testid="admin-action-publish-seo">Publicar 1 SEO elegible</button>
+              <span class="admin-kicker muted">Ventas</span>
+              <h2>Resumen Premium</h2>
+              <p class="admin-panel-sub">Estado comercial de Premium: total, activas, pruebas, impagos y bajas para revisar la salud de ingresos.</p>
             </div>
           </div>
           <section class="admin-stat-grid" data-admin-stats></section>
         </article>
 
-        <section class="admin-grid">
-          <article class="admin-panel">
-            <div class="admin-panel-head">
-              <div>
-                <span class="admin-kicker muted">Premium</span>
-                <h2>Suscripciones</h2>
-              </div>
-              <form class="admin-filter" data-premium-filter>
-                <input type="search" name="q" placeholder="Buscar email">
-                <select name="status">
-                  <option value="all">Todos</option>
-                  <option value="active">Active</option>
-                  <option value="on_trial">On trial</option>
-                  <option value="cancelled">Cancelled</option>
-                  <option value="expired">Expired</option>
-                  <option value="paid">Paid</option>
-                </select>
-                <button class="admin-button tiny ghost" type="submit" data-testid="admin-premium-filter">Filtrar</button>
-              </form>
+        <article class="admin-panel">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Suscriptores</span>
+              <h2>Datos Premium</h2>
             </div>
-            <div class="admin-table-wrap">
-              <table class="admin-table" data-testid="premium-table">
-                <thead>
-                  <tr>
-                    <th>Email</th>
-                    <th>Estado</th>
-                    <th>Renueva</th>
-                    <th>Evento</th>
-                    <th>Actualizado</th>
-                  </tr>
-                </thead>
-                <tbody data-premium-rows></tbody>
-              </table>
-            </div>
-            <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
-          </article>
+            <form class="admin-filter admin-filter-wide" data-premium-filter>
+              <input type="search" name="q" placeholder="Buscar email, estado, ID o evento">
+              <select name="status">
+                <option value="all">Todos</option>
+                <option value="active">Active</option>
+                <option value="on_trial">On trial</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="past_due">Past due</option>
+                <option value="payment_failed">Payment failed</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="expired">Expired</option>
+                <option value="paid">Paid</option>
+              </select>
+              <input type="search" name="provider" placeholder="Proveedor">
+              <input type="search" name="event_name" placeholder="Evento">
+              <button class="admin-button tiny ghost" type="submit" data-testid="admin-premium-filter">Filtrar</button>
+            </form>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table" data-testid="premium-table">
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Estado</th>
+                  <th>Proveedor</th>
+                  <th>IDs</th>
+                  <th>Fechas</th>
+                  <th>Evento</th>
+                </tr>
+              </thead>
+              <tbody data-premium-rows></tbody>
+            </table>
+          </div>
+          <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
+        </article>
+      </section>
 
+      <section class="admin-view" data-admin-view="marketing" hidden>
+        <article class="admin-panel admin-section-picker-panel">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Marketing</span>
+              <h2>Elige un área</h2>
+              <p class="admin-panel-sub">Selecciona qué quieres trabajar para desplegar sus campos y acciones.</p>
+            </div>
+            <div class="admin-subsection-menu" aria-label="Áreas de marketing">
+              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-seo" data-testid="admin-subsection-marketing-seo" aria-pressed="false">Contenidos SEO</button>
+              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-videos" data-testid="admin-subsection-marketing-videos" aria-pressed="false">Videos</button>
+            </div>
+          </div>
+          <p class="admin-empty-state" data-admin-subsection-empty="marketing">Selecciona Contenidos SEO o Videos para abrir las herramientas.</p>
+        </article>
+
+        <section class="admin-subsection-panel" data-admin-subsection-panel="marketing-seo" hidden>
           <article class="admin-panel">
             <div class="admin-panel-head">
               <div>
-                <span class="admin-kicker muted">SEO</span>
+                <span class="admin-kicker muted">Contenidos SEO</span>
                 <h2>Landings</h2>
+                <p class="admin-panel-sub">Genera borradores, publica landings elegibles y revisa el estado de indexación.</p>
+              </div>
+              <div class="admin-view-toolbar">
+                <button class="admin-button ghost" type="button" data-seo-generate data-testid="admin-action-generate-seo">Generar draft SEO</button>
+                <button class="admin-button" type="button" data-seo-publish data-testid="admin-action-publish-seo">Publicar 1 SEO elegible</button>
               </div>
               <form class="admin-filter" data-seo-filter>
                 <select name="status">
@@ -167,7 +191,23 @@
         </section>
       </section>
 
-      <section class="admin-view" data-admin-view="parking" hidden>
+      <section class="admin-view" data-admin-view="operaciones" hidden>
+        <article class="admin-panel admin-section-picker-panel">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Operaciones</span>
+              <h2>Elige un proceso</h2>
+              <p class="admin-panel-sub">Selecciona el módulo operativo que quieres revisar para desplegar sus datos y pruebas.</p>
+            </div>
+            <div class="admin-subsection-menu" aria-label="Procesos de operaciones">
+              <button class="admin-tab" type="button" data-admin-subsection-group="operaciones" data-admin-subsection-button="operaciones-parking" data-testid="admin-subsection-operaciones-parking" aria-pressed="false">Parking</button>
+            </div>
+          </div>
+          <p class="admin-empty-state" data-admin-subsection-empty="operaciones">Selecciona Parking para abrir Parking Intelligence.</p>
+        </article>
+      </section>
+
+      <section class="admin-subsection-panel" data-admin-subsection-panel="operaciones-parking" hidden>
         <section class="admin-panel admin-parking-panel">
           <div class="admin-panel-head">
             <div>
@@ -243,7 +283,7 @@
           <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
         </section>
       </section>
-      <section class="admin-view" data-admin-view="videos" hidden>
+      <section class="admin-subsection-panel" data-admin-subsection-panel="marketing-videos" hidden>
         <section class="admin-panel admin-video-panel">
           <div class="admin-panel-head">
             <div>

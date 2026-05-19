@@ -2112,3 +2112,121 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Backoffice section navigation and nested operating panels. */
+.admin-heading {
+  display: grid;
+  grid-template-columns: minmax(220px, auto) 1fr;
+  align-items: end;
+  gap: 24px;
+}
+
+.admin-main-menu {
+  justify-content: flex-end;
+  justify-self: end;
+}
+
+.admin-main-menu .admin-button {
+  margin-left: 4px;
+}
+
+.admin-subsection-menu {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.admin-section-picker-panel .admin-panel-head {
+  align-items: flex-start;
+}
+
+.admin-section-picker-panel .admin-empty-state {
+  margin: 0;
+  border-top: 1px solid var(--admin-line);
+  padding: 22px 24px 26px;
+}
+
+.admin-subsection-panel {
+  display: grid;
+  gap: 28px;
+}
+
+.admin-subsection-panel[hidden],
+.admin-empty-state[hidden] {
+  display: none !important;
+}
+
+.admin-filter.admin-filter-wide {
+  display: grid;
+  grid-template-columns: minmax(300px, 2fr) minmax(160px, .9fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+[data-admin-view="ventas"] > .admin-panel:nth-of-type(2) .admin-panel-head {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+.admin-filter.admin-filter-wide input,
+.admin-filter.admin-filter-wide select {
+  width: 100%;
+}
+
+[data-admin-view="ventas"] .admin-table {
+  min-width: 980px;
+}
+
+.admin-kpi-purpose,
+.admin-kpi-proposal {
+  display: block;
+  color: rgba(10, 20, 15, .72);
+  line-height: 1.45;
+}
+
+.admin-kpi-purpose strong,
+.admin-kpi-proposal strong,
+.admin-kpi-field-meta strong {
+  color: var(--admin-dark);
+}
+
+.admin-kpi-field-meta {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid rgba(10, 20, 15, .08);
+  padding-top: 10px;
+  color: rgba(10, 20, 15, .62);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+@media (max-width: 1180px) {
+  .admin-heading {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .admin-main-menu,
+  .admin-subsection-menu {
+    justify-content: flex-start;
+    justify-self: stretch;
+  }
+
+  .admin-filter.admin-filter-wide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .admin-filter.admin-filter-wide .admin-button {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-filter.admin-filter-wide {
+    grid-template-columns: 1fr;
+  }
+}
