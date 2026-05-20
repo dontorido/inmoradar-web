@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 
 const {
   buildCheckoutPayload,
+  getCustomerPortal,
   lemonConfig,
   lemonTestMode,
   getSignedCustomerPortalUrl,
@@ -136,6 +137,83 @@ test("getSignedCustomerPortalUrl usa el filtro por email de suscripciones", asyn
       "sergio@example.com"
     );
     assert.equal(portalUrl, "https://inmoradar.lemonsqueezy.com/billing?expires=1&signature=signed");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("getSignedCustomerPortalUrl usa el customer portal si la suscripcion no aparece", async () => {
+  const originalFetch = global.fetch;
+  const requested = [];
+  global.fetch = async (url, options) => {
+    requested.push(url);
+    assert.equal(options.headers.authorization, "Bearer test_key");
+
+    if (url.startsWith("https://api.lemonsqueezy.com/v1/subscriptions?")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: [] })
+      };
+    }
+
+    assert.match(url, /^https:\/\/api\.lemonsqueezy\.com\/v1\/customers\?/);
+    assert.match(url, /filter%5Bemail%5D=cliente%40example\.com/);
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        data: [
+          {
+            type: "customers",
+            id: "cus_123",
+            attributes: {
+              urls: {
+                customer_portal: "https://inmoradar.lemonsqueezy.com/billing?expires=1&signature=customer"
+              }
+            }
+          }
+        ]
+      })
+    };
+  };
+
+  try {
+    const portalUrl = await getSignedCustomerPortalUrl(
+      { storeId: "123", apiKey: "test_key" },
+      "cliente@example.com"
+    );
+    assert.equal(portalUrl, "https://inmoradar.lemonsqueezy.com/billing?expires=1&signature=customer");
+    assert.equal(requested.length, 2);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("getCustomerPortal no cae al portal generico si no hay enlace firmado", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    if (url.startsWith("https://api.lemonsqueezy.com/v1/subscriptions?")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: [] })
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: [] })
+    };
+  };
+
+  try {
+    const portal = await getCustomerPortal(
+      { storeId: "123", apiKey: "test_key" },
+      "sincompra@example.com"
+    );
+    assert.equal(portal.portalUrl, null);
+    assert.equal(portal.signed, false);
   } finally {
     global.fetch = originalFetch;
   }

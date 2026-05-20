@@ -171,38 +171,59 @@ async function getUnsignedCustomerPortalUrl(config) {
   return portalUrl;
 }
 
-async function findStoredSubscriptionId(email) {
-  if (!email || !hasSupabaseConfig()) return null;
+async function findStoredBillingIds(email) {
+  if (!email || !hasSupabaseConfig()) {
+    return {
+      customerId: null,
+      subscriptionId: null
+    };
+  }
 
   try {
     const params = new URLSearchParams({
       email: `eq.${email}`,
-      select: "provider_subscription_id,status,updated_at",
+      select: "provider_customer_id,provider_subscription_id,status,updated_at",
       order: "updated_at.desc",
       limit: "1"
     });
     const rows = await supabaseFetch(`premium_subscriptions?${params.toString()}`, { timeoutMs: 3000 });
     const row = Array.isArray(rows) ? rows[0] : null;
-    return row?.provider_subscription_id || null;
+    return {
+      customerId: row?.provider_customer_id || null,
+      subscriptionId: row?.provider_subscription_id || null
+    };
   } catch {
-    return null;
+    return {
+      customerId: null,
+      subscriptionId: null
+    };
   }
 }
 
 async function getSignedCustomerPortalUrl(config, email) {
-  const storedSubscriptionId = await findStoredSubscriptionId(email);
+  const storedIds = await findStoredBillingIds(email);
   const urls = [];
-  if (storedSubscriptionId) {
-    urls.push(`${LEMON_BASE_API_URL}/subscriptions/${encodeURIComponent(storedSubscriptionId)}`);
+  if (storedIds.subscriptionId) {
+    urls.push(`${LEMON_BASE_API_URL}/subscriptions/${encodeURIComponent(storedIds.subscriptionId)}`);
+  }
+  if (storedIds.customerId) {
+    urls.push(`${LEMON_BASE_API_URL}/customers/${encodeURIComponent(storedIds.customerId)}`);
   }
 
   if (email) {
-    const params = new URLSearchParams({
+    const subscriptionParams = new URLSearchParams({
       "filter[store_id]": String(config.storeId),
       "filter[user_email]": email,
       "page[size]": "1"
     });
-    urls.push(`${LEMON_BASE_API_URL}/subscriptions?${params.toString()}`);
+    urls.push(`${LEMON_BASE_API_URL}/subscriptions?${subscriptionParams.toString()}`);
+
+    const customerParams = new URLSearchParams({
+      "filter[store_id]": String(config.storeId),
+      "filter[email]": email,
+      "page[size]": "1"
+    });
+    urls.push(`${LEMON_BASE_API_URL}/customers?${customerParams.toString()}`);
   }
 
   for (const url of urls) {
@@ -229,7 +250,7 @@ async function getCustomerPortal(config, email) {
   }
 
   return {
-    portalUrl: await getUnsignedCustomerPortalUrl(config),
+    portalUrl: null,
     signed: false
   };
 }
@@ -270,6 +291,16 @@ module.exports = async function handler(req, res) {
 
     if (isPortalRequest(req, url, body)) {
       const portal = await getCustomerPortal(config, email);
+      if (!portal.portalUrl) {
+        json(res, 404, {
+          ok: false,
+          error: "customer_portal_not_found",
+          message: "No hemos encontrado una suscripcion Premium para ese email. Usa el mismo email de compra o escribe a hola@inmoradar.app.",
+          test_mode: Boolean(config.testMode)
+        });
+        return;
+      }
+
       json(res, 200, {
         ok: true,
         portal_url: portal.portalUrl,
