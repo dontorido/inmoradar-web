@@ -3,6 +3,7 @@ const CHECKOUT_ENDPOINT = "/api/lemonsqueezy-checkout";
 const PORTAL_ENDPOINT = "/api/lemonsqueezy-portal";
 const CONTACT_ENDPOINT = "/api/contact";
 const LANGUAGE_STORAGE_KEY = "inmoradar_language";
+const PUBLIC_HOSTS = new Set(["inmoradar.app", "www.inmoradar.app"]);
 
 const articles = [
   {
@@ -123,6 +124,10 @@ let currentLanguage = "es";
 
 function t(key) {
   return I18N[currentLanguage]?.[key] || I18N.es[key] || key;
+}
+
+function isPublicProductionHost() {
+  return PUBLIC_HOSTS.has(location.hostname);
 }
 
 function icon(name) {
@@ -376,11 +381,14 @@ function initCheckout() {
           body: JSON.stringify({ source: button.dataset.checkoutSource || "web" })
         });
         const payload = await response.json().catch(() => ({}));
-        if (!response.ok || !payload.checkout_url) throw new Error("checkout_failed");
+        if (!response.ok || !payload.checkout_url) throw new Error(payload.message || "checkout_failed");
+        if (payload.test_mode && isPublicProductionHost()) {
+          throw new Error("El checkout de pruebas esta bloqueado en la web publica.");
+        }
         showToast(t("checkoutOpening"));
         location.href = payload.checkout_url;
-      } catch {
-        location.href = `mailto:${WAITLIST_EMAIL}?subject=Quiero%20InmoRadar%20Premium`;
+      } catch (error) {
+        showToast(error.message || t("checkoutManual"), "error");
       } finally {
         button.disabled = false;
       }

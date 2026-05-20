@@ -43,8 +43,11 @@ function isProductionRuntime() {
 
 function lemonTestMode() {
   const explicit = process.env.LEMONSQUEEZY_TEST_MODE;
+  const allowProductionTestMode = String(process.env.ALLOW_LEMONSQUEEZY_TEST_MODE_IN_PRODUCTION || "").toLowerCase() === "true";
   if (explicit !== undefined && explicit !== "") {
-    return String(explicit).toLowerCase() !== "false";
+    const requestedTestMode = String(explicit).toLowerCase() !== "false";
+    if (requestedTestMode && isProductionRuntime() && !allowProductionTestMode) return false;
+    return requestedTestMode;
   }
   return !isProductionRuntime();
 }
@@ -638,15 +641,24 @@ module.exports = async function handler(req, res) {
     const payload = buildCheckoutPayload({ config, email, source, req });
     const checkout = await createLemonCheckout(payload, config.apiKey);
     const checkoutUrl = checkout?.data?.attributes?.url;
+    const checkoutTestMode = Boolean(checkout?.data?.attributes?.test_mode ?? config.testMode);
     if (!checkoutUrl) {
       json(res, 502, { ok: false, error: "checkout_url_missing" });
+      return;
+    }
+    if (isProductionRuntime() && checkoutTestMode) {
+      json(res, 409, {
+        ok: false,
+        error: "test_checkout_blocked_in_production",
+        message: "El checkout de pruebas esta bloqueado en produccion."
+      });
       return;
     }
 
     json(res, 200, {
       ok: true,
       checkout_url: checkoutUrl,
-      test_mode: Boolean(checkout?.data?.attributes?.test_mode ?? config.testMode),
+      test_mode: checkoutTestMode,
       checkout_id: checkout?.data?.id || null
     });
   } catch (error) {
