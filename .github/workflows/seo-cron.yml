@@ -12,9 +12,15 @@ jobs:
       - name: Trigger InmoRadar SEO cron
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SITE_URL: https://www.inmoradar.app
         run: |
-          test -n "$CRON_SECRET"
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Falta el secret CRON_SECRET en GitHub Actions. Anadelo en Settings > Secrets and variables > Actions."
+            exit 1
+          fi
           curl --fail-with-body \
-            --request GET \
-            --header "Authorization: Bearer $CRON_SECRET" \
-            https://inmoradar.app/api/cron/seo-publish
+            --retry 2 \
+            --retry-delay 5 \
+            --request POST \
+            --header "x-cron-secret: $CRON_SECRET" \
+            "$SITE_URL/api/cron/seo-publish"
