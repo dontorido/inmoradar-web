@@ -7,9 +7,9 @@
   <title>Backoffice | InmoRadar</title>
   <meta name="theme-color" content="#0A140F">
   <link rel="icon" href="/assets/favicon-32.png?v=20260519b" type="image/png" sizes="32x32">
-  <link rel="stylesheet" href="assets/styles.css">
-  <link rel="stylesheet" href="assets/admin.css">
-  <link rel="stylesheet" href="assets/admin-video-busy.css">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <link rel="stylesheet" href="/assets/admin.css">
+  <link rel="stylesheet" href="/assets/admin-video-busy.css">
 </head>
 <body class="admin-body">
   <main class="admin-shell">
@@ -144,12 +144,44 @@
               <p class="admin-panel-sub">Selecciona qué quieres trabajar para desplegar sus campos y acciones.</p>
             </div>
             <div class="admin-subsection-menu" aria-label="Áreas de marketing">
-              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-seo" data-testid="admin-subsection-marketing-seo" aria-pressed="false">Contenidos SEO</button>
+              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-dashboard" data-testid="admin-subsection-marketing-dashboard" aria-pressed="false">Dashboard</button>
+              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-seo" data-testid="admin-subsection-marketing-seo" aria-pressed="false">Contenido</button>
+              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-viraliza" data-testid="admin-subsection-marketing-viraliza" aria-pressed="false">Viraliza</button>
+              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-creadores" data-testid="admin-subsection-marketing-creadores" aria-pressed="false">Creadores</button>
+              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-comentarios" data-testid="admin-subsection-marketing-comentarios" aria-pressed="false">Comentarios</button>
+              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-hooks" data-testid="admin-subsection-marketing-hooks" aria-pressed="false">Hooks</button>
+              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-resultados" data-testid="admin-subsection-marketing-resultados" aria-pressed="false">Resultados</button>
               <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-videos" data-testid="admin-subsection-marketing-videos" aria-pressed="false">Videos</button>
             </div>
           </div>
-          <p class="admin-empty-state" data-admin-subsection-empty="marketing">Selecciona Contenidos SEO o Videos para abrir las herramientas.</p>
+          <p class="admin-empty-state" data-admin-subsection-empty="marketing">Selecciona Dashboard, Contenido, Viraliza, Creadores, Comentarios, Hooks, Resultados o Videos para abrir las herramientas.</p>
         </article>
+
+        <section class="admin-subsection-panel" data-admin-subsection-panel="marketing-dashboard" hidden>
+          <article class="admin-panel">
+            <div class="admin-panel-head">
+              <div>
+                <span class="admin-kicker muted">Marketing</span>
+                <h2>Dashboard</h2>
+                <p class="admin-panel-sub">Vista rapida de contenido, viralizacion organica, creadores y resultados.</p>
+              </div>
+            </div>
+            <div class="admin-marketing-dashboard">
+              <section>
+                <strong>Contenido</strong>
+                <p>Landings SEO, videos y briefs propios para captar usuarios en busqueda activa.</p>
+              </section>
+              <section>
+                <strong>Viraliza</strong>
+                <p>Rutina diaria para buscar conversaciones, comentar con criterio y detectar creadores.</p>
+              </section>
+              <section>
+                <strong>Resultados</strong>
+                <p>Aprendizajes semanales por hook, keyword, comentario, creador y video.</p>
+              </section>
+            </div>
+          </article>
+        </section>
 
         <section class="admin-subsection-panel" data-admin-subsection-panel="marketing-seo" hidden>
           <article class="admin-panel">
@@ -574,6 +606,122 @@
           </div>
         </section>
       </section>
+      <section class="admin-subsection-panel admin-viraliza-panel" data-admin-subsection-panel="marketing-viraliza" hidden>
+        <section class="admin-panel">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Marketing operativo</span>
+              <h2>Viraliza</h2>
+              <p class="admin-panel-sub">Tu radar diario para encontrar conversaciones, creadores y formatos que pueden hacer crecer InmoRadar.</p>
+            </div>
+            <div class="admin-row-actions">
+              <button class="admin-button tiny" type="button" data-viraliza-generate>Generar rutina de hoy</button>
+              <button class="admin-button tiny ghost" type="button" data-viraliza-mode>Modo ejecucion</button>
+              <button class="admin-button tiny ghost" type="button" data-viraliza-open-search>Buscar oportunidades</button>
+              <button class="admin-button tiny ghost" type="button" data-viraliza-create-video>Crear video</button>
+              <button class="admin-button tiny ghost" type="button" data-viraliza-results>Ver resultados</button>
+            </div>
+          </div>
+          <p class="admin-panel-sub">Encuentra conversaciones, comenta con criterio y convierte creadores en distribucion para InmoRadar. El sistema propone; tu revisas y ejecutas.</p>
+          <section class="admin-stat-grid compact admin-viraliza-kpis" data-viraliza-kpis></section>
+          <div class="admin-viraliza-layout">
+            <section class="admin-viraliza-column">
+              <div class="admin-viraliza-section-head">
+                <span>Daily Viral Routine</span>
+                <strong data-viraliza-theme>Aun no hay rutina</strong>
+              </div>
+              <p data-viraliza-goal>Aun no hay rutina para hoy. Genera una rutina diaria y empieza por las keywords con mas intencion.</p>
+              <div class="admin-viraliza-routine" data-viraliza-routine></div>
+            </section>
+            <section class="admin-viraliza-column admin-viraliza-main">
+              <div class="admin-viraliza-block" data-viraliza-keywords-block>
+                <div class="admin-viraliza-section-head">
+                  <span>Opportunity Radar</span>
+                  <strong>Keywords del dia</strong>
+                </div>
+                <div class="admin-viraliza-list" data-viraliza-keywords></div>
+              </div>
+              <div class="admin-viraliza-block" data-viraliza-comments-block>
+                <div class="admin-viraliza-section-head">
+                  <span>Comment Generator</span>
+                  <strong>Comentarios preparados</strong>
+                </div>
+                <div class="admin-viraliza-list" data-viraliza-comments></div>
+              </div>
+              <div class="admin-viraliza-block" data-viraliza-hooks-block>
+                <div class="admin-viraliza-section-head">
+                  <span>Hook Lab</span>
+                  <strong>Hooks adaptables</strong>
+                </div>
+                <div class="admin-viraliza-list" data-viraliza-hooks></div>
+              </div>
+            </section>
+            <aside class="admin-viraliza-column">
+              <div class="admin-viraliza-block" data-viraliza-creators-block>
+                <div class="admin-viraliza-section-head">
+                  <span>Creator Finder</span>
+                  <strong>A quien seguir hoy</strong>
+                </div>
+                <div class="admin-viraliza-list" data-viraliza-creators></div>
+              </div>
+              <div class="admin-viraliza-block">
+                <div class="admin-viraliza-section-head">
+                  <span>Outreach Generator</span>
+                  <strong>Creador del dia</strong>
+                </div>
+                <div data-viraliza-outreach></div>
+              </div>
+              <div class="admin-viraliza-block">
+                <div class="admin-viraliza-section-head">
+                  <span>Video Inspiration Inbox</span>
+                  <strong>Videos guardados</strong>
+                </div>
+                <div class="admin-viraliza-list" data-viraliza-saved-videos></div>
+              </div>
+            </aside>
+          </div>
+        </section>
+        <section class="admin-panel admin-viraliza-execution" data-viraliza-execution hidden>
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Modo ejecucion</span>
+              <h2>Vamos paso a paso</h2>
+              <p class="admin-panel-sub">Hoy no necesitas inspiracion: necesitas ejecutar. Copia, abre, revisa y marca acciones manualmente.</p>
+            </div>
+          </div>
+          <div class="admin-viraliza-steps" data-viraliza-steps></div>
+        </section>
+        <section class="admin-panel admin-viraliza-tools">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Asistentes</span>
+              <h2>Comentario contextual y aprendizaje</h2>
+              <p class="admin-panel-sub">Pega contexto de un video de terceros para generar comentarios utiles sin spam.</p>
+            </div>
+          </div>
+          <form class="admin-viraliza-context-form" data-viraliza-context-form>
+            <label>
+              <span>URL del video</span>
+              <input type="url" name="url" placeholder="https://...">
+            </label>
+            <label>
+              <span>Tipo de creador</span>
+              <select name="creator_type">
+                <option value="asesor_hipotecario">Asesor hipotecario</option>
+                <option value="cuenta_local">Cuenta local</option>
+                <option value="finanzas_personales">Finanzas personales</option>
+                <option value="comprar_piso">Comprar piso</option>
+              </select>
+            </label>
+            <label class="admin-viraliza-wide">
+              <span>Descripcion o transcripcion</span>
+              <textarea name="description" rows="4" placeholder="Resume el video, comentarios destacados o el punto principal."></textarea>
+            </label>
+            <button class="admin-button tiny" type="submit">Generar comentarios contextuales</button>
+          </form>
+          <div class="admin-viraliza-list" data-viraliza-context-output></div>
+        </section>
+      </section>
       <section class="admin-subsection-panel" data-admin-subsection-panel="marketing-videos" hidden>
         <section class="admin-panel admin-video-panel">
           <div class="admin-panel-head">
@@ -600,6 +748,40 @@
           <div class="admin-video-grid">
             <form class="admin-video-form" data-video-form>
               <label>
+                <span>Serie growth</span>
+                <select name="series_id">
+                  <option value="chollo_o_humo" selected>¿Chollo o humo?</option>
+                  <option value="antes_de_llamar">Antes de llamar</option>
+                  <option value="piso_a_vs_piso_b">Piso A vs Piso B</option>
+                  <option value="pisos_seguidores">Pisos de seguidores</option>
+                  <option value="errores_buscar_piso">Errores buscando piso</option>
+                  <option value="parecen_baratos">Pisos que parecen baratos</option>
+                  <option value="lo_visitarias">¿Lo visitarias?</option>
+                  <option value="mitos_inmobiliarios">Mitos inmobiliarios</option>
+                  <option value="mini_tutoriales">Mini tutoriales</option>
+                  <option value="build_in_public">Build in public</option>
+                </select>
+              </label>
+              <label>
+                <span>Plataforma</span>
+                <select name="platform">
+                  <option value="tiktok" selected>TikTok</option>
+                  <option value="reels">Instagram Reels</option>
+                  <option value="shorts">YouTube Shorts</option>
+                  <option value="linkedin">LinkedIn</option>
+                </select>
+              </label>
+              <label>
+                <span>Objetivo</span>
+                <select name="objective">
+                  <option value="comments_and_installs" selected>Comentarios + instalaciones</option>
+                  <option value="views">Visualizaciones</option>
+                  <option value="saves">Guardados</option>
+                  <option value="ugc_comments">Pisos enviados por usuarios</option>
+                  <option value="premium_conversion">Premium</option>
+                </select>
+              </label>
+              <label>
                 <span>Tema</span>
                 <select name="topic">
                   <option value="random">Aleatorio controlado</option>
@@ -614,6 +796,10 @@
               <label>
                 <span>Ciudad opcional</span>
                 <input type="text" name="city" placeholder="Madrid, Logrono, Valencia...">
+              </label>
+              <label class="admin-video-form-wide">
+                <span>Datos del anuncio JSON</span>
+                <textarea name="property_data" rows="8" spellcheck="false" placeholder='{"ciudad":"Madrid","barrio":"Ventas","portal":"Idealista","precio":"245.000 €","metros":"62 m²","precio_m2":"3.951 €/m²","entrada_estimada":"49.000 €","cuota_estimada":"980 €/mes","transporte":"Metro a 9 minutos","aparcamiento":"complicado","score":"6,8/10","veredicto":"lo compararia antes de llamar"}'></textarea>
               </label>
               <label>
                 <span>Duracion</span>
@@ -749,6 +935,6 @@
     </section>
   </main>
 
-  <script src="assets/admin.js"></script>
+  <script src="/assets/admin.js"></script>
 </body>
 </html>

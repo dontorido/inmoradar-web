@@ -6,7 +6,7 @@ const {
   coerceKpiSettings,
   defaultKpiSettings
 } = require("./_kpi/settings");
-const { generateSocialVideoProject, MUSIC_STYLES, TOPICS, VISUAL_BACKDROPS } = require("../lib/social-video/generator");
+const { generateSocialVideoProject, MUSIC_STYLES, seriesConfig, TOPICS, VISUAL_BACKDROPS } = require("../lib/social-video/generator");
 const { getVideoBrandingConfig } = require("../lib/social-video/branding");
 const {
   RUNWAY_VIDEO_PRICING,
@@ -30,6 +30,18 @@ const {
   publishChromeItem,
   uploadChromePackage
 } = require("../lib/operations/chromeWebStore");
+const {
+  DEFAULT_CONFIG: VIRALIZA_DEFAULT_CONFIG,
+  generateDailyRoutine,
+  generateContextualComments,
+  generateOutreachMessage,
+  generateVideoBriefFromHook,
+  generateVideoBriefFromSavedVideo,
+  recordAction,
+  recordResult,
+  analyzeWeeklyLearning,
+  recommendNextActions
+} = require("../lib/viraliza/engine");
 
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at";
@@ -812,6 +824,14 @@ async function handleSocialVideoGenerate(req) {
       payload: {
         ok: true,
         branding: getVideoBrandingConfig(),
+        series: Object.entries(seriesConfig).map(([value, config]) => ({
+          value,
+          label: config.name,
+          objective: config.objective,
+          duration_range: config.durationRange,
+          best_for_platform: config.bestForPlatform,
+          risk_level: config.riskLevel
+        })),
         topics: Object.entries(TOPICS).map(([value, config]) => ({ value, label: config.label })),
         visual_backdrops: Object.entries(VISUAL_BACKDROPS).map(([value, config]) => ({ value, label: config.label })),
         music_styles: Object.entries(MUSIC_STYLES).map(([value, config]) => ({ value, label: config.label }))
@@ -1061,6 +1081,314 @@ async function handleSocialVideoRenderContent(req, res, url) {
   res.end(buffer);
 }
 
+function viralRoutineRow(routine) {
+  return {
+    id: routine.id,
+    date: routine.date,
+    theme: routine.theme,
+    status: routine.status || "pending",
+    completion_rate: Number(routine.completionRate || 0),
+    daily_goal: routine.dailyGoal || "",
+    notes: routine.notes || "",
+    payload: routine,
+    updated_at: new Date().toISOString()
+  };
+}
+
+function viralKeywordRows(routine) {
+  return (routine.keywords || []).map((keyword) => ({
+    id: keyword.id,
+    routine_id: routine.id,
+    keyword: keyword.keyword,
+    category: keyword.category,
+    intent: keyword.intent,
+    platform_priority: keyword.platformPriority || keyword.platforms || [],
+    search_url_tiktok: keyword.searchUrls?.tiktok || null,
+    search_url_instagram: keyword.searchUrls?.instagram || null,
+    search_url_youtube: keyword.searchUrls?.youtube || null,
+    search_url_google: keyword.searchUrls?.google || null,
+    search_url_linkedin: keyword.searchUrls?.linkedin || null,
+    search_url_x: keyword.searchUrls?.x || null,
+    status: keyword.status || "pending",
+    performance_score: Number(keyword.performanceScore || 0),
+    notes: keyword.notes || "",
+    payload: keyword,
+    updated_at: new Date().toISOString()
+  }));
+}
+
+function viralCreatorRows(routine) {
+  return (routine.creators || []).map((creator) => ({
+    id: creator.id,
+    name: creator.name || null,
+    handle: creator.handle || null,
+    platform: creator.platform || null,
+    url: creator.url || null,
+    category: creator.category || null,
+    city: creator.city || null,
+    country: creator.country || null,
+    followers: Number(creator.followers || 0),
+    avg_views: Number(creator.avgViews || creator.avg_views || 0),
+    avg_comments: Number(creator.avgComments || creator.avg_comments || 0),
+    posting_frequency: creator.postingFrequency || creator.posting_frequency || null,
+    topics: Array.isArray(creator.topics) ? creator.topics : [],
+    creator_fit_score: Number(creator.creatorFitScore || creator.creator_fit_score || 0),
+    outreach_score: Number(creator.outreachScore || creator.outreach_score || 0),
+    why_relevant: creator.whyRelevant || creator.why_relevant || "",
+    best_collab_idea: creator.bestCollabIdea || creator.best_collab_idea || "",
+    recommended_action: creator.recommendedAction || creator.recommended_action || "",
+    status: creator.status || "suggested",
+    notes: creator.notes || "",
+    payload: creator,
+    updated_at: new Date().toISOString()
+  }));
+}
+
+function viralTaskRows(routine) {
+  return (routine.tasks || []).map((task) => ({
+    id: task.id,
+    routine_id: routine.id,
+    type: task.type,
+    title: task.title,
+    description: task.description || "",
+    priority: task.priority || "medium",
+    status: task.status || "pending",
+    notes: task.notes || "",
+    completed_at: task.completedAt || null,
+    payload: task,
+    updated_at: new Date().toISOString()
+  }));
+}
+
+function viralCommentRows(routine) {
+  return (routine.comments || []).map((comment) => ({
+    id: comment.id,
+    routine_id: routine.id,
+    text: comment.text,
+    type: comment.type,
+    brand_mention: Boolean(comment.brandMention),
+    best_for: comment.bestFor,
+    status: comment.status || "pending",
+    copied_at: comment.copiedAt || null,
+    used_on_url: comment.usedOnUrl || null,
+    result_likes: comment.result?.likes ?? comment.resultLikes ?? null,
+    result_replies: comment.result?.replies ?? comment.resultReplies ?? null,
+    payload: comment,
+    updated_at: new Date().toISOString()
+  }));
+}
+
+function viralHookRows(routine) {
+  return (routine.hooks || []).map((hook) => ({
+    id: hook.id,
+    routine_id: routine.id,
+    hook: hook.hook,
+    category: hook.category,
+    series: hook.series,
+    suggested_duration: Number(hook.suggestedDuration || 0),
+    suggested_cta: hook.suggestedCta || "",
+    overlay_example: hook.overlayExample || "",
+    script_preview: hook.scriptPreview || "",
+    status: hook.status || "pending",
+    performance_score: Number(hook.performanceScore || 0),
+    payload: hook,
+    updated_at: new Date().toISOString()
+  }));
+}
+
+function viralFollowRows(routine) {
+  return (routine.followQueue || []).map((creator) => ({
+    id: creator.queueId || `follow_${creator.id}`,
+    routine_id: routine.id,
+    creator_id: creator.id,
+    reason: creator.reason || creator.whyRelevant || "",
+    suggested_comment: creator.suggestedComment || "",
+    status: creator.status || "pending",
+    followed_at: creator.followedAt || null,
+    payload: creator,
+    updated_at: new Date().toISOString()
+  }));
+}
+
+function viralOutreachRows(routine) {
+  if (!routine.outreachMessage) return [];
+  return [
+    {
+      id: routine.outreachMessage.id,
+      routine_id: routine.id,
+      creator_id: routine.creatorToContact?.id || null,
+      message_type: routine.outreachMessage.messageType || "dm",
+      message_text: routine.outreachMessage.dm || routine.outreachMessage.medium || routine.outreachMessage.short || "",
+      collaboration_idea: routine.outreachMessage.collaborationIdea || "",
+      status: routine.outreachMessage.status || "pending",
+      payload: routine.outreachMessage,
+      updated_at: new Date().toISOString()
+    }
+  ];
+}
+
+function viralVideoBriefRows(routine) {
+  if (!routine.videoBrief) return [];
+  return [
+    {
+      id: routine.videoBrief.video_id || `${routine.id}_brief`,
+      source_type: "routine",
+      source_id: routine.id,
+      title: routine.videoBrief.title || "",
+      series: routine.videoBrief.series || "",
+      platform: routine.videoBrief.platform || "",
+      duration: Number(routine.videoBrief.duration || 0),
+      hook: routine.videoBrief.hook || "",
+      script: routine.videoBrief.script || "",
+      overlays: routine.videoBrief.overlays || [],
+      caption: routine.videoBrief.caption || "",
+      hashtags: routine.videoBrief.hashtags || [],
+      cta: routine.videoBrief.cta || "",
+      disclaimer: routine.videoBrief.disclaimer || "",
+      status: "draft",
+      payload: routine.videoBrief,
+      updated_at: new Date().toISOString()
+    }
+  ];
+}
+
+async function upsertRows(table, rows) {
+  if (!rows.length) return [];
+  return supabaseFetch(`${table}?on_conflict=id`, {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(rows)
+  });
+}
+
+async function saveViralRoutine(routine) {
+  await upsertRows("viral_routines", [viralRoutineRow(routine)]);
+  await Promise.all([
+    upsertRows("viral_tasks", viralTaskRows(routine)),
+    upsertRows("viral_keywords", viralKeywordRows(routine)),
+    upsertRows("viral_creators", viralCreatorRows(routine)),
+    upsertRows("viral_follow_queue", viralFollowRows(routine)),
+    upsertRows("viral_comments", viralCommentRows(routine)),
+    upsertRows("viral_outreach_messages", viralOutreachRows(routine)),
+    upsertRows("viral_hooks", viralHookRows(routine)),
+    upsertRows("viral_video_briefs", viralVideoBriefRows(routine))
+  ]);
+  return routine;
+}
+
+async function readViralRoutineByDate(date) {
+  const params = new URLSearchParams({
+    date: `eq.${date}`,
+    select: "payload,updated_at",
+    limit: "1"
+  });
+  const rows = await supabaseFetch(`viral_routines?${params.toString()}`);
+  const row = Array.isArray(rows) ? rows[0] : null;
+  return row?.payload ? { ...row.payload, updated_at: row.updated_at } : null;
+}
+
+async function readViralHistory() {
+  const [keywords, creators, hooks] = await Promise.all([
+    safeFetch("viral_keywords?select=keyword,performance_score,created_at&order=created_at.desc&limit=100"),
+    safeFetch("viral_creators?select=handle,status,category,creator_fit_score&order=updated_at.desc&limit=100"),
+    safeFetch("viral_hooks?select=hook,performance_score,category,series&order=updated_at.desc&limit=100")
+  ]);
+  return {
+    keywords: Array.isArray(keywords) ? keywords : keywords.rows,
+    creators: Array.isArray(creators) ? creators : creators.rows,
+    hooks: Array.isArray(hooks) ? hooks : hooks.rows,
+    followedCreators: (Array.isArray(creators) ? creators : creators.rows).filter((creator) => creator.status === "followed")
+  };
+}
+
+async function handleViraliza(req, url) {
+  const today = new Date().toISOString().slice(0, 10);
+  const date = String(url.searchParams.get("date") || today).slice(0, 10);
+
+  if (req.method === "GET") {
+    try {
+      const routine = await readViralRoutineByDate(date);
+      if (routine) return { status: 200, payload: { ok: true, routine, config: VIRALIZA_DEFAULT_CONFIG, persisted: true } };
+    } catch (error) {
+      const routine = generateDailyRoutine(date, VIRALIZA_DEFAULT_CONFIG, {});
+      return { status: 200, payload: { ok: true, routine, config: VIRALIZA_DEFAULT_CONFIG, persisted: false, table_missing: true, error: error.message } };
+    }
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        routine: generateDailyRoutine(date, VIRALIZA_DEFAULT_CONFIG, {}),
+        config: VIRALIZA_DEFAULT_CONFIG,
+        persisted: false
+      }
+    };
+  }
+
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+
+  const body = await readJsonBody(req);
+  const action = String(body.action || "generate");
+  if (action === "generate") {
+    const history = await readViralHistory().catch(() => ({}));
+    const routine = generateDailyRoutine(body.date || date, body.config || VIRALIZA_DEFAULT_CONFIG, history);
+    try {
+      await saveViralRoutine(routine);
+      return { status: 200, payload: { ok: true, routine, persisted: true } };
+    } catch (error) {
+      return { status: 200, payload: { ok: true, routine, persisted: false, table_missing: true, error: error.message } };
+    }
+  }
+
+  if (action === "contextual_comments") {
+    return { status: 200, payload: { ok: true, result: generateContextualComments(body.context || body.videoContext || {}) } };
+  }
+
+  if (action === "outreach") {
+    return { status: 200, payload: { ok: true, message: generateOutreachMessage(body.creator || {}, body.messageType || "dm") } };
+  }
+
+  if (action === "brief_from_hook") {
+    return { status: 200, payload: { ok: true, brief: generateVideoBriefFromHook(body.hook || {}) } };
+  }
+
+  if (action === "brief_from_saved_video") {
+    return { status: 200, payload: { ok: true, brief: generateVideoBriefFromSavedVideo(body.video || {}) } };
+  }
+
+  if (action === "record_action") {
+    const recorded = recordAction(body.record || body);
+    return { status: 200, payload: { ok: true, action: recorded } };
+  }
+
+  if (action === "record_result") {
+    const results = recordResult(body.entity || {}, body.metrics || {});
+    try {
+      await upsertRows(
+        "viral_results",
+        results.map((item) => ({
+          id: item.id,
+          entity_type: item.entityType,
+          entity_id: item.entityId,
+          metric_name: item.metricName,
+          metric_value: item.metricValue,
+          recorded_at: item.recordedAt,
+          payload: item
+        }))
+      );
+    } catch (error) {
+      return { status: 200, payload: { ok: true, results, persisted: false, error: error.message } };
+    }
+    return { status: 200, payload: { ok: true, results, persisted: true } };
+  }
+
+  if (action === "weekly_learning") {
+    const report = analyzeWeeklyLearning(body.dateRange || {}, body.data || {});
+    return { status: 200, payload: { ok: true, report, next_actions: recommendNextActions(report) } };
+  }
+
+  return { status: 400, payload: { ok: false, error: "viraliza_unknown_action" } };
+}
+
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
   if (!assertAdmin(req, res)) return;
@@ -1110,6 +1438,10 @@ module.exports = async function handler(req, res) {
     }
     if (resource === "social-video/generate") {
       const result = await handleSocialVideoGenerate(req);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "viraliza") {
+      const result = await handleViraliza(req, url);
       return json(res, result.status, result.payload);
     }
     if (resource === "social-video/runway-config") {

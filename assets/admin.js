@@ -2,11 +2,13 @@ const TOKEN_KEY = "inmoradar_admin_token";
 const VIDEO_PROJECT_KEY = "inmoradar_social_video_project";
 const RELEASE_TARGETS = ["web", "extension", "backoffice"];
 const MAX_RELEASE_FILE_BYTES = 3 * 1024 * 1024;
+const INITIAL_ADMIN_PATH = window.location.pathname || "";
+const INITIAL_MARKETING_SUBSECTION = INITIAL_ADMIN_PATH.includes("/backoffice/marketing/viraliza") ? "marketing-viraliza" : "";
 
 const state = {
   token: sessionStorage.getItem(TOKEN_KEY) || "",
-  activeSection: "ventas",
-  marketingSubsection: "",
+  activeSection: INITIAL_MARKETING_SUBSECTION ? "marketing" : "ventas",
+  marketingSubsection: INITIAL_MARKETING_SUBSECTION,
   operacionesSubsection: "",
   premium: {
     q: "",
@@ -44,6 +46,11 @@ const state = {
     runwayEstimate: null,
     runwayJob: null,
     runwayConfig: null
+  },
+  viraliza: {
+    routine: null,
+    executionMode: false,
+    focusedArea: "viraliza"
   }
 };
 
@@ -109,7 +116,26 @@ const els = {
   videoRunwayEstimate: document.querySelector("[data-video-runway-estimate]"),
   videoRunwayRender: document.querySelector("[data-video-runway-render]"),
   videoRunwayPoll: document.querySelector("[data-video-runway-poll]"),
-  videoRunwayImport: document.querySelector("[data-video-runway-import]")
+  videoRunwayImport: document.querySelector("[data-video-runway-import]"),
+  viralizaGenerate: document.querySelector("[data-viraliza-generate]"),
+  viralizaMode: document.querySelector("[data-viraliza-mode]"),
+  viralizaOpenSearch: document.querySelector("[data-viraliza-open-search]"),
+  viralizaCreateVideo: document.querySelector("[data-viraliza-create-video]"),
+  viralizaResults: document.querySelector("[data-viraliza-results]"),
+  viralizaKpis: document.querySelector("[data-viraliza-kpis]"),
+  viralizaTheme: document.querySelector("[data-viraliza-theme]"),
+  viralizaGoal: document.querySelector("[data-viraliza-goal]"),
+  viralizaRoutine: document.querySelector("[data-viraliza-routine]"),
+  viralizaKeywords: document.querySelector("[data-viraliza-keywords]"),
+  viralizaComments: document.querySelector("[data-viraliza-comments]"),
+  viralizaHooks: document.querySelector("[data-viraliza-hooks]"),
+  viralizaCreators: document.querySelector("[data-viraliza-creators]"),
+  viralizaOutreach: document.querySelector("[data-viraliza-outreach]"),
+  viralizaSavedVideos: document.querySelector("[data-viraliza-saved-videos]"),
+  viralizaExecution: document.querySelector("[data-viraliza-execution]"),
+  viralizaSteps: document.querySelector("[data-viraliza-steps]"),
+  viralizaContextForm: document.querySelector("[data-viraliza-context-form]"),
+  viralizaContextOutput: document.querySelector("[data-viraliza-context-output]")
 };
 
 function escapeHtml(value) {
@@ -175,6 +201,12 @@ function subsectionGroupFromPanel(panelName) {
   return String(panelName || "").startsWith("operaciones-") ? "operaciones" : "marketing";
 }
 
+function viralizaPanelAliases(value) {
+  return ["marketing-viraliza", "marketing-creadores", "marketing-comentarios", "marketing-hooks", "marketing-resultados"].includes(
+    String(value || "")
+  );
+}
+
 function syncSubsectionPanels() {
   els.subsectionButtons.forEach((button) => {
     const group = button.dataset.adminSubsectionGroup || "marketing";
@@ -188,7 +220,9 @@ function syncSubsectionPanels() {
     const panelName = panel.dataset.adminSubsectionPanel || "";
     const group = subsectionGroupFromPanel(panelName);
     const key = subsectionStateKey(group);
-    panel.hidden = !(state.activeSection === group && state[key] === panelName);
+    const selected = state[key];
+    const aliasMatch = panelName === "marketing-viraliza" && viralizaPanelAliases(selected);
+    panel.hidden = !(state.activeSection === group && (selected === panelName || aliasMatch));
   });
 
   els.subsectionEmptyStates.forEach((emptyState) => {
@@ -201,6 +235,10 @@ function syncSubsectionPanels() {
 function setAdminSubsection(group, subsection) {
   const normalizedGroup = ["marketing", "operaciones"].includes(group) ? group : "marketing";
   state[subsectionStateKey(normalizedGroup)] = subsection || "";
+  if (normalizedGroup === "marketing" && viralizaPanelAliases(subsection)) {
+    state.viraliza.focusedArea = String(subsection || "marketing-viraliza").replace("marketing-", "");
+    renderViraliza(state.viraliza.routine);
+  }
   setAdminSection(normalizedGroup);
 }
 
@@ -973,6 +1011,325 @@ function renderKpis(payload) {
       .join("");
 }
 
+function viralizaStatusTone(status) {
+  const value = String(status || "").toLowerCase();
+  if (["completed", "followed", "contacted", "replied", "collaboration_agreed"].includes(value)) return "ready";
+  if (["skipped", "rejected", "archived"].includes(value)) return "bad";
+  if (["in_progress", "reviewed", "warm_commented", "ready_to_contact"].includes(value)) return "warn";
+  return "draft";
+}
+
+function platformLabel(value) {
+  const labels = {
+    tiktok: "TikTok",
+    instagram: "Instagram",
+    youtube: "YouTube",
+    linkedin: "LinkedIn",
+    x: "X"
+  };
+  return labels[String(value || "").toLowerCase()] || value || "-";
+}
+
+function renderViralizaKpis(routine) {
+  if (!els.viralizaKpis) return;
+  if (!routine) {
+    els.viralizaKpis.innerHTML = [
+      stat("Rutina de hoy", "Pendiente", { hint: "Genera la rutina para empezar" }),
+      stat("Racha actual", "0", { hint: "Dias ejecutando la rutina" }),
+      stat("Oportunidades", "0", { hint: "Keywords y busquedas listas" }),
+      stat("Comentarios", "0", { hint: "Comentarios preparados" })
+    ].join("");
+    return;
+  }
+  const completed = (routine.tasks || []).filter((task) => task.status === "completed").length;
+  const total = (routine.tasks || []).length || 1;
+  els.viralizaKpis.innerHTML = [
+    stat("Rutina de hoy", `${completed}/${total}`, { hint: routine.status === "completed" ? "Completada" : "Pendiente" }),
+    stat("Racha actual", routine.streak || "1", { hint: "Dia activo de ejecucion" }),
+    stat("Oportunidades", (routine.keywords || []).length, { hint: "Keywords encontradas hoy" }),
+    stat("Comentarios", (routine.comments || []).length, { hint: "Maximo 2 con marca" }),
+    stat("Creadores nuevos", (routine.creators || []).length, { hint: "Detectados para revisar" }),
+    stat("Contactados semana", routine.contactedThisWeek || 0, { hint: "Manual, no automatico" }),
+    stat("Videos semana", routine.videosThisWeek || 0, { hint: "Briefs o piezas creadas" }),
+    stat("Formatos winners", routine.winningFormats || 0, { hint: "Aprendizaje semanal" })
+  ].join("");
+}
+
+function viralizaTaskCard(task) {
+  return `
+    <article class="admin-viraliza-card">
+      <div class="admin-viraliza-card-head">
+        ${chip(task.status || "pending", viralizaStatusTone(task.status))}
+        <span>${escapeHtml(task.priority || "medium")} · ${escapeHtml(task.difficulty || "easy")} · ${escapeHtml(task.estimatedMinutes || "-")} min</span>
+      </div>
+      <h3>${escapeHtml(task.title)}</h3>
+      <p>${escapeHtml(task.description || "")}</p>
+      <div class="admin-row-actions">
+        <button class="admin-button tiny ghost" type="button" data-viraliza-record data-entity-type="task" data-entity-id="${escapeHtml(task.id)}" data-action-type="in_progress">Empezar</button>
+        <button class="admin-button tiny" type="button" data-viraliza-record data-entity-type="task" data-entity-id="${escapeHtml(task.id)}" data-action-type="completed">Completar</button>
+      </div>
+    </article>
+  `;
+}
+
+function viralizaKeywordCard(keyword) {
+  const urls = keyword.searchUrls || {};
+  return `
+    <article class="admin-viraliza-card admin-viraliza-keyword">
+      <div class="admin-viraliza-card-head">
+        ${chip(keyword.category || "keyword", "draft")}
+        <span>${escapeHtml((keyword.platforms || []).map(platformLabel).join(", "))}</span>
+      </div>
+      <h3>${escapeHtml(keyword.keyword)}</h3>
+      <p>${escapeHtml(keyword.intent || "")}</p>
+      <ul>${(keyword.whatToLookFor || []).slice(0, 3).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+      <div class="admin-row-actions">
+        ${Object.entries(urls)
+          .slice(0, 4)
+          .map(([platform, url]) => `<button class="admin-button tiny ghost" type="button" data-open-url="${escapeHtml(url)}">${escapeHtml(platformLabel(platform))}</button>`)
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
+function viralizaCommentCard(comment) {
+  return `
+    <article class="admin-viraliza-card">
+      <div class="admin-viraliza-card-head">
+        ${chip(comment.type || "comment", "draft")}
+        ${chip(comment.brandMention ? "marca" : "sin marca", comment.brandMention ? "warn" : "ready")}
+      </div>
+      <p class="admin-viraliza-copy">${escapeHtml(comment.text)}</p>
+      <small>${escapeHtml(comment.bestFor || "")} · riesgo ${escapeHtml(comment.risk || "low")}</small>
+      <div class="admin-row-actions">
+        <button class="admin-button tiny" type="button" data-copy-text="${escapeHtml(comment.text)}">Copiar</button>
+        <button class="admin-button tiny ghost" type="button" data-viraliza-record data-entity-type="comment" data-entity-id="${escapeHtml(comment.id)}" data-action-type="used">Marcar usado</button>
+      </div>
+    </article>
+  `;
+}
+
+function viralizaHookCard(hook) {
+  return `
+    <article class="admin-viraliza-card">
+      <div class="admin-viraliza-card-head">
+        ${chip(hook.category || "hook", "draft")}
+        <span>${escapeHtml(hook.series || "")} · ${escapeHtml(hook.suggestedDuration || 28)}s</span>
+      </div>
+      <h3>${escapeHtml(hook.hook)}</h3>
+      <p>${escapeHtml(hook.scriptPreview || "")}</p>
+      <small>Overlay: ${escapeHtml(hook.overlayExample || "")}</small>
+      <div class="admin-row-actions">
+        <button class="admin-button tiny" type="button" data-copy-text="${escapeHtml(hook.hook)}">Copiar</button>
+        <button class="admin-button tiny ghost" type="button" data-viraliza-create-video-from-hook="${escapeHtml(hook.id)}">Crear video</button>
+      </div>
+    </article>
+  `;
+}
+
+function viralizaCreatorCard(creator) {
+  return `
+    <article class="admin-viraliza-card">
+      <div class="admin-viraliza-card-head">
+        ${chip(`Score ${creator.creatorFitScore || 0}`, scoreTone(creator.creatorFitScore), "score")}
+        <span>${escapeHtml(platformLabel(creator.platform))} · ${escapeHtml(creator.category || "")}</span>
+      </div>
+      <h3>${escapeHtml(creator.name || creator.handle || "Creador")}</h3>
+      <p>${escapeHtml(creator.whyRelevant || creator.reason || "")}</p>
+      <small>${escapeHtml((creator.topics || []).join(", "))}</small>
+      <div class="admin-row-actions">
+        <button class="admin-button tiny ghost" type="button" data-open-url="${escapeHtml(creator.url || "")}">Abrir perfil</button>
+        <button class="admin-button tiny ghost" type="button" data-copy-text="${escapeHtml(creator.handle || "")}">Copiar handle</button>
+        <button class="admin-button tiny" type="button" data-viraliza-record data-entity-type="creator" data-entity-id="${escapeHtml(creator.id)}" data-action-type="followed">Marcar seguido</button>
+      </div>
+    </article>
+  `;
+}
+
+function viralizaSavedVideoCard(video, index) {
+  return `
+    <article class="admin-viraliza-card">
+      <div class="admin-viraliza-card-head">
+        ${chip(video.status || "pending", viralizaStatusTone(video.status))}
+        <span>${escapeHtml(platformLabel(video.platform))}</span>
+      </div>
+      <h3>Video ${index + 1}</h3>
+      <p>Pega una URL, anota por que funciona y crea una adaptacion para InmoRadar. No copies el contenido: adapta el formato.</p>
+      <div class="admin-row-actions">
+        <button class="admin-button tiny ghost" type="button" data-viraliza-record data-entity-type="saved_video" data-entity-id="${escapeHtml(video.id)}" data-action-type="saved">Marcar guardado</button>
+        <button class="admin-button tiny ghost" type="button" data-viraliza-saved-brief="${escapeHtml(video.id)}">Crear idea</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderViralizaOutreach(routine) {
+  if (!els.viralizaOutreach) return;
+  const creator = routine?.creatorToContact;
+  const message = routine?.outreachMessage;
+  if (!creator || !message) {
+    els.viralizaOutreach.innerHTML = `<p class="admin-empty-state">Genera una rutina para ver el creador recomendado.</p>`;
+    return;
+  }
+  els.viralizaOutreach.innerHTML = `
+    <article class="admin-viraliza-card">
+      <div class="admin-viraliza-card-head">
+        ${chip(`Outreach ${creator.outreachScore || 0}`, scoreTone(creator.outreachScore), "score")}
+        <span>${escapeHtml(creator.recommendedAction || "warm_comment")}</span>
+      </div>
+      <h3>${escapeHtml(creator.name || creator.handle)}</h3>
+      <p>${escapeHtml(creator.bestCollabIdea || message.collaborationIdea || "")}</p>
+      <pre>${escapeHtml(message.dm || message.medium || message.short || "")}</pre>
+      <div class="admin-row-actions">
+        <button class="admin-button tiny" type="button" data-copy-text="${escapeHtml(message.dm || message.medium || message.short || "")}">Copiar mensaje</button>
+        <button class="admin-button tiny ghost" type="button" data-viraliza-record data-entity-type="outreach" data-entity-id="${escapeHtml(message.id)}" data-action-type="contacted">Marcar contactado</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderViralizaSteps(routine) {
+  if (!els.viralizaSteps) return;
+  if (!routine) {
+    els.viralizaSteps.innerHTML = `<p class="admin-empty-state">Genera una rutina para activar el modo ejecucion.</p>`;
+    return;
+  }
+  const keywords = (routine.primaryKeywords || routine.keywords || []).slice(0, 3);
+  const comments = (routine.comments || []).slice(0, 10);
+  const creators = (routine.followQueue || []).slice(0, 5);
+  const hooks = (routine.hooks || []).slice(0, 3);
+  const message = routine.outreachMessage;
+  els.viralizaSteps.innerHTML = `
+    <article class="admin-viraliza-step">
+      <span>Pantalla 1</span>
+      <h3>Busca estas 3 keywords</h3>
+      ${keywords.map(viralizaKeywordCard).join("")}
+    </article>
+    <article class="admin-viraliza-step">
+      <span>Pantalla 2</span>
+      <h3>Guarda 5 videos buenos</h3>
+      ${(routine.savedVideos || []).slice(0, 5).map(viralizaSavedVideoCard).join("")}
+    </article>
+    <article class="admin-viraliza-step">
+      <span>Pantalla 3</span>
+      <h3>Comenta en 10 videos</h3>
+      ${comments.map(viralizaCommentCard).join("")}
+    </article>
+    <article class="admin-viraliza-step">
+      <span>Pantalla 4</span>
+      <h3>Sigue 5 cuentas</h3>
+      ${creators.map(viralizaCreatorCard).join("")}
+    </article>
+    <article class="admin-viraliza-step">
+      <span>Pantalla 5</span>
+      <h3>Anota 3 hooks</h3>
+      ${hooks.map(viralizaHookCard).join("")}
+    </article>
+    <article class="admin-viraliza-step">
+      <span>Pantalla 6</span>
+      <h3>Contacta 1 creador</h3>
+      ${message ? `<pre>${escapeHtml(message.dm || message.medium || "")}</pre><button class="admin-button tiny" type="button" data-copy-text="${escapeHtml(message.dm || message.medium || "")}">Copiar mensaje</button>` : `<p class="admin-empty-state">Sin creador recomendado.</p>`}
+    </article>
+    <article class="admin-viraliza-step">
+      <span>Resumen del dia</span>
+      <h3>Aprendizajes y proximos pasos</h3>
+      <p>Registra URL, resultados y notas despues de 24h para que el Learning Engine detecte winners.</p>
+    </article>
+  `;
+}
+
+function renderViraliza(routine) {
+  state.viraliza.routine = routine || state.viraliza.routine;
+  const current = state.viraliza.routine;
+  renderViralizaKpis(current);
+  if (els.viralizaTheme) els.viralizaTheme.textContent = current?.theme || "Aun no hay rutina";
+  if (els.viralizaGoal) {
+    els.viralizaGoal.textContent =
+      current?.dailyGoal || "Aun no hay rutina para hoy. Genera una rutina diaria y empieza por las keywords con mas intencion.";
+  }
+  if (els.viralizaRoutine) {
+    els.viralizaRoutine.innerHTML = current ? (current.tasks || []).map(viralizaTaskCard).join("") : `<p class="admin-empty-state">Aun no hay rutina para hoy.</p>`;
+  }
+  if (els.viralizaKeywords) {
+    els.viralizaKeywords.innerHTML = current ? (current.primaryKeywords || current.keywords || []).slice(0, 3).map(viralizaKeywordCard).join("") : `<p class="admin-empty-state">Genera una rutina para ver keywords.</p>`;
+  }
+  if (els.viralizaComments) {
+    els.viralizaComments.innerHTML = current ? (current.comments || []).map(viralizaCommentCard).join("") : `<p class="admin-empty-state">Genera una rutina para preparar comentarios.</p>`;
+  }
+  if (els.viralizaHooks) {
+    els.viralizaHooks.innerHTML = current ? (current.hooks || []).map(viralizaHookCard).join("") : `<p class="admin-empty-state">Genera una rutina para ver hooks.</p>`;
+  }
+  if (els.viralizaCreators) {
+    els.viralizaCreators.innerHTML = current ? (current.followQueue || []).map(viralizaCreatorCard).join("") : `<p class="admin-empty-state">Genera una rutina para ver cuentas.</p>`;
+  }
+  if (els.viralizaSavedVideos) {
+    els.viralizaSavedVideos.innerHTML = current ? (current.savedVideos || []).map(viralizaSavedVideoCard).join("") : `<p class="admin-empty-state">Genera una rutina para guardar inspiracion.</p>`;
+  }
+  if (els.viralizaExecution) els.viralizaExecution.hidden = !state.viraliza.executionMode;
+  renderViralizaOutreach(current);
+  renderViralizaSteps(current);
+}
+
+async function loadViraliza() {
+  if (!els.viralizaKpis) return;
+  const payload = await api("/api/admin?resource=viraliza");
+  renderViraliza(payload.routine);
+}
+
+async function generateViralizaRoutine() {
+  showStatus("Generando rutina Viraliza...");
+  const payload = await api("/api/admin?resource=viraliza", {
+    method: "POST",
+    body: JSON.stringify({ action: "generate" })
+  });
+  renderViraliza(payload.routine);
+  showStatus(payload.persisted ? "Rutina Viraliza guardada." : "Rutina Viraliza generada sin guardar. Ejecuta database/viraliza.sql si falta la tabla.", payload.persisted ? "good" : "neutral");
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showStatus("Copiado.", "good");
+  } catch (error) {
+    showStatus("No pude copiar automaticamente. Selecciona el texto manualmente.", "bad");
+  }
+}
+
+async function recordViralizaAction(button) {
+  const record = {
+    entityType: button.dataset.entityType,
+    entityId: button.dataset.entityId,
+    actionType: button.dataset.actionType
+  };
+  await api("/api/admin?resource=viraliza", {
+    method: "POST",
+    body: JSON.stringify({ action: "record_action", record })
+  }).catch(() => null);
+  button.textContent = "Registrado";
+  button.disabled = true;
+  showStatus("Accion registrada. Recuerda ejecutar siempre manualmente en la plataforma.", "good");
+}
+
+async function generateContextualViralizaComments(form) {
+  const data = new FormData(form);
+  const payload = await api("/api/admin?resource=viraliza", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "contextual_comments",
+      context: {
+        url: String(data.get("url") || ""),
+        creatorType: String(data.get("creator_type") || ""),
+        description: String(data.get("description") || "")
+      }
+    })
+  });
+  if (!els.viralizaContextOutput) return;
+  els.viralizaContextOutput.innerHTML = (payload.result?.comments || [])
+    .map((comment) => viralizaCommentCard({ id: `context_${slugId(comment.text)}`, status: "pending", bestFor: comment.type, ...comment }))
+    .join("");
+}
+
 function setVideoActions(enabled) {
   [els.videoCopyPrompt, els.videoDownloadAiPack, els.videoDownloadJson, els.videoDownloadHtml, els.videoExport].forEach((button) => {
     if (button) button.disabled = !enabled || state.video.busy;
@@ -1116,9 +1473,27 @@ async function importRunwayClip() {
 
 function videoFormPayload(form) {
   const data = new FormData(form);
+  const propertyDataRaw = String(data.get("property_data") || "").trim();
+  let propertyData = {};
+  if (propertyDataRaw) {
+    try {
+      propertyData = JSON.parse(propertyDataRaw);
+    } catch (error) {
+      throw new Error("El JSON de datos del anuncio no es valido. Revisa comillas, comas y llaves.");
+    }
+    if (!propertyData || Array.isArray(propertyData) || typeof propertyData !== "object") {
+      throw new Error("Los datos del anuncio deben ser un objeto JSON.");
+    }
+  }
+  const city = String(data.get("city") || "").trim();
+  if (city && !propertyData.ciudad) propertyData.ciudad = city;
   return {
+    series_id: String(data.get("series_id") || "chollo_o_humo"),
+    platform: String(data.get("platform") || "tiktok"),
+    objective: String(data.get("objective") || "comments_and_installs"),
     topic: String(data.get("topic") || "random"),
-    city: String(data.get("city") || "").trim(),
+    city,
+    property_data: propertyData,
     duration_seconds: Number(data.get("duration_seconds") || 24),
     tone: String(data.get("tone") || "directo"),
     audience: String(data.get("audience") || "general"),
@@ -1162,6 +1537,17 @@ function realVideoPackText(project) {
     `Titulo: ${project.title || ""}`,
     `Duracion: ${project.duration_seconds || 24}s`,
     `Formato: ${project.format?.width || 1080}x${project.format?.height || 1920}`,
+    project.growth_strategy ? `Serie: ${project.growth_strategy.series || ""}` : "",
+    project.growth_strategy ? `Objetivo: ${project.growth_strategy.objective || ""}` : "",
+    "",
+    project.growth_strategy ? "GUION PERFORMANCE" : "",
+    project.growth_strategy?.script || "",
+    "",
+    project.growth_strategy ? "OVERLAYS" : "",
+    project.growth_strategy ? (project.growth_strategy.overlays || []).map((item) => `- ${item}`).join("\n") : "",
+    "",
+    project.growth_strategy ? "CAPTION Y CTA" : "",
+    project.growth_strategy ? `${project.growth_strategy.caption || ""}\nCTA: ${project.growth_strategy.cta || ""}\nDisclaimer: ${project.growth_strategy.disclaimer || ""}` : "",
     "",
     "PROMPT MAESTRO",
     pack.master_prompt || project.global_ai_prompt || "",
@@ -1228,6 +1614,52 @@ function renderVideoPreview() {
   }
 }
 
+function renderGrowthStrategyCard(project) {
+  const brief = project?.growth_strategy;
+  if (!brief) return "";
+  const quality = brief.quality_check || {};
+  const variants = brief.ab_variants || {};
+  const qualityRows = Object.entries(quality)
+    .map(([key, value]) => `<span>${escapeHtml(key.replace(/_/g, " "))}: <strong>${value ? "OK" : "Revisar"}</strong></span>`)
+    .join("");
+  const overlays = (brief.overlays || project.overlays || [])
+    .map((overlay) => `<li>${escapeHtml(overlay)}</li>`)
+    .join("");
+  const hooks = (variants.hooks || [])
+    .map((hook) => `<li>${escapeHtml(hook)}</li>`)
+    .join("");
+  const ctas = (variants.ctas || [])
+    .map((cta) => `<li>${escapeHtml(cta)}</li>`)
+    .join("");
+
+  return `
+    <section class="admin-video-branding-card admin-video-growth-card">
+      <strong>Estrategia growth</strong>
+      <p><b>Objetivo:</b> ${escapeHtml(brief.objective || "")}</p>
+      <p><b>Hook:</b> ${escapeHtml(brief.hook || "")}</p>
+      <p><b>CTA:</b> ${escapeHtml(brief.cta || "")}</p>
+      <p><b>Disclaimer:</b> ${escapeHtml(brief.disclaimer || project.disclaimer || "")}</p>
+      <p><b>Caption:</b> ${escapeHtml(brief.caption || project.caption || "")}</p>
+      <p><b>Hashtags:</b> ${escapeHtml((brief.hashtags || project.hashtags || []).join(" "))}</p>
+      <div class="admin-video-growth-lists">
+        <div>
+          <span>Overlays</span>
+          <ol>${overlays}</ol>
+        </div>
+        <div>
+          <span>Hooks A/B</span>
+          <ol>${hooks}</ol>
+        </div>
+        <div>
+          <span>CTAs A/B</span>
+          <ol>${ctas}</ol>
+        </div>
+      </div>
+      <div class="admin-video-quality">${qualityRows}</div>
+    </section>
+  `;
+}
+
 function renderVideoStoryboard() {
   const project = state.video.lastProject;
   if (!els.videoStoryboard) return;
@@ -1258,6 +1690,7 @@ function renderVideoStoryboard() {
       <p>${state.video.backgroundClipName ? `Clip real activo: ${escapeHtml(state.video.backgroundClipName)}. Se usara como fondo del export local.` : "Sin clip real subido. El export local usa una maqueta; para personas reales descarga el Pack IA real, genera un clip vertical y subelo en el formulario."}</p>
       <p>${escapeHtml(project.real_ai_video?.production_note || "El render final con personas reales requiere una IA de video o un clip real como fuente visual.")}</p>
     </section>
+    ${renderGrowthStrategyCard(project)}
     <div class="admin-video-scenes">
       ${(project.scenes || [])
         .map(
@@ -1985,6 +2418,7 @@ async function loadAll() {
       loadKpis(),
       loadParking(),
       loadReleaseHubs(),
+      loadViraliza(),
       loadRunwayConfig()
     ]);
     showStatus(`Actualizado ${formatDate(new Date().toISOString())}`, "good");
@@ -2308,6 +2742,72 @@ if (els.videoRunwayDuration) {
     state.video.runwayEstimate = null;
     setRunwayStatus("Duracion cambiada. Vuelve a estimar el coste.", "neutral");
     setRunwayActions();
+  });
+}
+
+if (els.viralizaGenerate) {
+  els.viralizaGenerate.addEventListener("click", () => generateViralizaRoutine().catch((error) => showStatus(error.message, "bad")));
+}
+
+if (els.viralizaMode) {
+  els.viralizaMode.addEventListener("click", () => {
+    state.viraliza.executionMode = !state.viraliza.executionMode;
+    renderViraliza(state.viraliza.routine);
+    els.viralizaMode.textContent = state.viraliza.executionMode ? "Cerrar modo ejecucion" : "Modo ejecucion";
+  });
+}
+
+if (els.viralizaOpenSearch) {
+  els.viralizaOpenSearch.addEventListener("click", () => {
+    const firstUrl = state.viraliza.routine?.primaryKeywords?.[0]?.searchUrls?.tiktok;
+    if (firstUrl) window.open(firstUrl, "_blank", "noopener,noreferrer");
+  });
+}
+
+if (els.viralizaCreateVideo) {
+  els.viralizaCreateVideo.addEventListener("click", () => {
+    setAdminSubsection("marketing", "marketing-videos");
+    showStatus("Abre Videos con el hook ganador de Viraliza como referencia.", "neutral");
+  });
+}
+
+if (els.viralizaResults) {
+  els.viralizaResults.addEventListener("click", () => {
+    setAdminSubsection("marketing", "marketing-resultados");
+    state.viraliza.executionMode = true;
+    renderViraliza(state.viraliza.routine);
+  });
+}
+
+if (els.viralizaContextForm) {
+  els.viralizaContextForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    generateContextualViralizaComments(els.viralizaContextForm).catch((error) => showStatus(error.message, "bad"));
+  });
+}
+
+if (els.app) {
+  els.app.addEventListener("click", (event) => {
+    const openButton = event.target.closest("[data-open-url]");
+    if (openButton?.dataset.openUrl) {
+      window.open(openButton.dataset.openUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const copyButton = event.target.closest("[data-copy-text]");
+    if (copyButton) {
+      copyToClipboard(copyButton.dataset.copyText || "").catch((error) => showStatus(error.message, "bad"));
+      return;
+    }
+    const recordButton = event.target.closest("[data-viraliza-record]");
+    if (recordButton) {
+      recordViralizaAction(recordButton).catch((error) => showStatus(error.message, "bad"));
+      return;
+    }
+    const hookButton = event.target.closest("[data-viraliza-create-video-from-hook]");
+    if (hookButton) {
+      setAdminSubsection("marketing", "marketing-videos");
+      showStatus("Usa este hook como base en el generador de videos.", "neutral");
+    }
   });
 }
 
