@@ -18,10 +18,10 @@
   <!-- End Google Tag Manager -->
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>InmoRadar · Analiza inmuebles antes de contactar</title>
-  <meta name="description" content="InmoRadar analiza anuncios inmobiliarios antes de contactar: precio real, zona, aparcamiento, transporte y señales clave. Compatible con Idealista, Fotocasa, Pisos.com y Habitaclia.">
-  <meta property="og:title" content="InmoRadar · Analiza inmuebles antes de contactar">
-  <meta property="og:description" content="Precio real, zona, aparcamiento, transporte y señales clave antes de contactar.">
+  <title>InmoRadar · Copiloto inmobiliario para tu navegador</title>
+  <meta name="description" content="InmoRadar añade análisis sobre Idealista, Fotocasa, Pisos.com y Habitaclia: precio real, coste inicial, zona, transporte, aparcamiento y señales clave.">
+  <meta property="og:title" content="InmoRadar · Copiloto inmobiliario para tu navegador">
+  <meta property="og:description" content="Decide si una vivienda merece la pena antes de contactar con una capa de análisis sobre tus portales inmobiliarios.">
   <meta name="theme-color" content="#FAFAFA">
   <link rel="icon" href="/assets/favicon-32.png?v=20260519b" type="image/png" sizes="32x32">
   <link rel="stylesheet" href="assets/styles.css">
@@ -51,7 +51,7 @@
           <button type="button" data-lang="es" aria-pressed="true"><span class="flag flag-es" aria-hidden="true"></span><span>ES</span></button>
           <button type="button" data-lang="en" aria-pressed="false"><span class="flag flag-en" aria-hidden="true"></span><span>EN</span></button>
         </div><a class="client-link" href="/clientes" aria-label="Area de clientes" title="Area de clientes" data-testid="nav-clientes"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle></svg></a>
-        <a class="button" href="/premium" data-testid="nav-cta-premium" data-i18n-key="navCta">Probar 2 días gratis</a>
+        <a class="button" href="/premium" data-testid="nav-cta-premium">Empezar gratis</a>
       </div>
       <button class="mobile-toggle" type="button" data-mobile-toggle data-testid="nav-mobile-toggle" aria-label="Abrir menu" aria-expanded="false">
         <span data-icon="Radar"></span>
@@ -71,13 +71,14 @@
     <section class="hero grid-bg" data-testid="section-hero">
       <div class="container hero-layout">
         <div class="reveal">
-          <p class="pill"><span class="dot-radar"></span>Extensión Chrome · Compatible con Idealista, Fotocasa, Pisos.com y Habitaclia</p>
-          <h1>Analiza pisos<br><span class="accent">antes de</span><br>contactar.</h1>
-          <p class="lead">InmoRadar convierte cada anuncio en una ficha clara: precio real, entrada estimada, zona, aparcamiento, transporte y señales que conviene revisar antes de gastar una llamada.</p>
+          <p class="pill"><span class="dot-radar"></span>Copiloto inmobiliario para tu navegador · Idealista, Fotocasa, Pisos.com y Habitaclia</p>
+          <h1>Decide si una vivienda merece la pena antes de contactar.</h1>
+          <p class="lead">InmoRadar añade una capa de análisis sobre Idealista, Fotocasa, Pisos.com y Habitaclia para mostrarte precio real, coste inicial, zona, transporte, aparcamiento y señales clave en segundos.</p>
           <div class="hero-actions">
-            <a class="button" href="/premium" data-testid="hero-cta-primary">Probar 2 días gratis <span data-icon="ArrowRight"></span></a>
-            <a class="button secondary" href="/que-analiza" data-testid="hero-cta-secondary">Ver qué analiza</a>
+            <a class="button" href="/premium" data-testid="hero-cta-primary">Analizar mi primer anuncio gratis <span data-icon="ArrowRight"></span></a>
+            <a class="button secondary" href="#ejemplo-real" data-testid="hero-cta-secondary">Ver ejemplo real</a>
           </div>
+          <p class="hero-microcopy">2 días gratis · Sin pago inicial · Premium semanal por 1,99 € solo si decides continuar</p>
           <div class="metrics" aria-label="Métricas principales">
             <div class="metric"><strong>2 días</strong><span>acceso inicial sin pagar</span></div>
             <div class="metric"><strong>1,99 &euro;</strong><span>Premium semanal después</span></div>
@@ -113,6 +114,40 @@
       </div>
     </section>
 
+    <section class="section compact" id="busca-donde-buscas" data-testid="section-portales">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-label">[ 01 ] Busca donde ya buscas</span>
+          <h2>No sustituye a tus portales.<br><span class="accent">Los hace más claros.</span></h2>
+          <p class="lead">Sigues buscando en Idealista, Fotocasa, Pisos.com y Habitaclia. InmoRadar trabaja encima de esas páginas para ordenar la información, detectar señales útiles y ayudarte a priorizar qué anuncios merecen una visita.</p>
+        </div>
+        <div class="portal-strip" aria-label="Portales compatibles">
+          <span>Idealista</span>
+          <span>Fotocasa</span>
+          <span>Pisos.com</span>
+          <span>Habitaclia</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section grid-bg" id="navegadores" data-testid="section-browsers">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-label">[ 02 ] Multi-navegador</span>
+          <h2>Funciona en tu<br><span class="accent">navegador favorito.</span></h2>
+          <p class="lead">InmoRadar se está preparando como extensión para navegadores modernos. Mostramos el estado real de cada navegador para que sepas cómo instalarlo hoy.</p>
+        </div>
+        <div class="browser-grid" aria-label="Compatibilidad por navegador">
+          <article class="browser-card"><span class="browser-logo">CH</span><div><h3>Chrome</h3><p>Instalación principal para usuarios de Chromium.</p></div><strong class="status-pill available">Disponible</strong></article>
+          <article class="browser-card"><span class="browser-logo">ED</span><div><h3>Edge</h3><p>Funciona sobre la base Chromium de Microsoft Edge.</p></div><strong class="status-pill compatible">Compatible</strong></article>
+          <article class="browser-card"><span class="browser-logo">FF</span><div><h3>Firefox</h3><p>Versión adaptada para el ecosistema Mozilla.</p></div><strong class="status-pill beta">Beta</strong></article>
+          <article class="browser-card"><span class="browser-logo">OP</span><div><h3>Opera</h3><p>Compatible mediante instalación de extensiones Chromium.</p></div><strong class="status-pill manual">Instalación manual</strong></article>
+          <article class="browser-card"><span class="browser-logo">VI</span><div><h3>Vivaldi</h3><p>Preparado para usuarios avanzados de Chromium.</p></div><strong class="status-pill manual">Instalación manual</strong></article>
+          <article class="browser-card"><span class="browser-logo">BR</span><div><h3>Brave</h3><p>Compatible con extensiones Chromium y foco en privacidad.</p></div><strong class="status-pill compatible">Compatible</strong></article>
+        </div>
+      </div>
+    </section>
+
     <section class="marquee" aria-label="Señales InmoRadar">
       <div class="marquee-track">
         <span><i class="dot-radar"></i>Coste real</span><span><i class="dot-radar"></i>Entorno urbano</span><span><i class="dot-radar"></i>Comparativa</span><span><i class="dot-radar"></i>Market Price</span><span><i class="dot-radar"></i>Address Intelligence</span><span><i class="dot-radar"></i>Logística diaria</span><span><i class="dot-radar"></i>Idealista</span><span><i class="dot-radar"></i>Fotocasa</span><span><i class="dot-radar"></i>Pisos.com</span><span><i class="dot-radar"></i>Habitaclia</span><span><i class="dot-radar"></i>Datos abiertos</span>
@@ -120,10 +155,10 @@
       </div>
     </section>
 
-    <section class="section" id="analisis" data-testid="section-que-analiza">
+    <section class="section" id="ejemplo-real" data-testid="section-que-analiza">
       <div class="container">
         <div class="section-head">
-          <span class="section-label">[ 01 ] Análisis inmediato</span>
+          <span class="section-label">[ 03 ] Ejemplo real</span>
           <h2>Precio, zona y coste real<br><span class="accent">en una sola vista.</span></h2>
           <p class="lead">Una ficha para decidir si merece la pena contactar, guardar o descartar antes de invertir tiempo.</p>
         </div>
@@ -168,7 +203,7 @@
     <section class="section grid-bg" id="datos">
       <div class="container">
         <div class="section-head">
-          <span class="section-label">[ 02 ] Datos enriquecidos</span>
+          <span class="section-label">[ 04 ] Datos enriquecidos</span>
           <h2>APIs propias<br><span class="accent">para señales urbanas.</span></h2>
           <p class="lead">Precio de mercado, datos de edificio, logística diaria y aparcamiento con fuentes, confianza y caveats.</p>
         </div>
@@ -181,11 +216,53 @@
       </div>
     </section>
 
+    <section class="section" id="comparativa" data-testid="section-comparison">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-label">[ 05 ] Criterio en menos tiempo</span>
+          <h2>Sin InmoRadar<br><span class="accent">vs Con InmoRadar.</span></h2>
+          <p class="lead">La diferencia no es hacer magia. Es reducir pestañas, cálculos sueltos y dudas repetidas para decidir mejor qué anuncios merecen atención.</p>
+        </div>
+        <div class="comparison-panels">
+          <article class="comparison-panel">
+            <span class="comparison-kicker">Sin InmoRadar</span>
+            <h3>Mucho dato disperso.</h3>
+            <ul>
+              <li>Saltas entre el anuncio, mapas, calculadora, comparadores y notas.</li>
+              <li>El precio por metro cuadrado se calcula tarde o no se calcula.</li>
+              <li>Comparar visitas depende de memoria, capturas o una hoja manual.</li>
+              <li>Es fácil dedicar tiempo a anuncios que no encajan.</li>
+            </ul>
+          </article>
+          <article class="comparison-panel with-radar">
+            <span class="comparison-kicker">Con InmoRadar</span>
+            <h3>Una lectura accionable.</h3>
+            <ul>
+              <li>Precio real, coste inicial, zona y señales clave en la misma ficha.</li>
+              <li>Comparas el anuncio con referencias de mercado y contexto urbano.</li>
+              <li>Guardas inmuebles y los ordenas por criterio, no por intuición.</li>
+              <li>Priorizar visitas se vuelve más rápido y menos improvisado.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section compact trust-section" id="criterio" data-testid="section-trust">
+      <div class="container">
+        <div class="trust-card">
+          <span class="section-label">[ 06 ] Transparencia</span>
+          <h2>No es una tasación.<br><span class="accent">Es una capa de criterio.</span></h2>
+          <p class="lead">InmoRadar ofrece estimaciones orientativas basadas en datos visibles del anuncio, fuentes públicas y señales urbanas. Sirve para entender mejor una vivienda antes de contactar, no para sustituir una tasación profesional ni garantizar una decisión económica.</p>
+        </div>
+      </div>
+    </section>
+
     <section class="section dark" id="premium">
       <div class="container premium-grid">
         <div class="premium-copy">
-          <span class="section-label">[ 03 ] Para búsquedas intensivas</span>
-          <h2>Pruébalo gratis.<br><span class="accent">Si engancha, paga por semana.</span></h2>
+          <span class="section-label">[ 07 ] Para búsquedas intensivas</span>
+          <h2>Paga solo durante<br><span class="accent">tu búsqueda activa.</span></h2>
           <p class="lead">Los 2 días gratis son acceso inicial para todos: no son una prueba Premium de pago. Premium solo empieza si decides continuar.</p>
         </div>
         <article class="pricing-card">
@@ -200,7 +277,7 @@
             <li>Señales urbanas y precio por zona.</li>
             <li>Cancelación inmediata, sin permanencia.</li>
           </ul>
-          <button class="button secondary full" type="button" data-checkout-button>Activar Premium <span data-icon="ArrowRight"></span></button>
+          <button class="button secondary full" type="button" data-checkout-button>Empezar gratis <span data-icon="ArrowRight"></span></button>
         </article>
       </div>
     </section>
@@ -208,7 +285,7 @@
     <section class="section" id="noticias">
       <div class="container">
         <div class="section-head">
-          <span class="section-label">[ 04 ] Noticias</span>
+          <span class="section-label">[ 08 ] Noticias</span>
           <h2>Guías para leer<br><span class="accent">mejor el mercado.</span></h2>
           <p class="lead">Artículos sobre precio por metro cuadrado, alquiler y metodología de análisis.</p>
         </div>
@@ -220,7 +297,7 @@
     <section class="section grid-bg" id="faq">
       <div class="container faq-wrap">
         <div class="section-head" style="display:block">
-          <span class="section-label">[ 05 ] Preguntas frecuentes</span>
+          <span class="section-label">[ 09 ] Preguntas frecuentes</span>
           <h2>Lo que la gente<br><span class="accent">siempre pregunta.</span></h2>
         </div>
         <div data-testid="faq-accordion">
@@ -237,7 +314,7 @@
     <section class="section" id="contacto">
       <div class="container contact-grid">
         <div>
-          <span class="section-label">[ 06 ] Contacto</span>
+          <span class="section-label">[ 10 ] Contacto</span>
           <h2>Cuéntanos qué te<br><span class="accent">trae por aquí.</span></h2>
           <p class="lead">Soporte, prensa, partners o feedback de producto. Leemos todo desde hola@inmoradar.app.</p>
           <div class="contact-points">
@@ -261,6 +338,20 @@
         </form>
       </div>
     </section>
+
+    <section class="section grid-bg final-cta" data-testid="section-final-cta">
+      <div class="container">
+        <div class="final-cta-card">
+          <span class="section-label">Empieza sin pago inicial</span>
+          <h2>Tu próximo anuncio puede estar mejor explicado.</h2>
+          <p class="lead">Prueba InmoRadar sobre los portales donde ya buscas y decide con más contexto antes de contactar.</p>
+          <div class="hero-actions final-actions">
+            <a class="button" href="/premium" data-testid="final-cta-primary">Analizar mi primer anuncio gratis <span data-icon="ArrowRight"></span></a>
+            <a class="button secondary" href="#ejemplo-real" data-testid="final-cta-secondary">Ver ejemplo real</a>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer class="site-footer" data-testid="site-footer">
@@ -268,8 +359,8 @@
       <div class="footer-top">
         <div>
           <a class="brand" href="/"><span class="brand-mark" data-icon="Radar"></span><span><strong>Inmo</strong><em>Radar</em></span></a>
-          <p class="footer-tagline">Analiza inmuebles antes de contactar: precio real, zona, aparcamiento, transporte y señales clave.</p>
-          <a class="button" href="/premium" data-testid="footer-cta-premium">Probar 2 días gratis</a>
+          <p class="footer-tagline">Copiloto inmobiliario para navegadores modernos.</p>
+          <a class="button" href="/premium" data-testid="footer-cta-premium">Empezar gratis</a>
         </div>
         <div class="footer-col"><h4>Producto</h4><a href="/que-analiza" data-testid="footer-link-que-analiza">Qué analiza</a><a href="/datos" data-testid="footer-link-datos">APIs</a><a href="/premium" data-testid="footer-link-premium">Premium</a></div>
         <div class="footer-col"><h4>Contenido</h4><a href="/noticias" data-testid="footer-link-noticias">Noticias</a><a href="/faq" data-testid="footer-link-faq">FAQ</a></div>
@@ -277,7 +368,7 @@
         <span class="footer-status">Online</span>
       </div>
       <div class="footer-word">INMORADAR</div>
-      <div class="footer-meta"><span>&copy; <span data-year></span> InmoRadar</span><span>v1.0 · Extensión Chrome</span></div>
+      <div class="footer-meta"><span>&copy; <span data-year></span> InmoRadar</span><span>v1.0 · Navegadores modernos</span></div>
     </div>
   </footer>
 
