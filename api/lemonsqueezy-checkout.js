@@ -650,7 +650,7 @@ module.exports = async function handler(req, res) {
       json(res, 409, {
         ok: false,
         error: "test_checkout_blocked_in_production",
-        message: "El checkout de pruebas esta bloqueado en produccion."
+        message: "El pago online aun no esta activo. Escribenos a hola@inmoradar.app y te lo activamos manualmente."
       });
       return;
     }

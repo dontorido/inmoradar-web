@@ -87,6 +87,7 @@ const I18N = {
     checkoutPreparing: "Preparando checkout seguro...",
     checkoutOpening: "Abriendo checkout...",
     checkoutManual: "Escríbenos y lo activamos manualmente.",
+    checkoutSetupIssue: "El pago online aún no está activo. Escríbenos a hola@inmoradar.app y te lo activamos manualmente.",
     portalOpening: "Enviando enlace seguro...",
     portalVerifying: "Verificando enlace seguro...",
     portalLinkSent: "Revisa tu email. Te hemos enviado un enlace temporal.",
@@ -110,6 +111,7 @@ const I18N = {
     checkoutPreparing: "Preparing secure checkout...",
     checkoutOpening: "Opening checkout...",
     checkoutManual: "Email us and we will activate it manually.",
+    checkoutSetupIssue: "Online payment is not active yet. Email us at hola@inmoradar.app and we will activate it manually.",
     portalOpening: "Sending secure link...",
     portalVerifying: "Verifying secure link...",
     portalLinkSent: "Check your email. We sent you a temporary link.",
@@ -381,6 +383,9 @@ function initCheckout() {
           body: JSON.stringify({ source: button.dataset.checkoutSource || "web" })
         });
         const payload = await response.json().catch(() => ({}));
+        if (payload.error === "test_checkout_blocked_in_production") {
+          throw new Error(t("checkoutSetupIssue"));
+        }
         if (!response.ok || !payload.checkout_url) throw new Error(payload.message || "checkout_failed");
         if (payload.test_mode && isPublicProductionHost()) {
           throw new Error("El checkout de pruebas esta bloqueado en la web publica.");
