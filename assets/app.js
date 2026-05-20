@@ -85,11 +85,11 @@ const I18N = {
     contactSent: "Enviado - enviar otro",
     checkoutPreparing: "Preparando checkout seguro...",
     checkoutOpening: "Abriendo checkout...",
-    checkoutManual: "Escribenos y lo activamos manualmente.",
+    checkoutManual: "Escríbenos y lo activamos manualmente.",
     portalOpening: "Enviando enlace seguro...",
     portalVerifying: "Verificando enlace seguro...",
     portalLinkSent: "Revisa tu email. Te hemos enviado un enlace temporal.",
-    portalHelp: "No hemos podido preparar el acceso. Escribenos y te ayudamos.",
+    portalHelp: "No hemos podido preparar el acceso. Escríbenos y te ayudamos.",
     all: "Todos",
     read: "Lectura 4 min",
     updated: "Actualizado may 2026"

@@ -94,7 +94,7 @@ function escapeEmailHtml(value) {
 
 function buildCustomerPortalEmailPayload({ email, verifyUrl, from }) {
   const safeVerifyUrl = escapeEmailHtml(verifyUrl);
-  const preheader = `Tu enlace seguro para entrar al area de clientes caduca en ${PORTAL_TOKEN_TTL_MINUTES} minutos.`;
+  const preheader = `Tu enlace seguro para entrar al área de clientes caduca en ${PORTAL_TOKEN_TTL_MINUTES} minutos.`;
 
   return {
     from,
@@ -103,8 +103,8 @@ function buildCustomerPortalEmailPayload({ email, verifyUrl, from }) {
     text: [
       "Hola,",
       "",
-      "Has pedido acceder al area de clientes de InmoRadar.",
-      `Abre este enlace para gestionar tu suscripcion Premium: ${verifyUrl}`,
+      "Has pedido acceder al área de clientes de InmoRadar.",
+      `Abre este enlace para gestionar tu suscripción Premium: ${verifyUrl}`,
       "",
       `El enlace caduca en ${PORTAL_TOKEN_TTL_MINUTES} minutos y solo puede usarse una vez.`,
       "",
@@ -147,12 +147,12 @@ function buildCustomerPortalEmailPayload({ email, verifyUrl, from }) {
             <tr>
               <td style="background:#FFFFFF;border:1px solid #E6E2D6;border-top:0;border-radius:0 0 28px 28px;padding:42px 34px 34px;box-shadow:0 28px 70px rgba(10,20,15,.10);">
                 <p style="margin:0 0 16px;color:#FF4500;font-size:11px;line-height:16px;font-weight:900;letter-spacing:.22em;text-transform:uppercase;">Acceso privado</p>
-                <h1 style="margin:0;color:#0A140F;font-size:38px;line-height:40px;font-weight:900;letter-spacing:-0.05em;">Entra a tu area de clientes de forma segura.</h1>
-                <p style="margin:20px 0 0;color:#374151;font-size:16px;line-height:25px;">Usa este enlace temporal para gestionar tu suscripcion Premium, revisar pagos o cancelar la renovacion desde el portal seguro.</p>
+                <h1 style="margin:0;color:#0A140F;font-size:38px;line-height:40px;font-weight:900;letter-spacing:-0.05em;">Entra a tu área de clientes de forma segura.</h1>
+                <p style="margin:20px 0 0;color:#374151;font-size:16px;line-height:25px;">Usa este enlace temporal para gestionar tu suscripción Premium, revisar pagos o cancelar la renovación desde el portal seguro.</p>
                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0 26px;">
                   <tr>
                     <td style="background:#FF4500;border-radius:999px;">
-                      <a href="${safeVerifyUrl}" style="display:inline-block;padding:16px 24px;color:#FFFFFF;text-decoration:none;font-size:15px;line-height:18px;font-weight:900;">Abrir area de clientes &rarr;</a>
+                      <a href="${safeVerifyUrl}" style="display:inline-block;padding:16px 24px;color:#FFFFFF;text-decoration:none;font-size:15px;line-height:18px;font-weight:900;">Abrir área de clientes &rarr;</a>
                     </td>
                   </tr>
                 </table>
@@ -160,11 +160,11 @@ function buildCustomerPortalEmailPayload({ email, verifyUrl, from }) {
                   <tr>
                     <td style="padding:18px 20px;">
                       <p style="margin:0;color:#0A140F;font-size:13px;line-height:20px;font-weight:700;">Este enlace caduca en ${PORTAL_TOKEN_TTL_MINUTES} minutos y solo puede usarse una vez.</p>
-                      <p style="margin:8px 0 0;color:#6B7280;font-size:13px;line-height:20px;">Si no has pedido este acceso, puedes ignorar este email. Nadie podra entrar sin abrir el enlace desde tu correo.</p>
+                      <p style="margin:8px 0 0;color:#6B7280;font-size:13px;line-height:20px;">Si no has pedido este acceso, puedes ignorar este email. Nadie podrá entrar sin abrir el enlace desde tu correo.</p>
                     </td>
                   </tr>
                 </table>
-                <p style="margin:24px 0 0;color:#6B7280;font-size:12px;line-height:19px;">Si el boton no funciona, copia y pega este enlace en tu navegador:<br><a href="${safeVerifyUrl}" style="color:#0A140F;text-decoration:underline;text-decoration-color:#FF4500;word-break:break-all;">${safeVerifyUrl}</a></p>
+                <p style="margin:24px 0 0;color:#6B7280;font-size:12px;line-height:19px;">Si el botón no funciona, copia y pega este enlace en tu navegador:<br><a href="${safeVerifyUrl}" style="color:#0A140F;text-decoration:underline;text-decoration-color:#FF4500;word-break:break-all;">${safeVerifyUrl}</a></p>
               </td>
             </tr>
             <tr>
@@ -392,7 +392,7 @@ async function getSignedCustomerPortalUrl(config, email) {
       const portalUrl = subscription?.attributes?.urls?.customer_portal;
       if (portalUrl) return portalUrl;
     } catch {
-      // Si el ID local estuviera desfasado, probamos el siguiente metodo.
+      // Si el ID local estuviera desfasado, probamos el siguiente método.
     }
   }
 
@@ -543,7 +543,7 @@ async function handlePortalMagicLinkVerify({ res, config, token }) {
 
   const billing = await findStoredBillingRecord(accessToken.email);
   if (!isPremiumActive(billing.subscription)) {
-    json(res, 403, { ok: false, error: "premium_required", message: "No hemos encontrado una suscripcion Premium activa." });
+    json(res, 403, { ok: false, error: "premium_required", message: "No hemos encontrado una suscripción Premium activa." });
     return;
   }
 
