@@ -593,7 +593,7 @@ async function handleChromeOperation(req) {
       payload: {
         ok: true,
         action,
-        message: `ZIP enviado a Chrome Web Store (${uploadState}). Comprueba el estado antes de enviarlo a revision.`,
+        message: `ZIP enviado a Chrome Web Store (${uploadState}). Comprueba el estado antes de enviarlo a revisión.`,
         artifact: updated,
         chrome_upload: chromeUpload
       }
@@ -616,7 +616,7 @@ async function handleChromeOperation(req) {
       payload: {
         ok: true,
         action,
-        message: "Extension enviada a revision/publicacion en Chrome Web Store.",
+        message: "Extensión enviada a revisión/publicación en Chrome Web Store.",
         artifact: updated,
         chrome_publish: chromePublish
       }
@@ -625,7 +625,7 @@ async function handleChromeOperation(req) {
 
   return {
     status: 400,
-    payload: { ok: false, error: "unsupported_chrome_action", message: `Accion de Chrome no soportada: ${action || "-"}` }
+    payload: { ok: false, error: "unsupported_chrome_action", message: `Acción de Chrome no soportada: ${action || "-"}` }
   };
 }
 
@@ -1238,7 +1238,26 @@ async function handleSocialVideoRender(req, url) {
         failure: error.message
       });
     }
-    return { status: 502, payload: { ...estimatePayload, ok: false, error: "runway_create_failed", message: error.message } };
+    console.error("Runway create failed", {
+      status: error.status || null,
+      message: error.message,
+      payload: error.payload || null,
+      model: request.model,
+      ratio: request.ratio,
+      duration: request.duration
+    });
+    const httpStatus = error.status && error.status >= 400 && error.status < 500 ? 400 : 502;
+    return {
+      status: httpStatus,
+      payload: {
+        ...estimatePayload,
+        ok: false,
+        error: "runway_create_failed",
+        message: error.message,
+        runway_status: error.status || null,
+        runway_error: error.payload || null
+      }
+    };
   }
 }
 

@@ -361,11 +361,11 @@ function renderStats(summary) {
     stat("Premium total", premium.total || 0, { id: "premium-total" }),
     stat("Premium active", statusCount("active") + statusCount("on_trial"), {
       id: "premium-active",
-      hint: "Cuentas con suscripcion activa esta semana"
+      hint: "Cuentas con suscripción activa esta semana"
     }),
     stat("On trial", statusCount("on_trial"), {
       id: "premium-trial",
-      hint: "Pruebas activas pendientes de conversion"
+      hint: "Pruebas activas pendientes de conversión"
     }),
     stat("Unpaid", statusCount("unpaid") + statusCount("past_due") + statusCount("payment_failed"), {
       id: "premium-unpaid",
@@ -418,7 +418,7 @@ function renderRevenue(revenue = {}) {
   ].join("");
 
   if (revenue.table_missing) {
-    els.revenueChart.innerHTML = `<p class="admin-empty-state compact">Falta la tabla <strong>premium_revenue_events</strong>. Ejecuta <strong>database/premium-revenue-events.sql</strong> y los siguientes webhooks de Lemon empezaran a llenar la grafica.</p>`;
+    els.revenueChart.innerHTML = `<p class="admin-empty-state compact">Falta la tabla <strong>premium_revenue_events</strong>. Ejecuta <strong>database/premium-revenue-events.sql</strong> y los siguientes webhooks de Lemon empezarán a llenar la gráfica.</p>`;
     return;
   }
 
@@ -437,7 +437,7 @@ function renderRevenue(revenue = {}) {
     .join("");
 
   els.revenueChart.innerHTML = `
-    ${paymentCount ? "" : `<p class="admin-empty-state compact">Sin cobros registrados todavia. La grafica se llenara con eventos de pago reales.</p>`}
+    ${paymentCount ? "" : `<p class="admin-empty-state compact">Sin cobros registrados todavía. La gráfica se llenará con eventos de pago reales.</p>`}
     <div class="admin-revenue-bars">${bars}</div>
   `;
 }
@@ -471,7 +471,7 @@ function renderUsageList(title, rows) {
                 `;
               })
               .join("")
-          : `<p class="admin-empty-state compact">Sin datos todavia.</p>`
+          : `<p class="admin-empty-state compact">Sin datos todavía.</p>`
       }
     </section>
   `;
@@ -493,7 +493,7 @@ function renderExtensionUsage(payload) {
   els.extensionStats.innerHTML = [
     stat("Usuarios 30d", payload.unique_users_30d || 0, {
       id: "extension-users",
-      hint: "Personas anonimas distintas usando la extension"
+      hint: "Personas anónimas distintas usando la extensión"
     }),
     stat("Activos 7d", payload.active_users_7d || 0, {
       id: "extension-active-7d",
@@ -505,13 +505,13 @@ function renderExtensionUsage(payload) {
     }),
     stat("Tiempo uso", formatDuration(payload.active_seconds_30d), {
       id: "extension-usage-time",
-      hint: `Media sesion ${formatDuration(payload.average_session_seconds)}`
+      hint: `Media sesión ${formatDuration(payload.average_session_seconds)}`
     })
   ].join("");
 
   els.extensionBreakdown.innerHTML = [
     renderUsageList("Navegador", payload.by_browser),
-    renderUsageList("Pais", payload.by_country),
+    renderUsageList("País", payload.by_country),
     renderUsageList("Version", payload.by_extension_version),
     renderUsageList("Evento", payload.by_event_name)
   ].join("");
@@ -530,7 +530,7 @@ function renderParkingStats(payload) {
 function renderParkingRows(rows) {
   if (!els.parkingRows) return;
   if (!rows.length) {
-    els.parkingRows.innerHTML = `<tr><td colspan="5">No hay calculos de parking cacheados todavia.</td></tr>`;
+    els.parkingRows.innerHTML = `<tr><td colspan="5">No hay cálculos de parking cacheados todavía.</td></tr>`;
     return;
   }
 
@@ -631,7 +631,7 @@ function releaseChromeActions(row) {
     <div class="admin-row-actions">
       <button class="admin-button tiny ghost" type="button" data-release-chrome-action="status" data-release-id="${id}">Estado Chrome</button>
       <button class="admin-button tiny ghost" type="button" data-release-chrome-action="upload" data-release-id="${id}">Subir ZIP</button>
-      <button class="admin-button tiny" type="button" data-release-chrome-action="publish" data-release-id="${id}">Enviar revision</button>
+      <button class="admin-button tiny" type="button" data-release-chrome-action="publish" data-release-id="${id}">Enviar revisión</button>
     </div>
   `;
 }
@@ -648,7 +648,7 @@ function renderReleaseRows(target, payload = {}) {
     return;
   }
   if (!rows.length) {
-    targetEl.innerHTML = `<tr><td colspan="4">Aun no hay artefactos de ${escapeHtml(releaseTargetLabel(target))} guardados.</td></tr>`;
+    targetEl.innerHTML = `<tr><td colspan="4">Aún no hay artefactos de ${escapeHtml(releaseTargetLabel(target))} guardados.</td></tr>`;
     return;
   }
 
@@ -741,12 +741,12 @@ async function saveReleaseArtifact(form) {
 }
 
 async function runChromeReleaseAction(action, artifactId, button) {
-  if (action === "publish" && !window.confirm("Enviar este ZIP a revision/publicacion en Chrome Web Store?")) return;
+  if (action === "publish" && !window.confirm("¿Enviar este ZIP a revisión/publicación en Chrome Web Store?")) return;
   const label = {
     status: "leyendo estado de Chrome",
     upload: "subiendo ZIP a Chrome",
-    publish: "enviando a revision en Chrome"
-  }[action] || "ejecutando accion de Chrome";
+    publish: "enviando a revisión en Chrome"
+  }[action] || "ejecutando acción de Chrome";
   showStatus(`Chrome: ${label}...`);
   if (button) button.disabled = true;
   try {
@@ -759,7 +759,7 @@ async function runChromeReleaseAction(action, artifactId, button) {
       })
     });
     await loadReleaseArtifacts("extension");
-    showStatus(payload.message || "Accion de Chrome completada.", "good");
+    showStatus(payload.message || "Acción de Chrome completada.", "good");
   } finally {
     if (button) button.disabled = false;
   }
@@ -872,7 +872,7 @@ function renderSeoSummary(summary = {}, fallbackRows = []) {
   els.seoSummary.innerHTML = [
     stat("Total", total, { id: "seo-total", hint: "Landings SEO creadas" }),
     stat("Publicadas", published, { id: "seo-published", hint: "Visibles e indexables" }),
-    stat("Pendientes", pending, { id: "seo-pending", hint: "Draft + revision + ready" }),
+    stat("Pendientes", pending, { id: "seo-pending", hint: "Draft + revisión + ready" }),
     stat("Ready", ready, { id: "seo-ready", hint: "Listas para publicar" }),
     stat("Revision", needsReview, { id: "seo-review", hint: "Necesitan criterio humano" }),
     stat("Noindex", noindex, { id: "seo-noindex", hint: "Bloqueadas para indice" }),
@@ -891,7 +891,7 @@ function renderSeoPagination(payload) {
   const range = from && to ? `${from}-${to}` : "0";
 
   els.seoPagination.innerHTML = `
-    <span>Pagina ${escapeHtml(page)} - Landings ${escapeHtml(range)} - 10 por pagina</span>
+      <span>Página ${escapeHtml(page)} - Landings ${escapeHtml(range)} - 10 por página</span>
     <div class="admin-pagination-actions">
       <button class="admin-button tiny ghost" type="button" data-seo-page="previous" data-testid="pagination-prev" ${hasPrevious ? "" : "disabled"}>Anterior</button>
       <button class="admin-button tiny secondary" type="button" data-seo-page="next" data-testid="pagination-next" ${hasNext ? "" : "disabled"}>Siguiente</button>
@@ -964,7 +964,7 @@ function kpiProposalText(field) {
   const path = String(field.path || "");
 
   if (field.type === "boolean") {
-    return `${formattedValue}. Mi propuesta es mantener esta bandera como punto de control para activar o apagar el bloque sin tocar el calculo interno.`;
+    return `${formattedValue}. Mi propuesta es mantener esta bandera como punto de control para activar o apagar el bloque sin tocar el cálculo interno.`;
   }
   if (path.includes("fallback")) {
     return `Partir de ${formattedValue}. La propuesta evita KPIs fijos cuando falta dato real y deja claro cuando el resultado es orientativo.`;
@@ -973,7 +973,7 @@ function kpiProposalText(field) {
     return `Partir de ${formattedValue}. La propuesta reparte el peso para que ningun factor aislado domine el score sin evidencia suficiente.`;
   }
   if (path.includes("threshold") || path.includes("minimum")) {
-    return `Partir de ${formattedValue}. La propuesta fija un umbral prudente y se deberia ajustar solo con datos historicos medidos.`;
+    return `Partir de ${formattedValue}. La propuesta fija un umbral prudente y se debería ajustar solo con datos históricos medidos.`;
   }
   if (path.includes("cap") || path.includes("max")) {
     return `Partir de ${formattedValue}. La propuesta limita el optimismo cuando la precision del dato de partida baja.`;
@@ -990,7 +990,7 @@ function renderKpis(payload) {
     ? `<div class="admin-kpi-alert">Falta la tabla <strong>kpi_settings</strong>. Ejecuta <strong>database/kpi-settings.sql</strong> en Supabase para guardar cambios.</div>`
     : payload.error
       ? `<div class="admin-kpi-alert">Aviso KPI: ${escapeHtml(payload.error)}</div>`
-      : `<div class="admin-kpi-meta">Ultima actualizacion KPI: ${escapeHtml(formatDate(payload.updated_at))}</div>`;
+    : `<div class="admin-kpi-meta">Última actualización KPI: ${escapeHtml(formatDate(payload.updated_at))}</div>`;
 
   els.kpiForm.innerHTML =
     note +
@@ -1054,63 +1054,63 @@ function platformLabel(value) {
 const VIRALIZA_TASK_GUIDES = {
   keyword_search: {
     steps: [
-      "Pulsa los botones de busqueda de las 3 keywords principales.",
-      "Mira videos recientes con preguntas reales en comentarios.",
+      "Pulsa los botones de búsqueda de las 3 keywords principales.",
+          "Mira vídeos recientes con preguntas reales en comentarios.",
       "Anota una duda repetida, formato o frase que pueda convertirse en contenido."
     ],
     doneWhen: "Completa cuando tengas 3 ideas claras sacadas de conversaciones reales."
   },
   save_videos: {
     steps: [
-      "Guarda 5 videos con buen hook en la propia plataforma.",
-      "Fijate en que funciona: primera frase, ritmo, pregunta, comparativa o checklist.",
-      "Decide como adaptarlo a InmoRadar sin copiar el contenido original."
+      "Guarda 5 vídeos con buen hook en la propia plataforma.",
+      "Fíjate en qué funciona: primera frase, ritmo, pregunta, comparativa o checklist.",
+      "Decide cómo adaptarlo a InmoRadar sin copiar el contenido original."
     ],
-    doneWhen: "Completa cuando tengas 5 referencias y una adaptacion posible."
+    doneWhen: "Completa cuando tengas 5 referencias y una adaptación posible."
   },
   comment: {
     steps: [
-      "Lee el video y varios comentarios antes de publicar.",
+      "Lee el vídeo y varios comentarios antes de publicar.",
       "Copia una sugerencia y cambia una frase para que encaje con el contexto.",
       "Publica manualmente, guarda la URL y marca el comentario como usado."
     ],
-    doneWhen: "Completa cuando hayas dejado 10 comentarios utiles, maximo 2 con marca."
+    doneWhen: "Completa cuando hayas dejado 10 comentarios útiles, máximo 2 con marca."
   },
   follow_accounts: {
     steps: [
-      "Abre el perfil y revisa bio, pais y ultimos videos.",
+      "Abre el perfil y revisa bio, país y últimos vídeos.",
       "Sigue solo cuentas con audiencia real sobre vivienda, hipoteca, barrios o finanzas.",
-      "Si encaja mucho, deja un comentario util antes de contactar."
+      "Si encaja mucho, deja un comentario útil antes de contactar."
     ],
     doneWhen: "Completa cuando hayas seguido o descartado conscientemente 5 cuentas."
   },
   hooks: {
     steps: [
-      "Elige 3 ideas vistas hoy y conviertelas en frases de primer segundo.",
-      "Comprueba que el hook no promete chollos, ahorro garantizado ni tasacion exacta.",
-      "Pulsa Crear video en el hook con mas potencial."
+      "Elige 3 ideas vistas hoy y conviértelas en frases de primer segundo.",
+      "Comprueba que el hook no promete chollos, ahorro garantizado ni tasación exacta.",
+      "Pulsa Crear vídeo en el hook con más potencial."
     ],
-    doneWhen: "Completa cuando tengas 3 hooks y 1 candidato para video."
+    doneWhen: "Completa cuando tengas 3 hooks y 1 candidato para vídeo."
   },
   outreach: {
     steps: [
       "Abre el perfil recomendado y valida si merece contacto hoy.",
       "Copia el mensaje y personaliza la primera frase con algo concreto del creador.",
-      "Envia manualmente o marca pendiente si conviene calentar antes."
+      "Envía manualmente o marca pendiente si conviene calentar antes."
     ],
     doneWhen: "Completa cuando hayas contactado 1 creador o decidido calentar primero."
   },
   create_video: {
     steps: [
-      "Elige el hook o aprendizaje mas fuerte del dia.",
-      "Crea el brief/video y revisa privacidad, disclaimer y CTA.",
-      "Deja listo caption, hashtags y siguiente accion."
+      "Elige el hook o aprendizaje más fuerte del día.",
+      "Crea el brief/vídeo y revisa privacidad, disclaimer y CTA.",
+      "Deja listo caption, hashtags y siguiente acción."
     ],
-    doneWhen: "Completa cuando exista 1 video preparado para grabar, publicar o programar."
+    doneWhen: "Completa cuando exista 1 vídeo preparado para grabar, publicar o programar."
   }
 };
 
-function guideList(items = [], title = "Que tienes que hacer") {
+function guideList(items = [], title = "Qué tienes que hacer") {
   const clean = items.filter(Boolean);
   if (!clean.length) return "";
   return `
@@ -1126,8 +1126,8 @@ function renderViralizaKpis(routine) {
   if (!routine) {
     els.viralizaKpis.innerHTML = [
       stat("Rutina de hoy", "Pendiente", { hint: "Genera la rutina para empezar" }),
-      stat("Racha actual", "0", { hint: "Dias ejecutando la rutina" }),
-      stat("Oportunidades", "0", { hint: "Keywords y busquedas listas" }),
+      stat("Racha actual", "0", { hint: "Días ejecutando la rutina" }),
+      stat("Oportunidades", "0", { hint: "Keywords y búsquedas listas" }),
       stat("Comentarios", "0", { hint: "Comentarios preparados" })
     ].join("");
     return;
@@ -1136,12 +1136,12 @@ function renderViralizaKpis(routine) {
   const total = (routine.tasks || []).length || 1;
   els.viralizaKpis.innerHTML = [
     stat("Rutina de hoy", `${completed}/${total}`, { hint: routine.status === "completed" ? "Completada" : "Pendiente" }),
-    stat("Racha actual", routine.streak || "1", { hint: "Dia activo de ejecucion" }),
+    stat("Racha actual", routine.streak || "1", { hint: "Día activo de ejecución" }),
     stat("Oportunidades", (routine.keywords || []).length, { hint: "Keywords encontradas hoy" }),
-    stat("Comentarios", (routine.comments || []).length, { hint: "Maximo 2 con marca" }),
+    stat("Comentarios", (routine.comments || []).length, { hint: "Máximo 2 con marca" }),
     stat("Creadores nuevos", (routine.creators || []).length, { hint: "Detectados para revisar" }),
-    stat("Contactados semana", routine.contactedThisWeek || 0, { hint: "Manual, no automatico" }),
-    stat("Videos semana", routine.videosThisWeek || 0, { hint: "Briefs o piezas creadas" }),
+    stat("Contactados semana", routine.contactedThisWeek || 0, { hint: "Manual, no automático" }),
+    stat("Vídeos semana", routine.videosThisWeek || 0, { hint: "Briefs o piezas creadas" }),
     stat("Formatos winners", routine.winningFormats || 0, { hint: "Aprendizaje semanal" })
   ].join("");
 }
@@ -1150,7 +1150,7 @@ function viralizaTaskContext(task, routine) {
   if (task?.type !== "keyword_search") return "";
   const keywords = (routine?.primaryKeywords || routine?.keywords || []).slice(0, 3);
   if (!keywords.length) {
-    return `<p class="admin-viraliza-done"><strong>Keywords propuestas:</strong> genera una rutina para verlas aqui.</p>`;
+    return `<p class="admin-viraliza-done"><strong>Keywords propuestas:</strong> genera una rutina para verlas aquí.</p>`;
   }
   return `
     <div class="admin-viraliza-howto admin-viraliza-task-context">
@@ -1212,11 +1212,11 @@ function viralizaKeywordCard(keyword) {
       <p>${escapeHtml(keyword.intent || "")}</p>
       ${guideList(
         [
-          "Abre una plataforma y revisa resultados recientes, no solo los mas virales.",
+          "Abre una plataforma y revisa resultados recientes, no solo los más virales.",
           "Busca preguntas de usuarios, dudas de hipoteca, quejas de zona o comparativas.",
-          "Si ves un patron repetido, conviertelo en comentario, hook o video."
+          "Si ves un patrón repetido, conviértelo en comentario, hook o vídeo."
         ],
-        "Como usar esta keyword"
+        "Cómo usar esta keyword"
       )}
       <ul>${(keyword.whatToLookFor || []).slice(0, 3).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
       <div class="admin-row-actions">
@@ -1239,9 +1239,9 @@ function viralizaCommentCard(comment) {
       <p class="admin-viraliza-copy">${escapeHtml(comment.text)}</p>
       ${guideList(
         [
-          "Usalo solo si el video realmente habla de este tema.",
-          "Ajusta una frase para que no parezca comentario generico.",
-          "Despues de publicarlo, guarda la URL y revisa respuestas en 24h."
+          "Úsalo solo si el vídeo realmente habla de este tema.",
+          "Ajusta una frase para que no parezca comentario genérico.",
+          "Después de publicarlo, guarda la URL y revisa respuestas en 24h."
         ],
         "Antes de publicarlo"
       )}
@@ -1266,15 +1266,15 @@ function viralizaHookCard(hook) {
       <small>Overlay: ${escapeHtml(hook.overlayExample || "")}</small>
       ${guideList(
         [
-          "Usalo si responde a una conversacion vista hoy.",
-          "Convierte el hook en un video corto con datos anonimizados o simulados.",
+          "Úsalo si responde a una conversación vista hoy.",
+          "Convierte el hook en un vídeo corto con datos anonimizados o simulados.",
           "Termina con una pregunta clara para comentarios."
         ],
-        "Como convertirlo en video"
+        "Cómo convertirlo en vídeo"
       )}
       <div class="admin-row-actions">
         <button class="admin-button tiny" type="button" data-copy-text="${escapeHtml(hook.hook)}">Copiar</button>
-        <button class="admin-button tiny ghost" type="button" data-viraliza-create-video-from-hook="${escapeHtml(hook.id)}">Crear video</button>
+        <button class="admin-button tiny ghost" type="button" data-viraliza-create-video-from-hook="${escapeHtml(hook.id)}">Crear vídeo</button>
       </div>
     </article>
   `;
@@ -1292,11 +1292,11 @@ function viralizaCreatorCard(creator) {
       <small>${escapeHtml((creator.topics || []).join(", "))}</small>
       ${guideList(
         [
-          "Abre el perfil y revisa si su audiencia es de Espana.",
+          "Abre el perfil y revisa si su audiencia es de España.",
           "Mira si responde comentarios y si hay preguntas reales.",
           "Sigue solo si puedes aportar valor; si encaja mucho, comenta antes de contactar."
         ],
-        "Decision manual"
+        "Decisión manual"
       )}
       <div class="admin-row-actions">
         <button class="admin-button tiny ghost" type="button" data-open-url="${escapeHtml(creator.url || "")}">Abrir perfil</button>
@@ -1314,15 +1314,15 @@ function viralizaSavedVideoCard(video, index) {
         ${chip(video.status || "pending", viralizaStatusTone(video.status))}
         <span>${escapeHtml(platformLabel(video.platform))}</span>
       </div>
-      <h3>Video ${index + 1}</h3>
-      <p>Pega una URL, anota por que funciona y crea una adaptacion para InmoRadar. No copies el contenido: adapta el formato.</p>
+      <h3>Vídeo ${index + 1}</h3>
+      <p>Pega una URL, anota por qué funciona y crea una adaptación para InmoRadar. No copies el contenido: adapta el formato.</p>
       ${guideList(
         [
-          "Guarda un video con hook fuerte o muchos comentarios utiles.",
-          "Resume en una frase por que funciona.",
+          "Guarda un vídeo con hook fuerte o muchos comentarios útiles.",
+          "Resume en una frase por qué funciona.",
           "Piensa la version InmoRadar: antes de llamar, chollo o humo, A vs B, checklist o error."
         ],
-        "Que guardar"
+        "Qué guardar"
       )}
       <div class="admin-row-actions">
         <button class="admin-button tiny ghost" type="button" data-viraliza-record data-entity-type="saved_video" data-entity-id="${escapeHtml(video.id)}" data-action-type="saved">Marcar guardado</button>
@@ -1351,9 +1351,9 @@ function renderViralizaOutreach(routine) {
       <pre>${escapeHtml(message.dm || message.medium || message.short || "")}</pre>
       ${guideList(
         [
-          "No lo envies tal cual si no has mirado el perfil.",
-          "Cambia la primera frase para mencionar un video, tema o ciudad concreta.",
-          "Ofrece probar InmoRadar o hacer un contenido util, no pedir promocion directa."
+          "No lo envíes tal cual si no has mirado el perfil.",
+          "Cambia la primera frase para mencionar un vídeo, tema o ciudad concreta.",
+          "Ofrece probar InmoRadar o hacer un contenido útil, no pedir promoción directa."
         ],
         "Antes de enviar"
       )}
@@ -1368,7 +1368,7 @@ function renderViralizaOutreach(routine) {
 function renderViralizaSteps(routine) {
   if (!els.viralizaSteps) return;
   if (!routine) {
-    els.viralizaSteps.innerHTML = `<p class="admin-empty-state">Genera una rutina para activar el modo ejecucion.</p>`;
+    els.viralizaSteps.innerHTML = `<p class="admin-empty-state">Genera una rutina para activar el modo ejecución.</p>`;
     return;
   }
   const keywords = (routine.primaryKeywords || routine.keywords || []).slice(0, 3);
@@ -1380,31 +1380,31 @@ function renderViralizaSteps(routine) {
     <article class="admin-viraliza-step">
       <span>Pantalla 1</span>
       <h3>Busca estas 3 keywords</h3>
-      <p class="admin-viraliza-step-intro">Hazlo primero. Abre las busquedas, detecta conversaciones reales y vuelve con ideas concretas.</p>
+        <p class="admin-viraliza-step-intro">Hazlo primero. Abre las búsquedas, detecta conversaciones reales y vuelve con ideas concretas.</p>
       ${keywords.map(viralizaKeywordCard).join("")}
     </article>
     <article class="admin-viraliza-step">
       <span>Pantalla 2</span>
-      <h3>Guarda 5 videos buenos</h3>
-      <p class="admin-viraliza-step-intro">Guarda referencias por formato, no por tema exacto. La pregunta es: como lo adaptamos a InmoRadar?</p>
+        <h3>Guarda 5 vídeos buenos</h3>
+      <p class="admin-viraliza-step-intro">Guarda referencias por formato, no por tema exacto. La pregunta es: ¿cómo lo adaptamos a InmoRadar?</p>
       ${(routine.savedVideos || []).slice(0, 5).map(viralizaSavedVideoCard).join("")}
     </article>
     <article class="admin-viraliza-step">
       <span>Pantalla 3</span>
-      <h3>Comenta en 10 videos</h3>
-      <p class="admin-viraliza-step-intro">Copia, adapta y publica manualmente. Si no aporta valor al video, no lo uses.</p>
+        <h3>Comenta en 10 vídeos</h3>
+        <p class="admin-viraliza-step-intro">Copia, adapta y publica manualmente. Si no aporta valor al vídeo, no lo uses.</p>
       ${comments.map(viralizaCommentCard).join("")}
     </article>
     <article class="admin-viraliza-step">
       <span>Pantalla 4</span>
       <h3>Sigue 5 cuentas</h3>
-      <p class="admin-viraliza-step-intro">Revisa cada perfil antes de seguir. Queremos cuentas con audiencia real y conversacion util.</p>
+      <p class="admin-viraliza-step-intro">Revisa cada perfil antes de seguir. Queremos cuentas con audiencia real y conversación útil.</p>
       ${creators.map(viralizaCreatorCard).join("")}
     </article>
     <article class="admin-viraliza-step">
       <span>Pantalla 5</span>
       <h3>Anota 3 hooks</h3>
-      <p class="admin-viraliza-step-intro">Elige hooks que puedas producir rapido y que terminen en pregunta o debate.</p>
+      <p class="admin-viraliza-step-intro">Elige hooks que puedas producir rápido y que terminen en pregunta o debate.</p>
       ${hooks.map(viralizaHookCard).join("")}
     </article>
     <article class="admin-viraliza-step">
@@ -1414,9 +1414,9 @@ function renderViralizaSteps(routine) {
       ${message ? `<pre>${escapeHtml(message.dm || message.medium || "")}</pre><button class="admin-button tiny" type="button" data-copy-text="${escapeHtml(message.dm || message.medium || "")}">Copiar mensaje</button>` : `<p class="admin-empty-state">Sin creador recomendado.</p>`}
     </article>
     <article class="admin-viraliza-step">
-      <span>Resumen del dia</span>
+        <span>Resumen del día</span>
       <h3>Aprendizajes y proximos pasos</h3>
-      <p>Registra URL, resultados y notas despues de 24h para que el Learning Engine detecte winners.</p>
+      <p>Registra URL, resultados y notas después de 24h para que el Learning Engine detecte winners.</p>
     </article>
   `;
 }
@@ -1424,21 +1424,21 @@ function renderViralizaSteps(routine) {
 const VIRALIZA_OVERVIEW_COPY = {
   title: "Viraliza",
   subtitle: "Tu radar diario para encontrar conversaciones, creadores y formatos que pueden hacer crecer InmoRadar.",
-  noteTitle: "Que haces cada dia",
+  noteTitle: "Qué haces cada día",
   note:
-    "Primero genera la rutina. Despues usa modo ejecucion para ir paso a paso y buscar oportunidades para abrir la primera busqueda sugerida.",
+    "Primero genera la rutina. Después usa modo ejecución para ir paso a paso y buscar oportunidades para abrir la primera búsqueda sugerida.",
   actions: [
     {
       label: "Generar rutina de hoy",
-      text: "Prepara la agenda diaria: 3 keywords, comentarios sugeridos, cuentas a revisar, hooks, outreach y espacios para guardar videos de inspiracion."
+      text: "Prepara la agenda diaria: 3 keywords, comentarios sugeridos, cuentas a revisar, hooks, outreach y espacios para guardar vídeos de inspiración."
     },
     {
-      label: "Modo ejecucion",
-      text: "Convierte la rutina en un asistente paso a paso. Sirve para hacerlo en orden y marcar cada accion cuando ya la hayas ejecutado manualmente."
+      label: "Modo ejecución",
+      text: "Convierte la rutina en un asistente paso a paso. Sirve para hacerlo en orden y marcar cada acción cuando ya la hayas ejecutado manualmente."
     },
     {
       label: "Buscar oportunidades",
-      text: "Abre la primera busqueda recomendada del dia para validar videos, comentarios y conversaciones reales antes de actuar."
+      text: "Abre la primera búsqueda recomendada del día para validar vídeos, comentarios y conversaciones reales antes de actuar."
     }
   ]
 };
@@ -1460,9 +1460,9 @@ function renderViralizaResults(routine) {
   const quality = routine?.qualityCheck || {};
   const actions = [
     "Completa la rutina diaria y registra URL real de cada comentario usado.",
-    "Revisa 24h despues likes, respuestas, visitas de perfil y clicks al link.",
-    "Si un hook genera retencion o comentarios, crea 10 variantes del mismo formato.",
-    "Si un creador responde, muevelo al pipeline de colaboracion y prepara un brief conjunto."
+    "Revisa 24h después likes, respuestas, visitas de perfil y clicks al link.",
+    "Si un hook genera retención o comentarios, crea 10 variantes del mismo formato.",
+    "Si un creador responde, muévelo al pipeline de colaboración y prepara un brief conjunto."
   ];
   els.viralizaResultsContent.innerHTML = `
     <article class="admin-viraliza-result-card">
@@ -1473,7 +1473,7 @@ function renderViralizaResults(routine) {
     <article class="admin-viraliza-result-card">
       <span>Comentarios</span>
       <strong>${escapeHtml(usedComments)}/${escapeHtml(comments.length || 10)}</strong>
-      <p>Marca como usado y anade la URL donde lo publicaste.</p>
+      <p>Marca como usado y añade la URL donde lo publicaste.</p>
     </article>
     <article class="admin-viraliza-result-card">
       <span>Creadores</span>
@@ -1483,12 +1483,12 @@ function renderViralizaResults(routine) {
     <article class="admin-viraliza-result-card">
       <span>Outreach</span>
       <strong>${escapeHtml(contacted)}/1</strong>
-      <p>Contacto del dia preparado o enviado manualmente.</p>
+      <p>Contacto del día preparado o enviado manualmente.</p>
     </article>
     <article class="admin-viraliza-result-card">
       <span>Hooks</span>
       <strong>${escapeHtml(hooks.length || 0)}</strong>
-      <p>Hooks disponibles para convertir en videos y comparar rendimiento.</p>
+      <p>Hooks disponibles para convertir en vídeos y comparar rendimiento.</p>
     </article>
     <article class="admin-viraliza-result-card">
       <span>Control de calidad</span>
@@ -1497,7 +1497,7 @@ function renderViralizaResults(routine) {
     </article>
     <article class="admin-viraliza-result-card admin-viraliza-result-wide">
       <span>Learning Engine</span>
-      <strong>Proximas acciones</strong>
+      <strong>Próximas acciones</strong>
       <ul>${actions.map((action) => `<li>${escapeHtml(action)}</li>`).join("")}</ul>
     </article>
   `;
@@ -1512,7 +1512,7 @@ function syncViralizaFocusedArea() {
       <strong>${escapeHtml(copy.noteTitle)}</strong>
       <p>${escapeHtml(copy.note)}</p>
       <div class="admin-viraliza-howto">
-        <strong>Que significa cada boton:</strong>
+        <strong>Qué significa cada botón:</strong>
         <ol>
           ${(copy.actions || [])
             .map((action) => `<li><strong>${escapeHtml(action.label)}:</strong> ${escapeHtml(action.text)}</li>`)
@@ -1538,13 +1538,13 @@ function renderViraliza(routine) {
   state.viraliza.routine = routine || state.viraliza.routine;
   const current = state.viraliza.routine;
   renderViralizaKpis(current);
-  if (els.viralizaTheme) els.viralizaTheme.textContent = current?.theme || "Aun no hay rutina";
+  if (els.viralizaTheme) els.viralizaTheme.textContent = current?.theme || "Aún no hay rutina";
   if (els.viralizaGoal) {
     els.viralizaGoal.textContent =
-      current?.dailyGoal || "Aun no hay rutina para hoy. Genera una rutina diaria y empieza por las keywords con mas intencion.";
+      current?.dailyGoal || "Aún no hay rutina para hoy. Genera una rutina diaria y empieza por las keywords con más intención.";
   }
   if (els.viralizaRoutine) {
-    els.viralizaRoutine.innerHTML = current ? (current.tasks || []).map((task) => viralizaTaskCard(task, current)).join("") : `<p class="admin-empty-state">Aun no hay rutina para hoy.</p>`;
+    els.viralizaRoutine.innerHTML = current ? (current.tasks || []).map((task) => viralizaTaskCard(task, current)).join("") : `<p class="admin-empty-state">Aún no hay rutina para hoy.</p>`;
   }
   if (els.viralizaKeywords) {
     els.viralizaKeywords.innerHTML = current ? (current.primaryKeywords || current.keywords || []).slice(0, 3).map(viralizaKeywordCard).join("") : `<p class="admin-empty-state">Genera una rutina para ver keywords.</p>`;
@@ -1559,7 +1559,7 @@ function renderViraliza(routine) {
     els.viralizaCreators.innerHTML = current ? (current.followQueue || []).map(viralizaCreatorCard).join("") : `<p class="admin-empty-state">Genera una rutina para ver cuentas.</p>`;
   }
   if (els.viralizaSavedVideos) {
-    els.viralizaSavedVideos.innerHTML = current ? (current.savedVideos || []).map(viralizaSavedVideoCard).join("") : `<p class="admin-empty-state">Genera una rutina para guardar inspiracion.</p>`;
+    els.viralizaSavedVideos.innerHTML = current ? (current.savedVideos || []).map(viralizaSavedVideoCard).join("") : `<p class="admin-empty-state">Genera una rutina para guardar inspiración.</p>`;
   }
   if (els.viralizaExecution) els.viralizaExecution.hidden = !state.viraliza.executionMode;
   renderViralizaOutreach(current);
@@ -1589,7 +1589,7 @@ async function copyToClipboard(text) {
     await navigator.clipboard.writeText(text);
     showStatus("Copiado.", "good");
   } catch (error) {
-    showStatus("No pude copiar automaticamente. Selecciona el texto manualmente.", "bad");
+    showStatus("No pude copiar automáticamente. Selecciona el texto manualmente.", "bad");
   }
 }
 
@@ -1605,7 +1605,7 @@ async function recordViralizaAction(button) {
   }).catch(() => null);
   button.textContent = "Registrado";
   button.disabled = true;
-  showStatus("Accion registrada. Recuerda ejecutar siempre manualmente en la plataforma.", "good");
+  showStatus("Acción registrada. Recuerda ejecutar siempre manualmente en la plataforma.", "good");
 }
 
 async function generateContextualViralizaComments(form) {
@@ -1670,21 +1670,25 @@ function runwayErrorMessage(error) {
     return message;
   }
   if (code === "runway_estimate_above_max_cost") {
-    return "Ese clip supera el limite de coste por render. Baja la duracion a 5 segundos o sube RUNWAY_MAX_COST_USD en Vercel.";
+    return "Ese clip supera el límite de coste por render. Baja la duración a 5 segundos o sube RUNWAY_MAX_COST_USD en Vercel.";
   }
   if (code === "runway_daily_budget_exceeded") {
-    return "Presupuesto diario de Runway agotado. Sube RUNWAY_DAILY_BUDGET_USD o espera a manana.";
+    return "Presupuesto diario de Runway agotado. Sube RUNWAY_DAILY_BUDGET_USD o espera a mañana.";
   }
   if (code === "runway_api_secret_missing") {
     return "Falta RUNWAYML_API_SECRET en Vercel. Sin esa clave no se puede lanzar el clip real.";
   }
   if (code === "runway_render_disabled") {
-    return "Runway esta apagado. Activa RUNWAY_RENDER_ENABLED=true en Vercel para lanzar renders reales.";
+    return "Runway está apagado. Activa RUNWAY_RENDER_ENABLED=true en Vercel para lanzar renders reales.";
+  }
+  if (code === "runway_create_failed" && payload.runway_error) {
+    const detail = payload.runway_error.message || payload.runway_error.error || payload.message;
+    return `Runway ha rechazado la petición (${payload.runway_status || "sin código"}): ${detail}. Revisa el prompt o vuelve a estimar el coste antes de lanzar.`;
   }
   if (code === "runway_create_failed" && /validation/i.test(String(payload.message || ""))) {
-    return "Runway ha rechazado el formato de la peticion. Actualiza la pagina y vuelve a generar el storyboard antes de lanzar el clip.";
+    return "Runway ha rechazado el formato de la petición. Ahora InmoRadar usa el formato compatible de texto puro; actualiza la página, estima de nuevo el coste y vuelve a lanzar el clip.";
   }
-  return payload.message || error?.message || "No se pudo completar la accion de Runway.";
+  return payload.message || error?.message || "No se pudo completar la acción de Runway.";
 }
 
 function setRunwayActions() {
@@ -1791,10 +1795,12 @@ function runwayPayload(extra = {}) {
 }
 
 function formatRunwayEstimate(estimate, limits = {}) {
-  if (!estimate) return "Sin estimacion.";
-  const maxCost = limits.max_cost_usd !== undefined ? ` Limite/render: $${Number(limits.max_cost_usd).toFixed(2)}.` : "";
+  if (!estimate) return "Sin estimación.";
+  const maxCost = limits.max_cost_usd !== undefined ? ` Límite/render: $${Number(limits.max_cost_usd).toFixed(2)}.` : "";
   const dailyBudget = limits.daily_budget_usd !== undefined ? ` Presupuesto diario: $${Number(limits.daily_budget_usd).toFixed(2)}.` : "";
-  return `Estimacion Runway: ${estimate.model}, ${estimate.duration_seconds}s, ${estimate.estimated_credits} creditos, $${Number(estimate.estimated_cost_usd).toFixed(2)}.${maxCost}${dailyBudget}`;
+  const ratio = limits.request?.ratio ? ` Ratio API: ${limits.request.ratio}.` : "";
+  const textOnlyNote = limits.request?.ratio === "1280:720" ? " Gen-4.5 en texto puro exige 16:9; InmoRadar lo reencuadra en vertical al componer." : "";
+  return `Estimación Runway: ${estimate.model}, ${estimate.duration_seconds}s, ${estimate.estimated_credits} créditos, $${Number(estimate.estimated_cost_usd).toFixed(2)}.${ratio}${textOnlyNote}${maxCost}${dailyBudget}`;
 }
 
 async function estimateRunwayRender() {
@@ -1802,7 +1808,7 @@ async function estimateRunwayRender() {
     setRunwayStatus("Genera primero un storyboard.", "bad");
     return null;
   }
-  setVideoBusy(true, "Estimando coste de Runway. No gasta creditos.");
+  setVideoBusy(true, "Estimando coste de Runway. No gasta créditos.");
   setRunwayStatus("Trabajando: estimando coste de Runway...", "working");
   try {
     const payload = await api("/api/admin?resource=social-video/render", {
@@ -1822,7 +1828,7 @@ async function estimateRunwayRender() {
 async function startRunwayRender() {
   if (!state.video.runwayEstimate) await estimateRunwayRender();
   if (!els.videoRunwayConfirm?.checked) {
-    setRunwayStatus("Marca la confirmacion de coste antes de lanzar Runway.", "bad");
+    setRunwayStatus("Marca la confirmación de coste antes de lanzar Runway.", "bad");
     return;
   }
   state.video.jobsStorageError = "";
@@ -1857,7 +1863,7 @@ async function startRunwayRender() {
 async function pollRunwayRender() {
   const jobId = state.video.runwayJob?.id;
   if (!jobId) return;
-  setVideoBusy(true, "Comprobando Runway. Si el clip aun no esta listo, podras volver a comprobarlo.");
+  setVideoBusy(true, "Comprobando Runway. Si el clip aún no está listo, podrás volver a comprobarlo.");
   setRunwayStatus("Trabajando: comprobando estado del render...", "working");
   try {
     const payload = await api(`/api/admin?resource=social-video/render&job_id=${encodeURIComponent(jobId)}`);
@@ -1912,7 +1918,7 @@ async function importRunwayClip() {
     renderVideoStoryboard();
     renderVideoPipeline();
     renderVideoReadiness();
-    setRunwayStatus("Clip Runway cargado como fondo. Ya puedes componer el video final con marca InmoRadar.", "good");
+    setRunwayStatus("Clip Runway cargado como fondo. Ya puedes componer el vídeo final con marca InmoRadar.", "good");
     showStatus("Clip Runway cargado como fondo.", "good");
   } finally {
     setVideoBusy(false);
@@ -1928,7 +1934,7 @@ function videoFormPayload(form) {
     try {
       propertyData = JSON.parse(propertyDataRaw);
     } catch (error) {
-      throw new Error("El JSON de datos del anuncio no es valido. Revisa comillas, comas y llaves.");
+      throw new Error("El JSON de datos del anuncio no es válido. Revisa comillas, comas y llaves.");
     }
     if (!propertyData || Array.isArray(propertyData) || typeof propertyData !== "object") {
       throw new Error("Los datos del anuncio deben ser un objeto JSON.");
@@ -1983,8 +1989,8 @@ function realVideoPackText(project) {
 
   return [
     `INMORADAR - PACK VIDEO IA REAL`,
-    `Titulo: ${project.title || ""}`,
-    `Duracion: ${project.duration_seconds || 24}s`,
+    `Título: ${project.title || ""}`,
+    `Duración: ${project.duration_seconds || 24}s`,
     `Formato: ${project.format?.width || 1080}x${project.format?.height || 1920}`,
     project.growth_strategy ? `Serie: ${project.growth_strategy.series || ""}` : "",
     project.growth_strategy ? `Objetivo: ${project.growth_strategy.objective || ""}` : "",
@@ -2007,14 +2013,14 @@ function realVideoPackText(project) {
     "ESCENAS",
     scenePrompts,
     "",
-    "MUSICA",
+    "MÚSICA",
     project.music_prompt || project.music_direction || "",
     "",
     "BRANDING OBLIGATORIO",
-    `Logo InmoRadar arriba derecha. Texto exacto "${project.branding?.websiteText || "Inmoradar.app"}" abajo derecha durante todo el video.`,
+    `Logo InmoRadar arriba derecha. Texto exacto "${project.branding?.websiteText || "Inmoradar.app"}" abajo derecha durante todo el vídeo.`,
     "",
     "USO RECOMENDADO",
-    "Genera el video base con este pack en una IA de video. Despues sube ese clip en 'Clip IA/personas reales' y exporta la maqueta final con texto, marca y musica desde InmoRadar."
+    "Genera el vídeo base con este pack en una IA de vídeo. Después sube ese clip en 'Clip IA/personas reales' y exporta la maqueta final con texto, marca y música desde InmoRadar."
   ].join("\n");
 }
 
@@ -2050,15 +2056,15 @@ function videoPipelineSteps(project) {
     },
     {
       id: "compose",
-      label: "03 - Composicion",
-      detail: "Marca, textos, progreso y musica se montan aqui.",
+      label: "03 - Composición",
+      detail: "Marca, textos, progreso y música se montan aquí.",
       done: finalReady,
       active: hasClip && !finalReady
     },
     {
       id: "ready",
       label: "04 - Listo para redes",
-      detail: finalReady ? "MP4/WebM descargado y proyecto marcado." : "Descarga el video final y el copy.",
+      detail: finalReady ? "MP4/WebM descargado y proyecto marcado." : "Descarga el vídeo final y el copy.",
       done: finalReady
     }
   ];
@@ -2089,7 +2095,7 @@ function renderVideoPipeline() {
               ? `No se pudo guardar en Supabase: ${escapeHtml(project.storage.error || "tabla social_video_projects pendiente")}. Ejecuta database/social-video-projects.sql.`
               : project.storage?.persisted
                 ? "Proyecto guardado en Supabase. Puedes recuperarlo desde la biblioteca."
-                : "Proyecto activo en esta sesion."
+                : "Proyecto activo en esta sesión."
           }</p>`
         : ""
     }
@@ -2104,7 +2110,7 @@ function renderVideoProjects() {
   }
   const projects = state.video.projects || [];
   if (!projects.length) {
-    els.videoProjects.innerHTML = `<p class="admin-empty-state">Todavia no hay proyectos de video guardados.</p>`;
+    els.videoProjects.innerHTML = `<p class="admin-empty-state">Todavía no hay proyectos de vídeo guardados.</p>`;
     return;
   }
   els.videoProjects.innerHTML = `
@@ -2153,13 +2159,13 @@ function renderVideoPreview() {
   const scenes = project.scenes || [];
   const scene = scenes[state.video.selectedSceneIndex] || scenes[0] || {};
   els.videoPreview.dataset.videoTopic = project.topic || "";
-  if (els.videoPreviewTopic) els.videoPreviewTopic.textContent = project.topic_label || "Video IA";
-  if (els.videoPreviewHeadline) els.videoPreviewHeadline.textContent = scene.headline || project.title || "Video InmoRadar";
+  if (els.videoPreviewTopic) els.videoPreviewTopic.textContent = project.topic_label || "Vídeo IA";
+  if (els.videoPreviewHeadline) els.videoPreviewHeadline.textContent = scene.headline || project.title || "Vídeo InmoRadar";
   if (els.videoPreviewBody) els.videoPreviewBody.textContent = scene.body || project.caption || "";
-  if (els.videoPreviewTitle) els.videoPreviewTitle.textContent = project.title || "Video InmoRadar";
+  if (els.videoPreviewTitle) els.videoPreviewTitle.textContent = project.title || "Vídeo InmoRadar";
   if (els.videoPreviewMeta) {
     const clipLabel = state.video.backgroundClipName ? `clip real: ${state.video.backgroundClipName}` : "maqueta local sin clip real";
-    els.videoPreviewMeta.textContent = `${project.duration_seconds || 24}s - ${project.format?.width || 1080}x${project.format?.height || 1920} - ${project.visual_style_label || "hogar"} - ${project.music_label || "musica"} - ${clipLabel}`;
+    els.videoPreviewMeta.textContent = `${project.duration_seconds || 24}s - ${project.format?.width || 1080}x${project.format?.height || 1920} - ${project.visual_style_label || "hogar"} - ${project.music_label || "música"} - ${clipLabel}`;
   }
   if (els.videoPreviewClip) {
     if (state.video.backgroundClipUrl) {
@@ -2227,7 +2233,7 @@ function renderVideoStoryboard() {
   const project = state.video.lastProject;
   if (!els.videoStoryboard) return;
   if (!project) {
-    els.videoStoryboard.innerHTML = `<p class="admin-empty-state">Genera un video para ver aqui el storyboard completo.</p>`;
+    els.videoStoryboard.innerHTML = `<p class="admin-empty-state">Genera un vídeo para ver aquí el storyboard completo.</p>`;
     return;
   }
   els.videoStoryboard.innerHTML = `
@@ -2243,15 +2249,15 @@ function renderVideoStoryboard() {
       </div>
     </section>
     <section class="admin-video-branding-card">
-      <strong>Reglas globales del video</strong>
+      <strong>Reglas globales del vídeo</strong>
       <p>Fondo humano: ${escapeHtml(project.visual_style_label || "Hogar cotidiano")} - ${escapeHtml(project.visual_backdrop || "")}</p>
-      <p>Musica: ${escapeHtml(project.music_label || "House suave")} - ${escapeHtml(project.music_direction || "")}</p>
-      <p>Branding: logo arriba derecha (${escapeHtml(project.branding?.logoSizePx || 72)} px) y texto exacto "${escapeHtml(project.branding?.websiteText || "Inmoradar.app")}" abajo derecha durante todo el video.</p>
+      <p>Música: ${escapeHtml(project.music_label || "House suave")} - ${escapeHtml(project.music_direction || "")}</p>
+      <p>Branding: logo arriba derecha (${escapeHtml(project.branding?.logoSizePx || 72)} px) y texto exacto "${escapeHtml(project.branding?.websiteText || "Inmoradar.app")}" abajo derecha durante todo el vídeo.</p>
     </section>
     <section class="admin-video-branding-card">
       <strong>Personas reales</strong>
-      <p>${state.video.backgroundClipName ? `Clip real activo: ${escapeHtml(state.video.backgroundClipName)}. Se usara como fondo del export local.` : "Sin clip real subido. El export local usa una maqueta; para personas reales descarga el Pack IA real, genera un clip vertical y subelo en el formulario."}</p>
-      <p>${escapeHtml(project.real_ai_video?.production_note || "El render final con personas reales requiere una IA de video o un clip real como fuente visual.")}</p>
+      <p>${state.video.backgroundClipName ? `Clip real activo: ${escapeHtml(state.video.backgroundClipName)}. Se usará como fondo del export local.` : "Sin clip real subido. El export local usa una maqueta; para personas reales descarga el Pack IA real, genera un clip vertical y súbelo en el formulario."}</p>
+      <p>${escapeHtml(project.real_ai_video?.production_note || "El render final con personas reales requiere una IA de vídeo o un clip real como fuente visual.")}</p>
     </section>
     ${renderGrowthStrategyCard(project)}
     <div class="admin-video-scenes">
@@ -2802,8 +2808,8 @@ async function exportVideoProject() {
     recorder.onstop = () => resolve();
   });
 
-  setVideoBusy(true, "Componiendo video final con fondo humano, musica y marca fija.");
-  showStatus(`Exportando video ${extension.toUpperCase()} con musica audible... manten esta pestana abierta.`);
+  setVideoBusy(true, "Componiendo vídeo final con fondo humano, música y marca fija.");
+  showStatus(`Exportando vídeo ${extension.toUpperCase()} con música audible... mantén esta pestaña abierta.`);
   const start = performance.now();
 
   recorder.start(500);
@@ -2848,7 +2854,7 @@ async function exportVideoProject() {
   }
   setVideoBusy(false);
   showStatus(
-    `Video final exportado en ${extension.toUpperCase()} ${state.video.backgroundClipName ? "con clip real de fondo" : "con fondo sintetico local"} y musica.`,
+    `Vídeo final exportado en ${extension.toUpperCase()} ${state.video.backgroundClipName ? "con clip real de fondo" : "con fondo sintético local"} y música.`,
     "good"
   );
 }
@@ -2858,7 +2864,7 @@ async function runVideoGeneration(form) {
   syncVideoBackgroundClip(form);
   payload.has_uploaded_clip = Boolean(state.video.backgroundClipName);
   setVideoBusy(true, "Generando guion, storyboard y preview con marca fija.");
-  showStatus("Paso 1/4: generando storyboard de video IA...");
+  showStatus("Paso 1/4: generando storyboard de vídeo IA...");
   try {
     const project = await api("/api/admin?resource=social-video/generate", {
       method: "POST",
@@ -2980,7 +2986,7 @@ async function loadRunwayConfig() {
     );
   } catch (error) {
     state.video.runwayConfig = {};
-    setRunwayStatus("No pude leer la configuracion de Runway. La estimacion se activara al generar storyboard.", "neutral");
+    setRunwayStatus("No pude leer la configuración de Runway. La estimación se activará al generar storyboard.", "neutral");
   }
   renderVideoReadiness();
   setRunwayActions();
@@ -3243,7 +3249,7 @@ els.kpiForm.addEventListener("submit", (event) => {
 });
 
 els.kpiReset.addEventListener("click", () => {
-  if (!window.confirm("Restaurar los valores recomendados de KPIs?")) return;
+  if (!window.confirm("¿Restaurar los valores recomendados de KPIs?")) return;
   saveKpis(state.kpis.defaults).catch((error) => showStatus(error.message, "bad"));
 });
 
@@ -3411,7 +3417,7 @@ if (els.videoRunwayModel) {
 if (els.videoRunwayDuration) {
   els.videoRunwayDuration.addEventListener("change", () => {
     state.video.runwayEstimate = null;
-    setRunwayStatus("Duracion cambiada. Vuelve a estimar el coste.", "neutral");
+    setRunwayStatus("Duración cambiada. Vuelve a estimar el coste.", "neutral");
     setRunwayActions();
   });
 }
@@ -3424,7 +3430,7 @@ if (els.viralizaMode) {
   els.viralizaMode.addEventListener("click", () => {
     state.viraliza.executionMode = !state.viraliza.executionMode;
     renderViraliza(state.viraliza.routine);
-    els.viralizaMode.textContent = state.viraliza.executionMode ? "Cerrar modo ejecucion" : "Modo ejecucion";
+    els.viralizaMode.textContent = state.viraliza.executionMode ? "Cerrar modo ejecución" : "Modo ejecución";
   });
 }
 
@@ -3462,7 +3468,7 @@ if (els.app) {
     const hookButton = event.target.closest("[data-viraliza-create-video-from-hook]");
     if (hookButton) {
       setAdminSubsection("marketing", "marketing-videos");
-      showStatus("Usa este hook como base en el generador de videos.", "neutral");
+      showStatus("Usa este hook como base en el generador de vídeos.", "neutral");
     }
   });
 }
