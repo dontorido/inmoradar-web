@@ -1,40 +1,21 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-DN6123E9KV"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-
-    gtag('config', 'G-DN6123E9KV');
-  </script>
-  <!-- Google Tag Manager -->
-  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-  })(window,document,'script','dataLayer','GTM-NWHKRNMD');</script>
-  <!-- End Google Tag Manager -->
+  <script src="/assets/consent.js" defer></script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Privacidad · InmoRadar</title>
-  <meta name="description" content="Política de privacidad de InmoRadar.">
+  <title>Politica de privacidad | InmoRadar</title>
+  <meta name="description" content="Politica de privacidad de InmoRadar para web, extension de navegador, Premium y servicios asociados.">
   <meta name="theme-color" content="#FAFAFA">
   <link rel="icon" href="/assets/favicon-32.png?v=20260519b" type="image/png" sizes="32x32">
-  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
-  <!-- Google Tag Manager (noscript) -->
-  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NWHKRNMD"
-  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-  <!-- End Google Tag Manager (noscript) -->
   <header class="site-header" data-site-header>
     <nav class="nav container" aria-label="Principal">
       <a class="brand" href="/"><span class="brand-mark" data-icon="Radar" aria-hidden="true"></span><span><strong>Inmo</strong><em>Radar</em></span></a>
       <div class="nav-links">
-        <a href="/que-analiza">Qué analiza</a>
+        <a href="/que-analiza">Que analiza</a>
         <a href="/datos">APIs</a>
         <a href="/premium">Premium</a>
         <a href="/noticias">Noticias</a>
@@ -45,37 +26,100 @@
         <div class="language-switch" aria-label="Idioma">
           <button type="button" data-lang="es" aria-pressed="true"><span class="flag flag-es" aria-hidden="true"></span><span>ES</span></button>
           <button type="button" data-lang="en" aria-pressed="false"><span class="flag flag-en" aria-hidden="true"></span><span>EN</span></button>
-        </div><a class="client-link" href="/clientes" aria-label="Area de clientes" title="Area de clientes" data-testid="nav-clientes"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle></svg></a>
+        </div>
+        <a class="client-link" href="/clientes" aria-label="Area de clientes" title="Area de clientes" data-testid="nav-clientes"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle></svg></a>
         <a class="button" href="/premium">Empezar gratis</a>
       </div>
+      <button class="mobile-toggle" type="button" data-mobile-toggle aria-label="Abrir menu"><span data-icon="Radar"></span></button>
     </nav>
+    <div class="mobile-panel" data-mobile-panel><a href="/que-analiza">Que analiza</a><a href="/datos">APIs</a><a href="/premium">Premium</a><a href="/noticias">Noticias</a><a href="/clientes" data-testid="nav-mobile-link-clientes">Clientes</a><a href="/faq">FAQ</a><a href="/contacto">Contacto</a></div>
   </header>
 
   <main class="legal-main">
     <article class="legal-doc">
       <span class="section-label">Privacidad</span>
-      <h1>Política de privacidad</h1>
-      <p>Última actualización: 19 de mayo de 2026.</p>
-      <p>InmoRadar es una extensión de navegador y una web de apoyo para analizar anuncios inmobiliarios. Esta política explica qué datos se usan y con qué finalidad.</p>
+      <h1>Politica de privacidad</h1>
+      <p>Ultima actualizacion: 20 de mayo de 2026.</p>
+      <p>Esta politica explica como InmoRadar trata datos en la extension de navegador, la web, los formularios de contacto, Premium y los servicios asociados. La URL publica para Chrome Web Store es <a href="https://www.inmoradar.app/privacidad">https://www.inmoradar.app/privacidad</a>.</p>
 
-      <h2>Datos que puede tratar la extensión</h2>
+      <h2>Resumen rapido</h2>
       <ul>
-        <li data-i18n="privacy.li1">Texto visible del anuncio inmobiliario para detectar precio, superficie, habitaciones, ubicación aproximada y señales del inmueble.</li>
-        <li data-i18n="privacy.li2">Direcciones habituales configuradas por el usuario, como trabajo o colegio, para preparar cálculos de logística diaria.</li>
-        <li data-i18n="privacy.li3">Inmuebles guardados por el usuario para mostrarlos en una lista comparativa.</li>
+        <li>La finalidad principal de InmoRadar es analizar anuncios inmobiliarios publicos en portales compatibles y mostrar una valoracion orientativa al usuario.</li>
+        <li>No vendemos datos de usuario ni los usamos para publicidad personalizada, scoring crediticio, prestamos o decisiones con efectos juridicos.</li>
+        <li>La extension guarda datos localmente en el navegador, como preferencias e inmuebles guardados por el usuario.</li>
+        <li>La extension puede enviar a InmoRadar datos tecnicos del anuncio visible para calcular precio, zona, aparcamiento, costes y senales del inmueble.</li>
+        <li>La web usa analitica opcional solo si el usuario la acepta en el banner de privacidad.</li>
       </ul>
 
-      <h2 data-i18n="privacy.h2">Almacenamiento local</h2>
-      <p>Las direcciónes habituales y la lista de inmuebles se guardan en el navegador del usuario. No vendemos datos personales ni los usamos para publicidad.</p>
+      <h2>Responsable y contacto</h2>
+      <p>Responsable del tratamiento: InmoRadar. Email de privacidad y soporte: <a href="mailto:hola@inmoradar.app">hola@inmoradar.app</a>.</p>
+      <p>Si InmoRadar se explota mediante una sociedad o autonomo con identificacion fiscal concreta, esos datos se incorporaran al aviso legal y a esta politica.</p>
 
-      <h2 data-i18n="privacy.h3">Servicios externos</h2>
-      <p>InmoRadar puede consultar servicios externos de mapas, geocodificación, rutas o análisis para calcular ubicaciónes aproximadas, transporte, tiempos o contexto del inmueble.</p>
+      <h2>Extension de navegador</h2>
+      <p>La extension InmoRadar funciona sobre paginas publicas de anuncios inmobiliarios en portales compatibles, como Idealista, Fotocasa, Pisos.com y Habitaclia. Su finalidad unica es ayudar al usuario a analizar el anuncio antes de contactar.</p>
 
-      <h2 data-i18n="privacy.h4">Pagos</h2>
-      <p>Cuando se active Premium, el pago se gestionará mediante un proveedor externo. InmoRadar no almacenará datos completos de tarjeta.</p>
+      <h3>Datos que puede leer la extension</h3>
+      <ul>
+        <li>Contenido visible del anuncio: precio, superficie, habitaciones, descripcion, caracteristicas, planta, ascensor, parking, terraza y otras senales publicas del inmueble.</li>
+        <li>URL, dominio, titulo de la pagina y portal inmobiliario para comprobar si la pagina es compatible.</li>
+        <li>Ubicacion del inmueble publicada en el anuncio, como municipio, distrito, barrio, zona o calle si aparece en la pagina. No se usa GPS del usuario.</li>
+        <li>Datos que el usuario decide guardar, como inmuebles favoritos o preferencias de comparacion.</li>
+      </ul>
 
-      <h2 data-i18n="privacy.contactTitle">Contacto</h2>
-      <p><span data-i18n="privacy.contactCopy">Para consultas de privacidad, escribe a</span> <a href="mailto:hola@inmoradar.app">hola@inmoradar.app</a>.</p>
+      <h3>Datos que se guardan localmente</h3>
+      <p>La extension usa almacenamiento del navegador para conservar configuracion, estado de instalacion, avisos de version e inmuebles guardados. Estos datos permanecen en el dispositivo del usuario salvo que el usuario los borre, desinstale la extension o use una funcion que implique enviarlos voluntariamente.</p>
+
+      <h3>Datos que pueden enviarse a InmoRadar</h3>
+      <p>Para calcular resultados, la extension puede consultar APIs propias de InmoRadar con datos del anuncio, como precio, metros cuadrados, municipio, provincia, distrito, zona, caracteristicas del inmueble y URL de origen. Estos datos se usan para devolver referencias de mercado, calculos de aparcamiento, ajustes de confianza y senales orientativas.</p>
+      <p>Si el usuario solicita recibir un informe por email, se tratara el email introducido y la lista de inmuebles seleccionados para generar y enviar ese informe.</p>
+
+      <h2>Web, contacto y Premium</h2>
+      <ul>
+        <li>Formulario de contacto: tratamos nombre, email, tema y mensaje para responder la solicitud.</li>
+        <li>Area de clientes: tratamos el email de compra para enviar un enlace temporal de acceso al portal de gestion.</li>
+        <li>Premium y pagos: los pagos se gestionan mediante un proveedor externo. InmoRadar no almacena numeros completos de tarjeta.</li>
+        <li>Informes por email: si el usuario pide un informe, tratamos el email y los datos de los inmuebles incluidos para enviarlo.</li>
+      </ul>
+
+      <h2>Analitica, cookies y consentimiento</h2>
+      <p>La web usa cookies tecnicas necesarias para su funcionamiento y puede usar Google Analytics y Google Tag Manager solo si el usuario acepta la analitica opcional. La analitica ayuda a medir visitas, paginas consultadas y rendimiento de forma agregada.</p>
+      <p>El usuario puede aceptar, rechazar o cambiar su decision en cualquier momento.</p>
+      <button class="button ghost consent-preferences-button" type="button" data-cookie-preferences>Gestionar preferencias de privacidad</button>
+
+      <h2>Proveedores y destinatarios</h2>
+      <p>Podemos usar proveedores que actuan como encargados o prestadores necesarios para operar el servicio:</p>
+      <ul>
+        <li>Vercel u otros proveedores de hosting y despliegue web.</li>
+        <li>Supabase u otros proveedores de base de datos y almacenamiento operativo.</li>
+        <li>Lemon Squeezy u otros procesadores de pago para Premium y portal de cliente.</li>
+        <li>Resend, Cloudflare Email Routing u otros proveedores de email para contacto, soporte e informes solicitados.</li>
+        <li>Google Analytics y Google Tag Manager solo para analitica web si el usuario la acepta.</li>
+        <li>Google y Chrome Web Store para distribucion, revision y publicacion de la extension.</li>
+      </ul>
+      <p>No compartimos datos de usuario con terceros para venderlos, revenderlos, crear perfiles publicitarios ajenos, determinar solvencia crediticia ni ofrecer prestamos.</p>
+
+      <h2>Base legal</h2>
+      <ul>
+        <li>Ejecucion de un servicio solicitado por el usuario: analisis del anuncio, envio de informes, soporte y gestion de Premium.</li>
+        <li>Interes legitimo: seguridad, prevencion de abuso, mantenimiento tecnico y mejora basica del producto sin publicidad personalizada.</li>
+        <li>Consentimiento: analitica opcional, comunicaciones o tratamientos que lo requieran.</li>
+        <li>Obligacion legal: conservacion de informacion fiscal o contable cuando corresponda.</li>
+      </ul>
+
+      <h2>Conservacion</h2>
+      <p>Los datos se conservan durante el tiempo necesario para prestar el servicio, atender solicitudes, mantener seguridad y cumplir obligaciones legales. Los datos guardados localmente por la extension permanecen en el navegador hasta que el usuario los borre o desinstale la extension. Los datos de soporte y pago se conservaran durante los plazos necesarios para responsabilidades legales, fiscales o contractuales.</p>
+
+      <h2>Seguridad</h2>
+      <p>Aplicamos medidas razonables de seguridad tecnica y organizativa. Las comunicaciones con la web y APIs se realizan mediante HTTPS. Las credenciales operativas y claves de API no se incluyen en la extension ni se exponen al usuario.</p>
+
+      <h2>Derechos de las personas usuarias</h2>
+      <p>El usuario puede solicitar acceso, rectificacion, supresion, oposicion, limitacion del tratamiento y portabilidad escribiendo a <a href="mailto:hola@inmoradar.app">hola@inmoradar.app</a>. Tambien puede presentar una reclamacion ante la Agencia Espanola de Proteccion de Datos si considera que el tratamiento no se ajusta a la normativa aplicable.</p>
+
+      <h2>Menores</h2>
+      <p>InmoRadar no esta dirigido a menores de 14 anos y no solicita deliberadamente datos de menores.</p>
+
+      <h2>Cambios de esta politica</h2>
+      <p>Podemos actualizar esta politica para reflejar cambios tecnicos, legales o de producto. Publicaremos siempre la version vigente en esta pagina.</p>
     </article>
   </main>
 
@@ -86,15 +130,15 @@
           <a class="brand" href="/"><span class="brand-mark" data-icon="Radar"></span><span><strong>Inmo</strong><em>Radar</em></span></a>
           <p class="footer-tagline">Copiloto inmobiliario para navegadores modernos.</p>
         </div>
-        <div class="footer-col"><h4>Producto</h4><a href="/que-analiza">Qué analiza</a><a href="/datos">APIs</a><a href="/premium">Premium</a></div>
+        <div class="footer-col"><h4>Producto</h4><a href="/que-analiza">Que analiza</a><a href="/datos">APIs</a><a href="/premium">Premium</a></div>
         <div class="footer-col"><h4>Contenido</h4><a href="/noticias">Noticias</a><a href="/faq">FAQ</a></div>
-        <div class="footer-col"><h4>Compañía</h4><a href="/contacto">Contacto</a><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></div>
+        <div class="footer-col"><h4>Compania</h4><a href="/contacto">Contacto</a><a href="/privacidad">Privacidad</a><a href="/terminos">Terminos</a></div>
         <span class="footer-status">Online</span>
       </div>
       <div class="footer-word">INMORADAR</div>
       <div class="footer-meta"><span>&copy; <span data-year></span> InmoRadar</span><span>v1.0</span></div>
     </div>
   </footer>
-  <script src="assets/app.js"></script>
+  <script src="/assets/app.js"></script>
 </body>
 </html>

@@ -89,7 +89,7 @@ test("el generador SEO soporta contenidos aleatorios controlados de alquiler y a
   assert.equal(expensive.results[0].saved, false);
 });
 
-test("las landings publicas incluyen Google Tag Manager", () => {
+test("las landings publicas cargan analitica solo tras consentimiento", () => {
   const html = renderLandingHtml({
     slug: "precio-metro-cuadrado/logrono",
     title: "Precio del metro cuadrado en Logroño",
@@ -103,9 +103,9 @@ test("las landings publicas incluyen Google Tag Manager", () => {
     source_data_json: { faq: [] }
   });
 
-  assert.match(html, /GTM-NWHKRNMD/);
-  assert.match(html, /googletagmanager\.com\/gtm\.js/);
-  assert.match(html, /googletagmanager\.com\/ns\.html/);
+  assert.match(html, /\/assets\/consent\.js/);
+  assert.doesNotMatch(html, /googletagmanager\.com\/gtm\.js/);
+  assert.doesNotMatch(html, /googletagmanager\.com\/ns\.html/);
   assert.match(html, /\/api\/og\/price-city/);
 });
 
