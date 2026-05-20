@@ -158,16 +158,18 @@ function socialIcon(name) {
 
 function footerSocialHtml() {
   return `
-    <nav class="footer-social" aria-label="Redes sociales InmoRadar" data-footer-social>
-      <a href="https://www.instagram.com/inmoradares/" target="_blank" rel="noopener noreferrer" aria-label="Instagram de InmoRadar" data-testid="footer-social-instagram">
-        ${socialIcon("instagram")}
-        <span>Instagram</span>
-      </a>
-      <a href="https://www.tiktok.com/@inmoradar" target="_blank" rel="noopener noreferrer" aria-label="TikTok de InmoRadar" data-testid="footer-social-tiktok">
-        ${socialIcon("tiktok")}
-        <span>TikTok</span>
-      </a>
-    </nav>
+    <div class="footer-social-row">
+      <nav class="footer-social" aria-label="Redes sociales InmoRadar" data-footer-social>
+        <a href="https://www.instagram.com/inmoradares/" target="_blank" rel="noopener noreferrer" aria-label="Instagram de InmoRadar" data-testid="footer-social-instagram">
+          ${socialIcon("instagram")}
+          <span>Instagram</span>
+        </a>
+        <a href="https://www.tiktok.com/@inmoradar" target="_blank" rel="noopener noreferrer" aria-label="TikTok de InmoRadar" data-testid="footer-social-tiktok">
+          ${socialIcon("tiktok")}
+          <span>TikTok</span>
+        </a>
+      </nav>
+    </div>
   `;
 }
 
@@ -375,11 +377,16 @@ function initContactForm() {
 function initFooterSocial() {
   document.querySelectorAll(".site-footer").forEach((footer) => {
     if (footer.querySelector("[data-footer-social]")) return;
+    const footerWord = footer.querySelector(".footer-word");
     const target = footer.querySelector(".footer-meta") || footer.querySelector(".container") || footer;
     const wrapper = document.createElement("template");
     wrapper.innerHTML = footerSocialHtml().trim();
     const social = wrapper.content.firstElementChild;
     if (!social) return;
+    if (footerWord) {
+      footerWord.insertAdjacentElement("afterend", social);
+      return;
+    }
     if (target.classList.contains("footer-meta") && target.children.length > 1) {
       target.insertBefore(social, target.children[1]);
     } else {
