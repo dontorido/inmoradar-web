@@ -67,6 +67,7 @@ const els = {
   extensionStats: document.querySelector("[data-extension-stats]"),
   extensionBreakdown: document.querySelector("[data-extension-breakdown]"),
   premiumRows: document.querySelector("[data-premium-rows]"),
+  seoSummary: document.querySelector("[data-seo-summary]"),
   seoRows: document.querySelector("[data-seo-rows]"),
   seoPagination: document.querySelector("[data-seo-pagination]"),
   premiumFilter: document.querySelector("[data-premium-filter]"),
@@ -759,6 +760,7 @@ function renderSeo(payload) {
   state.seo.pageSize = Number(payload.page_size || state.seo.pageSize || 10);
   state.seo.hasNextPage = Boolean(payload.has_next_page);
   state.seo.hasPreviousPage = Boolean(payload.has_previous_page);
+  renderSeoSummary(payload.summary || {}, rows);
 
   if (!rows.length) {
     els.seoRows.innerHTML = `<tr><td colspan="5">No hay landings con este filtro.</td></tr>`;
@@ -793,6 +795,31 @@ function renderSeo(payload) {
     })
     .join("");
   renderSeoPagination(payload);
+}
+
+function renderSeoSummary(summary = {}, fallbackRows = []) {
+  if (!els.seoSummary) return;
+  const rows = Array.isArray(fallbackRows) ? fallbackRows : [];
+  const fallbackTotal = rows.length;
+  const total = Number(summary.total_landings ?? fallbackTotal);
+  const published = Number(summary.published ?? rows.filter((row) => row.status === "published").length);
+  const pending = Number(summary.pending_landings ?? rows.filter((row) => ["draft", "needs_review", "ready_to_publish"].includes(row.status)).length);
+  const ready = Number(summary.ready_to_publish ?? rows.filter((row) => row.status === "ready_to_publish").length);
+  const needsReview = Number(summary.needs_review ?? rows.filter((row) => row.status === "needs_review").length);
+  const noindex = Number(summary.noindex ?? rows.filter((row) => row.index_status === "noindex" || row.status === "noindex").length);
+  const opportunities = Number(summary.pending_opportunities ?? 0);
+  const averageScore = Number(summary.average_quality_score ?? 0);
+
+  els.seoSummary.innerHTML = [
+    stat("Total", total, { id: "seo-total", hint: "Landings SEO creadas" }),
+    stat("Publicadas", published, { id: "seo-published", hint: "Visibles e indexables" }),
+    stat("Pendientes", pending, { id: "seo-pending", hint: "Draft + revision + ready" }),
+    stat("Ready", ready, { id: "seo-ready", hint: "Listas para publicar" }),
+    stat("Revision", needsReview, { id: "seo-review", hint: "Necesitan criterio humano" }),
+    stat("Noindex", noindex, { id: "seo-noindex", hint: "Bloqueadas para indice" }),
+    stat("Oportunidades", opportunities, { id: "seo-opportunities", hint: "Pendientes de generar" }),
+    stat("Score medio", averageScore ? averageScore.toFixed(0) : 0, { id: "seo-average-score", unit: "/100", hint: "Solo landings con score" })
+  ].join("");
 }
 
 function renderSeoPagination(payload) {

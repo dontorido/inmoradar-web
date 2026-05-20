@@ -628,10 +628,23 @@ async function handleSeoLandings(req, url) {
   });
   if (status && status !== "all") params.set("status", `eq.${status}`);
 
-  const rows = await supabaseFetch(`seo_landings?${params.toString()}`);
+  const summaryParams = new URLSearchParams({
+    select: "status,index_status,quality_score,published_at,updated_at",
+    limit: "5000"
+  });
+  const opportunitiesParams = new URLSearchParams({
+    select: "status,template_type",
+    limit: "5000"
+  });
+  const [rows, summaryRows, opportunityRows] = await Promise.all([
+    supabaseFetch(`seo_landings?${params.toString()}`),
+    safeFetch(`seo_landings?${summaryParams.toString()}`),
+    safeFetch(`seo_landing_opportunities?${opportunitiesParams.toString()}`)
+  ]);
   const allRows = Array.isArray(rows) ? rows : [];
   const hasNextPage = allRows.length > pageSize;
   const landings = allRows.slice(0, pageSize);
+  const summary = buildSeoLandingsSummary(summaryRows, opportunityRows, status);
   return {
     status: 200,
     payload: {
@@ -643,8 +656,55 @@ async function handleSeoLandings(req, url) {
       has_previous_page: page > 1,
       from: landings.length ? offset + 1 : 0,
       to: offset + landings.length,
+      summary,
       landings
     }
+  };
+}
+
+function buildSeoLandingsSummary(rows = [], opportunities = [], activeStatus = "all") {
+  const landings = Array.isArray(rows) ? rows : [];
+  const statusCounts = landings.reduce((acc, row) => {
+    const key = String(row.status || "unknown").toLowerCase();
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  const indexCounts = landings.reduce((acc, row) => {
+    const key = String(row.index_status || "unknown").toLowerCase();
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  const scores = landings
+    .map((row) => Number(row.quality_score || 0))
+    .filter((score) => Number.isFinite(score) && score > 0);
+  const filteredTotal =
+    activeStatus && activeStatus !== "all"
+      ? landings.filter((row) => String(row.status || "").toLowerCase() === activeStatus).length
+      : landings.length;
+  const pendingLandings =
+    (statusCounts.draft || 0) + (statusCounts.needs_review || 0) + (statusCounts.ready_to_publish || 0);
+  const pendingOpportunities = (Array.isArray(opportunities) ? opportunities : []).filter((row) =>
+    ["pending", "generating", "draft", "needs_review"].includes(String(row.status || "").toLowerCase())
+  ).length;
+
+  return {
+    total_landings: landings.length,
+    filtered_total: filteredTotal,
+    published: statusCounts.published || 0,
+    ready_to_publish: statusCounts.ready_to_publish || 0,
+    needs_review: statusCounts.needs_review || 0,
+    draft: statusCounts.draft || 0,
+    noindex: landings.filter(
+      (row) =>
+        String(row.index_status || "").toLowerCase() === "noindex" ||
+        String(row.status || "").toLowerCase() === "noindex"
+    ).length,
+    indexable: indexCounts.index || 0,
+    pending_landings: pendingLandings,
+    pending_opportunities: pendingOpportunities,
+    average_quality_score: scores.length
+      ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
+      : 0
   };
 }
 
