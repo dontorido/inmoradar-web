@@ -2490,6 +2490,41 @@
   margin: 0;
 }
 
+.admin-viraliza-howto {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(9, 9, 11, .08);
+  border-radius: 8px;
+  background: rgba(9, 9, 11, .025);
+  padding: 12px;
+}
+
+.admin-viraliza-howto strong,
+.admin-viraliza-done strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.admin-viraliza-howto ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-viraliza-done,
+.admin-viraliza-step-intro {
+  border-left: 3px solid var(--radar);
+  margin: 0;
+  padding-left: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .admin-viraliza-card ul {
   padding-left: 18px;
   color: var(--muted);

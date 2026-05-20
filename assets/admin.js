@@ -1043,6 +1043,76 @@ function platformLabel(value) {
   return labels[String(value || "").toLowerCase()] || value || "-";
 }
 
+const VIRALIZA_TASK_GUIDES = {
+  keyword_search: {
+    steps: [
+      "Pulsa los botones de busqueda de las 3 keywords principales.",
+      "Mira videos recientes con preguntas reales en comentarios.",
+      "Anota una duda repetida, formato o frase que pueda convertirse en contenido."
+    ],
+    doneWhen: "Completa cuando tengas 3 ideas claras sacadas de conversaciones reales."
+  },
+  save_videos: {
+    steps: [
+      "Guarda 5 videos con buen hook en la propia plataforma.",
+      "Fijate en que funciona: primera frase, ritmo, pregunta, comparativa o checklist.",
+      "Decide como adaptarlo a InmoRadar sin copiar el contenido original."
+    ],
+    doneWhen: "Completa cuando tengas 5 referencias y una adaptacion posible."
+  },
+  comment: {
+    steps: [
+      "Lee el video y varios comentarios antes de publicar.",
+      "Copia una sugerencia y cambia una frase para que encaje con el contexto.",
+      "Publica manualmente, guarda la URL y marca el comentario como usado."
+    ],
+    doneWhen: "Completa cuando hayas dejado 10 comentarios utiles, maximo 2 con marca."
+  },
+  follow_accounts: {
+    steps: [
+      "Abre el perfil y revisa bio, pais y ultimos videos.",
+      "Sigue solo cuentas con audiencia real sobre vivienda, hipoteca, barrios o finanzas.",
+      "Si encaja mucho, deja un comentario util antes de contactar."
+    ],
+    doneWhen: "Completa cuando hayas seguido o descartado conscientemente 5 cuentas."
+  },
+  hooks: {
+    steps: [
+      "Elige 3 ideas vistas hoy y conviertelas en frases de primer segundo.",
+      "Comprueba que el hook no promete chollos, ahorro garantizado ni tasacion exacta.",
+      "Pulsa Crear video en el hook con mas potencial."
+    ],
+    doneWhen: "Completa cuando tengas 3 hooks y 1 candidato para video."
+  },
+  outreach: {
+    steps: [
+      "Abre el perfil recomendado y valida si merece contacto hoy.",
+      "Copia el mensaje y personaliza la primera frase con algo concreto del creador.",
+      "Envia manualmente o marca pendiente si conviene calentar antes."
+    ],
+    doneWhen: "Completa cuando hayas contactado 1 creador o decidido calentar primero."
+  },
+  create_video: {
+    steps: [
+      "Elige el hook o aprendizaje mas fuerte del dia.",
+      "Crea el brief/video y revisa privacidad, disclaimer y CTA.",
+      "Deja listo caption, hashtags y siguiente accion."
+    ],
+    doneWhen: "Completa cuando exista 1 video preparado para grabar, publicar o programar."
+  }
+};
+
+function guideList(items = [], title = "Que tienes que hacer") {
+  const clean = items.filter(Boolean);
+  if (!clean.length) return "";
+  return `
+    <div class="admin-viraliza-howto">
+      <strong>${escapeHtml(title)}</strong>
+      <ol>${clean.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>
+    </div>
+  `;
+}
+
 function renderViralizaKpis(routine) {
   if (!els.viralizaKpis) return;
   if (!routine) {
@@ -1069,6 +1139,9 @@ function renderViralizaKpis(routine) {
 }
 
 function viralizaTaskCard(task) {
+  const guide = VIRALIZA_TASK_GUIDES[task.type] || {};
+  const steps = Array.isArray(task.steps) && task.steps.length ? task.steps : guide.steps || [];
+  const doneWhen = task.doneWhen || guide.doneWhen || "";
   return `
     <article class="admin-viraliza-card">
       <div class="admin-viraliza-card-head">
@@ -1077,9 +1150,11 @@ function viralizaTaskCard(task) {
       </div>
       <h3>${escapeHtml(task.title)}</h3>
       <p>${escapeHtml(task.description || "")}</p>
+      ${guideList(steps)}
+      ${doneWhen ? `<p class="admin-viraliza-done"><strong>Cuando marcarlo hecho:</strong> ${escapeHtml(doneWhen)}</p>` : ""}
       <div class="admin-row-actions">
-        <button class="admin-button tiny ghost" type="button" data-viraliza-record data-entity-type="task" data-entity-id="${escapeHtml(task.id)}" data-action-type="in_progress">Empezar</button>
-        <button class="admin-button tiny" type="button" data-viraliza-record data-entity-type="task" data-entity-id="${escapeHtml(task.id)}" data-action-type="completed">Completar</button>
+        <button class="admin-button tiny ghost" type="button" data-viraliza-record data-entity-type="task" data-entity-id="${escapeHtml(task.id)}" data-action-type="in_progress">Marcar en curso</button>
+        <button class="admin-button tiny" type="button" data-viraliza-record data-entity-type="task" data-entity-id="${escapeHtml(task.id)}" data-action-type="completed">Marcar hecho</button>
       </div>
     </article>
   `;
@@ -1095,11 +1170,19 @@ function viralizaKeywordCard(keyword) {
       </div>
       <h3>${escapeHtml(keyword.keyword)}</h3>
       <p>${escapeHtml(keyword.intent || "")}</p>
+      ${guideList(
+        [
+          "Abre una plataforma y revisa resultados recientes, no solo los mas virales.",
+          "Busca preguntas de usuarios, dudas de hipoteca, quejas de zona o comparativas.",
+          "Si ves un patron repetido, conviertelo en comentario, hook o video."
+        ],
+        "Como usar esta keyword"
+      )}
       <ul>${(keyword.whatToLookFor || []).slice(0, 3).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
       <div class="admin-row-actions">
         ${Object.entries(urls)
           .slice(0, 4)
-          .map(([platform, url]) => `<button class="admin-button tiny ghost" type="button" data-open-url="${escapeHtml(url)}">${escapeHtml(platformLabel(platform))}</button>`)
+          .map(([platform, url]) => `<button class="admin-button tiny ghost" type="button" data-open-url="${escapeHtml(url)}">Abrir ${escapeHtml(platformLabel(platform))}</button>`)
           .join("")}
       </div>
     </article>
@@ -1114,6 +1197,14 @@ function viralizaCommentCard(comment) {
         ${chip(comment.brandMention ? "marca" : "sin marca", comment.brandMention ? "warn" : "ready")}
       </div>
       <p class="admin-viraliza-copy">${escapeHtml(comment.text)}</p>
+      ${guideList(
+        [
+          "Usalo solo si el video realmente habla de este tema.",
+          "Ajusta una frase para que no parezca comentario generico.",
+          "Despues de publicarlo, guarda la URL y revisa respuestas en 24h."
+        ],
+        "Antes de publicarlo"
+      )}
       <small>${escapeHtml(comment.bestFor || "")} · riesgo ${escapeHtml(comment.risk || "low")}</small>
       <div class="admin-row-actions">
         <button class="admin-button tiny" type="button" data-copy-text="${escapeHtml(comment.text)}">Copiar</button>
@@ -1133,6 +1224,14 @@ function viralizaHookCard(hook) {
       <h3>${escapeHtml(hook.hook)}</h3>
       <p>${escapeHtml(hook.scriptPreview || "")}</p>
       <small>Overlay: ${escapeHtml(hook.overlayExample || "")}</small>
+      ${guideList(
+        [
+          "Usalo si responde a una conversacion vista hoy.",
+          "Convierte el hook en un video corto con datos anonimizados o simulados.",
+          "Termina con una pregunta clara para comentarios."
+        ],
+        "Como convertirlo en video"
+      )}
       <div class="admin-row-actions">
         <button class="admin-button tiny" type="button" data-copy-text="${escapeHtml(hook.hook)}">Copiar</button>
         <button class="admin-button tiny ghost" type="button" data-viraliza-create-video-from-hook="${escapeHtml(hook.id)}">Crear video</button>
@@ -1151,6 +1250,14 @@ function viralizaCreatorCard(creator) {
       <h3>${escapeHtml(creator.name || creator.handle || "Creador")}</h3>
       <p>${escapeHtml(creator.whyRelevant || creator.reason || "")}</p>
       <small>${escapeHtml((creator.topics || []).join(", "))}</small>
+      ${guideList(
+        [
+          "Abre el perfil y revisa si su audiencia es de Espana.",
+          "Mira si responde comentarios y si hay preguntas reales.",
+          "Sigue solo si puedes aportar valor; si encaja mucho, comenta antes de contactar."
+        ],
+        "Decision manual"
+      )}
       <div class="admin-row-actions">
         <button class="admin-button tiny ghost" type="button" data-open-url="${escapeHtml(creator.url || "")}">Abrir perfil</button>
         <button class="admin-button tiny ghost" type="button" data-copy-text="${escapeHtml(creator.handle || "")}">Copiar handle</button>
@@ -1169,6 +1276,14 @@ function viralizaSavedVideoCard(video, index) {
       </div>
       <h3>Video ${index + 1}</h3>
       <p>Pega una URL, anota por que funciona y crea una adaptacion para InmoRadar. No copies el contenido: adapta el formato.</p>
+      ${guideList(
+        [
+          "Guarda un video con hook fuerte o muchos comentarios utiles.",
+          "Resume en una frase por que funciona.",
+          "Piensa la version InmoRadar: antes de llamar, chollo o humo, A vs B, checklist o error."
+        ],
+        "Que guardar"
+      )}
       <div class="admin-row-actions">
         <button class="admin-button tiny ghost" type="button" data-viraliza-record data-entity-type="saved_video" data-entity-id="${escapeHtml(video.id)}" data-action-type="saved">Marcar guardado</button>
         <button class="admin-button tiny ghost" type="button" data-viraliza-saved-brief="${escapeHtml(video.id)}">Crear idea</button>
@@ -1194,6 +1309,14 @@ function renderViralizaOutreach(routine) {
       <h3>${escapeHtml(creator.name || creator.handle)}</h3>
       <p>${escapeHtml(creator.bestCollabIdea || message.collaborationIdea || "")}</p>
       <pre>${escapeHtml(message.dm || message.medium || message.short || "")}</pre>
+      ${guideList(
+        [
+          "No lo envies tal cual si no has mirado el perfil.",
+          "Cambia la primera frase para mencionar un video, tema o ciudad concreta.",
+          "Ofrece probar InmoRadar o hacer un contenido util, no pedir promocion directa."
+        ],
+        "Antes de enviar"
+      )}
       <div class="admin-row-actions">
         <button class="admin-button tiny" type="button" data-copy-text="${escapeHtml(message.dm || message.medium || message.short || "")}">Copiar mensaje</button>
         <button class="admin-button tiny ghost" type="button" data-viraliza-record data-entity-type="outreach" data-entity-id="${escapeHtml(message.id)}" data-action-type="contacted">Marcar contactado</button>
@@ -1217,31 +1340,37 @@ function renderViralizaSteps(routine) {
     <article class="admin-viraliza-step">
       <span>Pantalla 1</span>
       <h3>Busca estas 3 keywords</h3>
+      <p class="admin-viraliza-step-intro">Hazlo primero. Abre las busquedas, detecta conversaciones reales y vuelve con ideas concretas.</p>
       ${keywords.map(viralizaKeywordCard).join("")}
     </article>
     <article class="admin-viraliza-step">
       <span>Pantalla 2</span>
       <h3>Guarda 5 videos buenos</h3>
+      <p class="admin-viraliza-step-intro">Guarda referencias por formato, no por tema exacto. La pregunta es: como lo adaptamos a InmoRadar?</p>
       ${(routine.savedVideos || []).slice(0, 5).map(viralizaSavedVideoCard).join("")}
     </article>
     <article class="admin-viraliza-step">
       <span>Pantalla 3</span>
       <h3>Comenta en 10 videos</h3>
+      <p class="admin-viraliza-step-intro">Copia, adapta y publica manualmente. Si no aporta valor al video, no lo uses.</p>
       ${comments.map(viralizaCommentCard).join("")}
     </article>
     <article class="admin-viraliza-step">
       <span>Pantalla 4</span>
       <h3>Sigue 5 cuentas</h3>
+      <p class="admin-viraliza-step-intro">Revisa cada perfil antes de seguir. Queremos cuentas con audiencia real y conversacion util.</p>
       ${creators.map(viralizaCreatorCard).join("")}
     </article>
     <article class="admin-viraliza-step">
       <span>Pantalla 5</span>
       <h3>Anota 3 hooks</h3>
+      <p class="admin-viraliza-step-intro">Elige hooks que puedas producir rapido y que terminen en pregunta o debate.</p>
       ${hooks.map(viralizaHookCard).join("")}
     </article>
     <article class="admin-viraliza-step">
       <span>Pantalla 6</span>
       <h3>Contacta 1 creador</h3>
+      <p class="admin-viraliza-step-intro">Contacta solo si el perfil encaja. Personaliza el mensaje antes de enviarlo.</p>
       ${message ? `<pre>${escapeHtml(message.dm || message.medium || "")}</pre><button class="admin-button tiny" type="button" data-copy-text="${escapeHtml(message.dm || message.medium || "")}">Copiar mensaje</button>` : `<p class="admin-empty-state">Sin creador recomendado.</p>`}
     </article>
     <article class="admin-viraliza-step">
@@ -1256,37 +1385,37 @@ const VIRALIZA_AREAS = {
   viraliza: {
     title: "Viraliza",
     subtitle: "Tu radar diario para encontrar conversaciones, creadores y formatos que pueden hacer crecer InmoRadar.",
-    noteTitle: "Vista completa",
+    noteTitle: "Que haces cada dia",
     note:
-      "Desde aqui se ve la rutina entera: que buscar, que comentar, a quien seguir, que hooks guardar, que creador contactar y que video crear."
+      "Empieza por Generar rutina de hoy. Luego ejecuta en orden: keywords, videos guardados, comentarios, cuentas a seguir, hooks, outreach y video propio. Marca cada tarea solo cuando la hayas hecho fuera del sistema."
   },
   creadores: {
     title: "Creadores",
     subtitle: "CRM ligero para detectar cuentas relevantes, calentarlas con comentarios utiles y decidir a quien contactar.",
-    noteTitle: "Para que sirve",
+    noteTitle: "Que haces aqui",
     note:
-      "Aqui revisas las 5 cuentas sugeridas del dia, su Creator Fit Score, por que encajan y el mensaje preparado para contactar solo despues de revisarlo."
+      "Abre cada perfil, revisa si su audiencia habla de vivienda en Espana, sigue solo si encaja y marca seguido. Si el creador del dia encaja, copia el mensaje, personalizalo y contacta manualmente."
   },
   comentarios: {
     title: "Comentarios",
     subtitle: "Banco diario de comentarios utiles para participar en conversaciones sin spam y con revision humana.",
-    noteTitle: "Para que sirve",
+    noteTitle: "Que haces aqui",
     note:
-      "Aqui copias comentarios, los adaptas al video real, marcas donde los has usado y generas comentarios contextuales pegando descripcion o transcripcion."
+      "Elige un comentario, adaptalo al video real, publicalo manualmente y marca usado. Si tienes una URL o transcripcion concreta, usa el asistente contextual antes de comentar."
   },
   hooks: {
     title: "Hooks",
     subtitle: "Laboratorio de hooks y formatos para convertir oportunidades en guiones y briefs de video.",
-    noteTitle: "Para que sirve",
+    noteTitle: "Que haces aqui",
     note:
-      "Aqui eliges los hooks del dia, copias variantes, creas un video desde un hook y guardas videos de inspiracion para adaptarlos, no copiarlos."
+      "Escoge 3 hooks, guarda inspiraciones y pulsa Crear video en el mejor. El objetivo diario es salir con 1 brief o pieza preparada, no solo mirar ideas."
   },
   resultados: {
     title: "Resultados",
     subtitle: "Seguimiento de lo ejecutado y aprendizaje semanal para repetir lo que funciona.",
-    noteTitle: "Para que sirve",
+    noteTitle: "Que haces aqui",
     note:
-      "Aqui ves que falta medir: comentarios usados, follows, contactos, briefs, winners y proximas acciones. Es el sitio para cerrar el bucle despues de 24h."
+      "Al dia siguiente revisa respuestas, likes, guardados, clicks, instalaciones o replies de creadores. Eso decide que hooks, keywords y comentarios repetimos."
   }
 };
 
