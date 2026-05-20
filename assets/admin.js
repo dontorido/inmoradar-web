@@ -1681,6 +1681,9 @@ function runwayErrorMessage(error) {
   if (code === "runway_render_disabled") {
     return "Runway esta apagado. Activa RUNWAY_RENDER_ENABLED=true en Vercel para lanzar renders reales.";
   }
+  if (code === "runway_create_failed" && /validation/i.test(String(payload.message || ""))) {
+    return "Runway ha rechazado el formato de la peticion. Actualiza la pagina y vuelve a generar el storyboard antes de lanzar el clip.";
+  }
   return payload.message || error?.message || "No se pudo completar la accion de Runway.";
 }
 

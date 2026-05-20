@@ -101,10 +101,10 @@ test("runway estimate clamps duration and exposes cost before spending", () => {
     durationSeconds: 60
   });
   assert.equal(clamped.model, "gen4.5");
-  assert.equal(clamped.duration_seconds, 15);
+  assert.equal(clamped.duration_seconds, 10);
 });
 
-test("runway request uses InmoRadar safe-zone prompt and vertical ratio", () => {
+test("runway request uses InmoRadar safe-zone prompt and Gen-4.5 vertical ratio", () => {
   const project = generateSocialVideoProject({
     topic: "parking",
     city: "Madrid",
@@ -120,7 +120,8 @@ test("runway request uses InmoRadar safe-zone prompt and vertical ratio", () => 
   assert.equal(request.model, "gen4.5");
   assert.equal(request.endpoint, "image_to_video");
   assert.equal(request.duration, 5);
-  assert.equal(request.ratio, "768:1280");
+  assert.equal(request.ratio, "720:1280");
+  assert.ok(request.promptText.length <= 950);
   assert.match(request.promptText, /Dejar espacio libre arriba derecha/);
   assert.match(request.promptText, /Inmoradar\.app/);
   assert.match(request.promptText, /No incluir texto legible, logos externos/);
@@ -131,16 +132,17 @@ test("runway settings are disabled by default to avoid accidental cost", () => {
   assert.equal(settings.enabled, false);
   assert.equal(settings.apiSecretConfigured, false);
   assert.equal(settings.model, "gen4.5");
-  assert.equal(settings.ratio, "768:1280");
+  assert.equal(settings.ratio, "720:1280");
   assert.equal(settings.maxCostUsd, 0.75);
   assert.equal(settings.dailyBudgetUsd, 3);
 });
 
-test("runway ratio normaliza valores antiguos al formato oficial de API", () => {
-  assert.equal(normalizeRunwayRatio("720:1280"), "768:1280");
-  assert.equal(normalizeRunwayRatio("9:16"), "768:1280");
-  assert.equal(normalizeRunwayRatio("1280:720"), "1280:768");
-  assert.equal(normalizeRunwayRatio("768:1280"), "768:1280");
+test("runway ratio normaliza valores al formato Gen-4.5", () => {
+  assert.equal(normalizeRunwayRatio("720:1280"), "720:1280");
+  assert.equal(normalizeRunwayRatio("9:16"), "720:1280");
+  assert.equal(normalizeRunwayRatio("768:1280"), "720:1280");
+  assert.equal(normalizeRunwayRatio("1280:720"), "1280:720");
+  assert.equal(normalizeRunwayRatio("1280:768"), "1280:720");
 });
 
 test("videoStrategyInmoRadar genera brief viral prudente para chollo o humo", () => {
