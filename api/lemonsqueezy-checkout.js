@@ -359,9 +359,44 @@ async function findStoredBillingRecord(email) {
   }
 }
 
+function isSignedCustomerPortalUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    const host = url.hostname.toLowerCase();
+    if (!host.endsWith("lemonsqueezy.com")) return false;
+    if (host === "auth.lemonsqueezy.com") return false;
+    if (!url.pathname.includes("/billing")) return false;
+    return Boolean(url.searchParams.get("expires") && url.searchParams.get("signature"));
+  } catch {
+    return false;
+  }
+}
+
+function customerPortalCandidates(data) {
+  const records = Array.isArray(data?.data) ? data.data : data?.data ? [data.data] : [];
+  return records
+    .map((record) => record?.attributes?.urls?.customer_portal)
+    .filter(Boolean);
+}
+
 async function getSignedCustomerPortalUrl(config, email) {
   const storedIds = await findStoredBillingRecord(email);
   const urls = [];
+  if (email) {
+    const subscriptionParams = new URLSearchParams({
+      "filter[store_id]": String(config.storeId),
+      "filter[user_email]": email,
+      "page[size]": "5"
+    });
+    urls.push(`${LEMON_BASE_API_URL}/subscriptions?${subscriptionParams.toString()}`);
+
+    const customerParams = new URLSearchParams({
+      "filter[store_id]": String(config.storeId),
+      "filter[email]": email,
+      "page[size]": "5"
+    });
+    urls.push(`${LEMON_BASE_API_URL}/customers?${customerParams.toString()}`);
+  }
   if (storedIds.subscriptionId) {
     urls.push(`${LEMON_BASE_API_URL}/subscriptions/${encodeURIComponent(storedIds.subscriptionId)}`);
   }
@@ -369,28 +404,12 @@ async function getSignedCustomerPortalUrl(config, email) {
     urls.push(`${LEMON_BASE_API_URL}/customers/${encodeURIComponent(storedIds.customerId)}`);
   }
 
-  if (email) {
-    const subscriptionParams = new URLSearchParams({
-      "filter[store_id]": String(config.storeId),
-      "filter[user_email]": email,
-      "page[size]": "1"
-    });
-    urls.push(`${LEMON_BASE_API_URL}/subscriptions?${subscriptionParams.toString()}`);
-
-    const customerParams = new URLSearchParams({
-      "filter[store_id]": String(config.storeId),
-      "filter[email]": email,
-      "page[size]": "1"
-    });
-    urls.push(`${LEMON_BASE_API_URL}/customers?${customerParams.toString()}`);
-  }
-
   for (const url of urls) {
     try {
       const data = await lemonRequest(url, config.apiKey, { method: "GET" });
-      const subscription = Array.isArray(data?.data) ? data.data[0] : data?.data;
-      const portalUrl = subscription?.attributes?.urls?.customer_portal;
-      if (portalUrl) return portalUrl;
+      for (const portalUrl of customerPortalCandidates(data)) {
+        if (isSignedCustomerPortalUrl(portalUrl)) return portalUrl;
+      }
     } catch {
       // Si el ID local estuviera desfasado, probamos el siguiente método.
     }
@@ -547,12 +566,6 @@ async function handlePortalMagicLinkVerify({ res, config, token }) {
     return;
   }
 
-  const claimed = await claimPortalAccessToken(accessToken.token_hash);
-  if (!claimed) {
-    json(res, 410, { ok: false, error: "token_already_used", message: "Este enlace ya se ha utilizado." });
-    return;
-  }
-
   const portal = await getCustomerPortal(config, accessToken.email);
   if (!portal.portalUrl) {
     json(res, 404, {
@@ -560,6 +573,12 @@ async function handlePortalMagicLinkVerify({ res, config, token }) {
       error: "customer_portal_not_found",
       message: "No hemos podido generar el portal seguro. Escribe a hola@inmoradar.app."
     });
+    return;
+  }
+
+  const claimed = await claimPortalAccessToken(accessToken.token_hash);
+  if (!claimed) {
+    json(res, 410, { ok: false, error: "token_already_used", message: "Este enlace ya se ha utilizado." });
     return;
   }
 

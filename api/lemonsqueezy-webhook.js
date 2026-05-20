@@ -34,13 +34,22 @@ function subscriptionRow(payload, eventName) {
   const meta = payload.meta || {};
   const email = pickEmail(attributes, meta);
   const status = normalizeStatus(eventName, attributes);
+  const dataType = String(data.type || "");
 
   return {
     email,
     provider: "lemonsqueezy",
     provider_customer_id: attributes.customer_id ? String(attributes.customer_id) : null,
-    provider_subscription_id: data.id ? String(data.id) : attributes.subscription_id ? String(attributes.subscription_id) : null,
-    provider_order_id: attributes.order_id ? String(attributes.order_id) : null,
+    provider_subscription_id: attributes.subscription_id
+      ? String(attributes.subscription_id)
+      : dataType === "subscriptions" && data.id
+        ? String(data.id)
+        : null,
+    provider_order_id: attributes.order_id
+      ? String(attributes.order_id)
+      : dataType === "orders" && data.id
+        ? String(data.id)
+        : null,
     status,
     renews_at: attributes.renews_at || null,
     ends_at: attributes.ends_at || attributes.cancelled_at || null,
