@@ -51,6 +51,7 @@ module.exports = async function handler(req, res) {
       ["address_intelligence_cache", "address_intelligence_cache?select=id&limit=1"],
       ["parking_difficulty_cache", "parking_difficulty_cache?select=id&limit=1"],
       ["saved_property_email_reports", "saved_property_email_reports?select=id&limit=1"],
+      ["customer_portal_access_tokens", "customer_portal_access_tokens?select=id&limit=1"],
       ["contact_messages", "contact_messages?select=id&limit=1"]
     ].map(async ([name, path]) => [name, await checkSupabaseTable(path)]));
 

@@ -4,11 +4,15 @@ const crypto = require("node:crypto");
 
 const {
   buildCheckoutPayload,
+  buildCustomerPortalEmailPayload,
+  createPortalToken,
   getCustomerPortal,
+  hashPortalToken,
   lemonConfig,
   lemonTestMode,
   getSignedCustomerPortalUrl,
-  getUnsignedCustomerPortalUrl
+  getUnsignedCustomerPortalUrl,
+  portalTokenExpiry
 } = require("../api/lemonsqueezy-checkout");
 const { isPremiumActive, verifyLemonSignature } = require("../api/_utils");
 
@@ -78,6 +82,29 @@ test("verifyLemonSignature valida HMAC SHA256 de Lemon Squeezy", () => {
 
   assert.equal(verifyLemonSignature(rawBody, signature, secret), true);
   assert.equal(verifyLemonSignature(rawBody, "bad-signature", secret), false);
+});
+
+test("portal magic link usa tokens largos hasheados y caducidad corta", () => {
+  const token = createPortalToken();
+  assert.match(token, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(hashPortalToken(token), crypto.createHash("sha256").update(token).digest("hex"));
+  assert.equal(
+    portalTokenExpiry(new Date("2026-05-20T10:00:00.000Z")),
+    "2026-05-20T10:15:00.000Z"
+  );
+});
+
+test("buildCustomerPortalEmailPayload genera email de acceso seguro", () => {
+  const payload = buildCustomerPortalEmailPayload({
+    email: "cliente@example.com",
+    from: "hola@inmoradar.app",
+    verifyUrl: "https://inmoradar.app/clientes?token=abc"
+  });
+  assert.equal(payload.to, "cliente@example.com");
+  assert.equal(payload.from, "hola@inmoradar.app");
+  assert.match(payload.subject, /InmoRadar/);
+  assert.match(payload.text, /https:\/\/inmoradar\.app\/clientes\?token=abc/);
+  assert.match(payload.html, /Abrir area de clientes/);
 });
 
 test("getUnsignedCustomerPortalUrl construye el portal de cliente desde la tienda", async () => {

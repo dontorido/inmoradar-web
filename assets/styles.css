@@ -1085,6 +1085,16 @@ h3 {
   padding: 16px 18px;
 }
 
+.portal-status {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.portal-status[data-tone="success"] { color: var(--good); }
+.portal-status[data-tone="error"] { color: var(--radar-700); }
+
 .site-footer {
   overflow: hidden;
   padding: 96px 0 48px;

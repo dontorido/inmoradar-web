@@ -103,7 +103,13 @@ Portal de cliente para gestionar o cancelar suscripcion:
 POST /api/lemonsqueezy-portal
 ```
 
-Este endpoint reutiliza la funcion de checkout mediante rewrite de Vercel y devuelve el Customer Portal oficial de Lemon Squeezy. Si el email tiene una suscripcion en Lemon, devuelve una URL firmada de 24 horas; si no, cae al portal generico `/billing` con magic link. El cliente puede cancelar la renovacion, cambiar tarjeta y ver facturas. Si una suscripcion queda `cancelled` pero tiene `ends_at` futuro, InmoRadar mantiene Premium hasta el final del periodo ya pagado.
+El portal de cliente usa magic link propio. El usuario introduce su email, InmoRadar valida que exista una suscripcion Premium activa y envia un enlace temporal al email de compra mediante Cloudflare Email. Ese enlace caduca a los 15 minutos, se guarda hasheado en `customer_portal_access_tokens` y solo puede usarse una vez. Al abrirlo, el backend solicita a Lemon Squeezy una URL `customer_portal` firmada y redirige al portal oficial. No se envia al usuario al portal generico `/billing` por conocer solo un email.
+
+SQL necesario:
+
+```text
+database/customer-portal-access-tokens.sql
+```
 
 ## Backoffice
 

@@ -86,8 +86,10 @@ const I18N = {
     checkoutPreparing: "Preparando checkout seguro...",
     checkoutOpening: "Abriendo checkout...",
     checkoutManual: "Escribenos y lo activamos manualmente.",
-    portalOpening: "Abriendo portal seguro...",
-    portalHelp: "Escribenos y te ayudamos con la baja.",
+    portalOpening: "Enviando enlace seguro...",
+    portalVerifying: "Verificando enlace seguro...",
+    portalLinkSent: "Revisa tu email. Te hemos enviado un enlace temporal.",
+    portalHelp: "No hemos podido preparar el acceso. Escribenos y te ayudamos.",
     all: "Todos",
     read: "Lectura 4 min",
     updated: "Actualizado may 2026"
@@ -107,8 +109,10 @@ const I18N = {
     checkoutPreparing: "Preparing secure checkout...",
     checkoutOpening: "Opening checkout...",
     checkoutManual: "Email us and we will activate it manually.",
-    portalOpening: "Opening secure portal...",
-    portalHelp: "Email us and we will help you cancel.",
+    portalOpening: "Sending secure link...",
+    portalVerifying: "Verifying secure link...",
+    portalLinkSent: "Check your email. We sent you a temporary link.",
+    portalHelp: "We could not prepare access. Email us and we will help.",
     all: "All",
     read: "4 min read",
     updated: "Updated May 2026"
@@ -337,6 +341,30 @@ function initContactForm() {
 }
 
 function initCheckout() {
+  async function openPortalFromToken(token) {
+    try {
+      showToast(t("portalVerifying"));
+      const response = await fetch(PORTAL_ENDPOINT, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.portal_url) throw new Error(payload.message || t("portalHelp"));
+      location.href = payload.portal_url;
+    } catch (error) {
+      showToast(error.message || t("portalHelp"), "error");
+      const status = document.querySelector("[data-portal-status]");
+      if (status) {
+        status.textContent = error.message || t("portalHelp");
+        status.dataset.tone = "error";
+      }
+    }
+  }
+
+  const portalToken = new URLSearchParams(location.search).get("token");
+  if (portalToken) openPortalFromToken(portalToken);
+
   document.querySelectorAll("[data-checkout-button]").forEach((button) => {
     button.addEventListener("click", async () => {
       button.disabled = true;
@@ -362,6 +390,9 @@ function initCheckout() {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const email = String(new FormData(form).get("email") || "").trim();
+      const submit = form.querySelector("[type='submit']");
+      const status = form.querySelector("[data-portal-status]") || document.querySelector("[data-portal-status]");
+      if (submit) submit.disabled = true;
       try {
         showToast(t("portalOpening"));
         const response = await fetch(PORTAL_ENDPOINT, {
@@ -370,10 +401,22 @@ function initCheckout() {
           body: JSON.stringify({ email })
         });
         const payload = await response.json().catch(() => ({}));
-        if (!response.ok || !payload.portal_url) throw new Error("portal_failed");
-        location.href = payload.portal_url;
-      } catch {
-        location.href = `mailto:${WAITLIST_EMAIL}?subject=Gestionar%20Premium&body=Email:%20${encodeURIComponent(email)}`;
+        if (!response.ok) throw new Error(payload.message || t("portalHelp"));
+        const message = payload.message || t("portalLinkSent");
+        showToast(t("portalLinkSent"));
+        if (status) {
+          status.textContent = message;
+          status.dataset.tone = "success";
+        }
+      } catch (error) {
+        const message = error.message || t("portalHelp");
+        showToast(message, "error");
+        if (status) {
+          status.textContent = message;
+          status.dataset.tone = "error";
+        }
+      } finally {
+        if (submit) submit.disabled = false;
       }
     });
   });
