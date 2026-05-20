@@ -84,7 +84,18 @@ function hashPortalToken(token) {
   return crypto.createHash("sha256").update(String(token || ""), "utf8").digest("hex");
 }
 
+function escapeEmailHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function buildCustomerPortalEmailPayload({ email, verifyUrl, from }) {
+  const safeVerifyUrl = escapeEmailHtml(verifyUrl);
+  const preheader = `Tu enlace seguro para entrar al area de clientes caduca en ${PORTAL_TOKEN_TTL_MINUTES} minutos.`;
+
   return {
     from,
     to: email,
@@ -101,17 +112,72 @@ function buildCustomerPortalEmailPayload({ email, verifyUrl, from }) {
       "",
       "InmoRadar"
     ].join("\n"),
-    html: `
-      <div style="font-family:Inter,Arial,sans-serif;background:#0A0A0A;color:#FFFFFF;padding:32px;">
-        <div style="max-width:560px;margin:0 auto;background:#111111;border:1px solid #262626;padding:28px;">
-          <p style="font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#CCFF00;margin:0 0 16px;">InmoRadar</p>
-          <h1 style="font-size:28px;line-height:1.1;margin:0 0 14px;">Acceso seguro al area de clientes</h1>
-          <p style="color:#D4D4D4;line-height:1.6;margin:0 0 22px;">Usa este enlace para gestionar tu suscripcion Premium, revisar pagos o cancelar la renovacion.</p>
-          <p style="margin:0 0 26px;"><a href="${verifyUrl}" style="display:inline-block;background:#CCFF00;color:#0A0A0A;text-decoration:none;font-weight:700;padding:14px 20px;border-radius:999px;">Abrir area de clientes</a></p>
-          <p style="color:#A3A3A3;font-size:13px;line-height:1.6;margin:0;">El enlace caduca en ${PORTAL_TOKEN_TTL_MINUTES} minutos y solo puede usarse una vez. Si no lo has pedido, puedes ignorar este email.</p>
-        </div>
-      </div>
-    `
+    html: `<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Tu enlace de acceso a InmoRadar</title>
+  </head>
+  <body style="margin:0;padding:0;background:#F5F2EA;color:#0A140F;font-family:Arial,Helvetica,sans-serif;">
+    <span style="display:none;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;">${escapeEmailHtml(preheader)}</span>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F5F2EA;margin:0;padding:0;">
+      <tr>
+        <td align="center" style="padding:34px 16px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:640px;margin:0 auto;border-collapse:separate;">
+            <tr>
+              <td style="background:#0A140F;color:#FFFFFF;border-radius:28px 28px 0 0;padding:24px 28px;border:1px solid #0A140F;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td align="left" style="vertical-align:middle;">
+                      <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td style="width:34px;height:34px;background:#FFFFFF;border-radius:12px;text-align:center;vertical-align:middle;color:#FF4500;font-size:11px;font-weight:900;line-height:34px;letter-spacing:-0.04em;">IR</td>
+                          <td style="padding-left:10px;font-size:18px;line-height:22px;font-weight:900;letter-spacing:-0.03em;color:#FFFFFF;">Inmo<span style="color:#FF4500;">Radar</span></td>
+                        </tr>
+                      </table>
+                    </td>
+                    <td align="right" style="vertical-align:middle;">
+                      <span style="display:inline-block;border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:7px 10px;color:#FFFFFF;font-size:10px;line-height:12px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;">Clientes</span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="background:#FFFFFF;border:1px solid #E6E2D6;border-top:0;border-radius:0 0 28px 28px;padding:42px 34px 34px;box-shadow:0 28px 70px rgba(10,20,15,.10);">
+                <p style="margin:0 0 16px;color:#FF4500;font-size:11px;line-height:16px;font-weight:900;letter-spacing:.22em;text-transform:uppercase;">Acceso privado</p>
+                <h1 style="margin:0;color:#0A140F;font-size:38px;line-height:40px;font-weight:900;letter-spacing:-0.05em;">Entra a tu area de clientes de forma segura.</h1>
+                <p style="margin:20px 0 0;color:#374151;font-size:16px;line-height:25px;">Usa este enlace temporal para gestionar tu suscripcion Premium, revisar pagos o cancelar la renovacion desde el portal seguro.</p>
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0 26px;">
+                  <tr>
+                    <td style="background:#FF4500;border-radius:999px;">
+                      <a href="${safeVerifyUrl}" style="display:inline-block;padding:16px 24px;color:#FFFFFF;text-decoration:none;font-size:15px;line-height:18px;font-weight:900;">Abrir area de clientes &rarr;</a>
+                    </td>
+                  </tr>
+                </table>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F5F2EA;border:1px solid #E6E2D6;border-radius:20px;">
+                  <tr>
+                    <td style="padding:18px 20px;">
+                      <p style="margin:0;color:#0A140F;font-size:13px;line-height:20px;font-weight:700;">Este enlace caduca en ${PORTAL_TOKEN_TTL_MINUTES} minutos y solo puede usarse una vez.</p>
+                      <p style="margin:8px 0 0;color:#6B7280;font-size:13px;line-height:20px;">Si no has pedido este acceso, puedes ignorar este email. Nadie podra entrar sin abrir el enlace desde tu correo.</p>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:24px 0 0;color:#6B7280;font-size:12px;line-height:19px;">Si el boton no funciona, copia y pega este enlace en tu navegador:<br><a href="${safeVerifyUrl}" style="color:#0A140F;text-decoration:underline;text-decoration-color:#FF4500;word-break:break-all;">${safeVerifyUrl}</a></p>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:18px 20px 0;color:#6B7280;font-size:12px;line-height:18px;">
+                Copiloto inmobiliario para navegadores modernos. &copy; InmoRadar
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`
   };
 }
 
