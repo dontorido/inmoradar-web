@@ -1139,7 +1139,38 @@ function renderViralizaKpis(routine) {
   ].join("");
 }
 
-function viralizaTaskCard(task) {
+function viralizaTaskContext(task, routine) {
+  if (task?.type !== "keyword_search") return "";
+  const keywords = (routine?.primaryKeywords || routine?.keywords || []).slice(0, 3);
+  if (!keywords.length) {
+    return `<p class="admin-viraliza-done"><strong>Keywords propuestas:</strong> genera una rutina para verlas aqui.</p>`;
+  }
+  return `
+    <div class="admin-viraliza-howto admin-viraliza-task-context">
+      <strong>Keywords propuestas hoy:</strong>
+      <ol>
+        ${keywords
+          .map((keyword) => {
+            const urls = keyword.searchUrls || {};
+            return `
+              <li>
+                <strong>${escapeHtml(keyword.keyword)}</strong>
+                <span>${escapeHtml(keyword.intent || "Busca conversaciones reales sobre este tema.")}</span>
+                <div class="admin-row-actions">
+                  ${urls.tiktok ? `<button class="admin-button tiny ghost" type="button" data-open-url="${escapeHtml(urls.tiktok)}">TikTok</button>` : ""}
+                  ${urls.youtube ? `<button class="admin-button tiny ghost" type="button" data-open-url="${escapeHtml(urls.youtube)}">YouTube</button>` : ""}
+                  ${urls.instagram ? `<button class="admin-button tiny ghost" type="button" data-open-url="${escapeHtml(urls.instagram)}">Instagram</button>` : ""}
+                </div>
+              </li>
+            `;
+          })
+          .join("")}
+      </ol>
+    </div>
+  `;
+}
+
+function viralizaTaskCard(task, routine) {
   const guide = VIRALIZA_TASK_GUIDES[task.type] || {};
   const steps = Array.isArray(task.steps) && task.steps.length ? task.steps : guide.steps || [];
   const doneWhen = task.doneWhen || guide.doneWhen || "";
@@ -1151,6 +1182,7 @@ function viralizaTaskCard(task) {
       </div>
       <h3>${escapeHtml(task.title)}</h3>
       <p>${escapeHtml(task.description || "")}</p>
+      ${viralizaTaskContext(task, routine)}
       ${guideList(steps)}
       ${doneWhen ? `<p class="admin-viraliza-done"><strong>Cuando marcarlo hecho:</strong> ${escapeHtml(doneWhen)}</p>` : ""}
       <div class="admin-row-actions">
@@ -1505,7 +1537,7 @@ function renderViraliza(routine) {
       current?.dailyGoal || "Aun no hay rutina para hoy. Genera una rutina diaria y empieza por las keywords con mas intencion.";
   }
   if (els.viralizaRoutine) {
-    els.viralizaRoutine.innerHTML = current ? (current.tasks || []).map(viralizaTaskCard).join("") : `<p class="admin-empty-state">Aun no hay rutina para hoy.</p>`;
+    els.viralizaRoutine.innerHTML = current ? (current.tasks || []).map((task) => viralizaTaskCard(task, current)).join("") : `<p class="admin-empty-state">Aun no hay rutina para hoy.</p>`;
   }
   if (els.viralizaKeywords) {
     els.viralizaKeywords.innerHTML = current ? (current.primaryKeywords || current.keywords || []).slice(0, 3).map(viralizaKeywordCard).join("") : `<p class="admin-empty-state">Genera una rutina para ver keywords.</p>`;

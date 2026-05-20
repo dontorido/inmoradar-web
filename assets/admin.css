@@ -2515,6 +2515,19 @@
   line-height: 1.45;
 }
 
+.admin-viraliza-task-context ol {
+  gap: 12px;
+}
+
+.admin-viraliza-task-context li {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-viraliza-task-context li span {
+  color: var(--muted);
+}
+
 .admin-viraliza-done,
 .admin-viraliza-step-intro {
   border-left: 3px solid var(--radar);
