@@ -4,6 +4,8 @@ const crypto = require("node:crypto");
 
 const {
   buildCheckoutPayload,
+  lemonConfig,
+  lemonTestMode,
   getSignedCustomerPortalUrl,
   getUnsignedCustomerPortalUrl
 } = require("../api/lemonsqueezy-checkout");
@@ -40,6 +42,32 @@ test("buildCheckoutPayload crea checkout de Lemon en test mode", () => {
   assert.equal(payload.data.attributes.checkout_data.custom.source, "premium_test");
   assert.equal(payload.data.relationships.store.data.id, "123");
   assert.equal(payload.data.relationships.variant.data.id, "456");
+});
+
+test("lemonConfig usa modo real por defecto en producción", () => {
+  const previousEnv = {
+    VERCEL_ENV: process.env.VERCEL_ENV,
+    NODE_ENV: process.env.NODE_ENV,
+    LEMONSQUEEZY_TEST_MODE: process.env.LEMONSQUEEZY_TEST_MODE
+  };
+
+  try {
+    process.env.VERCEL_ENV = "production";
+    delete process.env.LEMONSQUEEZY_TEST_MODE;
+    assert.equal(lemonTestMode(), false);
+    assert.equal(lemonConfig().testMode, false);
+
+    process.env.LEMONSQUEEZY_TEST_MODE = "true";
+    assert.equal(lemonTestMode(), true);
+
+    process.env.LEMONSQUEEZY_TEST_MODE = "false";
+    assert.equal(lemonTestMode(), false);
+  } finally {
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test("verifyLemonSignature valida HMAC SHA256 de Lemon Squeezy", () => {

@@ -26,7 +26,10 @@ test("Parking Intelligence devuelve lectura sofisticada para 109503975", () => {
   assert.match(result.resident_parking.items[0].name, /Arroyo del Olivar/);
   assert.match(result.resident_parking.message, /no se puede confirmar disponibilidad/i);
   assert.equal(result.street_parking.regulated_zone.detected, null);
-  assert.equal(result.paid_parking.source, "not_available");
+  assert.equal(result.paid_parking.source, "parkopedia_license_required");
+  assert.equal(result.paid_parking.price_status, "not_confirmed");
+  assert.match(result.paid_parking.message, /Parkopedia/i);
+  assert.match(result.paid_parking.message, /integraci[oó]n autorizada/i);
 });
 
 test("garaje incluido baja claramente el riesgo global", () => {

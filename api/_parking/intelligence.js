@@ -22,6 +22,8 @@ const MADRID_RESIDENT_PARKINGS = [
 
 const DISCLAIMER =
   "Estimación orientativa. La dificultad real puede variar según portal, horario, permisos de residente y disponibilidad puntual.";
+const PARKOPEDIA_BUSINESS_URL = "https://business.parkopedia.com/parking-data";
+const PARKOPEDIA_LICENSE_URL = "https://api.parkopedia.com/license-parking-data/";
 
 function normalizeText(value) {
   return String(value || "")
@@ -184,7 +186,7 @@ function garageAssessment(params = {}) {
 function buildOverallScore({ profile, garage, streetParking, residentParking, paidParking, transportOffset }) {
   const streetRisk = Number(streetParking.difficulty_score || 6);
   const noGarageRisk = garage.included_detected ? 0.5 : garage.optional_detected ? 4.5 : 8;
-  const paidRisk = paidParking.source === "not_available" ? 6.2 : 4.8;
+  const paidRisk = paidParking.price_status === "confirmed" ? 4.8 : 6.2;
   const residentRisk = residentParking.nearby_detected ? 4.8 : 7;
   const transportRisk = transportOffset.has_good_public_transport ? 4.8 : 6.2;
   const weights =
@@ -220,8 +222,16 @@ function buildPaidParking() {
     nearest_distance_m: null,
     price_2h: null,
     price_day: null,
-    source: "not_available",
-    message: "No se ha confirmado información de parkings de rotación o precios cercanos."
+    monthly_pass_price: null,
+    source: "parkopedia_license_required",
+    source_name: "Parkopedia",
+    source_url: PARKOPEDIA_BUSINESS_URL,
+    license_url: PARKOPEDIA_LICENSE_URL,
+    price_status: "not_confirmed",
+    integration_status: "prepared_no_license",
+    requires_license: true,
+    message:
+      "Precios de parking no confirmados. Parkopedia ofrece tarifas por horas, día y abonos mediante datos licenciados, pero InmoRadar solo mostrará importes cuando exista una integración autorizada o una fuente pública verificable."
   };
 }
 
@@ -267,6 +277,12 @@ function buildSources(residentParking) {
     name: "Madrid SER Geoportal",
     type: "regulated_parking_dataset",
     url: "https://geoportal.madrid.es/IDEAM_WBGEOPORTAL/"
+  });
+  sources.push({
+    name: "Parkopedia",
+    type: "licensed_parking_prices_reference",
+    url: PARKOPEDIA_BUSINESS_URL,
+    status: "license_required"
   });
   return sources;
 }

@@ -7,6 +7,19 @@ function safeError(error) {
     .slice(0, 240);
 }
 
+function isProductionRuntime() {
+  const runtime = String(process.env.VERCEL_ENV || process.env.NODE_ENV || "").toLowerCase();
+  return runtime === "production";
+}
+
+function lemonTestMode() {
+  const explicit = process.env.LEMONSQUEEZY_TEST_MODE;
+  if (explicit !== undefined && explicit !== "") {
+    return String(explicit).toLowerCase() !== "false";
+  }
+  return !isProductionRuntime();
+}
+
 async function checkSupabaseTable(path) {
   try {
     const rows = await supabaseFetch(path, { timeoutMs: 4000 });
@@ -62,7 +75,7 @@ module.exports = async function handler(req, res) {
         process.env.LEMONSQUEEZY_STORE_ID &&
         process.env.LEMONSQUEEZY_VARIANT_ID
     ),
-    lemonsqueezy_test_mode: String(process.env.LEMONSQUEEZY_TEST_MODE || "true").toLowerCase() !== "false",
+    lemonsqueezy_test_mode: lemonTestMode(),
     lemonsqueezy_webhook_configured: Boolean(process.env.LEMONSQUEEZY_WEBHOOK_SECRET),
     cloudflare_email_configured: Boolean(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_EMAIL_API_TOKEN)
   });

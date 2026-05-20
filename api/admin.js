@@ -77,6 +77,19 @@ async function safeFetch(path, fallback = []) {
   }
 }
 
+function isProductionRuntime() {
+  const runtime = String(process.env.VERCEL_ENV || process.env.NODE_ENV || "").toLowerCase();
+  return runtime === "production";
+}
+
+function lemonTestMode() {
+  const explicit = process.env.LEMONSQUEEZY_TEST_MODE;
+  if (explicit !== undefined && explicit !== "") {
+    return String(explicit).toLowerCase() !== "false";
+  }
+  return !isProductionRuntime();
+}
+
 function routeFromRequest(req) {
   const url = new URL(req.url || "/", `https://${req.headers.host || "inmoradar.app"}`);
   const resource = url.searchParams.get("resource");
@@ -146,7 +159,7 @@ async function handleSummary() {
           process.env.LEMONSQUEEZY_STORE_ID &&
           process.env.LEMONSQUEEZY_VARIANT_ID
       ),
-      lemonsqueezy_test_mode: String(process.env.LEMONSQUEEZY_TEST_MODE || "true").toLowerCase() !== "false",
+      lemonsqueezy_test_mode: lemonTestMode(),
       lemonsqueezy_webhook_configured: Boolean(process.env.LEMONSQUEEZY_WEBHOOK_SECRET)
     },
     premium: {

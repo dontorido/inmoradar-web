@@ -20,8 +20,21 @@ function lemonConfig() {
     apiKey: process.env.LEMONSQUEEZY_API_KEY,
     storeId: process.env.LEMONSQUEEZY_STORE_ID,
     variantId: process.env.LEMONSQUEEZY_VARIANT_ID,
-    testMode: String(process.env.LEMONSQUEEZY_TEST_MODE || "true").toLowerCase() !== "false"
+    testMode: lemonTestMode()
   };
+}
+
+function isProductionRuntime() {
+  const runtime = String(process.env.VERCEL_ENV || process.env.NODE_ENV || "").toLowerCase();
+  return runtime === "production";
+}
+
+function lemonTestMode() {
+  const explicit = process.env.LEMONSQUEEZY_TEST_MODE;
+  if (explicit !== undefined && explicit !== "") {
+    return String(explicit).toLowerCase() !== "false";
+  }
+  return !isProductionRuntime();
 }
 
 function configMissing(config) {
@@ -76,9 +89,9 @@ function buildCheckoutPayload({ config, email, source, req }) {
           headings_color: "#FFFFFF",
           primary_text_color: "#FFFFFF",
           secondary_text_color: "#A3A3A3",
-          links_color: "#CCFF00",
+          links_color: "#FF4500",
           borders_color: "#262626",
-          button_color: "#CCFF00",
+          button_color: "#FF4500",
           button_text_color: "#0A0A0A"
         },
         checkout_data: {
@@ -295,3 +308,4 @@ module.exports.getCustomerPortal = getCustomerPortal;
 module.exports.getSignedCustomerPortalUrl = getSignedCustomerPortalUrl;
 module.exports.getUnsignedCustomerPortalUrl = getUnsignedCustomerPortalUrl;
 module.exports.lemonConfig = lemonConfig;
+module.exports.lemonTestMode = lemonTestMode;
