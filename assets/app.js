@@ -122,7 +122,263 @@ const I18N = {
   }
 };
 
+const ARTICLE_TRANSLATIONS = {
+  en: {
+    "precio-alquiler-zaragoza": {
+      tag: "Rent",
+      title: "Rent price per square metre in Zaragoza",
+      excerpt: "How to read a monthly rent with local reference data, floor area and real cost before messaging the advertiser."
+    },
+    "precio-alquiler-granada": {
+      tag: "Rent",
+      title: "Rent price per square metre in Granada",
+      excerpt: "A guide to tell a reasonable rent from a premium that is hard to justify by location or condition."
+    },
+    "saber-piso-caro-granada": {
+      tag: "Analysis",
+      title: "How to know if a flat is overpriced in Granada",
+      excerpt: "Price, likely renovation, transport and parking: four layers so you do not decide on intuition alone."
+    },
+    "precio-metro-cuadrado-madrid": {
+      tag: "Price per m2",
+      title: "Price per square metre in Madrid",
+      excerpt: "Madrid requires granularity: neighbourhood, district, building and comparable listings matter more than a municipal average."
+    },
+    "precio-metro-cuadrado-barcelona": {
+      tag: "Price per m2",
+      title: "Price per square metre in Barcelona",
+      excerpt: "A reading of prices by area and urban signals to understand when a premium can make sense."
+    },
+    "precio-metro-cuadrado-valencia": {
+      tag: "Price per m2",
+      title: "Price per square metre in Valencia",
+      excerpt: "How to combine price, neighbourhood, transport and visible condition to prioritise visits."
+    },
+    "precio-metro-cuadrado-malaga": {
+      tag: "Price per m2",
+      title: "Price per square metre in Malaga",
+      excerpt: "A tight market, location and renovation risk: what to check before booking a viewing."
+    },
+    "precio-metro-cuadrado-salamanca": {
+      tag: "Price per m2",
+      title: "Price per square metre in Salamanca",
+      excerpt: "Useful references for buyers who want to compare listings without losing weeks."
+    },
+    "precio-metro-cuadrado-logrono": {
+      tag: "Price per m2",
+      title: "Price per square metre in Logrono",
+      excerpt: "A simple method to read prices and avoid conclusions that are too quick."
+    }
+  }
+};
+
+const TEXT_TRANSLATIONS_EN = {
+  "Principal": "Main",
+  "Secciones": "Sections",
+  "Idioma": "Language",
+  "Abrir menu": "Open menu",
+  "Area de clientes": "Customer area",
+  "Área de clientes": "Customer area",
+  "Qué analiza": "What it checks",
+  "Noticias": "News",
+  "Contacto": "Contact",
+  "Producto": "Product",
+  "Contenido": "Content",
+  "Compañía": "Company",
+  "Compania": "Company",
+  "Privacidad": "Privacy",
+  "Términos": "Terms",
+  "Terminos": "Terms",
+  "Empezar gratis": "Start free",
+  "Ver Premium": "See Premium",
+  "Volver al inicio": "Back home",
+  "Online": "Online",
+  "Navegadores modernos": "Modern browsers",
+  "Copiloto inmobiliario para navegadores modernos.": "Real-estate copilot for modern browsers.",
+  "Copiloto inmobiliario para tu navegador · Idealista, Fotocasa, Pisos.com y Habitaclia": "Real-estate copilot for your browser · Idealista, Fotocasa, Pisos.com and Habitaclia",
+  "Decide si una vivienda merece la pena antes de contactar.": "Decide whether a home is worth it before contacting.",
+  "InmoRadar añade una capa de análisis sobre Idealista, Fotocasa, Pisos.com y Habitaclia para mostrarte precio real, coste inicial, zona, transporte, aparcamiento y señales clave en segundos.": "InmoRadar adds an analysis layer on top of Idealista, Fotocasa, Pisos.com and Habitaclia to show real price, initial cost, area, transport, parking and key signals in seconds.",
+  "Analizar mi primer anuncio gratis": "Analyse my first listing for free",
+  "Ver ejemplo real": "See a real example",
+  "2 días gratis · Sin pago inicial · Premium semanal por 1,99 € solo si decides continuar": "2 free days · No upfront payment · Weekly Premium for €1.99 only if you decide to continue",
+  "2 días": "2 days",
+  "acceso inicial sin pagar": "initial access without paying",
+  "Premium semanal después": "weekly Premium afterwards",
+  "índice de valoración": "rating index",
+  "Vista previa · InmoRadar": "Preview · InmoRadar",
+  "Calle Goya · Madrid": "Goya Street · Madrid",
+  "Piso · 78 m²": "Flat · 78 m²",
+  "Oportunidad": "Opportunity",
+  "Precio": "Price",
+  "media 4.080": "average 4,080",
+  "Entrada est.": "Est. deposit",
+  "Distancia M.": "Metro distance",
+  "Linea 2": "Line 2",
+  "Indice InmoRadar": "InmoRadar Index",
+  "Ascensor": "Lift",
+  "Exterior": "Exterior",
+  "Sin reforma": "No renovation",
+  "ZBR baja": "Low ZBE risk",
+  "Aparc. medio": "Medium parking",
+  "Señal detectada": "Signal detected",
+  "Precio 7% bajo la media de la zona en los últimos 90 días.": "Price 7% below the area average over the last 90 days.",
+  "Busca donde ya buscas": "Search where you already search",
+  "No sustituye a tus portales.": "It does not replace your portals.",
+  "Los hace más claros.": "It makes them clearer.",
+  "Sigues buscando en Idealista, Fotocasa, Pisos.com y Habitaclia. InmoRadar trabaja encima de esas páginas para ordenar la información, detectar señales útiles y ayudarte a priorizar qué anuncios merecen una visita.": "You keep searching on Idealista, Fotocasa, Pisos.com and Habitaclia. InmoRadar works on top of those pages to organise the information, detect useful signals and help you prioritise which listings deserve a viewing.",
+  "Portales compatibles": "Compatible portals",
+  "Extensión multi-navegador": "Multi-browser extension",
+  "Funciona en tu": "Works in your",
+  "navegador favorito.": "favourite browser.",
+  "InmoRadar se está preparando como extensión para navegadores modernos. Mostramos el estado real de cada navegador para que sepas cómo instalarlo hoy.": "InmoRadar is being prepared as an extension for modern browsers. We show the real status of each browser so you know how to install it today.",
+  "Instalación principal para usuarios de Chromium.": "Primary installation for Chromium users.",
+  "Disponible": "Available",
+  "Funciona sobre la base Chromium de Microsoft Edge.": "Works on Microsoft Edge's Chromium base.",
+  "Compatible": "Compatible",
+  "Versión adaptada para el ecosistema Mozilla.": "Adapted version for the Mozilla ecosystem.",
+  "Beta": "Beta",
+  "Compatible mediante instalación de extensiones Chromium.": "Compatible via Chromium extension installation.",
+  "Instalación manual": "Manual install",
+  "Preparado para usuarios avanzados de Chromium.": "Prepared for advanced Chromium users.",
+  "Compatible con extensiones Chromium y foco en privacidad.": "Compatible with Chromium extensions and privacy-focused browsing.",
+  "Coste real": "Real cost",
+  "Entorno urbano": "Urban context",
+  "Comparativa": "Comparison",
+  "Logística diaria": "Daily logistics",
+  "Datos abiertos": "Open data",
+  "Ejemplo real": "Real example",
+  "Precio, zona y coste real": "Price, area and real cost",
+  "en una sola vista.": "in one view.",
+  "Una ficha para decidir si merece la pena contactar, guardar o descartar antes de invertir tiempo.": "One card to decide whether to contact, save or discard before spending time.",
+  "Lo que": "What you",
+  "de verdad": "really",
+  "vas a pagar.": "will pay.",
+  "€/m²": "€/m²",
+  "Entrada": "Deposit",
+  "Cuota": "Mortgage",
+  "Comunidad": "Fees",
+  "Lo que el anuncio": "What the listing",
+  "nunca te cuenta.": "never tells you.",
+  "Ruido nocturno": "Night noise",
+  "Bajo": "Low",
+  "Aparcamiento": "Parking",
+  "Medio · ZBR no": "Medium · no ZBE",
+  "Metro/Bus": "Metro/Bus",
+  "240 m · 4 lineas": "240 m · 4 lines",
+  "Guarda. Compara. Decide.": "Save. Compare. Decide.",
+  "Inmueble": "Property",
+  "Metros": "Area",
+  "Lectura": "Reading",
+  "Equilibrado": "Balanced",
+  "Caro": "Expensive",
+  "Datos enriquecidos": "Enriched data",
+  "APIs propias": "Own APIs",
+  "para señales urbanas.": "for urban signals.",
+  "Precio de mercado, datos de edificio, logística diaria y aparcamiento con fuentes, confianza y caveats.": "Market price, building data, daily logistics and parking with sources, confidence and caveats.",
+  "Referencia por operación y nivel geográfico.": "Reference by transaction type and geographic level.",
+  "Cobertura": "Coverage",
+  "España": "Spain",
+  "Granularidad": "Granularity",
+  "Barrio": "Neighbourhood",
+  "Semanal": "Weekly",
+  "Contexto público de dirección y edificio.": "Public context for address and building.",
+  "Fuentes": "Sources",
+  "Campos": "Fields",
+  "señales": "signals",
+  "Tiempo": "Time",
+  "Trayectos a destinos habituales.": "Routes to usual destinations.",
+  "Modos": "Modes",
+  "Coche·Bus·Pie": "Car·Bus·Walk",
+  "Picos": "Peaks",
+  "Hora punta": "Rush hour",
+  "Cálculo": "Calculation",
+  "Multi-origen": "Multi-origin",
+  "Documentación técnica": "Technical documentation",
+  "Criterio en menos tiempo": "Judgement in less time",
+  "Sin InmoRadar": "Without InmoRadar",
+  "vs Con InmoRadar.": "vs With InmoRadar.",
+  "La diferencia no es hacer magia. Es reducir pestañas, cálculos sueltos y dudas repetidas para decidir mejor qué anuncios merecen atención.": "The difference is not magic. It is reducing tabs, loose calculations and repeated doubts so you can decide better which listings deserve attention.",
+  "Mucho dato disperso.": "Too much scattered data.",
+  "Saltas entre el anuncio, mapas, calculadora, comparadores y notas.": "You jump between the listing, maps, calculator, comparables and notes.",
+  "El precio por metro cuadrado se calcula tarde o no se calcula.": "Price per square metre is calculated late or not calculated at all.",
+  "Comparar visitas depende de memoria, capturas o una hoja manual.": "Comparing visits depends on memory, screenshots or a manual spreadsheet.",
+  "Es fácil dedicar tiempo a anuncios que no encajan.": "It is easy to spend time on listings that do not fit.",
+  "Con InmoRadar": "With InmoRadar",
+  "Una lectura accionable.": "An actionable reading.",
+  "Precio real, coste inicial, zona y señales clave en la misma ficha.": "Real price, initial cost, area and key signals in the same card.",
+  "Comparas el anuncio con referencias de mercado y contexto urbano.": "You compare the listing with market references and urban context.",
+  "Guardas inmuebles y los ordenas por criterio, no por intuición.": "You save homes and rank them by criteria, not intuition.",
+  "Priorizar visitas se vuelve más rápido y menos improvisado.": "Prioritising viewings becomes faster and less improvised.",
+  "Transparencia": "Transparency",
+  "No es una tasación.": "It is not a valuation.",
+  "Es una capa de criterio.": "It is a layer of judgement.",
+  "InmoRadar ofrece estimaciones orientativas basadas en datos visibles del anuncio, fuentes públicas y señales urbanas. Sirve para entender mejor una vivienda antes de contactar, no para sustituir una tasación profesional ni garantizar una decisión económica.": "InmoRadar provides indicative estimates based on visible listing data, public sources and urban signals. It helps you understand a home better before contacting, not replace a professional valuation or guarantee a financial decision.",
+  "Para búsquedas intensivas": "For active searches",
+  "Paga solo durante": "Pay only during",
+  "tu búsqueda activa.": "your active search.",
+  "Los 2 días gratis son acceso inicial para todos: no son una prueba Premium de pago. Premium solo empieza si decides continuar.": "The 2 free days are initial access for everyone: they are not a paid Premium trial. Premium only starts if you decide to continue.",
+  "Más popular": "Most popular",
+  "/ semana": "/ week",
+  "+ 2 días iniciales · sin tarjeta para probar": "+ 2 initial days · no card to try",
+  "2 días gratis por defecto, sin activar Premium.": "2 free days by default, without activating Premium.",
+  "Premium semanal solo si decides continuar.": "Weekly Premium only if you decide to continue.",
+  "Análisis ilimitados de fichas.": "Unlimited listing analyses.",
+  "Comparativa de inmuebles guardados.": "Comparison of saved homes.",
+  "Señales urbanas y precio por zona.": "Urban signals and area price.",
+  "Cancelación inmediata, sin permanencia.": "Immediate cancellation, no commitment.",
+  "Guías para leer": "Guides to read",
+  "mejor el mercado.": "the market better.",
+  "Artículos sobre precio por metro cuadrado, alquiler y metodología de análisis.": "Articles about price per square metre, rent and analysis methodology.",
+  "Preguntas frecuentes": "Frequently asked questions",
+  "Lo que la gente": "What people",
+  "siempre pregunta.": "always ask.",
+  "Los 2 días gratis, ¿son una prueba Premium?": "Are the 2 free days a Premium trial?",
+  "No. Son acceso inicial gratuito para todos los usuarios. No tienes que pagar Premium para probar InmoRadar durante esos 2 días.": "No. They are free initial access for all users. You do not need to pay Premium to try InmoRadar during those 2 days.",
+  "¿InmoRadar mide datos exactos?": "Does InmoRadar measure exact data?",
+  "No. Son estimaciones orientativas basadas en datos abiertos, información visible del anuncio y señales urbanas.": "No. They are indicative estimates based on open data, visible listing information and urban signals.",
+  "¿Funciona con cualquier portal?": "Does it work with any portal?",
+  "Compatible con Idealista, Fotocasa, Pisos.com y Habitaclia. Iremos sumando otros portales en próximas versiones.": "Compatible with Idealista, Fotocasa, Pisos.com and Habitaclia. We will add more portals in upcoming versions.",
+  "¿Dónde se guardan mis inmuebles?": "Where are my saved homes stored?",
+  "Localmente en el navegador salvo que actives funciones que requieran servicios externos.": "Locally in your browser unless you enable features that require external services.",
+  "¿Puedo cancelar Premium cuando quiera?": "Can I cancel Premium whenever I want?",
+  "Sí. Es semanal y sin permanencia.": "Yes. It is weekly and has no commitment.",
+  "¿Necesito crear cuenta para probar?": "Do I need to create an account to try it?",
+  "No para los 2 días iniciales.": "Not for the initial 2 days.",
+  "Cuéntanos qué te": "Tell us what",
+  "trae por aquí.": "brings you here.",
+  "Soporte, prensa, partners o feedback de producto. Leemos todo desde hola@inmoradar.app.": "Support, press, partners or product feedback. We read everything at hola@inmoradar.app.",
+  "Madrid · operamos 100% remoto": "Madrid · we operate 100% remotely",
+  "Nombre": "Name",
+  "Email": "Email",
+  "Tema": "Topic",
+  "General": "General",
+  "Partner": "Partner",
+  "Prensa": "Press",
+  "Mensaje": "Message",
+  "Enviar mensaje": "Send message",
+  "Empieza sin pago inicial": "Start with no upfront payment",
+  "Tu próximo anuncio puede estar mejor explicado.": "Your next listing can be better explained.",
+  "Prueba InmoRadar sobre los portales donde ya buscas y decide con más contexto antes de contactar.": "Try InmoRadar on the portals where you already search and decide with more context before contacting.",
+  "Redes sociales InmoRadar": "InmoRadar social profiles",
+  "Instagram de InmoRadar": "InmoRadar on Instagram",
+  "TikTok de InmoRadar": "InmoRadar on TikTok"
+};
+
+const PAGE_META_TRANSLATIONS_EN = {
+  "/": {
+    title: "InmoRadar · Real-estate copilot for your browser",
+    description: "InmoRadar adds analysis on top of Idealista, Fotocasa, Pisos.com and Habitaclia: real price, initial cost, area, transport, parking and key signals."
+  },
+  "/index.html": {
+    title: "InmoRadar · Real-estate copilot for your browser",
+    description: "InmoRadar adds analysis on top of Idealista, Fotocasa, Pisos.com and Habitaclia: real price, initial cost, area, transport, parking and key signals."
+  }
+};
+
 let currentLanguage = "es";
+const originalTextNodes = new WeakMap();
+const originalAttributes = new WeakMap();
+const originalMeta = {};
 
 function t(key) {
   return I18N[currentLanguage]?.[key] || I18N.es[key] || key;
@@ -181,6 +437,84 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+function normalizedText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function translatedText(value) {
+  return TEXT_TRANSLATIONS_EN[normalizedText(value)] || "";
+}
+
+function replaceTextPreservingSpace(node, nextText) {
+  const current = String(node.data || "");
+  const leading = current.match(/^\s*/)?.[0] || "";
+  const trailing = current.match(/\s*$/)?.[0] || "";
+  node.data = `${leading}${nextText}${trailing}`;
+}
+
+function translateTextNodes(language) {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement;
+      if (!parent || parent.closest("script, style, svg, [data-no-translate]")) return NodeFilter.FILTER_REJECT;
+      return normalizedText(node.data) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    }
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach((node) => {
+    if (!originalTextNodes.has(node)) originalTextNodes.set(node, node.data);
+    const original = originalTextNodes.get(node);
+    if (language === "es") {
+      node.data = original;
+      return;
+    }
+    const value = translatedText(original);
+    if (value) replaceTextPreservingSpace(node, value);
+  });
+}
+
+function translateAttributes(language) {
+  document.querySelectorAll("[aria-label], [title], [placeholder], [content]").forEach((node) => {
+    ["aria-label", "title", "placeholder", "content"].forEach((attr) => {
+      if (!node.hasAttribute(attr)) return;
+      if (!originalAttributes.has(node)) originalAttributes.set(node, {});
+      const originals = originalAttributes.get(node);
+      if (!(attr in originals)) originals[attr] = node.getAttribute(attr);
+      if (language === "es") {
+        node.setAttribute(attr, originals[attr]);
+        return;
+      }
+      const value = translatedText(originals[attr]);
+      if (value) node.setAttribute(attr, value);
+    });
+  });
+}
+
+function translatePageMeta(language) {
+  if (!originalMeta.title) originalMeta.title = document.title;
+  if (!originalMeta.description) {
+    originalMeta.description = document.querySelector('meta[name="description"]')?.getAttribute("content") || "";
+  }
+  const path = location.pathname || "/";
+  const meta = PAGE_META_TRANSLATIONS_EN[path];
+  document.title = language === "en" && meta?.title ? meta.title : originalMeta.title;
+  const description = document.querySelector('meta[name="description"]');
+  if (description) {
+    description.setAttribute("content", language === "en" && meta?.description ? meta.description : originalMeta.description);
+  }
+}
+
+function translateStaticContent(language) {
+  translateTextNodes(language);
+  translateAttributes(language);
+  translatePageMeta(language);
+}
+
+function localizedArticle(item) {
+  return currentLanguage === "en" ? { ...item, ...(ARTICLE_TRANSLATIONS.en[item.slug] || {}) } : item;
+}
+
 function applyLanguage(language) {
   currentLanguage = language === "en" ? "en" : "es";
   document.documentElement.lang = currentLanguage;
@@ -198,6 +532,7 @@ function applyLanguage(language) {
   });
   renderArticles();
   renderArticlePage();
+  translateStaticContent(currentLanguage);
 }
 
 function initLanguage() {
@@ -234,7 +569,7 @@ function renderArticles() {
     const items = articles
       .filter((item) => filter === "Todos" || item.tag === filter)
       .slice(0, limit);
-    grid.innerHTML = items.map((item, index) => articleCard(item, index === 0 && grid.dataset.largeFirst === "true")).join("");
+    grid.innerHTML = items.map((item, index) => articleCard(localizedArticle(item), index === 0 && grid.dataset.largeFirst === "true")).join("");
   });
 }
 
@@ -269,8 +604,8 @@ function renderArticlePage() {
   const target = document.querySelector("[data-article-page]");
   if (!target) return;
   const slug = target.dataset.slug || new URLSearchParams(location.search).get("slug") || location.pathname.split("/").filter(Boolean).pop();
-  const article = articles.find((item) => item.slug === slug) || articles[0];
-  const related = articles.filter((item) => item.slug !== article.slug).slice(0, 3);
+  const article = localizedArticle(articles.find((item) => item.slug === slug) || articles[0]);
+  const related = articles.filter((item) => item.slug !== article.slug).slice(0, 3).map(localizedArticle);
   target.innerHTML = `
     <section class="page-header grid-bg">
       <div class="container article-layout">
@@ -283,19 +618,19 @@ function renderArticlePage() {
     </section>
     <section class="section">
       <article class="container article-layout article-body">
-        <p class="article-summary">${escapeHtml(article.excerpt)} La clave es no mirar solo el precio total: la lectura mejora al cruzar euros por metro, barrio, estado, transporte y aparcamiento.</p>
-        <h2>Resumen rápido</h2>
-        <p>Un anuncio puede parecer atractivo por precio absoluto y seguir estando por encima de mercado si la superficie, la ubicación concreta o el estado del edificio no acompañan. InmoRadar ordena esas señales para que decidas si merece una llamada.</p>
-        <h2>Metodología</h2>
+        <p class="article-summary">${escapeHtml(article.excerpt)} ${currentLanguage === "en" ? "The key is not to look only at the total price: the reading improves when you combine euros per square metre, neighbourhood, condition, transport and parking." : "La clave es no mirar solo el precio total: la lectura mejora al cruzar euros por metro, barrio, estado, transporte y aparcamiento."}</p>
+        <h2>${currentLanguage === "en" ? "Quick summary" : "Resumen rápido"}</h2>
+        <p>${currentLanguage === "en" ? "A listing can look attractive by total price and still be above market if the floor area, exact location or building condition do not support it. InmoRadar organises those signals so you can decide whether it deserves a call." : "Un anuncio puede parecer atractivo por precio absoluto y seguir estando por encima de mercado si la superficie, la ubicación concreta o el estado del edificio no acompañan. InmoRadar ordena esas señales para que decidas si merece una llamada."}</p>
+        <h2>${currentLanguage === "en" ? "Methodology" : "Metodología"}</h2>
         <ol class="number-list">
-          <li><span>01</span><p>Calculamos el precio por metro cuadrado del anuncio y lo comparamos con referencias agregadas disponibles.</p></li>
-          <li><span>02</span><p>Mostramos el nivel geográfico usado: zona, distrito, municipio o provincia. Nunca lo presentamos como precio exacto de calle.</p></li>
-          <li><span>03</span><p>Cruzamos coste inicial, financiación orientativa, transporte y aparcamiento para evitar una lectura incompleta.</p></li>
-          <li><span>04</span><p>Añadimos caveats cuando la confianza baja o faltan datos del anuncio.</p></li>
+          <li><span>01</span><p>${currentLanguage === "en" ? "We calculate the listing price per square metre and compare it with available aggregated references." : "Calculamos el precio por metro cuadrado del anuncio y lo comparamos con referencias agregadas disponibles."}</p></li>
+          <li><span>02</span><p>${currentLanguage === "en" ? "We show the geographic level used: area, district, municipality or province. We never present it as an exact street price." : "Mostramos el nivel geográfico usado: zona, distrito, municipio o provincia. Nunca lo presentamos como precio exacto de calle."}</p></li>
+          <li><span>03</span><p>${currentLanguage === "en" ? "We combine initial cost, indicative financing, transport and parking to avoid an incomplete reading." : "Cruzamos coste inicial, financiación orientativa, transporte y aparcamiento para evitar una lectura incompleta."}</p></li>
+          <li><span>04</span><p>${currentLanguage === "en" ? "We add caveats when confidence is low or the listing lacks data." : "Añadimos caveats cuando la confianza baja o faltan datos del anuncio."}</p></li>
         </ol>
-        <h2>Cómo usarlo con InmoRadar</h2>
-        <p>Abre un anuncio compatible, revisa la ficha de precio y zona, guarda los candidatos fuertes y compara los inmuebles antes de contactar. La extensión no sustituye una tasación ni una visita, pero ayuda a filtrar mejor.</p>
-        <div class="callout"><strong>Tip InmoRadar</strong><p>Si una vivienda sale cara y además la finca no tiene ascensor, el parking es difícil o la reforma visual parece probable, pide más información antes de avanzar.</p></div>
+        <h2>${currentLanguage === "en" ? "How to use it with InmoRadar" : "Cómo usarlo con InmoRadar"}</h2>
+        <p>${currentLanguage === "en" ? "Open a compatible listing, review the price and area card, save the strongest candidates and compare homes before contacting. The extension does not replace a valuation or a viewing, but it helps you filter better." : "Abre un anuncio compatible, revisa la ficha de precio y zona, guarda los candidatos fuertes y compara los inmuebles antes de contactar. La extensión no sustituye una tasación ni una visita, pero ayuda a filtrar mejor."}</p>
+        <div class="callout"><strong>Tip InmoRadar</strong><p>${currentLanguage === "en" ? "If a home is expensive and the building has no lift, parking is difficult or visual renovation looks likely, ask for more information before moving forward." : "Si una vivienda sale cara y además la finca no tiene ascensor, el parking es difícil o la reforma visual parece probable, pide más información antes de avanzar."}</p></div>
       </article>
       <div class="container">
         <div class="article-grid">${related.map((item) => articleCard(item)).join("")}</div>
