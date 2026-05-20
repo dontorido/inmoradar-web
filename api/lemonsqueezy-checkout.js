@@ -498,7 +498,7 @@ async function handlePortalMagicLinkRequest({ req, res, email }) {
   const genericPayload = {
     ok: true,
     link_sent: true,
-    message: "Si ese email tiene una suscripcion Premium activa, recibira un enlace de acceso en unos segundos."
+    message: "Si tu email tiene una suscripción Premium activa, recibirás un enlace seguro para entrar en unos segundos."
   };
 
   if (!isPremiumActive(billing.subscription)) {
