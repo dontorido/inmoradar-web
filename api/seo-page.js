@@ -122,6 +122,20 @@ function brandMarkIcon() {
   return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5.2"/><circle cx="12" cy="12" r="1.25" fill="currentColor" stroke="none"/><path d="M12 12l3.2-3.6M12 4.5v1.6M12 17.9v1.6M4.5 12h1.6M17.9 12h1.6M8.9 8.9l1.1 1.1M15.1 15.1 14 14"/></svg>`;
 }
 
+function seoSocialLinks() {
+  return `
+      <nav class="footer-social seo-footer-social" aria-label="Redes sociales InmoRadar">
+        <a href="https://www.instagram.com/inmoradares/" target="_blank" rel="noopener noreferrer" aria-label="Instagram de InmoRadar">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" stroke="none"></circle></svg>
+          <span>Instagram</span>
+        </a>
+        <a href="https://www.tiktok.com/@inmoradar" target="_blank" rel="noopener noreferrer" aria-label="TikTok de InmoRadar">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14 3v10.2a4.8 4.8 0 1 1-4.8-4.8c.5 0 1 .08 1.4.22v3.05a2 2 0 1 0 1.36 1.9V3h2.04c.42 2.45 1.92 4.16 4.5 4.48v3.08A7.2 7.2 0 0 1 14 8.92"></path></svg>
+          <span>TikTok</span>
+        </a>
+      </nav>`;
+}
+
 function seoPageScript() {
   return `<script>
   (() => {
@@ -236,6 +250,15 @@ function renderLandingHtml(landing) {
       padding: 28px 0;
     }
     .seo-global-footer .footer-grid { width: min(1100px, calc(100% - 40px)); }
+    .seo-global-footer .footer-social a {
+      color: rgba(255,255,255,.76);
+      text-decoration: none;
+      text-decoration-color: transparent;
+    }
+    .seo-global-footer .footer-social a:hover {
+      color: #FFFFFF;
+      text-decoration: none;
+    }
     .seo-breadcrumb {
       color: #6E6E6E;
       display: flex;
@@ -709,6 +732,7 @@ function renderLandingHtml(landing) {
         <a href="/#noticias">Noticias</a>
         <a href="mailto:hola@inmoradar.app">Contacto</a>
       </div>
+      ${seoSocialLinks()}
       <span>© InmoRadar</span>
     </div>
   </footer>

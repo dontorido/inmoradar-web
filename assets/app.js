@@ -134,7 +134,7 @@ function isPublicProductionHost() {
 
 function icon(name) {
   const paths = {
-    Radar: '<circle cx="12" cy="12" r="8"/><path d="M12 12l5-5M12 4v3M12 17v3M4 12h3M17 12h3"/>',
+    Radar: '<circle cx="12" cy="12" r="5.2"/><circle cx="12" cy="12" r="1.25" fill="currentColor" stroke="none"/><path d="M12 12l3.2-3.6M12 4.5v1.6M12 17.9v1.6M4.5 12h1.6M17.9 12h1.6M8.9 8.9l1.1 1.1M15.1 15.1 14 14"/>',
     ArrowRight: '<path d="M5 12h14M13 5l7 7-7 7"/>',
     ArrowUpRight: '<path d="M7 17 17 7M8 7h9v9"/>',
     Mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
@@ -144,6 +144,31 @@ function icon(name) {
     Calendar: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/>'
   };
   return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.Radar}</svg>`;
+}
+
+function socialIcon(name) {
+  const icons = {
+    instagram:
+      '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" stroke="none"></circle></svg>',
+    tiktok:
+      '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14 3v10.2a4.8 4.8 0 1 1-4.8-4.8c.5 0 1 .08 1.4.22v3.05a2 2 0 1 0 1.36 1.9V3h2.04c.42 2.45 1.92 4.16 4.5 4.48v3.08A7.2 7.2 0 0 1 14 8.92"></path></svg>'
+  };
+  return icons[name] || icons.instagram;
+}
+
+function footerSocialHtml() {
+  return `
+    <nav class="footer-social" aria-label="Redes sociales InmoRadar" data-footer-social>
+      <a href="https://www.instagram.com/inmoradares/" target="_blank" rel="noopener noreferrer" aria-label="Instagram de InmoRadar" data-testid="footer-social-instagram">
+        ${socialIcon("instagram")}
+        <span>Instagram</span>
+      </a>
+      <a href="https://www.tiktok.com/@inmoradar" target="_blank" rel="noopener noreferrer" aria-label="TikTok de InmoRadar" data-testid="footer-social-tiktok">
+        ${socialIcon("tiktok")}
+        <span>TikTok</span>
+      </a>
+    </nav>
+  `;
 }
 
 function escapeHtml(value) {
@@ -347,6 +372,22 @@ function initContactForm() {
   });
 }
 
+function initFooterSocial() {
+  document.querySelectorAll(".site-footer").forEach((footer) => {
+    if (footer.querySelector("[data-footer-social]")) return;
+    const target = footer.querySelector(".footer-meta") || footer.querySelector(".container") || footer;
+    const wrapper = document.createElement("template");
+    wrapper.innerHTML = footerSocialHtml().trim();
+    const social = wrapper.content.firstElementChild;
+    if (!social) return;
+    if (target.classList.contains("footer-meta") && target.children.length > 1) {
+      target.insertBefore(social, target.children[1]);
+    } else {
+      target.appendChild(social);
+    }
+  });
+}
+
 function initCheckout() {
   async function openPortalFromToken(token) {
     try {
@@ -447,6 +488,7 @@ function init() {
   initArticleFilters();
   initFaq();
   initContactForm();
+  initFooterSocial();
   initCheckout();
 }
 
