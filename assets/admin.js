@@ -1,5 +1,7 @@
 const TOKEN_KEY = "inmoradar_admin_token";
 const VIDEO_PROJECT_KEY = "inmoradar_social_video_project";
+const RELEASE_TARGETS = ["web", "extension", "backoffice"];
+const MAX_RELEASE_FILE_BYTES = 3 * 1024 * 1024;
 
 const state = {
   token: sessionStorage.getItem(TOKEN_KEY) || "",
@@ -21,6 +23,11 @@ const state = {
   },
   parking: {
     lastProbe: null
+  },
+  releases: {
+    web: [],
+    extension: [],
+    backoffice: []
   },
   kpis: {
     schema: [],
@@ -73,6 +80,10 @@ const els = {
   parkingRefresh: document.querySelector("[data-parking-refresh]"),
   parkingProbeForm: document.querySelector("[data-parking-probe-form]"),
   parkingResult: document.querySelector("[data-parking-result]"),
+  releaseForms: document.querySelectorAll("[data-release-form]"),
+  releaseRows: document.querySelectorAll("[data-release-rows]"),
+  releaseConnectors: document.querySelectorAll("[data-release-connectors]"),
+  releaseRefreshButtons: document.querySelectorAll("[data-release-refresh]"),
   videoForm: document.querySelector("[data-video-form]"),
   videoPreview: document.querySelector("[data-video-preview]"),
   videoPreviewTopic: document.querySelector("[data-video-preview-topic]"),
@@ -505,6 +516,152 @@ function renderParkingRows(rows) {
       `;
     })
     .join("");
+}
+
+function releaseTargetLabel(target) {
+  return {
+    web: "Web",
+    extension: "Extensión",
+    backoffice: "Backoffice"
+  }[target] || target;
+}
+
+function releaseRowsElement(target) {
+  return Array.from(els.releaseRows).find((node) => node.dataset.releaseRows === target);
+}
+
+function releaseConnectorsElement(target) {
+  return Array.from(els.releaseConnectors).find((node) => node.dataset.releaseConnectors === target);
+}
+
+function formatBytes(bytes) {
+  const size = Number(bytes || 0);
+  if (!size) return "-";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function connectorCard(connector) {
+  return `
+    <article class="admin-release-connector ${connector.configured ? "is-ready" : "is-missing"}">
+      <div>
+        <strong>${escapeHtml(connector.label)}</strong>
+        <span>${escapeHtml(connector.configured ? "Configurado" : "Pendiente")}</span>
+      </div>
+      <p>${escapeHtml(connector.purpose || "")}</p>
+    </article>
+  `;
+}
+
+function renderReleaseConnectors(target, connectors = {}) {
+  const targetEl = releaseConnectorsElement(target);
+  if (!targetEl) return;
+  const items = connectors[target] || [];
+  targetEl.innerHTML = items.length
+    ? items.map(connectorCard).join("")
+    : `<p class="admin-empty-state compact">Sin conectores definidos para ${escapeHtml(releaseTargetLabel(target))}.</p>`;
+}
+
+function renderReleaseRows(target, payload = {}) {
+  const targetEl = releaseRowsElement(target);
+  if (!targetEl) return;
+  renderReleaseConnectors(target, payload.connectors || {});
+  const rows = payload.artifacts || [];
+  state.releases[target] = rows;
+
+  if (payload.table_missing) {
+    targetEl.innerHTML = `<tr><td colspan="4">Falta la tabla release_artifacts. Ejecuta database/release-artifacts.sql.</td></tr>`;
+    return;
+  }
+  if (!rows.length) {
+    targetEl.innerHTML = `<tr><td colspan="4">Aun no hay artefactos de ${escapeHtml(releaseTargetLabel(target))} guardados.</td></tr>`;
+    return;
+  }
+
+  targetEl.innerHTML = rows
+    .map((row) => `
+      <tr>
+        <td>
+          <strong>${escapeHtml(row.version || "-")}</strong>
+          <div class="admin-subtle">${escapeHtml(row.title || "-")}</div>
+          <div class="admin-subtle">${escapeHtml(formatDate(row.created_at))}</div>
+        </td>
+        <td>
+          ${chip(row.channel || "draft", statusTone(row.channel))}
+          <div class="admin-subtle">${escapeHtml(row.connector_target || row.artifact_kind || "-")}</div>
+        </td>
+        <td>
+          <strong>${escapeHtml(row.file_name || row.artifact_kind || "-")}</strong>
+          <div class="admin-subtle">${escapeHtml(formatBytes(row.file_size_bytes))}</div>
+          <div class="admin-subtle">${escapeHtml(row.sha256 ? `sha ${row.sha256.slice(0, 10)}` : row.storage_path || "-")}</div>
+        </td>
+        <td>${chip(row.status || "draft", statusTone(row.status))}</td>
+      </tr>
+    `)
+    .join("");
+}
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return btoa(binary);
+}
+
+async function sha256Hex(buffer) {
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function releaseFilePayload(file) {
+  if (!file) return {};
+  if (file.size > MAX_RELEASE_FILE_BYTES) {
+    throw new Error("Archivo demasiado grande para guardar inline. Usa Storage cuando activemos paquetes grandes.");
+  }
+  const buffer = await file.arrayBuffer();
+  return {
+    file_name: file.name,
+    mime_type: file.type || "application/octet-stream",
+    file_size_bytes: file.size,
+    sha256: await sha256Hex(buffer),
+    artifact_payload: {
+      encoding: "base64",
+      content_base64: arrayBufferToBase64(buffer)
+    }
+  };
+}
+
+async function releasePayloadFromForm(form) {
+  const data = new FormData(form);
+  const file = data.get("artifact_file");
+  return {
+    target: form.dataset.releaseTarget,
+    version: String(data.get("version") || "").trim(),
+    title: String(data.get("title") || "").trim(),
+    channel: String(data.get("channel") || "draft"),
+    status: "draft",
+    artifact_kind: String(data.get("artifact_kind") || "bundle"),
+    connector_target: String(data.get("connector_target") || "").trim(),
+    notes: String(data.get("notes") || "").trim(),
+    ...(await releaseFilePayload(file && file.name ? file : null))
+  };
+}
+
+async function saveReleaseArtifact(form) {
+  const target = form.dataset.releaseTarget;
+  const payload = await releasePayloadFromForm(form);
+  await api("/api/admin?resource=operations/releases", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  form.reset();
+  await loadReleaseArtifacts(target);
+  showStatus(`${releaseTargetLabel(target)} guardado en backoffice.`, "good");
 }
 
 function premiumDetail(label, value) {
@@ -1717,6 +1874,16 @@ async function loadParking() {
   renderParkingRows(payload.recent || []);
 }
 
+async function loadReleaseArtifacts(target) {
+  const payload = await api(`/api/admin?resource=operations/releases&target=${encodeURIComponent(target)}`);
+  renderReleaseRows(target, payload);
+}
+
+async function loadReleaseHubs() {
+  if (!els.releaseRows.length) return;
+  await Promise.all(RELEASE_TARGETS.map((target) => loadReleaseArtifacts(target)));
+}
+
 async function loadRunwayConfig() {
   if (!els.videoRunwayPanel) return;
   try {
@@ -1742,7 +1909,16 @@ async function loadAll() {
   if (!state.token) return;
   showStatus("Cargando backoffice...");
   try {
-    await Promise.all([loadSummary(), loadPremium(), loadExtensionUsage(), loadSeo(), loadKpis(), loadParking(), loadRunwayConfig()]);
+    await Promise.all([
+      loadSummary(),
+      loadPremium(),
+      loadExtensionUsage(),
+      loadSeo(),
+      loadKpis(),
+      loadParking(),
+      loadReleaseHubs(),
+      loadRunwayConfig()
+    ]);
     showStatus(`Actualizado ${formatDate(new Date().toISOString())}`, "good");
   } catch (error) {
     if (error.status === 401) {
@@ -1954,6 +2130,20 @@ if (els.parkingProbeForm) {
     runParkingProbe(els.parkingProbeForm).catch((error) => showStatus(error.message, "bad"));
   });
 }
+
+els.releaseForms.forEach((form) => {
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveReleaseArtifact(form).catch((error) => showStatus(error.message, "bad"));
+  });
+});
+
+els.releaseRefreshButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const target = button.dataset.releaseRefresh;
+    loadReleaseArtifacts(target).catch((error) => showStatus(error.message, "bad"));
+  });
+});
 
 if (els.videoForm) {
   els.videoForm.addEventListener("submit", (event) => {

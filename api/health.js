@@ -46,6 +46,7 @@ module.exports = async function handler(req, res) {
       ["kpi_settings", "kpi_settings?select=id&limit=1"],
       ["premium_subscriptions", "premium_subscriptions?select=id&limit=1"],
       ["premium_revenue_events", "premium_revenue_events?select=id&limit=1"],
+      ["release_artifacts", "release_artifacts?select=id&limit=1"],
       ["extension_usage_events", "extension_usage_events?select=id&limit=1"],
       ["photo_condition_analysis_cache", "photo_condition_analysis_cache?select=id&limit=1"],
       ["address_intelligence_cache", "address_intelligence_cache?select=id&limit=1"],

@@ -225,9 +225,12 @@
             </div>
             <div class="admin-subsection-menu" aria-label="Procesos de operaciones">
               <button class="admin-tab" type="button" data-admin-subsection-group="operaciones" data-admin-subsection-button="operaciones-parking" data-testid="admin-subsection-operaciones-parking" aria-pressed="false">Parking</button>
+              <button class="admin-tab" type="button" data-admin-subsection-group="operaciones" data-admin-subsection-button="operaciones-web" data-testid="admin-subsection-operaciones-web" aria-pressed="false">Web</button>
+              <button class="admin-tab" type="button" data-admin-subsection-group="operaciones" data-admin-subsection-button="operaciones-extension" data-testid="admin-subsection-operaciones-extension" aria-pressed="false">Extensión</button>
+              <button class="admin-tab" type="button" data-admin-subsection-group="operaciones" data-admin-subsection-button="operaciones-backoffice" data-testid="admin-subsection-operaciones-backoffice" aria-pressed="false">Backoffice</button>
             </div>
           </div>
-          <p class="admin-empty-state" data-admin-subsection-empty="operaciones">Selecciona Parking para abrir Parking Intelligence.</p>
+          <p class="admin-empty-state" data-admin-subsection-empty="operaciones">Selecciona Parking, Web, Extensión o Backoffice para abrir sus herramientas.</p>
         </article>
       </section>
 
@@ -305,6 +308,233 @@
             </table>
           </div>
           <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
+        </section>
+      </section>
+
+      <section class="admin-subsection-panel" data-admin-subsection-panel="operaciones-web" hidden>
+        <section class="admin-panel admin-release-panel">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Centro de versiones</span>
+              <h2>Web</h2>
+              <p class="admin-panel-sub">Guarda paquetes, manifiestos y notas de despliegue web en el backoffice antes de publicarlos.</p>
+            </div>
+            <button class="admin-button tiny ghost" type="button" data-release-refresh="web">Actualizar Web</button>
+          </div>
+          <div class="admin-release-grid">
+            <form class="admin-release-form" data-release-form data-release-target="web">
+              <label>
+                <span>Versión</span>
+                <input type="text" name="version" placeholder="2026.05.20-web" required>
+              </label>
+              <label>
+                <span>Título</span>
+                <input type="text" name="title" placeholder="Cambios web producción" required>
+              </label>
+              <label>
+                <span>Canal</span>
+                <select name="channel">
+                  <option value="draft">Draft</option>
+                  <option value="staging">Staging</option>
+                  <option value="production">Producción</option>
+                </select>
+              </label>
+              <label>
+                <span>Tipo</span>
+                <select name="artifact_kind">
+                  <option value="bundle">Paquete</option>
+                  <option value="manifest">Manifest</option>
+                  <option value="release_notes">Notas</option>
+                  <option value="config">Config</option>
+                </select>
+              </label>
+              <label>
+                <span>Conector</span>
+                <select name="connector_target">
+                  <option value="vercel">Vercel</option>
+                  <option value="github">GitHub</option>
+                </select>
+              </label>
+              <label>
+                <span>Archivo</span>
+                <input type="file" name="artifact_file">
+              </label>
+              <label class="admin-release-notes">
+                <span>Notas internas</span>
+                <textarea name="notes" rows="4" placeholder="Qué contiene, riesgo, pasos de publicación y rollback."></textarea>
+              </label>
+              <button class="admin-button" type="submit">Guardar en Backoffice</button>
+              <p class="admin-release-note">Los archivos pequeños se guardan en Supabase como artefacto auditado. Para paquetes grandes usaremos Storage y el conector de publicación.</p>
+            </form>
+            <div class="admin-release-side">
+              <div class="admin-release-connectors" data-release-connectors="web"></div>
+              <div class="admin-table-wrap">
+                <table class="admin-table admin-release-table">
+                  <thead>
+                    <tr>
+                      <th>Versión</th>
+                      <th>Canal</th>
+                      <th>Archivo</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody data-release-rows="web"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="admin-subsection-panel" data-admin-subsection-panel="operaciones-extension" hidden>
+        <section class="admin-panel admin-release-panel">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Centro de versiones</span>
+              <h2>Extensión</h2>
+              <p class="admin-panel-sub">Centraliza ZIP/CRX/XPI, manifiestos y notas para Chrome, Edge y Firefox desde el backoffice.</p>
+            </div>
+            <button class="admin-button tiny ghost" type="button" data-release-refresh="extension">Actualizar Extensión</button>
+          </div>
+          <div class="admin-release-grid">
+            <form class="admin-release-form" data-release-form data-release-target="extension">
+              <label>
+                <span>Versión</span>
+                <input type="text" name="version" placeholder="1.0.11" required>
+              </label>
+              <label>
+                <span>Título</span>
+                <input type="text" name="title" placeholder="Build extensión producción" required>
+              </label>
+              <label>
+                <span>Canal</span>
+                <select name="channel">
+                  <option value="draft">Draft</option>
+                  <option value="beta">Beta</option>
+                  <option value="stable">Stable</option>
+                </select>
+              </label>
+              <label>
+                <span>Tipo</span>
+                <select name="artifact_kind">
+                  <option value="bundle">ZIP/CRX/XPI</option>
+                  <option value="manifest">Manifest</option>
+                  <option value="release_notes">Notas</option>
+                  <option value="config">Config</option>
+                </select>
+              </label>
+              <label>
+                <span>Navegador</span>
+                <select name="connector_target">
+                  <option value="chrome">Chrome</option>
+                  <option value="edge">Edge</option>
+                  <option value="firefox">Firefox</option>
+                </select>
+              </label>
+              <label>
+                <span>Archivo</span>
+                <input type="file" name="artifact_file" accept=".zip,.crx,.xpi,.json">
+              </label>
+              <label class="admin-release-notes">
+                <span>Notas internas</span>
+                <textarea name="notes" rows="4" placeholder="Cambios, permisos nuevos, pruebas y notas para revisión de store."></textarea>
+              </label>
+              <button class="admin-button" type="submit">Guardar en Backoffice</button>
+              <p class="admin-release-note">La publicación automática irá por APIs oficiales de cada store cuando las credenciales estén configuradas.</p>
+            </form>
+            <div class="admin-release-side">
+              <div class="admin-release-connectors" data-release-connectors="extension"></div>
+              <div class="admin-table-wrap">
+                <table class="admin-table admin-release-table">
+                  <thead>
+                    <tr>
+                      <th>Versión</th>
+                      <th>Canal</th>
+                      <th>Archivo</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody data-release-rows="extension"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="admin-subsection-panel" data-admin-subsection-panel="operaciones-backoffice" hidden>
+        <section class="admin-panel admin-release-panel">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Centro de versiones</span>
+              <h2>Backoffice</h2>
+              <p class="admin-panel-sub">Gestiona los cambios del propio panel: scripts SQL, configuración, previews y notas de despliegue.</p>
+            </div>
+            <button class="admin-button tiny ghost" type="button" data-release-refresh="backoffice">Actualizar Backoffice</button>
+          </div>
+          <div class="admin-release-grid">
+            <form class="admin-release-form" data-release-form data-release-target="backoffice">
+              <label>
+                <span>Versión</span>
+                <input type="text" name="version" placeholder="2026.05.20-admin" required>
+              </label>
+              <label>
+                <span>Título</span>
+                <input type="text" name="title" placeholder="Cambios backoffice" required>
+              </label>
+              <label>
+                <span>Canal</span>
+                <select name="channel">
+                  <option value="draft">Draft</option>
+                  <option value="staging">Staging</option>
+                  <option value="production">Producción</option>
+                </select>
+              </label>
+              <label>
+                <span>Tipo</span>
+                <select name="artifact_kind">
+                  <option value="config">Config</option>
+                  <option value="manifest">Manifest</option>
+                  <option value="release_notes">Notas</option>
+                  <option value="build_log">Log</option>
+                  <option value="bundle">Paquete</option>
+                </select>
+              </label>
+              <label>
+                <span>Conector</span>
+                <select name="connector_target">
+                  <option value="supabase">Supabase</option>
+                  <option value="vercel">Vercel</option>
+                </select>
+              </label>
+              <label>
+                <span>Archivo</span>
+                <input type="file" name="artifact_file" accept=".json,.sql,.txt,.zip">
+              </label>
+              <label class="admin-release-notes">
+                <span>Notas internas</span>
+                <textarea name="notes" rows="4" placeholder="Qué se cambia, tabla afectada, rollback y responsable."></textarea>
+              </label>
+              <button class="admin-button" type="submit">Guardar en Backoffice</button>
+              <p class="admin-release-note">Esto deja de depender de archivos sueltos en local y crea histórico operativo dentro del panel.</p>
+            </form>
+            <div class="admin-release-side">
+              <div class="admin-release-connectors" data-release-connectors="backoffice"></div>
+              <div class="admin-table-wrap">
+                <table class="admin-table admin-release-table">
+                  <thead>
+                    <tr>
+                      <th>Versión</th>
+                      <th>Canal</th>
+                      <th>Archivo</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody data-release-rows="backoffice"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </section>
       </section>
       <section class="admin-subsection-panel" data-admin-subsection-panel="marketing-videos" hidden>
