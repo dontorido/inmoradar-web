@@ -2663,10 +2663,12 @@
 }
 
 .admin-marketing-menu {
+  flex: 1 1 620px;
   display: grid;
-  grid-template-columns: repeat(4, minmax(160px, 1fr));
-  gap: 10px;
-  min-width: min(720px, 100%);
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 12px;
+  width: min(760px, 100%);
+  min-width: 0;
 }
 
 .admin-marketing-tab {
@@ -2675,8 +2677,9 @@
   gap: 5px;
   height: auto;
   justify-content: stretch;
+  min-width: 0;
   min-height: 92px;
-  padding: 14px 16px;
+  padding: 16px 22px;
   text-align: left;
 }
 
@@ -3039,6 +3042,10 @@
   .admin-marketing-dashboard,
   .admin-viraliza-results-grid {
     grid-template-columns: 1fr;
+  }
+
+  .admin-marketing-menu {
+    width: 100%;
   }
 
   .admin-viraliza-context-form {
