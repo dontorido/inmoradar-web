@@ -221,7 +221,7 @@
             <div>
               <span class="admin-kicker muted">Operaciones</span>
               <h2>Elige un proceso</h2>
-              <p class="admin-panel-sub">Selecciona el módulo operativo que quieres revisar para desplegar sus datos y pruebas.</p>
+              <p class="admin-panel-sub">Aquí centralizamos tareas que antes acababan en archivos locales: pruebas de Parking, versiones de la web, paquetes de extensión y cambios del propio backoffice.</p>
             </div>
             <div class="admin-subsection-menu" aria-label="Procesos de operaciones">
               <button class="admin-tab" type="button" data-admin-subsection-group="operaciones" data-admin-subsection-button="operaciones-parking" data-testid="admin-subsection-operaciones-parking" aria-pressed="false">Parking</button>
@@ -230,7 +230,7 @@
               <button class="admin-tab" type="button" data-admin-subsection-group="operaciones" data-admin-subsection-button="operaciones-backoffice" data-testid="admin-subsection-operaciones-backoffice" aria-pressed="false">Backoffice</button>
             </div>
           </div>
-          <p class="admin-empty-state" data-admin-subsection-empty="operaciones">Selecciona Parking, Web, Extensión o Backoffice para abrir sus herramientas.</p>
+          <p class="admin-empty-state" data-admin-subsection-empty="operaciones">Selecciona Parking para probar datos, Web para preparar despliegues, Extensión para guardar builds por navegador o Backoffice para auditar cambios internos.</p>
         </article>
       </section>
 
@@ -317,22 +317,30 @@
             <div>
               <span class="admin-kicker muted">Centro de versiones</span>
               <h2>Web</h2>
-              <p class="admin-panel-sub">Guarda paquetes, manifiestos y notas de despliegue web en el backoffice antes de publicarlos.</p>
+              <p class="admin-panel-sub">Registra cada cambio de la web antes de publicarlo: qué versión es, qué archivo lo acompaña, dónde se probará y qué conector lo desplegará.</p>
             </div>
             <button class="admin-button tiny ghost" type="button" data-release-refresh="web">Actualizar Web</button>
+          </div>
+          <div class="admin-release-explain">
+            <p><strong>Qué guardas aquí:</strong> manifiestos, notas o paquetes pequeños relacionados con un cambio de la web.</p>
+            <p><strong>Para qué sirve:</strong> dejar un historial claro de lo que se va a desplegar, sin depender de archivos sueltos en tu ordenador.</p>
+            <p><strong>Después:</strong> cuando el conector esté activo, desde aquí se enviará a Vercel o GitHub.</p>
           </div>
           <div class="admin-release-grid">
             <form class="admin-release-form" data-release-form data-release-target="web">
               <label>
                 <span>Versión</span>
+                <small>Identificador único del cambio. Ejemplo: 2026.05.20-web o home-v2.</small>
                 <input type="text" name="version" placeholder="2026.05.20-web" required>
               </label>
               <label>
                 <span>Título</span>
+                <small>Resumen humano para reconocerlo luego en la tabla.</small>
                 <input type="text" name="title" placeholder="Cambios web producción" required>
               </label>
               <label>
                 <span>Canal</span>
+                <small>Draft es borrador; Staging es prueba; Producción es listo para publicar.</small>
                 <select name="channel">
                   <option value="draft">Draft</option>
                   <option value="staging">Staging</option>
@@ -341,6 +349,7 @@
               </label>
               <label>
                 <span>Tipo</span>
+                <small>Define qué estás guardando: paquete, manifest, notas o configuración.</small>
                 <select name="artifact_kind">
                   <option value="bundle">Paquete</option>
                   <option value="manifest">Manifest</option>
@@ -350,6 +359,7 @@
               </label>
               <label>
                 <span>Conector</span>
+                <small>Servicio que usaremos para publicar o sincronizar este cambio.</small>
                 <select name="connector_target">
                   <option value="vercel">Vercel</option>
                   <option value="github">GitHub</option>
@@ -357,14 +367,16 @@
               </label>
               <label>
                 <span>Archivo</span>
+                <small>Opcional. Sube un JSON, ZIP pequeño o nota que deba quedar guardada con esta versión.</small>
                 <input type="file" name="artifact_file">
               </label>
               <label class="admin-release-notes">
                 <span>Notas internas</span>
+                <small>Explica qué cambia, qué riesgo tiene y cómo volver atrás si algo falla.</small>
                 <textarea name="notes" rows="4" placeholder="Qué contiene, riesgo, pasos de publicación y rollback."></textarea>
               </label>
-              <button class="admin-button" type="submit">Guardar en Backoffice</button>
-              <p class="admin-release-note">Los archivos pequeños se guardan en Supabase como artefacto auditado. Para paquetes grandes usaremos Storage y el conector de publicación.</p>
+              <button class="admin-button" type="submit">Guardar versión web</button>
+              <p class="admin-release-note">Guardar no publica todavía: deja la versión preparada y auditada en Supabase. La publicación vendrá cuando activemos el conector.</p>
             </form>
             <div class="admin-release-side">
               <div class="admin-release-connectors" data-release-connectors="web"></div>
@@ -392,22 +404,30 @@
             <div>
               <span class="admin-kicker muted">Centro de versiones</span>
               <h2>Extensión</h2>
-              <p class="admin-panel-sub">Centraliza ZIP/CRX/XPI, manifiestos y notas para Chrome, Edge y Firefox desde el backoffice.</p>
+              <p class="admin-panel-sub">Prepara las versiones de la extensión por navegador. Aquí guardas el build, el manifest y las notas que luego se enviarán a Chrome, Edge o Firefox.</p>
             </div>
             <button class="admin-button tiny ghost" type="button" data-release-refresh="extension">Actualizar Extensión</button>
+          </div>
+          <div class="admin-release-explain">
+            <p><strong>Qué guardas aquí:</strong> ZIP, CRX, XPI, manifest o notas de revisión de la extensión.</p>
+            <p><strong>Para qué sirve:</strong> tener una única versión controlada antes de subirla a cada tienda de navegador.</p>
+            <p><strong>Después:</strong> el backoffice llamará a las APIs oficiales de Chrome, Edge y Firefox. No se salta la revisión de las tiendas.</p>
           </div>
           <div class="admin-release-grid">
             <form class="admin-release-form" data-release-form data-release-target="extension">
               <label>
                 <span>Versión</span>
+                <small>Número de versión de la extensión. Debe coincidir con el manifest.</small>
                 <input type="text" name="version" placeholder="1.0.11" required>
               </label>
               <label>
                 <span>Título</span>
+                <small>Nombre corto del build para identificarlo en operaciones.</small>
                 <input type="text" name="title" placeholder="Build extensión producción" required>
               </label>
               <label>
                 <span>Canal</span>
+                <small>Draft guarda borrador; Beta sirve para prueba; Stable es candidato a producción.</small>
                 <select name="channel">
                   <option value="draft">Draft</option>
                   <option value="beta">Beta</option>
@@ -416,6 +436,7 @@
               </label>
               <label>
                 <span>Tipo</span>
+                <small>Elige si subes el paquete final, el manifest, notas o configuración.</small>
                 <select name="artifact_kind">
                   <option value="bundle">ZIP/CRX/XPI</option>
                   <option value="manifest">Manifest</option>
@@ -425,6 +446,7 @@
               </label>
               <label>
                 <span>Navegador</span>
+                <small>Tienda a la que irá esta versión cuando activemos publicación automática.</small>
                 <select name="connector_target">
                   <option value="chrome">Chrome</option>
                   <option value="edge">Edge</option>
@@ -433,14 +455,16 @@
               </label>
               <label>
                 <span>Archivo</span>
+                <small>Sube el ZIP/CRX/XPI o el manifest que quieras dejar guardado.</small>
                 <input type="file" name="artifact_file" accept=".zip,.crx,.xpi,.json">
               </label>
               <label class="admin-release-notes">
                 <span>Notas internas</span>
+                <small>Incluye permisos nuevos, cambios visibles y pruebas hechas antes de enviar a revisión.</small>
                 <textarea name="notes" rows="4" placeholder="Cambios, permisos nuevos, pruebas y notas para revisión de store."></textarea>
               </label>
-              <button class="admin-button" type="submit">Guardar en Backoffice</button>
-              <p class="admin-release-note">La publicación automática irá por APIs oficiales de cada store cuando las credenciales estén configuradas.</p>
+              <button class="admin-button" type="submit">Guardar versión de extensión</button>
+              <p class="admin-release-note">Guardar no actualiza usuarios todavía: deja el paquete preparado para enviarlo a la tienda oficial correspondiente.</p>
             </form>
             <div class="admin-release-side">
               <div class="admin-release-connectors" data-release-connectors="extension"></div>
@@ -468,22 +492,30 @@
             <div>
               <span class="admin-kicker muted">Centro de versiones</span>
               <h2>Backoffice</h2>
-              <p class="admin-panel-sub">Gestiona los cambios del propio panel: scripts SQL, configuración, previews y notas de despliegue.</p>
+              <p class="admin-panel-sub">Controla los cambios del propio panel: scripts SQL, ajustes de configuración, previews, logs y notas de despliegue.</p>
             </div>
             <button class="admin-button tiny ghost" type="button" data-release-refresh="backoffice">Actualizar Backoffice</button>
+          </div>
+          <div class="admin-release-explain">
+            <p><strong>Qué guardas aquí:</strong> SQL, configuración, notas internas, logs o paquetes pequeños del panel admin.</p>
+            <p><strong>Para qué sirve:</strong> saber qué se tocó en el backoffice, cuándo, con qué archivo y cómo revertirlo.</p>
+            <p><strong>Después:</strong> estos registros serán la base para publicar cambios del admin sin mover archivos manualmente.</p>
           </div>
           <div class="admin-release-grid">
             <form class="admin-release-form" data-release-form data-release-target="backoffice">
               <label>
                 <span>Versión</span>
+                <small>Identificador del cambio interno. Ejemplo: 2026.05.20-admin.</small>
                 <input type="text" name="version" placeholder="2026.05.20-admin" required>
               </label>
               <label>
                 <span>Título</span>
+                <small>Resumen claro del cambio: nueva sección, ajuste de SQL, fix de panel, etc.</small>
                 <input type="text" name="title" placeholder="Cambios backoffice" required>
               </label>
               <label>
                 <span>Canal</span>
+                <small>Draft es preparación; Staging es prueba; Producción es listo para aplicar.</small>
                 <select name="channel">
                   <option value="draft">Draft</option>
                   <option value="staging">Staging</option>
@@ -492,6 +524,7 @@
               </label>
               <label>
                 <span>Tipo</span>
+                <small>Marca si es configuración, manifest, notas, log o paquete.</small>
                 <select name="artifact_kind">
                   <option value="config">Config</option>
                   <option value="manifest">Manifest</option>
@@ -502,6 +535,7 @@
               </label>
               <label>
                 <span>Conector</span>
+                <small>Destino operativo del cambio: Supabase para datos/SQL o Vercel para panel.</small>
                 <select name="connector_target">
                   <option value="supabase">Supabase</option>
                   <option value="vercel">Vercel</option>
@@ -509,14 +543,16 @@
               </label>
               <label>
                 <span>Archivo</span>
+                <small>Sube JSON, SQL, TXT o ZIP pequeño que deba quedar asociado a esta versión.</small>
                 <input type="file" name="artifact_file" accept=".json,.sql,.txt,.zip">
               </label>
               <label class="admin-release-notes">
                 <span>Notas internas</span>
+                <small>Describe qué tabla, pantalla o proceso afecta y qué hacer si hay que deshacerlo.</small>
                 <textarea name="notes" rows="4" placeholder="Qué se cambia, tabla afectada, rollback y responsable."></textarea>
               </label>
-              <button class="admin-button" type="submit">Guardar en Backoffice</button>
-              <p class="admin-release-note">Esto deja de depender de archivos sueltos en local y crea histórico operativo dentro del panel.</p>
+              <button class="admin-button" type="submit">Guardar cambio interno</button>
+              <p class="admin-release-note">Guardar crea histórico operativo dentro del panel. No ejecuta SQL ni despliega por sí solo hasta que activemos esa acción.</p>
             </form>
             <div class="admin-release-side">
               <div class="admin-release-connectors" data-release-connectors="backoffice"></div>
