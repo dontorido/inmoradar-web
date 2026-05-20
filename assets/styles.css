@@ -1277,6 +1277,13 @@ h3 {
   color: var(--radar);
   font-weight: 900;
 }
+.legal-doc a.button {
+  color: white;
+  text-decoration: none;
+}
+.legal-doc a.button.ghost {
+  color: var(--ink);
+}
 .billing-form.compact {
   display: grid;
   gap: 14px;
