@@ -755,14 +755,14 @@
             <div>
               <span class="admin-kicker muted">Social Video Studio</span>
               <h2>Videos IA</h2>
-              <p class="admin-panel-sub">Genera un guion vertical, storyboard y preview con branding obligatorio de InmoRadar.</p>
+              <p class="admin-panel-sub">Genera un guion vertical, storyboard, clip IA y composicion final con branding obligatorio de InmoRadar.</p>
             </div>
             <div class="admin-row-actions">
               <button class="admin-button tiny ghost" type="button" data-video-copy-prompt data-testid="admin-action-copy-video-prompt" disabled>Copiar prompt IA</button>
               <button class="admin-button tiny ghost" type="button" data-video-download-ai-pack data-testid="admin-action-download-ai-pack" disabled>Pack IA real</button>
               <button class="admin-button tiny ghost" type="button" data-video-download-json data-testid="admin-action-download-video-json" disabled>Descargar storyboard</button>
               <button class="admin-button tiny" type="button" data-video-download-html data-testid="admin-action-download-video-html" disabled>Descargar preview HTML</button>
-              <button class="admin-button tiny" type="button" data-video-export data-testid="admin-action-export-video" disabled>Exportar maqueta</button>
+              <button class="admin-button tiny" type="button" data-video-export data-testid="admin-action-export-video" disabled>Componer video final</button>
             </div>
           </div>
           <div class="admin-video-busy" data-video-busy role="status" aria-live="polite" hidden>
@@ -772,8 +772,36 @@
               <p data-video-busy-message>Preparando video IA.</p>
             </div>
           </div>
+          <div class="admin-video-steps-guide" data-video-steps-guide>
+            <article>
+              <span>Paso 1</span>
+              <strong>Genera el storyboard</strong>
+              <p>Rellena el brief y pulsa Generar storyboard. Esto no gasta creditos y prepara guion, escenas, copy y prompts.</p>
+            </article>
+            <article>
+              <span>Paso 2</span>
+              <strong>Elige clip de fondo</strong>
+              <p>Sube un clip propio/IA o usa Runway. Sin clip, el export sera una maqueta local para revisar composicion.</p>
+            </article>
+            <article>
+              <span>Paso 3</span>
+              <strong>Compón el final</strong>
+              <p>Cuando haya storyboard y clip, InmoRadar monta marca, textos, web y musica sobre la pieza.</p>
+            </article>
+            <article>
+              <span>Paso 4</span>
+              <strong>Descarga y publica</strong>
+              <p>Descarga el video final, el pack IA o el storyboard, y revisa la biblioteca antes de publicar.</p>
+            </article>
+          </div>
+          <div class="admin-video-readiness" data-video-readiness aria-live="polite"></div>
           <div class="admin-video-grid">
             <form class="admin-video-form" data-video-form>
+              <div class="admin-video-step-heading">
+                <span>Paso 1</span>
+                <strong>Define el brief del video</strong>
+                <p>Estos campos generan el guion y el storyboard. Aun no se crea un clip real hasta que subas un video o lances Runway.</p>
+              </div>
               <label>
                 <span>Serie growth</span>
                 <select name="series_id">
@@ -885,8 +913,20 @@
                   <option value="soft">Guardar y comparar</option>
                 </select>
               </label>
-              <button class="admin-button" type="submit" data-testid="admin-action-generate-video">Generar video IA</button>
-              <p class="admin-video-note">Para personas reales, sube un clip vertical generado con IA o grabado. Si no subes clip, el export local es una maqueta visual; el Pack IA real contiene prompts para generar el video final en una IA de video.</p>
+              <div class="admin-video-primary-action">
+                <div>
+                  <span>Paso 1 · acción</span>
+                  <strong>Generar storyboard y preview</strong>
+                  <p>Primero crea el proyecto. Después se activan Runway, descargas y composición final.</p>
+                </div>
+                <button class="admin-button" type="submit" data-testid="admin-action-generate-video">Generar storyboard</button>
+              </div>
+              <div class="admin-video-step-heading">
+                <span>Paso 2</span>
+                <strong>Anade un clip real o genera uno con Runway</strong>
+                <p>El clip es el fondo humano del video. Si no hay clip, InmoRadar solo puede exportar una maqueta visual.</p>
+              </div>
+              <p class="admin-video-note">Para personas reales, sube un clip vertical generado con IA o grabado, o lanza Runway con coste controlado. El compositor final anade marca, textos y musica sobre ese clip.</p>
               <section class="admin-video-runway" data-video-runway-panel>
                 <div>
                   <span>Runway IA</span>
@@ -897,7 +937,6 @@
                   <span>Modelo</span>
                   <select name="runway_model" data-video-runway-model>
                     <option value="gen4.5" selected>Gen-4.5 - 12 creditos/s</option>
-                    <option value="veo3.1_fast_no_audio">Veo 3.1 Fast sin audio - 10 creditos/s</option>
                   </select>
                 </label>
                 <label>
@@ -942,6 +981,22 @@
                 <span data-video-preview-meta>1080x1920 - branding obligatorio - MP4 preparado para renderer</span>
               </div>
             </section>
+          </div>
+        </section>
+
+        <section class="admin-panel admin-video-library-panel">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Produccion</span>
+              <h2>Flujo y biblioteca</h2>
+              <p class="admin-panel-sub">Seguimiento operativo de cada video: storyboard, clip IA, composicion final y ultimos proyectos guardados.</p>
+            </div>
+          </div>
+          <div class="admin-video-pipeline" data-video-pipeline>
+            <p class="admin-empty-state">Genera un video para activar el flujo de produccion.</p>
+          </div>
+          <div class="admin-video-projects" data-video-projects>
+            <p class="admin-empty-state">Todavia no hay proyectos de video guardados.</p>
           </div>
         </section>
 

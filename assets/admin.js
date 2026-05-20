@@ -45,7 +45,9 @@ const state = {
     backgroundClipType: "",
     runwayEstimate: null,
     runwayJob: null,
-    runwayConfig: null
+    runwayConfig: null,
+    projects: [],
+    storageError: ""
   },
   viraliza: {
     routine: null,
@@ -107,6 +109,8 @@ const els = {
   videoExport: document.querySelector("[data-video-export]"),
   videoBusy: document.querySelector("[data-video-busy]"),
   videoBusyMessage: document.querySelector("[data-video-busy-message]"),
+  videoPipeline: document.querySelector("[data-video-pipeline]"),
+  videoProjects: document.querySelector("[data-video-projects]"),
   videoRunwayPanel: document.querySelector("[data-video-runway-panel]"),
   videoRunwayModel: document.querySelector("[data-video-runway-model]"),
   videoRunwayDuration: document.querySelector("[data-video-runway-duration]"),
@@ -116,6 +120,7 @@ const els = {
   videoRunwayRender: document.querySelector("[data-video-runway-render]"),
   videoRunwayPoll: document.querySelector("[data-video-runway-poll]"),
   videoRunwayImport: document.querySelector("[data-video-runway-import]"),
+  videoReadiness: document.querySelector("[data-video-readiness]"),
   viralizaGenerate: document.querySelector("[data-viraliza-generate]"),
   viralizaMode: document.querySelector("[data-viraliza-mode]"),
   viralizaOpenSearch: document.querySelector("[data-viraliza-open-search]"),
@@ -1661,6 +1666,81 @@ function setRunwayActions() {
   if (els.videoRunwayImport) els.videoRunwayImport.disabled = !hasResult || isBusy;
 }
 
+function runwayReadiness(config = state.video.runwayConfig || {}) {
+  if (!config || !Object.keys(config).length) {
+    return {
+      tone: "warn",
+      status: "Sin comprobar",
+      detail: "Todavía no se ha leído la configuración de Runway."
+    };
+  }
+  if (config.dry_run_only) {
+    return {
+      tone: "warn",
+      status: "Solo estimación",
+      detail: "RUNWAY_DRY_RUN_ONLY está activo. Puedes estimar coste, pero no lanzar renders."
+    };
+  }
+  if (!config.enabled) {
+    return {
+      tone: "warn",
+      status: "Render apagado",
+      detail: "Falta RUNWAY_RENDER_ENABLED=true. La maqueta local seguirá funcionando."
+    };
+  }
+  if (!config.api_secret_configured) {
+    return {
+      tone: "bad",
+      status: "Falta API key",
+      detail: "Configura RUNWAYML_API_SECRET en Vercel para generar clips reales."
+    };
+  }
+  return {
+    tone: "good",
+    status: "Runway activo",
+    detail: `Límite/render $${Number(config.max_cost_usd || 0).toFixed(2)} · presupuesto diario $${Number(config.daily_budget_usd || 0).toFixed(2)}.`
+  };
+}
+
+function renderVideoReadiness() {
+  if (!els.videoReadiness) return;
+  const project = state.video.lastProject;
+  const runway = runwayReadiness();
+  const storageOk = !state.video.storageError;
+  const hasClip = Boolean(state.video.backgroundClipName || project?.has_ai_clip || project?.has_uploaded_clip);
+  const cards = [
+    {
+      tone: project ? "good" : "warn",
+      label: "Paso 1 · Storyboard",
+      status: project ? "Generado" : "Pendiente",
+      detail: project ? "Ya puedes descargar prompts, usar Runway o componer." : "Pulsa Generar storyboard para empezar. No gasta créditos."
+    },
+    {
+      tone: storageOk ? "good" : "warn",
+      label: "Biblioteca",
+      status: storageOk ? "Disponible" : "Tabla pendiente",
+      detail: storageOk ? "Los proyectos se guardan y se pueden recuperar." : `${state.video.storageError}. Ejecuta database/social-video-projects.sql.`
+    },
+    {
+      tone: runway.tone,
+      label: "Paso 2 · Clip IA",
+      status: hasClip ? "Clip listo" : runway.status,
+      detail: hasClip ? "Hay clip de fondo cargado para el compositor final." : runway.detail
+    }
+  ];
+  els.videoReadiness.innerHTML = cards
+    .map(
+      (card) => `
+        <article data-tone="${escapeHtml(card.tone)}">
+          <span>${escapeHtml(card.label)}</span>
+          <strong>${escapeHtml(card.status)}</strong>
+          <p>${escapeHtml(card.detail)}</p>
+        </article>
+      `
+    )
+    .join("");
+}
+
 function runwayPayload(extra = {}) {
   return {
     project: state.video.lastProject,
@@ -1711,6 +1791,13 @@ async function startRunwayRender() {
       )
     });
     state.video.runwayJob = payload.job;
+    if (state.video.lastProject) {
+      state.video.lastProject.status = "ai_clip_queued";
+      state.video.lastProject.last_job_id = payload.job?.id || null;
+      renderVideoPipeline();
+      renderVideoStoryboard();
+      loadSocialVideos().catch(() => {});
+    }
     setRunwayStatus(`Runway lanzado. Job ${payload.job?.id || "-"} en estado ${payload.job?.status || "submitted"}.`, "good");
     showStatus("Render Runway lanzado. Usa Comprobar estado para traer el clip cuando termine.", "good");
   } finally {
@@ -1725,6 +1812,15 @@ async function pollRunwayRender() {
   const payload = await api(`/api/admin?resource=social-video/render&job_id=${encodeURIComponent(jobId)}`);
   state.video.runwayJob = payload.job;
   if (payload.job?.result_url) {
+    if (state.video.lastProject) {
+      state.video.lastProject.status = "ai_clip_ready";
+      state.video.lastProject.has_ai_clip = true;
+      state.video.lastProject.last_job_id = payload.job.id || state.video.lastProject.last_job_id || null;
+      renderVideoPipeline();
+      renderVideoReadiness();
+      renderVideoStoryboard();
+      loadSocialVideos().catch(() => {});
+    }
     setRunwayStatus("Runway ha terminado. Pulsa Usar clip IA para cargarlo como fondo.", "good");
   } else if (payload.job?.failure) {
     setRunwayStatus(`Runway fallo: ${payload.job.failure}`, "bad");
@@ -1751,9 +1847,18 @@ async function importRunwayClip() {
     state.video.backgroundClipUrl = URL.createObjectURL(blob);
     state.video.backgroundClipName = `runway-${jobId}.mp4`;
     state.video.backgroundClipType = blob.type || "video/mp4";
+    if (state.video.lastProject?.id) {
+      await updateSocialVideoProjectStatus(state.video.lastProject.id, {
+        status: "ai_clip_ready",
+        has_ai_clip: true,
+        last_job_id: jobId
+      }).catch(() => null);
+    }
     renderVideoPreview();
     renderVideoStoryboard();
-    setRunwayStatus("Clip Runway cargado como fondo. Ya puedes exportar la maqueta final con marca InmoRadar.", "good");
+    renderVideoPipeline();
+    renderVideoReadiness();
+    setRunwayStatus("Clip Runway cargado como fondo. Ya puedes componer el video final con marca InmoRadar.", "good");
     showStatus("Clip Runway cargado como fondo.", "good");
   } finally {
     setVideoBusy(false);
@@ -1859,6 +1964,118 @@ function realVideoPackText(project) {
   ].join("\n");
 }
 
+function videoProjectStatusLabel(status) {
+  const labels = {
+    storyboard_ready: "Storyboard listo",
+    ai_clip_queued: "Clip IA en cola",
+    ai_clip_ready: "Clip IA listo",
+    final_exported: "Video final exportado",
+    failed: "Error",
+    archived: "Archivado"
+  };
+  return labels[status] || status || "Storyboard listo";
+}
+
+function videoPipelineSteps(project) {
+  const status = String(project?.status || "storyboard_ready");
+  const hasClip = Boolean(state.video.backgroundClipName || project?.has_ai_clip || project?.has_uploaded_clip || status === "ai_clip_ready" || status === "final_exported");
+  const finalReady = status === "final_exported";
+  return [
+    {
+      id: "storyboard",
+      label: "01 - Storyboard",
+      detail: project ? "Guion, escenas y prompts preparados." : "Pendiente de generar.",
+      done: Boolean(project)
+    },
+    {
+      id: "clip",
+      label: "02 - Clip real/IA",
+      detail: hasClip ? "Ya hay un clip para usar como fondo humano." : "Sube un clip o genera uno con Runway.",
+      done: hasClip,
+      active: Boolean(project) && !hasClip
+    },
+    {
+      id: "compose",
+      label: "03 - Composicion",
+      detail: "Marca, textos, progreso y musica se montan aqui.",
+      done: finalReady,
+      active: hasClip && !finalReady
+    },
+    {
+      id: "ready",
+      label: "04 - Listo para redes",
+      detail: finalReady ? "MP4/WebM descargado y proyecto marcado." : "Descarga el video final y el copy.",
+      done: finalReady
+    }
+  ];
+}
+
+function renderVideoPipeline() {
+  if (!els.videoPipeline) return;
+  const project = state.video.lastProject;
+  const steps = videoPipelineSteps(project);
+  els.videoPipeline.innerHTML = `
+    <div class="admin-video-pipeline-grid">
+      ${steps
+        .map(
+          (step) => `
+          <article class="admin-video-pipeline-step${step.done ? " done" : ""}${step.active ? " active" : ""}" data-testid="admin-video-pipeline-${escapeHtml(step.id)}">
+            <span>${escapeHtml(step.label)}</span>
+            <strong>${step.done ? "OK" : step.active ? "Ahora" : "Pendiente"}</strong>
+            <p>${escapeHtml(step.detail)}</p>
+          </article>
+        `
+        )
+        .join("")}
+    </div>
+    ${
+      project
+        ? `<p class="admin-video-storage-note">${
+            project.storage?.persisted === false
+              ? `No se pudo guardar en Supabase: ${escapeHtml(project.storage.error || "tabla social_video_projects pendiente")}. Ejecuta database/social-video-projects.sql.`
+              : project.storage?.persisted
+                ? "Proyecto guardado en Supabase. Puedes recuperarlo desde la biblioteca."
+                : "Proyecto activo en esta sesion."
+          }</p>`
+        : ""
+    }
+  `;
+}
+
+function renderVideoProjects() {
+  if (!els.videoProjects) return;
+  if (state.video.storageError) {
+    els.videoProjects.innerHTML = `<p class="admin-empty-state">No puedo leer la biblioteca: ${escapeHtml(state.video.storageError)}. Ejecuta database/social-video-projects.sql.</p>`;
+    return;
+  }
+  const projects = state.video.projects || [];
+  if (!projects.length) {
+    els.videoProjects.innerHTML = `<p class="admin-empty-state">Todavia no hay proyectos de video guardados.</p>`;
+    return;
+  }
+  els.videoProjects.innerHTML = `
+    <div class="admin-video-project-list">
+      ${projects
+        .map(
+          (project) => `
+          <button class="admin-video-project-row" type="button" data-video-project-id="${escapeHtml(project.id)}" data-testid="admin-video-project-${escapeHtml(project.id)}">
+            <span>
+              <strong>${escapeHtml(project.title)}</strong>
+              <small>${escapeHtml(project.city || "Sin ciudad")} - ${escapeHtml(project.topic_label || project.topic || "Video")} - ${escapeHtml(formatDate(project.updated_at || project.generated_at))}</small>
+            </span>
+            <span class="admin-video-project-meta">
+              ${chip(videoProjectStatusLabel(project.status), project.status === "final_exported" ? "published" : project.status === "failed" ? "bad" : project.status === "ai_clip_ready" ? "ready" : "draft")}
+              ${project.has_ai_clip ? chip("clip IA", "ready") : ""}
+              ${project.final_exported_at ? chip("exportado", "published") : ""}
+            </span>
+          </button>
+        `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
 function renderVideoProject(project) {
   const isNewProject = project?.id && project.id !== state.video.lastProject?.id;
   state.video.lastProject = project;
@@ -1871,6 +2088,8 @@ function renderVideoProject(project) {
   sessionStorage.setItem(VIDEO_PROJECT_KEY, JSON.stringify(storedVideoProject(project)));
   renderVideoPreview();
   renderVideoStoryboard();
+  renderVideoPipeline();
+  renderVideoReadiness();
   setVideoActions(Boolean(project));
 }
 
@@ -2529,7 +2748,7 @@ async function exportVideoProject() {
     recorder.onstop = () => resolve();
   });
 
-  setVideoBusy(true, "Exportando video con personas de fondo, musica y marca fija.");
+  setVideoBusy(true, "Componiendo video final con fondo humano, musica y marca fija.");
   showStatus(`Exportando video ${extension.toUpperCase()} con musica audible... manten esta pestana abierta.`);
   const start = performance.now();
 
@@ -2565,9 +2784,17 @@ async function exportVideoProject() {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+  if (project.id) {
+    await updateSocialVideoProjectStatus(project.id, {
+      status: "final_exported",
+      has_uploaded_clip: Boolean(state.video.backgroundClipName),
+      has_ai_clip: Boolean(state.video.runwayJob?.result_url || project.has_ai_clip),
+      final_exported_at: new Date().toISOString()
+    }).catch(() => null);
+  }
   setVideoBusy(false);
   showStatus(
-    `Video exportado en ${extension.toUpperCase()} ${state.video.backgroundClipName ? "con clip real de fondo" : "como maqueta local"} y musica.`,
+    `Video final exportado en ${extension.toUpperCase()} ${state.video.backgroundClipName ? "con clip real de fondo" : "con fondo sintetico local"} y musica.`,
     "good"
   );
 }
@@ -2575,17 +2802,25 @@ async function exportVideoProject() {
 async function runVideoGeneration(form) {
   const payload = videoFormPayload(form);
   syncVideoBackgroundClip(form);
+  payload.has_uploaded_clip = Boolean(state.video.backgroundClipName);
   setVideoBusy(true, "Generando guion, storyboard y preview con marca fija.");
-  showStatus("Generando storyboard de video IA...");
+  showStatus("Paso 1/4: generando storyboard de video IA...");
   try {
     const project = await api("/api/admin?resource=social-video/generate", {
       method: "POST",
       body: JSON.stringify(payload)
     });
     renderVideoProject(project);
-    showStatus(`Video IA preparado: ${project.title}`, "good");
+    await loadSocialVideos().catch(() => null);
+    showStatus(
+      project.storage?.persisted === false
+        ? `Paso 1 completado, pero la biblioteca no guarda: ${project.storage.error || "tabla pendiente"}.`
+        : `Paso 1 completado: storyboard preparado. Ahora sube un clip o estima Runway.`,
+      project.storage?.persisted === false ? "neutral" : "good"
+    );
   } finally {
     setVideoBusy(false);
+    renderVideoReadiness();
   }
 }
 
@@ -2684,16 +2919,61 @@ async function loadRunwayConfig() {
     if (payload.default_duration_seconds && els.videoRunwayDuration) {
       els.videoRunwayDuration.value = String(payload.default_duration_seconds);
     }
+    const readiness = runwayReadiness(payload);
     setRunwayStatus(
-      payload.enabled
-        ? `Runway activo. Limite/render $${Number(payload.max_cost_usd || 0).toFixed(2)} y presupuesto diario $${Number(payload.daily_budget_usd || 0).toFixed(2)}.`
-        : "Runway esta en modo estimacion. Para render real activa RUNWAY_RENDER_ENABLED=true y configura la API key.",
-      payload.enabled ? "good" : "neutral"
+      `${readiness.status}. ${readiness.detail}`,
+      readiness.tone === "good" ? "good" : readiness.tone === "bad" ? "bad" : "neutral"
     );
   } catch (error) {
+    state.video.runwayConfig = {};
     setRunwayStatus("No pude leer la configuracion de Runway. La estimacion se activara al generar storyboard.", "neutral");
   }
+  renderVideoReadiness();
   setRunwayActions();
+}
+
+async function loadSocialVideos() {
+  if (!els.videoProjects) return;
+  try {
+    const payload = await api("/api/admin?resource=social-video/projects&limit=12");
+    state.video.projects = payload.projects || [];
+    state.video.storageError = payload.storage_error || "";
+  } catch (error) {
+    state.video.projects = [];
+    state.video.storageError = error.message;
+  }
+  renderVideoProjects();
+  renderVideoPipeline();
+  renderVideoReadiness();
+}
+
+async function updateSocialVideoProjectStatus(id, patch = {}) {
+  if (!id) return null;
+  const payload = await api("/api/admin?resource=social-video/projects", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "update_status",
+      id,
+      ...patch
+    })
+  });
+  if (payload.project && state.video.lastProject?.id === id) {
+    state.video.lastProject = {
+      ...state.video.lastProject,
+      status: payload.project.status,
+      has_ai_clip: payload.project.has_ai_clip,
+      has_uploaded_clip: payload.project.has_uploaded_clip,
+      final_exported_at: payload.project.final_exported_at,
+      last_job_id: payload.project.last_job_id,
+      failure: payload.project.failure
+    };
+    sessionStorage.setItem(VIDEO_PROJECT_KEY, JSON.stringify(storedVideoProject(state.video.lastProject)));
+    renderVideoPipeline();
+    renderVideoReadiness();
+    renderVideoStoryboard();
+  }
+  await loadSocialVideos();
+  return payload.project;
 }
 
 async function loadAll() {
@@ -2709,7 +2989,8 @@ async function loadAll() {
       loadParking(),
       loadReleaseHubs(),
       loadViraliza(),
-      loadRunwayConfig()
+      loadRunwayConfig(),
+      loadSocialVideos()
     ]);
     showStatus(`Actualizado ${formatDate(new Date().toISOString())}`, "good");
   } catch (error) {
@@ -2956,7 +3237,15 @@ if (els.videoForm) {
     syncVideoBackgroundClip(els.videoForm);
     renderVideoPreview();
     renderVideoStoryboard();
+    renderVideoPipeline();
+    renderVideoReadiness();
     if (state.video.backgroundClipName) {
+      if (state.video.lastProject?.id) {
+        updateSocialVideoProjectStatus(state.video.lastProject.id, {
+          status: "ai_clip_ready",
+          has_uploaded_clip: true
+        }).catch(() => null);
+      }
       showStatus(`Clip real cargado: ${state.video.backgroundClipName}`, "good");
     }
   });
@@ -2969,6 +3258,34 @@ if (els.videoStoryboard) {
     state.video.selectedSceneIndex = Number(button.dataset.videoScene || 0);
     renderVideoPreview();
     renderVideoStoryboard();
+  });
+}
+
+if (els.videoProjects) {
+  els.videoProjects.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-video-project-id]");
+    if (!row) return;
+    const item = (state.video.projects || []).find((project) => project.id === row.dataset.videoProjectId);
+    if (!item) return;
+    if (state.video.backgroundClipUrl) URL.revokeObjectURL(state.video.backgroundClipUrl);
+    state.video.backgroundClipUrl = "";
+    state.video.backgroundClipName = "";
+    state.video.backgroundClipType = "";
+    const project = {
+      ...(item.project || {}),
+      id: item.id,
+      title: item.title,
+      city: item.city,
+      status: item.status,
+      has_ai_clip: item.has_ai_clip,
+      has_uploaded_clip: item.has_uploaded_clip,
+      final_exported_at: item.final_exported_at,
+      last_job_id: item.last_job_id,
+      failure: item.failure,
+      storage: { persisted: true, project: item }
+    };
+    renderVideoProject(project);
+    showStatus(`Proyecto cargado: ${item.title}`, "good");
   });
 }
 
@@ -3113,4 +3430,7 @@ try {
 } catch (error) {
   sessionStorage.removeItem(VIDEO_PROJECT_KEY);
 }
+renderVideoPipeline();
+renderVideoProjects();
+renderVideoReadiness();
 loadAll();

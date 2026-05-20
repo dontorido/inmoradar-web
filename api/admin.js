@@ -9,6 +9,12 @@ const {
 const { generateSocialVideoProject, MUSIC_STYLES, seriesConfig, TOPICS, VISUAL_BACKDROPS } = require("../lib/social-video/generator");
 const { getVideoBrandingConfig } = require("../lib/social-video/branding");
 const {
+  SOCIAL_VIDEO_PROJECT_STATUSES,
+  normalizeProjectStatus,
+  socialVideoProjectRow,
+  socialVideoProjectSummary
+} = require("../lib/social-video/projects");
+const {
   RUNWAY_VIDEO_PRICING,
   buildRunwayTextToVideoRequest,
   createRunwayTextToVideo,
@@ -817,6 +823,108 @@ async function handleKpiSettings(req) {
   return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
 }
 
+async function upsertSocialVideoProject(project, overrides = {}) {
+  const row = socialVideoProjectRow(project, overrides);
+  if (!row.id) throw new Error("social_video_project_id_required");
+  const rows = await supabaseFetch("social_video_projects?on_conflict=id", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify(row)
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+async function patchSocialVideoProject(id, patch = {}) {
+  const status = patch.status ? normalizeProjectStatus(patch.status) : undefined;
+  const body = {
+    ...patch,
+    ...(status ? { status } : {}),
+    updated_at: new Date().toISOString()
+  };
+  const rows = await supabaseFetch(`social_video_projects?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(body)
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+async function safePatchSocialVideoProject(id, patch = {}) {
+  if (!id || !hasSupabaseConfig()) return null;
+  try {
+    return await patchSocialVideoProject(id, patch);
+  } catch (error) {
+    return null;
+  }
+}
+
+async function handleSocialVideoProjects(req, url) {
+  if (req.method === "GET") {
+    const limit = clampLimit(url.searchParams.get("limit"), 12, 50);
+    const status = normalizeProjectStatus(url.searchParams.get("status"), "");
+    const params = new URLSearchParams({
+      select:
+        "id,title,city,topic,topic_label,platform,series_id,objective,status,duration_seconds,visual_style,music_style,cta,has_uploaded_clip,has_ai_clip,final_exported_at,last_job_id,failure,project_json,created_at,updated_at",
+      order: "updated_at.desc",
+      limit: String(limit)
+    });
+    if (status) params.set("status", `eq.${status}`);
+    try {
+      const rows = await supabaseFetch(`social_video_projects?${params.toString()}`);
+      return {
+        status: 200,
+        payload: {
+          ok: true,
+          projects: (Array.isArray(rows) ? rows : []).map(socialVideoProjectSummary)
+        }
+      };
+    } catch (error) {
+      return {
+        status: 200,
+        payload: {
+          ok: true,
+          projects: [],
+          storage_error: error.message
+        }
+      };
+    }
+  }
+
+  if (req.method !== "POST") {
+    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  }
+
+  const body = await readJsonBody(req);
+  const action = String(body.action || "").trim();
+  if (action !== "update_status") {
+    return { status: 400, payload: { ok: false, error: "unsupported_social_video_project_action" } };
+  }
+  const id = String(body.id || "").trim();
+  if (!id) return { status: 400, payload: { ok: false, error: "project_id_required" } };
+  const status = normalizeProjectStatus(body.status);
+  if (!SOCIAL_VIDEO_PROJECT_STATUSES.includes(status)) {
+    return { status: 400, payload: { ok: false, error: "invalid_project_status" } };
+  }
+
+  const patch = {
+    status,
+    has_uploaded_clip: body.has_uploaded_clip,
+    has_ai_clip: body.has_ai_clip,
+    final_exported_at: status === "final_exported" ? body.final_exported_at || new Date().toISOString() : body.final_exported_at,
+    last_job_id: body.last_job_id || undefined,
+    failure: body.failure || null
+  };
+  Object.keys(patch).forEach((key) => patch[key] === undefined && delete patch[key]);
+  const row = await patchSocialVideoProject(id, patch);
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      project: socialVideoProjectSummary(row || { id, status })
+    }
+  };
+}
+
 async function handleSocialVideoGenerate(req) {
   if (req.method === "GET") {
     return {
@@ -844,9 +952,24 @@ async function handleSocialVideoGenerate(req) {
   }
 
   const body = await readJsonBody(req);
+  const project = generateSocialVideoProject(body);
+  try {
+    const row = await upsertSocialVideoProject(project, {
+      has_uploaded_clip: Boolean(body.has_uploaded_clip)
+    });
+    project.storage = {
+      persisted: true,
+      project: row ? socialVideoProjectSummary(row) : null
+    };
+  } catch (error) {
+    project.storage = {
+      persisted: false,
+      error: error.message
+    };
+  }
   return {
     status: 200,
-    payload: generateSocialVideoProject(body)
+    payload: project
   };
 }
 
@@ -969,6 +1092,20 @@ async function handleSocialVideoRender(req, url) {
       failure: failure ? String(failure) : null,
       raw_response: task
     });
+    if (job.project_id && outputUrl) {
+      await safePatchSocialVideoProject(job.project_id, {
+        status: "ai_clip_ready",
+        has_ai_clip: true,
+        last_job_id: job.id,
+        failure: null
+      });
+    } else if (job.project_id && failure) {
+      await safePatchSocialVideoProject(job.project_id, {
+        status: "failed",
+        last_job_id: job.id,
+        failure: String(failure)
+      });
+    }
     return { status: 200, payload: socialVideoJobPayload(updated || job, { runway_status: task.status || null }) };
   }
 
@@ -1014,7 +1151,21 @@ async function handleSocialVideoRender(req, url) {
     return { status: 400, payload: { ...estimatePayload, ok: false, error: "runway_cost_confirmation_required" } };
   }
 
-  const usedCredits = await runwayCreditsSpentToday();
+  let usedCredits = 0;
+  try {
+    usedCredits = await runwayCreditsSpentToday();
+  } catch (error) {
+    return {
+      status: 500,
+      payload: {
+        ...estimatePayload,
+        ok: false,
+        error: "social_video_jobs_storage_missing",
+        message: "Falta la tabla social_video_jobs en Supabase. Ejecuta database/social-video-jobs.sql antes de lanzar Runway.",
+        details: error.message
+      }
+    };
+  }
   const budgetCredits = Math.floor(settings.dailyBudgetUsd / 0.01);
   if (usedCredits + estimate.estimated_credits > budgetCredits) {
     return {
@@ -1029,18 +1180,39 @@ async function handleSocialVideoRender(req, url) {
     };
   }
 
-  const job = await insertSocialVideoJob({
-    project_id: project.id || null,
-    provider: "runway",
-    status: "queued",
-    model: request.model,
-    duration_seconds: request.duration,
-    ratio: request.ratio,
-    prompt_text: request.promptText,
-    estimated_credits: estimate.estimated_credits,
-    estimated_cost_usd: estimate.estimated_cost_usd,
-    raw_request: request
-  });
+  let job = null;
+  try {
+    job = await insertSocialVideoJob({
+      project_id: project.id || null,
+      provider: "runway",
+      status: "queued",
+      model: request.model,
+      duration_seconds: request.duration,
+      ratio: request.ratio,
+      prompt_text: request.promptText,
+      estimated_credits: estimate.estimated_credits,
+      estimated_cost_usd: estimate.estimated_cost_usd,
+      raw_request: request
+    });
+  } catch (error) {
+    return {
+      status: 500,
+      payload: {
+        ...estimatePayload,
+        ok: false,
+        error: "social_video_jobs_storage_missing",
+        message: "No puedo guardar el job de Runway. Ejecuta database/social-video-jobs.sql en Supabase y vuelve a intentarlo.",
+        details: error.message
+      }
+    };
+  }
+  if (project.id && job?.id) {
+    await safePatchSocialVideoProject(project.id, {
+      status: "ai_clip_queued",
+      last_job_id: job.id,
+      failure: null
+    });
+  }
 
   try {
     const task = await createRunwayTextToVideo({
@@ -1059,6 +1231,13 @@ async function handleSocialVideoRender(req, url) {
       status: "failed",
       failure: error.message
     }).catch(() => {});
+    if (project.id) {
+      await safePatchSocialVideoProject(project.id, {
+        status: "failed",
+        last_job_id: job.id,
+        failure: error.message
+      });
+    }
     return { status: 502, payload: { ...estimatePayload, ok: false, error: "runway_create_failed", message: error.message } };
   }
 }
@@ -1438,6 +1617,10 @@ module.exports = async function handler(req, res) {
     }
     if (resource === "social-video/generate") {
       const result = await handleSocialVideoGenerate(req);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "social-video/projects") {
+      const result = await handleSocialVideoProjects(req, url);
       return json(res, result.status, result.payload);
     }
     if (resource === "viraliza") {

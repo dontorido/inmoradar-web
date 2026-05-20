@@ -6,7 +6,7 @@ create table if not exists public.social_video_jobs (
   status text not null default 'queued',
   model text not null,
   duration_seconds integer not null,
-  ratio text not null default '720:1280',
+  ratio text not null default '768:1280',
   prompt_text text not null,
   estimated_credits numeric not null default 0,
   estimated_cost_usd numeric not null default 0,
