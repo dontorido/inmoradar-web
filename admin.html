@@ -611,8 +611,8 @@
           <div class="admin-panel-head">
             <div>
               <span class="admin-kicker muted">Marketing operativo</span>
-              <h2>Viraliza</h2>
-              <p class="admin-panel-sub">Tu radar diario para encontrar conversaciones, creadores y formatos que pueden hacer crecer InmoRadar.</p>
+              <h2 data-viraliza-title>Viraliza</h2>
+              <p class="admin-panel-sub" data-viraliza-subtitle>Tu radar diario para encontrar conversaciones, creadores y formatos que pueden hacer crecer InmoRadar.</p>
             </div>
             <div class="admin-row-actions">
               <button class="admin-button tiny" type="button" data-viraliza-generate>Generar rutina de hoy</button>
@@ -624,8 +624,9 @@
           </div>
           <p class="admin-panel-sub">Encuentra conversaciones, comenta con criterio y convierte creadores en distribucion para InmoRadar. El sistema propone; tu revisas y ejecutas.</p>
           <section class="admin-stat-grid compact admin-viraliza-kpis" data-viraliza-kpis></section>
-          <div class="admin-viraliza-layout">
-            <section class="admin-viraliza-column">
+          <section class="admin-viraliza-focus-note" data-viraliza-focus-note></section>
+          <div class="admin-viraliza-layout" data-viraliza-layout>
+            <section class="admin-viraliza-column" data-viraliza-routine-block>
               <div class="admin-viraliza-section-head">
                 <span>Daily Viral Routine</span>
                 <strong data-viraliza-theme>Aun no hay rutina</strong>
@@ -664,14 +665,14 @@
                 </div>
                 <div class="admin-viraliza-list" data-viraliza-creators></div>
               </div>
-              <div class="admin-viraliza-block">
+              <div class="admin-viraliza-block" data-viraliza-outreach-block>
                 <div class="admin-viraliza-section-head">
                   <span>Outreach Generator</span>
                   <strong>Creador del dia</strong>
                 </div>
                 <div data-viraliza-outreach></div>
               </div>
-              <div class="admin-viraliza-block">
+              <div class="admin-viraliza-block" data-viraliza-saved-videos-block>
                 <div class="admin-viraliza-section-head">
                   <span>Video Inspiration Inbox</span>
                   <strong>Videos guardados</strong>
@@ -720,6 +721,16 @@
             <button class="admin-button tiny" type="submit">Generar comentarios contextuales</button>
           </form>
           <div class="admin-viraliza-list" data-viraliza-context-output></div>
+        </section>
+        <section class="admin-panel admin-viraliza-results-panel" data-viraliza-results-block hidden>
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Results Tracker</span>
+              <h2>Resultados</h2>
+              <p class="admin-panel-sub">Mide comentarios, follows, outreach, hooks y videos para que el Learning Engine recomiende que repetir.</p>
+            </div>
+          </div>
+          <div class="admin-viraliza-results-grid" data-viraliza-results-content></div>
         </section>
       </section>
       <section class="admin-subsection-panel" data-admin-subsection-panel="marketing-videos" hidden>

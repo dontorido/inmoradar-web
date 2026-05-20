@@ -122,9 +122,22 @@ const els = {
   viralizaOpenSearch: document.querySelector("[data-viraliza-open-search]"),
   viralizaCreateVideo: document.querySelector("[data-viraliza-create-video]"),
   viralizaResults: document.querySelector("[data-viraliza-results]"),
+  viralizaTitle: document.querySelector("[data-viraliza-title]"),
+  viralizaSubtitle: document.querySelector("[data-viraliza-subtitle]"),
+  viralizaFocusNote: document.querySelector("[data-viraliza-focus-note]"),
   viralizaKpis: document.querySelector("[data-viraliza-kpis]"),
+  viralizaLayout: document.querySelector("[data-viraliza-layout]"),
   viralizaTheme: document.querySelector("[data-viraliza-theme]"),
   viralizaGoal: document.querySelector("[data-viraliza-goal]"),
+  viralizaRoutineBlock: document.querySelector("[data-viraliza-routine-block]"),
+  viralizaKeywordsBlock: document.querySelector("[data-viraliza-keywords-block]"),
+  viralizaCommentsBlock: document.querySelector("[data-viraliza-comments-block]"),
+  viralizaHooksBlock: document.querySelector("[data-viraliza-hooks-block]"),
+  viralizaCreatorsBlock: document.querySelector("[data-viraliza-creators-block]"),
+  viralizaOutreachBlock: document.querySelector("[data-viraliza-outreach-block]"),
+  viralizaSavedVideosBlock: document.querySelector("[data-viraliza-saved-videos-block]"),
+  viralizaResultsBlock: document.querySelector("[data-viraliza-results-block]"),
+  viralizaResultsContent: document.querySelector("[data-viraliza-results-content]"),
   viralizaRoutine: document.querySelector("[data-viraliza-routine]"),
   viralizaKeywords: document.querySelector("[data-viraliza-keywords]"),
   viralizaComments: document.querySelector("[data-viraliza-comments]"),
@@ -1239,6 +1252,145 @@ function renderViralizaSteps(routine) {
   `;
 }
 
+const VIRALIZA_AREAS = {
+  viraliza: {
+    title: "Viraliza",
+    subtitle: "Tu radar diario para encontrar conversaciones, creadores y formatos que pueden hacer crecer InmoRadar.",
+    noteTitle: "Vista completa",
+    note:
+      "Desde aqui se ve la rutina entera: que buscar, que comentar, a quien seguir, que hooks guardar, que creador contactar y que video crear."
+  },
+  creadores: {
+    title: "Creadores",
+    subtitle: "CRM ligero para detectar cuentas relevantes, calentarlas con comentarios utiles y decidir a quien contactar.",
+    noteTitle: "Para que sirve",
+    note:
+      "Aqui revisas las 5 cuentas sugeridas del dia, su Creator Fit Score, por que encajan y el mensaje preparado para contactar solo despues de revisarlo."
+  },
+  comentarios: {
+    title: "Comentarios",
+    subtitle: "Banco diario de comentarios utiles para participar en conversaciones sin spam y con revision humana.",
+    noteTitle: "Para que sirve",
+    note:
+      "Aqui copias comentarios, los adaptas al video real, marcas donde los has usado y generas comentarios contextuales pegando descripcion o transcripcion."
+  },
+  hooks: {
+    title: "Hooks",
+    subtitle: "Laboratorio de hooks y formatos para convertir oportunidades en guiones y briefs de video.",
+    noteTitle: "Para que sirve",
+    note:
+      "Aqui eliges los hooks del dia, copias variantes, creas un video desde un hook y guardas videos de inspiracion para adaptarlos, no copiarlos."
+  },
+  resultados: {
+    title: "Resultados",
+    subtitle: "Seguimiento de lo ejecutado y aprendizaje semanal para repetir lo que funciona.",
+    noteTitle: "Para que sirve",
+    note:
+      "Aqui ves que falta medir: comentarios usados, follows, contactos, briefs, winners y proximas acciones. Es el sitio para cerrar el bucle despues de 24h."
+  }
+};
+
+function currentViralizaArea() {
+  return VIRALIZA_AREAS[state.viraliza.focusedArea] ? state.viraliza.focusedArea : "viraliza";
+}
+
+function setElementHidden(element, hidden) {
+  if (element) element.hidden = Boolean(hidden);
+}
+
+function renderViralizaResults(routine) {
+  if (!els.viralizaResultsContent) return;
+  const tasks = routine?.tasks || [];
+  const comments = routine?.comments || [];
+  const creators = routine?.followQueue || [];
+  const hooks = routine?.hooks || [];
+  const completedTasks = tasks.filter((task) => task.status === "completed").length;
+  const usedComments = comments.filter((comment) => ["used", "completed"].includes(String(comment.status || ""))).length;
+  const followedCreators = creators.filter((creator) => ["followed", "completed"].includes(String(creator.status || ""))).length;
+  const contacted = routine?.outreachMessage?.status === "contacted" || routine?.creatorToContact?.status === "contacted" ? 1 : 0;
+  const quality = routine?.qualityCheck || {};
+  const actions = [
+    "Completa la rutina diaria y registra URL real de cada comentario usado.",
+    "Revisa 24h despues likes, respuestas, visitas de perfil y clicks al link.",
+    "Si un hook genera retencion o comentarios, crea 10 variantes del mismo formato.",
+    "Si un creador responde, muevelo al pipeline de colaboracion y prepara un brief conjunto."
+  ];
+  els.viralizaResultsContent.innerHTML = `
+    <article class="admin-viraliza-result-card">
+      <span>Rutina</span>
+      <strong>${escapeHtml(completedTasks)}/${escapeHtml(tasks.length || 7)}</strong>
+      <p>Tareas completadas hoy.</p>
+    </article>
+    <article class="admin-viraliza-result-card">
+      <span>Comentarios</span>
+      <strong>${escapeHtml(usedComments)}/${escapeHtml(comments.length || 10)}</strong>
+      <p>Marca como usado y anade la URL donde lo publicaste.</p>
+    </article>
+    <article class="admin-viraliza-result-card">
+      <span>Creadores</span>
+      <strong>${escapeHtml(followedCreators)}/${escapeHtml(creators.length || 5)}</strong>
+      <p>Cuentas revisadas y seguidas manualmente.</p>
+    </article>
+    <article class="admin-viraliza-result-card">
+      <span>Outreach</span>
+      <strong>${escapeHtml(contacted)}/1</strong>
+      <p>Contacto del dia preparado o enviado manualmente.</p>
+    </article>
+    <article class="admin-viraliza-result-card">
+      <span>Hooks</span>
+      <strong>${escapeHtml(hooks.length || 0)}</strong>
+      <p>Hooks disponibles para convertir en videos y comparar rendimiento.</p>
+    </article>
+    <article class="admin-viraliza-result-card">
+      <span>Control de calidad</span>
+      <strong>${quality.passed === false ? "Revisar" : "OK"}</strong>
+      <p>${escapeHtml((quality.issues || []).join(", ") || "Rutina human-in-the-loop, sin automatizar comentarios, follows ni DMs.")}</p>
+    </article>
+    <article class="admin-viraliza-result-card admin-viraliza-result-wide">
+      <span>Learning Engine</span>
+      <strong>Proximas acciones</strong>
+      <ul>${actions.map((action) => `<li>${escapeHtml(action)}</li>`).join("")}</ul>
+    </article>
+  `;
+}
+
+function syncViralizaFocusedArea() {
+  const area = currentViralizaArea();
+  const copy = VIRALIZA_AREAS[area];
+  if (els.viralizaTitle) els.viralizaTitle.textContent = copy.title;
+  if (els.viralizaSubtitle) els.viralizaSubtitle.textContent = copy.subtitle;
+  if (els.viralizaFocusNote) {
+    els.viralizaFocusNote.innerHTML = `
+      <strong>${escapeHtml(copy.noteTitle)}</strong>
+      <p>${escapeHtml(copy.note)}</p>
+    `;
+  }
+
+  const overview = area === "viraliza";
+  const visible = {
+    routine: overview,
+    keywords: overview,
+    comments: overview || area === "comentarios",
+    hooks: overview || area === "hooks",
+    creators: overview || area === "creadores",
+    outreach: overview || area === "creadores",
+    savedVideos: overview || area === "hooks",
+    tools: overview || area === "comentarios",
+    results: area === "resultados"
+  };
+
+  setElementHidden(els.viralizaLayout, visible.results);
+  setElementHidden(els.viralizaRoutineBlock, !visible.routine);
+  setElementHidden(els.viralizaKeywordsBlock, !visible.keywords);
+  setElementHidden(els.viralizaCommentsBlock, !visible.comments);
+  setElementHidden(els.viralizaHooksBlock, !visible.hooks);
+  setElementHidden(els.viralizaCreatorsBlock, !visible.creators);
+  setElementHidden(els.viralizaOutreachBlock, !visible.outreach);
+  setElementHidden(els.viralizaSavedVideosBlock, !visible.savedVideos);
+  setElementHidden(els.viralizaContextForm?.closest(".admin-viraliza-tools"), !visible.tools);
+  setElementHidden(els.viralizaResultsBlock, !visible.results);
+}
+
 function renderViraliza(routine) {
   state.viraliza.routine = routine || state.viraliza.routine;
   const current = state.viraliza.routine;
@@ -1269,6 +1421,8 @@ function renderViraliza(routine) {
   if (els.viralizaExecution) els.viralizaExecution.hidden = !state.viraliza.executionMode;
   renderViralizaOutreach(current);
   renderViralizaSteps(current);
+  renderViralizaResults(current);
+  syncViralizaFocusedArea();
 }
 
 async function loadViraliza() {

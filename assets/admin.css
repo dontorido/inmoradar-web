@@ -2393,6 +2393,26 @@
   border-bottom: 1px solid rgba(9, 9, 11, .08);
 }
 
+.admin-viraliza-focus-note {
+  display: grid;
+  gap: 6px;
+  margin: 18px 24px 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(9, 9, 11, .08);
+  border-radius: 8px;
+  background: rgba(255, 69, 0, .04);
+}
+
+.admin-viraliza-focus-note strong {
+  font-size: 15px;
+}
+
+.admin-viraliza-focus-note p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .admin-viraliza-layout {
   display: grid;
   grid-template-columns: minmax(280px, .9fr) minmax(360px, 1.25fr) minmax(300px, .95fr);
@@ -2551,9 +2571,59 @@
   padding: 0 24px 24px;
 }
 
+.admin-viraliza-results-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 14px;
+  padding: 24px;
+}
+
+.admin-viraliza-result-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgba(9, 9, 11, .08);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.admin-viraliza-result-card span {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.admin-viraliza-result-card strong {
+  font-size: clamp(28px, 4vw, 48px);
+  line-height: .95;
+}
+
+.admin-viraliza-result-card p,
+.admin-viraliza-result-card li {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.admin-viraliza-result-card ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.admin-viraliza-result-wide {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 1180px) {
   .admin-viraliza-layout,
-  .admin-marketing-dashboard {
+  .admin-marketing-dashboard,
+  .admin-viraliza-results-grid {
     grid-template-columns: 1fr;
   }
 
