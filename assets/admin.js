@@ -119,7 +119,6 @@ const els = {
   viralizaGenerate: document.querySelector("[data-viraliza-generate]"),
   viralizaMode: document.querySelector("[data-viraliza-mode]"),
   viralizaOpenSearch: document.querySelector("[data-viraliza-open-search]"),
-  viralizaCreateVideo: document.querySelector("[data-viraliza-create-video]"),
   viralizaTitle: document.querySelector("[data-viraliza-title]"),
   viralizaSubtitle: document.querySelector("[data-viraliza-subtitle]"),
   viralizaFocusNote: document.querySelector("[data-viraliza-focus-note]"),
@@ -1388,7 +1387,21 @@ const VIRALIZA_OVERVIEW_COPY = {
   subtitle: "Tu radar diario para encontrar conversaciones, creadores y formatos que pueden hacer crecer InmoRadar.",
   noteTitle: "Que haces cada dia",
   note:
-    "Empieza por Generar rutina de hoy. Revisa las keywords propuestas, guarda inspiraciones, publica comentarios manualmente, sigue cuentas con criterio, prepara hooks, contacta un creador y lanza un video propio. Todo vive en esta pantalla."
+    "Primero genera la rutina. Despues usa modo ejecucion para ir paso a paso y buscar oportunidades para abrir la primera busqueda sugerida.",
+  actions: [
+    {
+      label: "Generar rutina de hoy",
+      text: "Prepara la agenda diaria: 3 keywords, comentarios sugeridos, cuentas a revisar, hooks, outreach y espacios para guardar videos de inspiracion."
+    },
+    {
+      label: "Modo ejecucion",
+      text: "Convierte la rutina en un asistente paso a paso. Sirve para hacerlo en orden y marcar cada accion cuando ya la hayas ejecutado manualmente."
+    },
+    {
+      label: "Buscar oportunidades",
+      text: "Abre la primera busqueda recomendada del dia para validar videos, comentarios y conversaciones reales antes de actuar."
+    }
+  ]
 };
 
 function setElementHidden(element, hidden) {
@@ -1459,6 +1472,14 @@ function syncViralizaFocusedArea() {
     els.viralizaFocusNote.innerHTML = `
       <strong>${escapeHtml(copy.noteTitle)}</strong>
       <p>${escapeHtml(copy.note)}</p>
+      <div class="admin-viraliza-howto">
+        <strong>Que significa cada boton:</strong>
+        <ol>
+          ${(copy.actions || [])
+            .map((action) => `<li><strong>${escapeHtml(action.label)}:</strong> ${escapeHtml(action.text)}</li>`)
+            .join("")}
+        </ol>
+      </div>
     `;
   }
 
@@ -2998,13 +3019,6 @@ if (els.viralizaOpenSearch) {
   els.viralizaOpenSearch.addEventListener("click", () => {
     const firstUrl = state.viraliza.routine?.primaryKeywords?.[0]?.searchUrls?.tiktok;
     if (firstUrl) window.open(firstUrl, "_blank", "noopener,noreferrer");
-  });
-}
-
-if (els.viralizaCreateVideo) {
-  els.viralizaCreateVideo.addEventListener("click", () => {
-    setAdminSubsection("marketing", "marketing-videos");
-    showStatus("Abre Videos con el hook ganador de Viraliza como referencia.", "neutral");
   });
 }
 
