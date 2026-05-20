@@ -49,8 +49,7 @@ const state = {
   },
   viraliza: {
     routine: null,
-    executionMode: false,
-    focusedArea: "viraliza"
+    executionMode: false
   }
 };
 
@@ -121,7 +120,6 @@ const els = {
   viralizaMode: document.querySelector("[data-viraliza-mode]"),
   viralizaOpenSearch: document.querySelector("[data-viraliza-open-search]"),
   viralizaCreateVideo: document.querySelector("[data-viraliza-create-video]"),
-  viralizaResults: document.querySelector("[data-viraliza-results]"),
   viralizaTitle: document.querySelector("[data-viraliza-title]"),
   viralizaSubtitle: document.querySelector("[data-viraliza-subtitle]"),
   viralizaFocusNote: document.querySelector("[data-viraliza-focus-note]"),
@@ -214,10 +212,16 @@ function subsectionGroupFromPanel(panelName) {
   return String(panelName || "").startsWith("operaciones-") ? "operaciones" : "marketing";
 }
 
+const VIRALIZA_SUBSECTION_AREAS = {
+  "marketing-viraliza": "viraliza"
+};
+
+function viralizaAreaFromSubsection(value) {
+  return VIRALIZA_SUBSECTION_AREAS[String(value || "")] || "";
+}
+
 function viralizaPanelAliases(value) {
-  return ["marketing-viraliza", "marketing-creadores", "marketing-comentarios", "marketing-hooks", "marketing-resultados"].includes(
-    String(value || "")
-  );
+  return Boolean(viralizaAreaFromSubsection(value));
 }
 
 function syncSubsectionPanels() {
@@ -247,11 +251,9 @@ function syncSubsectionPanels() {
 
 function setAdminSubsection(group, subsection) {
   const normalizedGroup = ["marketing", "operaciones"].includes(group) ? group : "marketing";
-  state[subsectionStateKey(normalizedGroup)] = subsection || "";
-  if (normalizedGroup === "marketing" && viralizaPanelAliases(subsection)) {
-    state.viraliza.focusedArea = String(subsection || "marketing-viraliza").replace("marketing-", "");
-    renderViraliza(state.viraliza.routine);
-  }
+  const viralizaArea = normalizedGroup === "marketing" ? viralizaAreaFromSubsection(subsection) : "";
+  state[subsectionStateKey(normalizedGroup)] = viralizaArea ? "marketing-viraliza" : subsection || "";
+  if (viralizaArea) renderViraliza(state.viraliza.routine);
   setAdminSection(normalizedGroup);
 }
 
@@ -1381,47 +1383,13 @@ function renderViralizaSteps(routine) {
   `;
 }
 
-const VIRALIZA_AREAS = {
-  viraliza: {
-    title: "Viraliza",
-    subtitle: "Tu radar diario para encontrar conversaciones, creadores y formatos que pueden hacer crecer InmoRadar.",
-    noteTitle: "Que haces cada dia",
-    note:
-      "Empieza por Generar rutina de hoy. Luego ejecuta en orden: keywords, videos guardados, comentarios, cuentas a seguir, hooks, outreach y video propio. Marca cada tarea solo cuando la hayas hecho fuera del sistema."
-  },
-  creadores: {
-    title: "Creadores",
-    subtitle: "CRM ligero para detectar cuentas relevantes, calentarlas con comentarios utiles y decidir a quien contactar.",
-    noteTitle: "Que haces aqui",
-    note:
-      "Abre cada perfil, revisa si su audiencia habla de vivienda en Espana, sigue solo si encaja y marca seguido. Si el creador del dia encaja, copia el mensaje, personalizalo y contacta manualmente."
-  },
-  comentarios: {
-    title: "Comentarios",
-    subtitle: "Banco diario de comentarios utiles para participar en conversaciones sin spam y con revision humana.",
-    noteTitle: "Que haces aqui",
-    note:
-      "Elige un comentario, adaptalo al video real, publicalo manualmente y marca usado. Si tienes una URL o transcripcion concreta, usa el asistente contextual antes de comentar."
-  },
-  hooks: {
-    title: "Hooks",
-    subtitle: "Laboratorio de hooks y formatos para convertir oportunidades en guiones y briefs de video.",
-    noteTitle: "Que haces aqui",
-    note:
-      "Escoge 3 hooks, guarda inspiraciones y pulsa Crear video en el mejor. El objetivo diario es salir con 1 brief o pieza preparada, no solo mirar ideas."
-  },
-  resultados: {
-    title: "Resultados",
-    subtitle: "Seguimiento de lo ejecutado y aprendizaje semanal para repetir lo que funciona.",
-    noteTitle: "Que haces aqui",
-    note:
-      "Al dia siguiente revisa respuestas, likes, guardados, clicks, instalaciones o replies de creadores. Eso decide que hooks, keywords y comentarios repetimos."
-  }
+const VIRALIZA_OVERVIEW_COPY = {
+  title: "Viraliza",
+  subtitle: "Tu radar diario para encontrar conversaciones, creadores y formatos que pueden hacer crecer InmoRadar.",
+  noteTitle: "Que haces cada dia",
+  note:
+    "Empieza por Generar rutina de hoy. Revisa las keywords propuestas, guarda inspiraciones, publica comentarios manualmente, sigue cuentas con criterio, prepara hooks, contacta un creador y lanza un video propio. Todo vive en esta pantalla."
 };
-
-function currentViralizaArea() {
-  return VIRALIZA_AREAS[state.viraliza.focusedArea] ? state.viraliza.focusedArea : "viraliza";
-}
 
 function setElementHidden(element, hidden) {
   if (element) element.hidden = Boolean(hidden);
@@ -1484,8 +1452,7 @@ function renderViralizaResults(routine) {
 }
 
 function syncViralizaFocusedArea() {
-  const area = currentViralizaArea();
-  const copy = VIRALIZA_AREAS[area];
+  const copy = VIRALIZA_OVERVIEW_COPY;
   if (els.viralizaTitle) els.viralizaTitle.textContent = copy.title;
   if (els.viralizaSubtitle) els.viralizaSubtitle.textContent = copy.subtitle;
   if (els.viralizaFocusNote) {
@@ -1495,29 +1462,16 @@ function syncViralizaFocusedArea() {
     `;
   }
 
-  const overview = area === "viraliza";
-  const visible = {
-    routine: overview,
-    keywords: overview,
-    comments: overview || area === "comentarios",
-    hooks: overview || area === "hooks",
-    creators: overview || area === "creadores",
-    outreach: overview || area === "creadores",
-    savedVideos: overview || area === "hooks",
-    tools: overview || area === "comentarios",
-    results: area === "resultados"
-  };
-
-  setElementHidden(els.viralizaLayout, visible.results);
-  setElementHidden(els.viralizaRoutineBlock, !visible.routine);
-  setElementHidden(els.viralizaKeywordsBlock, !visible.keywords);
-  setElementHidden(els.viralizaCommentsBlock, !visible.comments);
-  setElementHidden(els.viralizaHooksBlock, !visible.hooks);
-  setElementHidden(els.viralizaCreatorsBlock, !visible.creators);
-  setElementHidden(els.viralizaOutreachBlock, !visible.outreach);
-  setElementHidden(els.viralizaSavedVideosBlock, !visible.savedVideos);
-  setElementHidden(els.viralizaContextForm?.closest(".admin-viraliza-tools"), !visible.tools);
-  setElementHidden(els.viralizaResultsBlock, !visible.results);
+  setElementHidden(els.viralizaLayout, false);
+  setElementHidden(els.viralizaRoutineBlock, false);
+  setElementHidden(els.viralizaKeywordsBlock, false);
+  setElementHidden(els.viralizaCommentsBlock, false);
+  setElementHidden(els.viralizaHooksBlock, false);
+  setElementHidden(els.viralizaCreatorsBlock, false);
+  setElementHidden(els.viralizaOutreachBlock, false);
+  setElementHidden(els.viralizaSavedVideosBlock, false);
+  setElementHidden(els.viralizaContextForm?.closest(".admin-viraliza-tools"), false);
+  setElementHidden(els.viralizaResultsBlock, false);
 }
 
 function renderViraliza(routine) {
@@ -3051,14 +3005,6 @@ if (els.viralizaCreateVideo) {
   els.viralizaCreateVideo.addEventListener("click", () => {
     setAdminSubsection("marketing", "marketing-videos");
     showStatus("Abre Videos con el hook ganador de Viraliza como referencia.", "neutral");
-  });
-}
-
-if (els.viralizaResults) {
-  els.viralizaResults.addEventListener("click", () => {
-    setAdminSubsection("marketing", "marketing-resultados");
-    state.viraliza.executionMode = true;
-    renderViraliza(state.viraliza.routine);
   });
 }
 

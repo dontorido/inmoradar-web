@@ -140,21 +140,33 @@
           <div class="admin-panel-head">
             <div>
               <span class="admin-kicker muted">Marketing</span>
-              <h2>Elige un área</h2>
-              <p class="admin-panel-sub">Selecciona qué quieres trabajar para desplegar sus campos y acciones.</p>
+              <h2>Elige un modulo</h2>
+              <p class="admin-panel-sub">Marketing queda organizado en cuatro espacios claros: control, contenido, distribucion y video.</p>
             </div>
-            <div class="admin-subsection-menu" aria-label="Áreas de marketing">
-              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-dashboard" data-testid="admin-subsection-marketing-dashboard" aria-pressed="false">Dashboard</button>
-              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-seo" data-testid="admin-subsection-marketing-seo" aria-pressed="false">Contenido</button>
-              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-viraliza" data-testid="admin-subsection-marketing-viraliza" aria-pressed="false">Viraliza</button>
-              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-creadores" data-testid="admin-subsection-marketing-creadores" aria-pressed="false">Creadores</button>
-              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-comentarios" data-testid="admin-subsection-marketing-comentarios" aria-pressed="false">Comentarios</button>
-              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-hooks" data-testid="admin-subsection-marketing-hooks" aria-pressed="false">Hooks</button>
-              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-resultados" data-testid="admin-subsection-marketing-resultados" aria-pressed="false">Resultados</button>
-              <button class="admin-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-videos" data-testid="admin-subsection-marketing-videos" aria-pressed="false">Videos</button>
+            <div class="admin-subsection-menu admin-marketing-menu" aria-label="Areas de marketing">
+              <button class="admin-tab admin-marketing-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-dashboard" data-testid="admin-subsection-marketing-dashboard" aria-pressed="false">
+                <span>01</span>
+                <strong>Vision general</strong>
+                <small>Estado y accesos rapidos</small>
+              </button>
+              <button class="admin-tab admin-marketing-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-seo" data-testid="admin-subsection-marketing-seo" aria-pressed="false">
+                <span>02</span>
+                <strong>SEO y Noticias</strong>
+                <small>Landings, indexacion y publicaciones</small>
+              </button>
+              <button class="admin-tab admin-marketing-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-viraliza" data-testid="admin-subsection-marketing-viraliza" aria-pressed="false">
+                <span>03</span>
+                <strong>Viraliza</strong>
+                <small>Rutina, hooks, creadores y resultados</small>
+              </button>
+              <button class="admin-tab admin-marketing-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-videos" data-testid="admin-subsection-marketing-videos" aria-pressed="false">
+                <span>04</span>
+                <strong>Videos IA</strong>
+                <small>Storyboard, Runway y biblioteca</small>
+              </button>
             </div>
           </div>
-          <p class="admin-empty-state" data-admin-subsection-empty="marketing">Selecciona Dashboard, Contenido, Viraliza, Creadores, Comentarios, Hooks, Resultados o Videos para abrir las herramientas.</p>
+          <p class="admin-empty-state" data-admin-subsection-empty="marketing">Selecciona Vision general, SEO y Noticias, Viraliza o Videos IA para abrir un area de trabajo.</p>
         </article>
 
         <section class="admin-subsection-panel" data-admin-subsection-panel="marketing-dashboard" hidden>
@@ -163,21 +175,27 @@
               <div>
                 <span class="admin-kicker muted">Marketing</span>
                 <h2>Dashboard</h2>
-                <p class="admin-panel-sub">Vista rapida de contenido, viralizacion organica, creadores y resultados.</p>
+                <p class="admin-panel-sub">Vista rapida de las areas reales de Marketing. Los detalles de creadores, comentarios, hooks y resultados viven dentro de Viraliza para evitar duplicidades.</p>
               </div>
             </div>
             <div class="admin-marketing-dashboard">
               <section>
-                <strong>Contenido</strong>
-                <p>Landings SEO, videos y briefs propios para captar usuarios en busqueda activa.</p>
+                <span>01</span>
+                <strong>SEO y Noticias</strong>
+                <p>Landings, noticias, sitemap y estado de publicacion para captar usuarios en busqueda activa.</p>
+                <button class="admin-button tiny ghost" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-seo">Abrir SEO</button>
               </section>
               <section>
+                <span>02</span>
                 <strong>Viraliza</strong>
-                <p>Rutina diaria para buscar conversaciones, comentar con criterio y detectar creadores.</p>
+                <p>Un unico flujo para oportunidades, comentarios, hooks, creadores, outreach y resultados.</p>
+                <button class="admin-button tiny ghost" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-viraliza">Abrir Viraliza</button>
               </section>
               <section>
-                <strong>Resultados</strong>
-                <p>Aprendizajes semanales por hook, keyword, comentario, creador y video.</p>
+                <span>03</span>
+                <strong>Videos IA</strong>
+                <p>Generacion de guiones, preview, storyboard, composicion y clips de Runway cuando este activo.</p>
+                <button class="admin-button tiny ghost" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-videos">Abrir Videos</button>
               </section>
             </div>
           </article>
@@ -619,7 +637,6 @@
               <button class="admin-button tiny ghost" type="button" data-viraliza-mode>Modo ejecucion</button>
               <button class="admin-button tiny ghost" type="button" data-viraliza-open-search>Buscar oportunidades</button>
               <button class="admin-button tiny ghost" type="button" data-viraliza-create-video>Crear video</button>
-              <button class="admin-button tiny ghost" type="button" data-viraliza-results>Ver resultados</button>
             </div>
           </div>
           <p class="admin-panel-sub">Encuentra conversaciones, comenta con criterio y convierte creadores en distribucion para InmoRadar. El sistema propone; tu revisas y ejecutas.</p>
@@ -722,7 +739,7 @@
           </form>
           <div class="admin-viraliza-list" data-viraliza-context-output></div>
         </section>
-        <section class="admin-panel admin-viraliza-results-panel" data-viraliza-results-block hidden>
+        <section class="admin-panel admin-viraliza-results-panel" data-viraliza-results-block>
           <div class="admin-panel-head">
             <div>
               <span class="admin-kicker muted">Results Tracker</span>
