@@ -619,6 +619,8 @@ h3 {
 .section.dark h2,
 .section.dark h3 { color: white; }
 .section.dark .lead { color: rgba(255,255,255,.7); }
+.section.dark .pricing-card h2,
+.section.dark .pricing-card h3 { color: var(--ink); }
 
 .section-head {
   display: grid;
@@ -982,6 +984,9 @@ h3 {
   align-items: start;
   color: rgba(9,9,11,.74);
   line-height: 1.4;
+}
+.section.dark .premium-copy .check-list li {
+  color: rgba(255,255,255,.78);
 }
 .check-list li::before {
   content: "";
