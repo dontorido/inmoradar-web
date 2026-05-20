@@ -47,7 +47,8 @@ const state = {
     runwayJob: null,
     runwayConfig: null,
     projects: [],
-    storageError: ""
+    storageError: "",
+    jobsStorageError: ""
   },
   viraliza: {
     routine: null,
@@ -94,6 +95,7 @@ const els = {
   releaseConnectors: document.querySelectorAll("[data-release-connectors]"),
   releaseRefreshButtons: document.querySelectorAll("[data-release-refresh]"),
   videoForm: document.querySelector("[data-video-form]"),
+  videoPanel: document.querySelector(".admin-video-panel"),
   videoPreview: document.querySelector("[data-video-preview]"),
   videoPreviewTopic: document.querySelector("[data-video-preview-topic]"),
   videoPreviewHeadline: document.querySelector("[data-video-preview-headline]"),
@@ -1640,6 +1642,10 @@ function setVideoBusy(isBusy, message = "Trabajando...") {
   if (els.videoBusyMessage) {
     els.videoBusyMessage.textContent = message;
   }
+  if (els.videoPanel) {
+    els.videoPanel.setAttribute("aria-busy", state.video.busy ? "true" : "false");
+  }
+  document.body.classList.toggle("admin-video-busy-active", state.video.busy);
   if (els.videoForm) {
     els.videoForm.querySelectorAll("input, select, button").forEach((control) => {
       control.disabled = state.video.busy;
@@ -1652,6 +1658,30 @@ function setRunwayStatus(message, tone = "neutral") {
   if (!els.videoRunwayStatus) return;
   els.videoRunwayStatus.textContent = message || "";
   els.videoRunwayStatus.dataset.tone = tone;
+}
+
+function runwayErrorMessage(error) {
+  const payload = error?.payload || {};
+  const code = payload.error || error?.message || "";
+  if (code === "social_video_jobs_storage_missing" || /social_video_jobs/i.test(String(payload.message || code))) {
+    const message = "Runway no se ha lanzado: falta la tabla social_video_jobs en Supabase. Ejecuta database/social-video-jobs.sql en Supabase SQL Editor y vuelve a pulsar Generar clip Runway.";
+    state.video.jobsStorageError = message;
+    renderVideoReadiness();
+    return message;
+  }
+  if (code === "runway_estimate_above_max_cost") {
+    return "Ese clip supera el limite de coste por render. Baja la duracion a 5 segundos o sube RUNWAY_MAX_COST_USD en Vercel.";
+  }
+  if (code === "runway_daily_budget_exceeded") {
+    return "Presupuesto diario de Runway agotado. Sube RUNWAY_DAILY_BUDGET_USD o espera a manana.";
+  }
+  if (code === "runway_api_secret_missing") {
+    return "Falta RUNWAYML_API_SECRET en Vercel. Sin esa clave no se puede lanzar el clip real.";
+  }
+  if (code === "runway_render_disabled") {
+    return "Runway esta apagado. Activa RUNWAY_RENDER_ENABLED=true en Vercel para lanzar renders reales.";
+  }
+  return payload.message || error?.message || "No se pudo completar la accion de Runway.";
 }
 
 function setRunwayActions() {
@@ -1722,8 +1752,14 @@ function renderVideoReadiness() {
       detail: storageOk ? "Los proyectos se guardan y se pueden recuperar." : `${state.video.storageError}. Ejecuta database/social-video-projects.sql.`
     },
     {
+      tone: state.video.jobsStorageError ? "bad" : "warn",
+      label: "Paso 2 · Registro Runway",
+      status: state.video.jobsStorageError ? "Tabla pendiente" : "Se valida al lanzar",
+      detail: state.video.jobsStorageError || "Al lanzar Runway se registra el job para controlar coste, estado y resultado."
+    },
+    {
       tone: runway.tone,
-      label: "Paso 2 · Clip IA",
+      label: "Paso 3 · Clip IA",
       status: hasClip ? "Clip listo" : runway.status,
       detail: hasClip ? "Hay clip de fondo cargado para el compositor final." : runway.detail
     }
@@ -1763,15 +1799,21 @@ async function estimateRunwayRender() {
     setRunwayStatus("Genera primero un storyboard.", "bad");
     return null;
   }
-  const payload = await api("/api/admin?resource=social-video/render", {
-    method: "POST",
-    body: JSON.stringify(runwayPayload({ dry_run: true }))
-  });
-  state.video.runwayEstimate = payload.estimate;
-  state.video.runwayJob = null;
-  setRunwayStatus(formatRunwayEstimate(payload.estimate, payload), "good");
-  setRunwayActions();
-  return payload;
+  setVideoBusy(true, "Estimando coste de Runway. No gasta creditos.");
+  setRunwayStatus("Trabajando: estimando coste de Runway...", "working");
+  try {
+    const payload = await api("/api/admin?resource=social-video/render", {
+      method: "POST",
+      body: JSON.stringify(runwayPayload({ dry_run: true }))
+    });
+    state.video.runwayEstimate = payload.estimate;
+    state.video.runwayJob = null;
+    setRunwayStatus(formatRunwayEstimate(payload.estimate, payload), "good");
+    setRunwayActions();
+    return payload;
+  } finally {
+    setVideoBusy(false);
+  }
 }
 
 async function startRunwayRender() {
@@ -1780,7 +1822,10 @@ async function startRunwayRender() {
     setRunwayStatus("Marca la confirmacion de coste antes de lanzar Runway.", "bad");
     return;
   }
-  setVideoBusy(true, "Enviando render a Runway con limite de coste.");
+  state.video.jobsStorageError = "";
+  renderVideoReadiness();
+  setVideoBusy(true, "Lanzando clip en Runway. Puede tardar unos segundos en crear el job.");
+  setRunwayStatus("Trabajando: enviando el render a Runway...", "working");
   try {
     const payload = await api("/api/admin?resource=social-video/render", {
       method: "POST",
@@ -1809,25 +1854,31 @@ async function startRunwayRender() {
 async function pollRunwayRender() {
   const jobId = state.video.runwayJob?.id;
   if (!jobId) return;
-  const payload = await api(`/api/admin?resource=social-video/render&job_id=${encodeURIComponent(jobId)}`);
-  state.video.runwayJob = payload.job;
-  if (payload.job?.result_url) {
-    if (state.video.lastProject) {
-      state.video.lastProject.status = "ai_clip_ready";
-      state.video.lastProject.has_ai_clip = true;
-      state.video.lastProject.last_job_id = payload.job.id || state.video.lastProject.last_job_id || null;
-      renderVideoPipeline();
-      renderVideoReadiness();
-      renderVideoStoryboard();
-      loadSocialVideos().catch(() => {});
+  setVideoBusy(true, "Comprobando Runway. Si el clip aun no esta listo, podras volver a comprobarlo.");
+  setRunwayStatus("Trabajando: comprobando estado del render...", "working");
+  try {
+    const payload = await api(`/api/admin?resource=social-video/render&job_id=${encodeURIComponent(jobId)}`);
+    state.video.runwayJob = payload.job;
+    if (payload.job?.result_url) {
+      if (state.video.lastProject) {
+        state.video.lastProject.status = "ai_clip_ready";
+        state.video.lastProject.has_ai_clip = true;
+        state.video.lastProject.last_job_id = payload.job.id || state.video.lastProject.last_job_id || null;
+        renderVideoPipeline();
+        renderVideoReadiness();
+        renderVideoStoryboard();
+        loadSocialVideos().catch(() => {});
+      }
+      setRunwayStatus("Runway ha terminado. Pulsa Usar clip IA para cargarlo como fondo.", "good");
+    } else if (payload.job?.failure) {
+      setRunwayStatus(`Runway fallo: ${payload.job.failure}`, "bad");
+    } else {
+      setRunwayStatus(`Runway sigue en estado ${payload.job?.status || "pendiente"}.`, "neutral");
     }
-    setRunwayStatus("Runway ha terminado. Pulsa Usar clip IA para cargarlo como fondo.", "good");
-  } else if (payload.job?.failure) {
-    setRunwayStatus(`Runway fallo: ${payload.job.failure}`, "bad");
-  } else {
-    setRunwayStatus(`Runway sigue en estado ${payload.job?.status || "pendiente"}.`, "neutral");
+    setRunwayActions();
+  } finally {
+    setVideoBusy(false);
   }
-  setRunwayActions();
 }
 
 async function importRunwayClip() {
@@ -3315,24 +3366,34 @@ if (els.videoExport) {
 }
 
 if (els.videoRunwayEstimate) {
-  els.videoRunwayEstimate.addEventListener("click", () => estimateRunwayRender().catch((error) => setRunwayStatus(error.message, "bad")));
+  els.videoRunwayEstimate.addEventListener("click", () =>
+    estimateRunwayRender().catch((error) => {
+      setVideoBusy(false);
+      setRunwayStatus(runwayErrorMessage(error), "bad");
+    })
+  );
 }
 
 if (els.videoRunwayRender) {
   els.videoRunwayRender.addEventListener("click", () => startRunwayRender().catch((error) => {
     setVideoBusy(false);
-    setRunwayStatus(error.message, "bad");
+    setRunwayStatus(runwayErrorMessage(error), "bad");
   }));
 }
 
 if (els.videoRunwayPoll) {
-  els.videoRunwayPoll.addEventListener("click", () => pollRunwayRender().catch((error) => setRunwayStatus(error.message, "bad")));
+  els.videoRunwayPoll.addEventListener("click", () =>
+    pollRunwayRender().catch((error) => {
+      setVideoBusy(false);
+      setRunwayStatus(runwayErrorMessage(error), "bad");
+    })
+  );
 }
 
 if (els.videoRunwayImport) {
   els.videoRunwayImport.addEventListener("click", () => importRunwayClip().catch((error) => {
     setVideoBusy(false);
-    setRunwayStatus(error.message, "bad");
+    setRunwayStatus(runwayErrorMessage(error), "bad");
   }));
 }
 
