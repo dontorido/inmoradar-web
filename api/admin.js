@@ -23,6 +23,13 @@ const {
   normalizeReleaseTarget,
   releaseConnectors
 } = require("../lib/operations/releases");
+const {
+  chromeWebStoreConfig,
+  decodeInlineArtifactPayload,
+  fetchChromeItemStatus,
+  publishChromeItem,
+  uploadChromePackage
+} = require("../lib/operations/chromeWebStore");
 
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at";
@@ -436,6 +443,171 @@ async function handleReleaseArtifacts(req, url) {
       artifact: Array.isArray(rows) ? rows[0] : artifact,
       connectors: releaseConnectors()
     }
+  };
+}
+
+function chromeFetch(url, options = {}) {
+  return fetchWithTimeout(url, {
+    ...options,
+    timeoutMs: Number(process.env.CHROME_WEBSTORE_TIMEOUT_MS || 60000)
+  });
+}
+
+function appendReleaseNote(existingNotes, note) {
+  const stamp = new Date().toISOString();
+  const notes = [existingNotes, `[${stamp}] ${note}`].filter(Boolean).join("\n");
+  return notes.slice(-4000);
+}
+
+function summarizeChromeStatus(payload = {}) {
+  const published = payload.publishedItemRevisionStatus?.state;
+  const submitted = payload.submittedItemRevisionStatus?.state;
+  const upload = payload.lastAsyncUploadState;
+  return [
+    published ? `publicado=${published}` : "",
+    submitted ? `revision=${submitted}` : "",
+    upload ? `upload=${upload}` : "",
+    payload.takenDown ? "retirado=true" : "",
+    payload.warned ? "aviso=true" : ""
+  ]
+    .filter(Boolean)
+    .join(", ") || "estado recibido";
+}
+
+async function releaseArtifactById(id) {
+  const cleanId = String(id || "").trim();
+  if (!cleanId) return null;
+  const params = new URLSearchParams({
+    id: `eq.${cleanId}`,
+    select: "*",
+    limit: "1"
+  });
+  const rows = await supabaseFetch(`release_artifacts?${params.toString()}`);
+  return Array.isArray(rows) && rows.length ? rows[0] : null;
+}
+
+async function patchReleaseArtifact(id, patch) {
+  const cleanId = String(id || "").trim();
+  if (!cleanId) throw new Error("release_artifact_id_required");
+  const rows = await supabaseFetch(`release_artifacts?id=eq.${encodeURIComponent(cleanId)}`, {
+    method: "PATCH",
+    headers: {
+      prefer: "return=representation"
+    },
+    body: JSON.stringify({
+      ...patch,
+      updated_at: new Date().toISOString()
+    })
+  });
+  return Array.isArray(rows) ? rows[0] : null;
+}
+
+function assertChromeReleaseArtifact(artifact) {
+  if (!artifact) throw new Error("release_artifact_not_found");
+  const connector = String(artifact.connector_target || "").toLowerCase();
+  if (artifact.target !== "extension" || connector !== "chrome") {
+    throw new Error("chrome_release_artifact_required");
+  }
+}
+
+async function handleChromeOperation(req) {
+  if (req.method !== "POST") {
+    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  }
+
+  const input = await readJsonBody(req);
+  const action = String(input.action || "").trim().toLowerCase();
+  const config = chromeWebStoreConfig();
+  if (!config.configured) {
+    return {
+      status: 400,
+      payload: {
+        ok: false,
+        error: "chrome_webstore_not_configured",
+        message: `Faltan variables de entorno para Chrome Web Store: ${config.missing.join(", ")}`,
+        missing: config.missing
+      }
+    };
+  }
+
+  const chromeOptions = { config, fetchImpl: chromeFetch };
+  const artifact = input.artifact_id ? await releaseArtifactById(input.artifact_id) : null;
+
+  if (action === "status") {
+    const chromeStatus = await fetchChromeItemStatus(chromeOptions);
+    let updated = null;
+    if (artifact) {
+      assertChromeReleaseArtifact(artifact);
+      updated = await patchReleaseArtifact(artifact.id, {
+        notes: appendReleaseNote(artifact.notes, `Chrome status: ${summarizeChromeStatus(chromeStatus)}`)
+      });
+    }
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        action,
+        message: `Estado de Chrome leido: ${summarizeChromeStatus(chromeStatus)}.`,
+        artifact: updated,
+        chrome_status: chromeStatus
+      }
+    };
+  }
+
+  if (!artifact) {
+    return { status: 400, payload: { ok: false, error: "artifact_id_required", message: "Selecciona un artefacto de Chrome." } };
+  }
+  assertChromeReleaseArtifact(artifact);
+
+  if (action === "upload") {
+    const packageBuffer = decodeInlineArtifactPayload(artifact);
+    const chromeUpload = await uploadChromePackage(packageBuffer, {
+      ...chromeOptions,
+      mimeType: artifact.mime_type || "application/zip"
+    });
+    const uploadState = chromeUpload.uploadState || "UPLOAD_SUBMITTED";
+    const updated = await patchReleaseArtifact(artifact.id, {
+      status: uploadState === "UPLOAD_FAILED" ? "failed" : "submitted",
+      notes: appendReleaseNote(artifact.notes, `Chrome upload: ${uploadState}${chromeUpload.crxVersion ? ` version=${chromeUpload.crxVersion}` : ""}`)
+    });
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        action,
+        message: `ZIP enviado a Chrome Web Store (${uploadState}). Comprueba el estado antes de enviarlo a revision.`,
+        artifact: updated,
+        chrome_upload: chromeUpload
+      }
+    };
+  }
+
+  if (action === "publish") {
+    const chromePublish = await publishChromeItem({
+      ...chromeOptions,
+      publishType: input.publish_type || input.publishType || "DEFAULT_PUBLISH",
+      deployPercentage: input.deploy_percentage ?? input.deployPercentage,
+      skipReview: input.skip_review === true || input.skipReview === true
+    });
+    const updated = await patchReleaseArtifact(artifact.id, {
+      status: "submitted",
+      notes: appendReleaseNote(artifact.notes, `Chrome publish: ${chromePublish.state || "submitted"}`)
+    });
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        action,
+        message: "Extension enviada a revision/publicacion en Chrome Web Store.",
+        artifact: updated,
+        chrome_publish: chromePublish
+      }
+    };
+  }
+
+  return {
+    status: 400,
+    payload: { ok: false, error: "unsupported_chrome_action", message: `Accion de Chrome no soportada: ${action || "-"}` }
   };
 }
 
@@ -870,6 +1042,10 @@ module.exports = async function handler(req, res) {
     }
     if (resource === "operations/releases") {
       const result = await handleReleaseArtifacts(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "operations/chrome") {
+      const result = await handleChromeOperation(req);
       return json(res, result.status, result.payload);
     }
     if (resource === "social-video/generate") {

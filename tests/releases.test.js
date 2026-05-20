@@ -42,6 +42,8 @@ test("releaseConnectors no expone secretos y marca configuracion", () => {
     SUPABASE_SERVICE_ROLE_KEY: "sb_secret_123",
     CHROME_WEBSTORE_PUBLISHER_ID: "pub",
     CHROME_WEBSTORE_ITEM_ID: "item",
+    CHROME_WEBSTORE_CLIENT_ID: "client",
+    CHROME_WEBSTORE_CLIENT_SECRET: "secret",
     CHROME_WEBSTORE_REFRESH_TOKEN: "refresh"
   });
 

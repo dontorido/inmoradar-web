@@ -563,6 +563,19 @@ function renderReleaseConnectors(target, connectors = {}) {
     : `<p class="admin-empty-state compact">Sin conectores definidos para ${escapeHtml(releaseTargetLabel(target))}.</p>`;
 }
 
+function releaseChromeActions(row) {
+  const connector = String(row.connector_target || "").toLowerCase();
+  if (row.target !== "extension" || connector !== "chrome") return "";
+  const id = escapeHtml(row.id || "");
+  return `
+    <div class="admin-row-actions">
+      <button class="admin-button tiny ghost" type="button" data-release-chrome-action="status" data-release-id="${id}">Estado Chrome</button>
+      <button class="admin-button tiny ghost" type="button" data-release-chrome-action="upload" data-release-id="${id}">Subir ZIP</button>
+      <button class="admin-button tiny" type="button" data-release-chrome-action="publish" data-release-id="${id}">Enviar revision</button>
+    </div>
+  `;
+}
+
 function renderReleaseRows(target, payload = {}) {
   const targetEl = releaseRowsElement(target);
   if (!targetEl) return;
@@ -596,7 +609,10 @@ function renderReleaseRows(target, payload = {}) {
           <div class="admin-subtle">${escapeHtml(formatBytes(row.file_size_bytes))}</div>
           <div class="admin-subtle">${escapeHtml(row.sha256 ? `sha ${row.sha256.slice(0, 10)}` : row.storage_path || "-")}</div>
         </td>
-        <td>${chip(row.status || "draft", statusTone(row.status))}</td>
+        <td>
+          ${chip(row.status || "draft", statusTone(row.status))}
+          ${releaseChromeActions(row)}
+        </td>
       </tr>
     `)
     .join("");
@@ -662,6 +678,31 @@ async function saveReleaseArtifact(form) {
   form.reset();
   await loadReleaseArtifacts(target);
   showStatus(`${releaseTargetLabel(target)} guardado en backoffice.`, "good");
+}
+
+async function runChromeReleaseAction(action, artifactId, button) {
+  if (action === "publish" && !window.confirm("Enviar este ZIP a revision/publicacion en Chrome Web Store?")) return;
+  const label = {
+    status: "leyendo estado de Chrome",
+    upload: "subiendo ZIP a Chrome",
+    publish: "enviando a revision en Chrome"
+  }[action] || "ejecutando accion de Chrome";
+  showStatus(`Chrome: ${label}...`);
+  if (button) button.disabled = true;
+  try {
+    const payload = await api("/api/admin?resource=operations/chrome", {
+      method: "POST",
+      body: JSON.stringify({
+        action,
+        artifact_id: artifactId,
+        publish_type: "DEFAULT_PUBLISH"
+      })
+    });
+    await loadReleaseArtifacts("extension");
+    showStatus(payload.message || "Accion de Chrome completada.", "good");
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 function premiumDetail(label, value) {
@@ -2142,6 +2183,16 @@ els.releaseRefreshButtons.forEach((button) => {
   button.addEventListener("click", () => {
     const target = button.dataset.releaseRefresh;
     loadReleaseArtifacts(target).catch((error) => showStatus(error.message, "bad"));
+  });
+});
+
+els.releaseRows.forEach((rowsEl) => {
+  rowsEl.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-release-chrome-action]");
+    if (!button) return;
+    runChromeReleaseAction(button.dataset.releaseChromeAction, button.dataset.releaseId, button).catch((error) =>
+      showStatus(error.message, "bad")
+    );
   });
 });
 
