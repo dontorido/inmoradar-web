@@ -164,6 +164,39 @@ button { cursor: pointer; }
   color: white;
 }
 
+.client-link {
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(9, 9, 11, 0.1);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.client-link:hover {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.client-link:active { transform: scale(.97); }
+
+.client-link svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .flag {
   width: 18px;
   height: 12px;
@@ -1160,6 +1193,8 @@ h3 {
 
 @media (max-width: 1060px) {
   .nav-links, .nav-actions .button { display: none; }
+  .client-link { width: 38px; min-width: 38px; min-height: 38px; }
+  .client-link svg { width: 17px; height: 17px; }
   .mobile-toggle { display: grid; }
   .mobile-panel.open { display: block; }
   .hero-layout,

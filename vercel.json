@@ -36,6 +36,7 @@
     { "source": "/datos", "destination": "/datos.html" },
     { "source": "/metodologia", "destination": "/metodologia.html" },
     { "source": "/premium", "destination": "/premium.html" },
+    { "source": "/clientes", "destination": "/clientes.html" },
     { "source": "/noticias", "destination": "/noticias.html" },
     { "source": "/noticias/:slug", "destination": "/article.html?slug=:slug" },
     { "source": "/faq", "destination": "/faq.html" },
