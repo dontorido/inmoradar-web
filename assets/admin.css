@@ -2279,6 +2279,52 @@
   text-transform: uppercase;
 }
 
+.admin-video-social-copy {
+  display: grid;
+  gap: 8px;
+  width: min(410px, 100%);
+  border: 1px solid rgba(9, 9, 11, .1);
+  border-radius: 22px;
+  background: #ffffff;
+  padding: 16px;
+  box-shadow: 0 16px 44px -38px rgba(9, 9, 11, .35);
+}
+
+.admin-video-social-copy span {
+  color: var(--radar);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+.admin-video-social-copy strong {
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -.03em;
+}
+
+.admin-video-social-copy p {
+  margin: 0;
+  color: var(--ink);
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.admin-video-final-action {
+  display: grid;
+  width: min(410px, 100%);
+}
+
+.admin-video-final-action .admin-button {
+  width: 100%;
+  min-height: 54px;
+}
+
 .admin-video-storyboard {
   padding: 24px;
 }

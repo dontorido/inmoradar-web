@@ -235,12 +235,9 @@ const els = {
   videoPreviewBody: document.querySelector("[data-video-preview-body]"),
   videoPreviewTitle: document.querySelector("[data-video-preview-title]"),
   videoPreviewMeta: document.querySelector("[data-video-preview-meta]"),
+  videoSocialCopy: document.querySelector("[data-video-social-copy]"),
   videoPreviewClip: document.querySelector("[data-video-preview-clip]"),
   videoStoryboard: document.querySelector("[data-video-storyboard]"),
-  videoCopyPrompt: document.querySelector("[data-video-copy-prompt]"),
-  videoDownloadAiPack: document.querySelector("[data-video-download-ai-pack]"),
-  videoDownloadJson: document.querySelector("[data-video-download-json]"),
-  videoDownloadHtml: document.querySelector("[data-video-download-html]"),
   videoExport: document.querySelector("[data-video-export]"),
   videoBusy: document.querySelector("[data-video-busy]"),
   videoBusyMessage: document.querySelector("[data-video-busy-message]"),
@@ -1761,7 +1758,7 @@ async function generateContextualViralizaComments(form) {
 }
 
 function setVideoActions(enabled) {
-  [els.videoCopyPrompt, els.videoDownloadAiPack, els.videoDownloadJson, els.videoDownloadHtml, els.videoExport].forEach((button) => {
+  [els.videoExport].forEach((button) => {
     if (button) button.disabled = !enabled || state.video.busy;
   });
   syncRunwayDurationLabel();
@@ -2417,6 +2414,34 @@ function renderVideoProject(project) {
   setVideoActions(Boolean(project));
 }
 
+function buildExpertSocialCopy(project) {
+  if (!project) {
+    return "Genera un storyboard para crear un texto de publicación conectado con el análisis del vídeo.";
+  }
+  const brief = project.growth_strategy || {};
+  const hook = brief.hook || project.title || "Antes de contactar por una vivienda, mira los datos";
+  const cta = brief.cta || project.cta_text || "Pásalo por InmoRadar antes de contactar.";
+  const disclaimer = brief.disclaimer || project.disclaimer || "Estimaciones orientativas. No es una tasación.";
+  const signal = (brief.overlays || project.overlays || [])
+    .filter(Boolean)
+    .slice(1, 5)
+    .join(" · ");
+  const hashtags = (brief.hashtags || project.hashtags || ["#InmoRadar", "#BuscarPiso", "#Vivienda"])
+    .slice(0, 7)
+    .join(" ");
+  const context = signal
+    ? `En este análisis miraría especialmente: ${signal}.`
+    : "En valoración no me quedaría solo con la foto ni con el precio: miraría €/m², entrada, cuota, zona y señales del entorno.";
+  return [
+    hook,
+    "",
+    `${context} Como filtro previo, InmoRadar ayuda a poner criterio sobre el anuncio antes de llamar: precio, coste estimado, zona, transporte, aparcamiento y score en una sola lectura.`,
+    "",
+    `${cta} ${disclaimer}`,
+    hashtags
+  ].join("\n");
+}
+
 function renderVideoPreview() {
   const project = state.video.lastProject;
   if (!project || !els.videoPreview) return;
@@ -2431,6 +2456,7 @@ function renderVideoPreview() {
     const clipLabel = state.video.backgroundClipName ? `clip real: ${state.video.backgroundClipName}` : "maqueta local sin clip real";
     els.videoPreviewMeta.textContent = `${project.duration_seconds || 24}s - ${project.format?.width || 1080}x${project.format?.height || 1920} - ${project.visual_style_label || "hogar"} - ${project.music_label || "música"} - ${clipLabel}`;
   }
+  if (els.videoSocialCopy) els.videoSocialCopy.textContent = buildExpertSocialCopy(project);
   if (els.videoPreviewClip) {
     if (state.video.backgroundClipUrl) {
       if (els.videoPreviewClip.src !== state.video.backgroundClipUrl) {
@@ -2520,7 +2546,7 @@ function renderVideoStoryboard() {
     </section>
     <section class="admin-video-branding-card">
       <strong>Personas reales</strong>
-      <p>${state.video.backgroundClipName ? `Clip real activo: ${escapeHtml(state.video.backgroundClipName)}. Se usará como fondo del export local.` : "Sin clip real subido. El export local usa una maqueta; para personas reales descarga el Pack IA real, genera un clip vertical y súbelo en el formulario."}</p>
+      <p>${state.video.backgroundClipName ? `Clip real activo: ${escapeHtml(state.video.backgroundClipName)}. Se usará como fondo del export local.` : "Sin clip real listo todavía. Genera el clip con Runway y úsalo como fondo antes de componer el vídeo final."}</p>
       <p>${escapeHtml(project.real_ai_video?.production_note || "El render final con personas reales requiere una IA de vídeo o un clip real como fuente visual.")}</p>
     </section>
     ${renderGrowthStrategyCard(project)}
@@ -3623,22 +3649,6 @@ if (els.videoProjects) {
     renderVideoProject(project);
     showStatus(`Proyecto cargado: ${item.title}`, "good");
   });
-}
-
-if (els.videoCopyPrompt) {
-  els.videoCopyPrompt.addEventListener("click", () => copyVideoPrompt().catch((error) => showStatus(error.message, "bad")));
-}
-
-if (els.videoDownloadAiPack) {
-  els.videoDownloadAiPack.addEventListener("click", downloadVideoAiPack);
-}
-
-if (els.videoDownloadJson) {
-  els.videoDownloadJson.addEventListener("click", downloadVideoJson);
-}
-
-if (els.videoDownloadHtml) {
-  els.videoDownloadHtml.addEventListener("click", downloadVideoHtml);
 }
 
 if (els.videoExport) {

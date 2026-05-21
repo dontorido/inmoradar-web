@@ -757,13 +757,6 @@
               <h2>Vídeos IA</h2>
               <p class="admin-panel-sub">Genera un guion vertical, storyboard, clip IA y composición final con branding obligatorio de InmoRadar.</p>
             </div>
-            <div class="admin-row-actions">
-              <button class="admin-button tiny ghost" type="button" data-video-copy-prompt data-testid="admin-action-copy-video-prompt" disabled>Copiar prompt IA</button>
-              <button class="admin-button tiny ghost" type="button" data-video-download-ai-pack data-testid="admin-action-download-ai-pack" disabled>Pack IA real</button>
-              <button class="admin-button tiny ghost" type="button" data-video-download-json data-testid="admin-action-download-video-json" disabled>Descargar storyboard</button>
-              <button class="admin-button tiny" type="button" data-video-download-html data-testid="admin-action-download-video-html" disabled>Descargar preview HTML</button>
-              <button class="admin-button tiny" type="button" data-video-export data-testid="admin-action-export-video" disabled>Componer vídeo final</button>
-            </div>
           </div>
           <div class="admin-video-busy" data-video-busy role="status" aria-live="polite" hidden>
             <div class="admin-video-busy-card">
@@ -796,7 +789,7 @@
             <article>
               <span>Paso 4</span>
               <strong>Descarga y publica</strong>
-              <p>Descarga el vídeo final, el pack IA o el storyboard, y revisa la biblioteca antes de publicar.</p>
+              <p>Compón el vídeo final, revisa el copy experto y publícalo con una llamada clara a usar InmoRadar.</p>
             </article>
           </div>
           <div class="admin-video-readiness" data-video-readiness aria-live="polite"></div>
@@ -932,7 +925,7 @@
                 <div>
                   <span>Paso 1 · acción</span>
                   <strong>Generar storyboard y preview</strong>
-                  <p>Primero crea el proyecto. Después se activan Runway, descargas y composición final.</p>
+                  <p>Primero crea el proyecto. Después se activan Runway, copy de publicación y composición final.</p>
                 </div>
                 <button class="admin-button" type="submit" data-testid="admin-action-generate-video">Generar storyboard</button>
               </div>
@@ -1017,6 +1010,14 @@
               <div class="admin-video-preview-meta">
                 <strong data-video-preview-title>Sin vídeo generado todavía</strong>
                 <span data-video-preview-meta>1080x1920 - branding obligatorio - MP4 preparado para renderer</span>
+              </div>
+              <section class="admin-video-social-copy">
+                <span>Texto para redes</span>
+                <strong>Copy experto para publicar</strong>
+                <p data-video-social-copy>Genera un storyboard para crear un texto de publicación conectado con el análisis del vídeo.</p>
+              </section>
+              <div class="admin-video-final-action">
+                <button class="admin-button" type="button" data-video-export data-testid="admin-action-export-video" disabled>Componer vídeo final</button>
               </div>
             </section>
           </div>
