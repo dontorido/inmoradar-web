@@ -1697,7 +1697,10 @@ function runwayErrorMessage(error) {
   }
   if (code === "runway_create_failed" && payload.runway_error) {
     const detail = payload.runway_error.message || payload.runway_error.error || payload.message;
-    return `Runway ha rechazado la petición (${payload.runway_status || "sin código"}): ${detail}. Revisa el prompt o vuelve a estimar el coste antes de lanzar.`;
+    const summary = payload.runway_request_summary
+      ? ` Payload: ${payload.runway_request_summary.model || "-"}, ${payload.runway_request_summary.ratio || "-"}, ${payload.runway_request_summary.duration || "-"}s, prompt ${payload.runway_request_summary.prompt_text_chars || 0} chars.`
+      : "";
+    return `Runway ha rechazado la petición (${payload.runway_status || "sin código"}): ${detail}.${summary} He aplicado un prompt mínimo compatible; recarga, estima de nuevo y lanza otra vez.`;
   }
   if (code === "runway_create_failed" && /validation/i.test(String(payload.message || ""))) {
     return "Runway ha rechazado el formato de la petición. Ahora InmoRadar usa el formato compatible de texto puro; actualiza la página, estima de nuevo el coste y vuelve a lanzar el clip.";

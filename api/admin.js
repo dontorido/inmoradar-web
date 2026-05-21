@@ -20,6 +20,7 @@ const {
   createRunwayTextToVideo,
   estimateRunwayCost,
   getRunwayTask,
+  runwayRequestSummary,
   runwaySettings
 } = require("../lib/social-video/runway");
 const { summarizeExtensionUsage } = require("../lib/extension-usage/metrics");
@@ -1255,7 +1256,8 @@ async function handleSocialVideoRender(req, url) {
         error: "runway_create_failed",
         message: error.message,
         runway_status: error.status || null,
-        runway_error: error.payload || null
+        runway_error: error.payload || null,
+        runway_request_summary: runwayRequestSummary(request)
       }
     };
   }

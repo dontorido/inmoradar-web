@@ -30,6 +30,8 @@ RUNWAY_DRY_RUN_ONLY=false
 
 Nota: Gen-4.5 en modo texto puro se envia a Runway como `image_to_video` sin `promptImage`, tal como indica la API oficial. En ese modo usamos `1280:720` porque Runway puede rechazar `720:1280` sin imagen de entrada. InmoRadar reencuadra el clip en la composicion vertical final.
 
+Para evitar rechazos de validacion del cuerpo, el prompt que se envia a Runway se normaliza a una linea corta en ASCII. Si Runway aun rechaza el prompt del storyboard, el backend reintenta una vez con un prompt minimo compatible antes de devolver error.
+
 ## Tabla Supabase
 
 Ejecuta `database/social-video-jobs.sql` antes de activar renders reales. La tabla registra jobs, coste estimado, estado, respuesta de Runway y URL final.

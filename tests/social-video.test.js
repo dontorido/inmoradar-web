@@ -4,7 +4,7 @@ const test = require("node:test");
 const { VIDEO_BRANDING_CONFIG } = require("../lib/social-video/branding");
 const { generateSocialVideoProject } = require("../lib/social-video/generator");
 const { socialVideoProjectRow, socialVideoProjectSummary } = require("../lib/social-video/projects");
-const { RunwayApiError, buildRunwayTextToVideoRequest, createRunwayTextToVideo, estimateRunwayCost, normalizeRunwayRatio, runwaySettings } = require("../lib/social-video/runway");
+const { RUNWAY_FALLBACK_PROMPT, RunwayApiError, buildRunwayTextToVideoRequest, createRunwayTextToVideo, estimateRunwayCost, normalizeRunwayRatio, runwaySettings, sanitizeRunwayPromptText } = require("../lib/social-video/runway");
 const { analyzePerformance, generateVideoBrief, seriesConfig } = require("../lib/social-video/videoStrategyInmoRadar");
 
 test("video branding config exige logo y web en posiciones fijas", () => {
@@ -121,10 +121,11 @@ test("runway request uses InmoRadar safe-zone prompt and Gen-4.5 text-only ratio
   assert.equal(request.endpoint, "image_to_video");
   assert.equal(request.duration, 5);
   assert.equal(request.ratio, "1280:720");
-  assert.ok(request.promptText.length <= 950);
-  assert.match(request.promptText, /Dejar espacio libre arriba derecha/);
+  assert.ok(request.promptText.length <= 650);
+  assert.match(request.promptText, /Leave clean space top right/);
   assert.match(request.promptText, /Inmoradar\.app/);
-  assert.match(request.promptText, /No incluir texto legible, logos externos/);
+  assert.match(request.promptText, /No readable text, no logos/);
+  assert.doesNotMatch(request.promptText, /[^\x20-\x7E]/);
 });
 
 test("runway request keeps vertical ratio when a prompt image is provided", () => {
@@ -174,6 +175,51 @@ test("runway create exposes provider validation details", async () => {
       return true;
     }
   );
+});
+
+test("runway create retries body validation with minimal fallback prompt", async () => {
+  const bodies = [];
+  const fetchImpl = async (_url, options) => {
+    bodies.push(JSON.parse(options.body));
+    if (bodies.length === 1) {
+      return {
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ message: "Validation of body failed" })
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ id: "task_123", status: "PENDING" })
+    };
+  };
+
+  const task = await createRunwayTextToVideo({
+    apiSecret: "secret",
+    fetchImpl,
+    request: {
+      endpoint: "image_to_video",
+      model: "gen4.5",
+      promptText: "test",
+      ratio: "1280:720",
+      duration: 5
+    }
+  });
+
+  assert.equal(task.id, "task_123");
+  assert.equal(bodies.length, 2);
+  assert.equal(bodies[1].promptText, RUNWAY_FALLBACK_PROMPT);
+  assert.equal(bodies[1].ratio, "1280:720");
+});
+
+test("runway prompt sanitizer removes unsupported characters and clamps length", () => {
+  const sanitized = sanitizeRunwayPromptText(`Vídeo con precio 245.000 € y 62 m²\n${"muy largo ".repeat(120)}`);
+  assert.ok(sanitized.length <= 650);
+  assert.match(sanitized, /Video/);
+  assert.match(sanitized, /EUR/);
+  assert.match(sanitized, /m2/);
+  assert.doesNotMatch(sanitized, /[^\x20-\x7E]/);
 });
 
 test("runway settings are disabled by default to avoid accidental cost", () => {
