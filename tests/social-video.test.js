@@ -92,16 +92,16 @@ test("runway estimate clamps duration and exposes cost before spending", () => {
   });
 
   assert.equal(estimate.model, "gen4.5");
-  assert.equal(estimate.duration_seconds, 24);
-  assert.equal(estimate.estimated_credits, 288);
-  assert.equal(estimate.estimated_cost_usd, 2.88);
+  assert.equal(estimate.duration_seconds, 10);
+  assert.equal(estimate.estimated_credits, 120);
+  assert.equal(estimate.estimated_cost_usd, 1.2);
 
   const clamped = estimateRunwayCost({
     model: "unknown",
     durationSeconds: 60
   });
   assert.equal(clamped.model, "gen4.5");
-  assert.equal(clamped.duration_seconds, 45);
+  assert.equal(clamped.duration_seconds, 10);
 });
 
 test("runway request uses InmoRadar safe-zone prompt and Gen-4.5 text-to-video endpoint", () => {
@@ -119,7 +119,7 @@ test("runway request uses InmoRadar safe-zone prompt and Gen-4.5 text-to-video e
 
   assert.equal(request.model, "gen4.5");
   assert.equal(request.endpoint, "text_to_video");
-  assert.equal(request.duration, 24);
+  assert.equal(request.duration, 10);
   assert.equal(request.ratio, "720:1280");
   assert.ok(request.promptText.length <= 650);
   assert.match(request.promptText, /Leave clean space top right/);
@@ -143,7 +143,7 @@ test("runway request keeps vertical ratio when a prompt image is provided", () =
   });
 
   assert.equal(request.endpoint, "image_to_video");
-  assert.equal(request.duration, 24);
+  assert.equal(request.duration, 10);
   assert.equal(request.ratio, "720:1280");
   assert.equal(request.promptImage, "data:image/png;base64,abc");
 });

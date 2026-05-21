@@ -1933,7 +1933,7 @@ function renderVideoReadiness() {
 }
 
 function runwayPayload(extra = {}) {
-  const duration = currentStoryboardDuration();
+  const duration = currentRunwayClipDuration();
   return {
     project: state.video.lastProject,
     model: els.videoRunwayModel?.value || "gen4.5",
@@ -1950,19 +1950,34 @@ function currentStoryboardDuration() {
   return Number.isFinite(fromForm) && fromForm > 0 ? fromForm : 24;
 }
 
+function currentRunwayClipDuration() {
+  const storyboardDuration = currentStoryboardDuration();
+  return Math.max(2, Math.min(10, storyboardDuration));
+}
+
 function syncRunwayDurationLabel() {
   if (!els.videoRunwayDurationLabel) return;
-  els.videoRunwayDurationLabel.textContent = `${currentStoryboardDuration()} segundos`;
+  const storyboardDuration = currentStoryboardDuration();
+  const runwayDuration = currentRunwayClipDuration();
+  els.videoRunwayDurationLabel.textContent =
+    runwayDuration === storyboardDuration
+      ? `${runwayDuration} segundos`
+      : `${runwayDuration} segundos · se repite hasta ${storyboardDuration}s`;
 }
 
 function formatRunwayEstimate(estimate, limits = {}) {
   if (!estimate) return "Sin estimación.";
+  const storyboardDuration = currentStoryboardDuration();
+  const clipNote =
+    Number(estimate.duration_seconds || 0) < storyboardDuration
+      ? ` Clip compatible Runway: ${estimate.duration_seconds}s; el compositor lo repetirá hasta ${storyboardDuration}s.`
+      : "";
   const maxCost = limits.max_cost_usd !== undefined ? ` Límite/render: $${Number(limits.max_cost_usd).toFixed(2)}.` : "";
   const dailyBudget = limits.daily_budget_usd !== undefined ? ` Presupuesto diario: $${Number(limits.daily_budget_usd).toFixed(2)}.` : "";
   const endpoint = limits.request?.endpoint ? ` Endpoint API: ${limits.request.endpoint}.` : "";
   const ratio = limits.request?.ratio ? ` Ratio API: ${limits.request.ratio}.` : "";
   const textOnlyNote = limits.request?.endpoint === "text_to_video" ? " Gen-4.5 en texto puro se envía por text_to_video." : "";
-  return `Estimación Runway: ${estimate.model}, ${estimate.duration_seconds}s, ${estimate.estimated_credits} créditos, $${Number(estimate.estimated_cost_usd).toFixed(2)}.${endpoint}${ratio}${textOnlyNote}${maxCost}${dailyBudget}`;
+  return `Estimación Runway: ${estimate.model}, ${estimate.duration_seconds}s, ${estimate.estimated_credits} créditos, $${Number(estimate.estimated_cost_usd).toFixed(2)}.${clipNote}${endpoint}${ratio}${textOnlyNote}${maxCost}${dailyBudget}`;
 }
 
 async function estimateRunwayRender() {
@@ -3630,7 +3645,7 @@ if (els.videoForm) {
   els.videoForm.querySelector('[name="duration_seconds"]')?.addEventListener("change", () => {
     state.video.runwayEstimate = null;
     syncRunwayDurationLabel();
-    setRunwayStatus("Duración del storyboard cambiada. Runway usará esta misma duración; vuelve a estimar el coste.", "neutral");
+    setRunwayStatus("Duración del storyboard cambiada. Runway generará un clip compatible y el compositor lo repetirá hasta la duración final; vuelve a estimar el coste.", "neutral");
     setRunwayActions();
   });
   els.videoForm.querySelector('[name="background_clip"]')?.addEventListener("change", () => {
