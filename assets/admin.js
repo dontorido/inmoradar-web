@@ -3035,13 +3035,40 @@ function createBackgroundVideo(url) {
     const done = () => resolve(video);
     video.muted = true;
     video.loop = true;
+    video.autoplay = true;
     video.playsInline = true;
     video.preload = "auto";
-    video.onloadeddata = done;
-    video.onerror = () => reject(new Error("background_clip_load_failed"));
+    video.crossOrigin = "anonymous";
+    video.style.position = "fixed";
+    video.style.left = "-9999px";
+    video.style.top = "0";
+    video.style.width = "1px";
+    video.style.height = "1px";
+    video.style.opacity = "0";
+    video.setAttribute("aria-hidden", "true");
+    video.onended = () => {
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    };
+    video.oncanplay = done;
+    video.onerror = () => {
+      video.remove();
+      reject(new Error("background_clip_load_failed"));
+    };
     video.src = url;
+    document.body.appendChild(video);
     video.load();
   });
+}
+
+function keepBackgroundVideoAlive(video) {
+  if (!video) return;
+  if (video.ended || (Number.isFinite(video.duration) && video.duration > 0 && video.currentTime >= video.duration - 0.08)) {
+    video.currentTime = 0;
+  }
+  if (video.paused) {
+    video.play().catch(() => {});
+  }
 }
 
 async function exportVideoProject() {
@@ -3106,6 +3133,7 @@ async function exportVideoProject() {
   await new Promise((resolve) => {
     function frame(now) {
       const elapsed = Math.min(durationMs, now - start);
+      keepBackgroundVideoAlive(backgroundVideo);
       drawVideoFrame(ctx, project, elapsed, logoImage, backgroundVideo);
       if (elapsed < durationMs) {
         requestAnimationFrame(frame);
@@ -3122,6 +3150,7 @@ async function exportVideoProject() {
   if (backgroundVideo) {
     backgroundVideo.pause();
     backgroundVideo.removeAttribute("src");
+    backgroundVideo.remove();
     backgroundVideo.load();
   }
 
