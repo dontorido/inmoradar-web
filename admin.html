@@ -767,7 +767,11 @@
           </div>
           <div class="admin-video-busy" data-video-busy role="status" aria-live="polite" hidden>
             <div class="admin-video-busy-card">
-              <span class="admin-video-busy-clock" aria-hidden="true"></span>
+              <div class="admin-video-busy-visual" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
               <strong>Trabajando...</strong>
               <p data-video-busy-message>Preparando vídeo IA.</p>
               <small>No cierres esta pestaña hasta que termine la acción.</small>
@@ -782,7 +786,7 @@
             <article>
               <span>Paso 2</span>
               <strong>Elige clip de fondo</strong>
-              <p>Sube un clip propio/IA o usa Runway. Sin clip, el export será una maqueta local para revisar composición.</p>
+              <p>Genera el clip con Runway. Sin clip, el export será una maqueta local para revisar composición.</p>
             </article>
             <article>
               <span>Paso 3</span>
@@ -797,11 +801,12 @@
           </div>
           <div class="admin-video-readiness" data-video-readiness aria-live="polite"></div>
           <div class="admin-video-grid">
-            <form class="admin-video-form" data-video-form>
+            <div class="admin-video-workspace">
+              <form class="admin-video-form" data-video-form>
               <div class="admin-video-step-heading">
                 <span>Paso 1</span>
                 <strong>Define el brief del vídeo</strong>
-                <p>Estos campos generan el guion y el storyboard. Aún no se crea un clip real hasta que subas un vídeo o lances Runway.</p>
+                <p>Estos campos generan el guion y el storyboard. El clip real se crea después desde Runway.</p>
               </div>
               <label>
                 <span>Serie growth</span>
@@ -906,10 +911,6 @@
                 </select>
               </label>
               <label>
-                <span>Clip IA/personas reales</span>
-                <input type="file" name="background_clip" accept="video/mp4,video/webm,video/quicktime">
-              </label>
-              <label>
                 <span>Música</span>
                 <select name="music_style">
                   <option value="warm_house" selected>House suave</option>
@@ -935,13 +936,16 @@
                 </div>
                 <button class="admin-button" type="submit" data-testid="admin-action-generate-video">Generar storyboard</button>
               </div>
-              <div class="admin-video-step-heading">
+              </form>
+
+              <section class="admin-video-runway-column" aria-label="Generación de clip real con Runway">
+                <div class="admin-video-step-heading">
                 <span>Paso 2</span>
                 <strong>Añade un clip real o genera uno con Runway</strong>
                 <p>El clip es el fondo humano del vídeo. Si no hay clip, InmoRadar solo puede exportar una maqueta visual.</p>
-              </div>
-              <p class="admin-video-note">Para personas reales, sube un clip vertical generado con IA o grabado, o lanza Runway con coste controlado. El compositor final añade marca, textos y música sobre ese clip.</p>
-              <section class="admin-video-runway" data-video-runway-panel>
+                </div>
+                <p class="admin-video-note">Para personas reales, lanza Runway con coste controlado. El compositor final añade marca, textos y música sobre ese clip.</p>
+                <section class="admin-video-runway" data-video-runway-panel>
                 <div>
                   <span>Runway IA</span>
                   <strong>Clip real con coste controlado</strong>
@@ -994,7 +998,8 @@
                   <button class="admin-button tiny ghost" type="button" data-video-runway-import disabled>Usar clip IA</button>
                 </div>
               </section>
-            </form>
+            </section>
+            </div>
 
             <section class="admin-video-preview-shell" aria-label="Preview vertical">
               <div class="admin-video-preview" data-video-preview data-testid="admin-video-preview">

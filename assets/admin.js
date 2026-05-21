@@ -1665,6 +1665,11 @@ function setVideoBusy(isBusy, message = "Trabajando...") {
       control.disabled = state.video.busy;
     });
   }
+  if (els.videoRunwayPanel) {
+    els.videoRunwayPanel.querySelectorAll("input, select").forEach((control) => {
+      control.disabled = state.video.busy;
+    });
+  }
   setVideoActions(Boolean(state.video.lastProject));
 }
 
@@ -1759,33 +1764,33 @@ function runwayReadiness(config = state.video.runwayConfig || {}) {
 function renderVideoReadiness() {
   if (!els.videoReadiness) return;
   const project = state.video.lastProject;
-  const runway = runwayReadiness();
-  const storageOk = !state.video.storageError;
-  const hasClip = Boolean(state.video.backgroundClipName || project?.has_ai_clip || project?.has_uploaded_clip);
+  const status = String(project?.status || "");
+  const hasClip = Boolean(state.video.backgroundClipName || project?.has_ai_clip || project?.has_uploaded_clip || status === "ai_clip_ready" || status === "final_exported");
+  const finalReady = status === "final_exported";
   const cards = [
     {
       tone: project ? "good" : "warn",
-      label: "Paso 1 · Storyboard",
-      status: project ? "Generado" : "Pendiente",
-      detail: project ? "Ya puedes descargar prompts, usar Runway o componer." : "Pulsa Generar storyboard para empezar. No gasta créditos."
+      label: "01 - Storyboard",
+      status: project ? "OK" : "Pendiente",
+      detail: project ? "Guion, escenas y prompts preparados." : "Genera primero el storyboard."
     },
     {
-      tone: storageOk ? "good" : "warn",
-      label: "Biblioteca",
-      status: storageOk ? "Disponible" : "Tabla pendiente",
-      detail: storageOk ? "Los proyectos se guardan y se pueden recuperar." : `${state.video.storageError}. Ejecuta database/social-video-projects.sql.`
+      tone: hasClip ? "good" : project ? "warn" : "neutral",
+      label: "02 - Clip real/IA",
+      status: hasClip ? "OK" : project ? "Ahora" : "Pendiente",
+      detail: hasClip ? "Ya hay un clip para usar como fondo humano." : "Genera el clip con Runway."
     },
     {
-      tone: state.video.jobsStorageError ? "bad" : "warn",
-      label: "Paso 2 · Registro Runway",
-      status: state.video.jobsStorageError ? "Tabla pendiente" : "Se valida al lanzar",
-      detail: state.video.jobsStorageError || "Al lanzar Runway se registra el job para controlar coste, estado y resultado."
+      tone: hasClip ? "good" : "neutral",
+      label: "03 - Composición",
+      status: hasClip ? "OK" : "Pendiente",
+      detail: "Marca, textos, progreso y música se montan aquí."
     },
     {
-      tone: runway.tone,
-      label: "Paso 3 · Clip IA",
-      status: hasClip ? "Clip listo" : runway.status,
-      detail: hasClip ? "Hay clip de fondo cargado para el compositor final." : runway.detail
+      tone: finalReady ? "good" : "neutral",
+      label: "04 - Listo para redes",
+      status: finalReady ? "OK" : "Pendiente",
+      detail: finalReady ? "MP4/WebM descargado y proyecto marcado." : "Descarga el vídeo final cuando esté compuesto."
     }
   ];
   els.videoReadiness.innerHTML = cards
@@ -2050,7 +2055,7 @@ function realVideoPackText(project) {
     `Logo InmoRadar arriba derecha. Texto exacto "${project.branding?.websiteText || "Inmoradar.app"}" abajo derecha durante todo el vídeo.`,
     "",
     "USO RECOMENDADO",
-    "Genera el vídeo base con este pack en una IA de vídeo. Después sube ese clip en 'Clip IA/personas reales' y exporta la maqueta final con texto, marca y música desde InmoRadar."
+    "Genera el vídeo base desde Runway y úsalo como clip IA en InmoRadar para exportar la pieza final con texto, marca y música."
   ].join("\n");
 }
 
@@ -2080,7 +2085,7 @@ function videoPipelineSteps(project) {
     {
       id: "clip",
       label: "02 - Clip real/IA",
-      detail: hasClip ? "Ya hay un clip para usar como fondo humano." : "Sube un clip o genera uno con Runway.",
+      detail: hasClip ? "Ya hay un clip para usar como fondo humano." : "Genera un clip con Runway.",
       done: hasClip,
       active: Boolean(project) && !hasClip
     },
@@ -2905,7 +2910,7 @@ async function runVideoGeneration(form) {
     showStatus(
       project.storage?.persisted === false
         ? `Paso 1 completado, pero la biblioteca no guarda: ${project.storage.error || "tabla pendiente"}.`
-        : `Paso 1 completado: storyboard preparado. Ahora sube un clip o estima Runway.`,
+        : `Paso 1 completado: storyboard preparado. Ahora estima Runway para generar el clip.`,
       project.storage?.persisted === false ? "neutral" : "good"
     );
   } finally {

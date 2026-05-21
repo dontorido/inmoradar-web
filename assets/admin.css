@@ -1881,16 +1881,76 @@
   line-height: 1.4;
 }
 
+.admin-video-busy-visual {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: end;
+  gap: 8px;
+  width: 116px;
+  height: 82px;
+  border: 1px solid rgba(13, 147, 94, .22);
+  border-radius: 26px;
+  background:
+    linear-gradient(180deg, rgba(13, 147, 94, .1), rgba(13, 147, 94, .03)),
+    radial-gradient(circle at 50% 24%, rgba(255, 69, 0, .18), transparent 34px);
+  padding: 18px 22px;
+}
+
+.admin-video-busy-visual::before {
+  content: "IA";
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #0d935e;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .18em;
+}
+
+.admin-video-busy-visual span {
+  display: block;
+  height: 24px;
+  border-radius: 999px 999px 8px 8px;
+  background: #0d935e;
+  animation: admin-working-bars 1s ease-in-out infinite;
+}
+
+.admin-video-busy-visual span:nth-child(2) {
+  height: 38px;
+  background: var(--radar);
+  animation-delay: .14s;
+}
+
+.admin-video-busy-visual span:nth-child(3) {
+  height: 30px;
+  animation-delay: .28s;
+}
+
 @keyframes admin-clock-spin {
   from { transform: translate(-50%, -100%) rotate(0deg); }
   to { transform: translate(-50%, -100%) rotate(360deg); }
 }
 
+@keyframes admin-working-bars {
+  0%, 100% { transform: scaleY(.72); opacity: .72; }
+  45% { transform: scaleY(1.18); opacity: 1; }
+}
+
 .admin-video-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 380px) minmax(0, 1fr);
+  grid-template-columns: 1fr;
   gap: 28px;
   padding: 24px;
+}
+
+.admin-video-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(360px, .88fr);
+  gap: 24px;
+  align-items: start;
 }
 
 .admin-video-steps-guide {
@@ -1960,34 +2020,37 @@
 
 .admin-video-readiness article {
   position: relative;
-  padding: 16px 16px 16px 44px;
+  min-height: 140px;
+  padding: 20px 16px;
+  border-color: rgba(9, 9, 11, .12);
+  background: #ffffff;
 }
 
 .admin-video-readiness article::before {
-  content: "";
-  position: absolute;
-  top: 18px;
-  left: 18px;
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  background: var(--muted);
-  box-shadow: 0 0 0 5px rgba(9, 9, 11, .06);
+  content: none;
 }
 
-.admin-video-readiness article[data-tone="good"]::before {
-  background: #0d935e;
-  box-shadow: 0 0 0 5px rgba(13, 147, 94, .12);
+.admin-video-readiness article[data-tone="good"] {
+  border-color: rgba(13, 147, 94, .28);
+  background: #effaf4;
 }
 
-.admin-video-readiness article[data-tone="warn"]::before {
-  background: var(--radar);
-  box-shadow: 0 0 0 5px rgba(255, 69, 0, .13);
+.admin-video-readiness article[data-tone="warn"] {
+  border-color: rgba(255, 69, 0, .26);
+  background: var(--radar-50);
 }
 
-.admin-video-readiness article[data-tone="bad"]::before {
-  background: #d9274e;
-  box-shadow: 0 0 0 5px rgba(217, 39, 78, .12);
+.admin-video-readiness article[data-tone="bad"] {
+  border-color: rgba(217, 39, 78, .24);
+  background: rgba(217, 39, 78, .06);
+}
+
+.admin-video-readiness article[data-tone="neutral"] {
+  background: var(--bg);
+}
+
+.admin-video-readiness article[data-tone="good"] strong {
+  color: #0d935e;
 }
 
 .admin-video-step-heading {
@@ -2014,12 +2077,17 @@
 .admin-video-form {
   display: grid;
   align-content: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
 .admin-video-form label {
   display: grid;
   gap: 8px;
+}
+
+.admin-video-form-wide {
+  grid-column: 1 / -1;
 }
 
 .admin-video-form span,
@@ -2074,6 +2142,13 @@
   color: var(--muted);
   font-size: 13px;
   line-height: 1.55;
+}
+
+.admin-video-runway-column {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
 }
 
 .admin-video-preview-shell {
@@ -2528,6 +2603,10 @@
     grid-template-columns: 1fr;
   }
 
+  .admin-video-workspace {
+    grid-template-columns: 1fr;
+  }
+
   .admin-video-pipeline-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2559,6 +2638,10 @@
   .admin-video-primary-action {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .admin-video-form {
+    grid-template-columns: 1fr;
   }
 
   .admin-video-pipeline-grid {
@@ -2613,6 +2696,28 @@
   color: var(--muted);
   font-size: 13px;
   line-height: 1.45;
+}
+
+.admin-video-runway label {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-video-runway select {
+  min-height: 46px;
+  border: 1px solid rgba(9, 9, 11, .1);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink);
+  padding: 0 16px;
+  font-family: var(--body);
+  font-size: 14px;
+  outline: none;
+}
+
+.admin-video-runway select:focus {
+  border-color: var(--radar);
+  box-shadow: 0 0 0 4px rgba(255, 69, 0, .12);
 }
 
 .admin-video-runway-flow {
