@@ -7,7 +7,7 @@
   <title>InmoRadar · Copiloto inmobiliario para tu navegador</title>
   <meta name="description" content="InmoRadar añade análisis sobre Idealista, Fotocasa, Pisos.com y Habitaclia: precio real, coste inicial, zona, transporte, aparcamiento y señales clave.">
   <meta property="og:title" content="InmoRadar · Copiloto inmobiliario para tu navegador">
-  <meta property="og:description" content="Decide si una vivienda merece la pena antes de contactar con una capa de análisis sobre tus portales inmobiliarios.">
+  <meta property="og:description" content="Descubre lo que el anuncio no te cuenta con una capa de análisis sobre tus portales inmobiliarios.">
   <meta name="theme-color" content="#FAFAFA">
   <link rel="icon" href="/assets/favicon-32.png?v=20260519b" type="image/png" sizes="32x32">
   <link rel="stylesheet" href="assets/styles.css">
@@ -32,7 +32,7 @@
           <button type="button" data-lang="es" aria-pressed="true"><span class="flag flag-es" aria-hidden="true"></span><span>ES</span></button>
           <button type="button" data-lang="en" aria-pressed="false"><span class="flag flag-en" aria-hidden="true"></span><span>EN</span></button>
         </div><a class="client-link" href="/clientes" aria-label="Area de clientes" title="Area de clientes" data-testid="nav-clientes"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle></svg></a>
-        <a class="button" href="/premium" data-testid="nav-cta-premium">Empezar gratis</a>
+        <a class="button" href="/premium" data-testid="nav-cta-premium" data-launch-waitlist-source="nav">Probar gratis 2 días</a>
       </div>
       <button class="mobile-toggle" type="button" data-mobile-toggle data-testid="nav-mobile-toggle" aria-label="Abrir menu" aria-expanded="false">
         <span data-icon="Radar"></span>
@@ -53,13 +53,13 @@
       <div class="container hero-layout">
         <div class="reveal">
           <p class="pill"><span class="dot-radar"></span>Copiloto inmobiliario para tu navegador · Idealista, Fotocasa, Pisos.com y Habitaclia</p>
-          <h1>Decide si una vivienda merece la pena antes de contactar.</h1>
+          <h1>Descubre lo que el anuncio no te cuenta.</h1>
           <p class="lead">InmoRadar añade una capa de análisis sobre Idealista, Fotocasa, Pisos.com y Habitaclia para mostrarte precio real, coste inicial, zona, transporte, aparcamiento y señales clave en segundos.</p>
           <div class="hero-actions">
-            <a class="button" href="/premium" data-testid="hero-cta-primary">Analizar mi primer anuncio gratis <span data-icon="ArrowRight"></span></a>
+            <button class="button" type="button" data-testid="hero-cta-primary" data-launch-waitlist data-launch-waitlist-source="hero">Empieza a descubrir información relevante <span data-icon="ArrowRight"></span></button>
             <a class="button secondary" href="#ejemplo-real" data-testid="hero-cta-secondary">Ver ejemplo real</a>
           </div>
-          <p class="hero-microcopy">2 días gratis · Sin pago inicial · Premium semanal por 1,99 € solo si decides continuar</p>
+          <p class="hero-microcopy">Déjanos tu email y te avisamos en cuanto esté disponible para tu navegador. 2 días gratis para los primeros usuarios · Sin permanencia.</p>
           <div class="metrics" aria-label="Métricas principales">
             <div class="metric"><strong>2 días</strong><span>acceso inicial sin pagar</span></div>
             <div class="metric"><strong>1,99 &euro;</strong><span>Premium semanal después</span></div>
@@ -108,6 +108,9 @@
           <span>Pisos.com</span>
           <span>Habitaclia</span>
         </div>
+        <div class="section-action">
+          <button class="button" type="button" data-launch-waitlist data-launch-waitlist-source="portales" data-testid="portales-cta-install">Empieza a descubrir información relevante <span data-icon="ArrowRight"></span></button>
+        </div>
       </div>
     </section>
 
@@ -115,17 +118,21 @@
       <div class="container">
         <div class="section-head">
           <span class="section-label">Extensión multi-navegador</span>
-          <h2>Funciona en tu<br><span class="accent">navegador favorito.</span></h2>
-          <p class="lead">InmoRadar se está preparando como extensión para navegadores modernos. Mostramos el estado real de cada navegador para que sepas cómo instalarlo hoy.</p>
+          <h2>Muy pronto en tu<br><span class="accent">navegador favorito.</span></h2>
+          <p class="lead">InmoRadar se está preparando como extensión para navegadores modernos. Mostramos el estado real de cada navegador y te llevamos a la store correspondiente.</p>
         </div>
         <div class="browser-grid" aria-label="Compatibilidad por navegador">
-          <article class="browser-card"><span class="browser-logo">CH</span><div><h3>Chrome</h3><p>Instalación principal para usuarios de Chromium.</p></div><strong class="status-pill available">Disponible</strong></article>
-          <article class="browser-card"><span class="browser-logo">ED</span><div><h3>Edge</h3><p>Funciona sobre la base Chromium de Microsoft Edge.</p></div><strong class="status-pill compatible">Compatible</strong></article>
+          <article class="browser-card"><span class="browser-logo">CH</span><div><h3>Chrome</h3><p>Instalación desde Chrome Web Store cuando la ficha esté pública.</p></div><strong class="status-pill soon">Próximamente</strong></article>
+          <article class="browser-card"><span class="browser-logo">ED</span><div><h3>Edge</h3><p>Compatible con la base Chromium de Microsoft Edge.</p></div><strong class="status-pill compatible">Compatible</strong></article>
           <article class="browser-card"><span class="browser-logo">FF</span><div><h3>Firefox</h3><p>Versión adaptada para el ecosistema Mozilla.</p></div><strong class="status-pill beta">Beta</strong></article>
-          <article class="browser-card"><span class="browser-logo">OP</span><div><h3>Opera</h3><p>Compatible mediante instalación de extensiones Chromium.</p></div><strong class="status-pill manual">Instalación manual</strong></article>
-          <article class="browser-card"><span class="browser-logo">VI</span><div><h3>Vivaldi</h3><p>Preparado para usuarios avanzados de Chromium.</p></div><strong class="status-pill manual">Instalación manual</strong></article>
-          <article class="browser-card"><span class="browser-logo">BR</span><div><h3>Brave</h3><p>Compatible con extensiones Chromium y foco en privacidad.</p></div><strong class="status-pill compatible">Compatible</strong></article>
+          <article class="browser-card"><span class="browser-logo">OP</span><div><h3>Opera</h3><p>Compatible mediante extensiones Chromium cuando esté disponible.</p></div><strong class="status-pill manual">Instalación manual</strong></article>
+          <article class="browser-card"><span class="browser-logo">VI</span><div><h3>Vivaldi</h3><p>Instalación compatible desde Chrome Web Store.</p></div><strong class="status-pill compatible">Compatible</strong></article>
+          <article class="browser-card"><span class="browser-logo">BR</span><div><h3>Brave</h3><p>Instalación compatible desde Chrome Web Store.</p></div><strong class="status-pill compatible">Compatible</strong></article>
         </div>
+        <div class="section-action">
+          <button class="button" type="button" data-launch-waitlist data-launch-waitlist-source="navegadores" data-testid="browsers-cta-install">Empieza a descubrir información relevante <span data-icon="ArrowRight"></span></button>
+        </div>
+        <p class="browser-note">Chrome, Vivaldi y Brave comparten Chrome Web Store. Edge, Firefox y Opera tienen stores o flujos compatibles propios.</p>
       </div>
     </section>
 
@@ -178,6 +185,9 @@
             </table>
           </article>
         </div>
+        <div class="section-action">
+          <button class="button" type="button" data-launch-waitlist data-launch-waitlist-source="ejemplo_real" data-testid="example-cta-install">Empieza a descubrir información relevante <span data-icon="ArrowRight"></span></button>
+        </div>
       </div>
     </section>
 
@@ -193,7 +203,10 @@
           <article class="control-card"><span class="card-icon" data-icon="MapPin"></span><h3>AI-02 Address Intelligence</h3><p>Contexto público de dirección y edificio.</p><div class="control-meta"><div><span>Fuentes</span><strong>Catastro+</strong></div><div><span>Campos</span><strong>12 señales</strong></div><div><span>Tiempo</span><strong>&lt;300 ms</strong></div></div></article>
           <article class="control-card"><span class="card-icon" data-icon="ArrowRight"></span><h3>LD-03 Logística diaria</h3><p>Trayectos a destinos habituales.</p><div class="control-meta"><div><span>Modos</span><strong>Coche·Bus·Pie</strong></div><div><span>Picos</span><strong>Hora punta</strong></div><div><span>Cálculo</span><strong>Multi-origen</strong></div></div></article>
         </div>
-        <p style="margin-top:28px"><a class="button ghost" href="/datos">Documentación técnica <span data-icon="ArrowRight"></span></a></p>
+        <div class="section-action dual">
+          <button class="button" type="button" data-launch-waitlist data-launch-waitlist-source="datos" data-testid="datos-cta-install">Empieza a descubrir información relevante <span data-icon="ArrowRight"></span></button>
+          <a class="button ghost" href="/datos">Documentación técnica <span data-icon="ArrowRight"></span></a>
+        </div>
       </div>
     </section>
 
@@ -226,6 +239,9 @@
             </ul>
           </article>
         </div>
+        <div class="section-action">
+          <button class="button" type="button" data-launch-waitlist data-launch-waitlist-source="comparativa" data-testid="comparison-cta-install">Empieza a descubrir información relevante <span data-icon="ArrowRight"></span></button>
+        </div>
       </div>
     </section>
 
@@ -235,6 +251,9 @@
           <span class="section-label">Transparencia</span>
           <h2>No es una tasación.<br><span class="accent">Es una capa de criterio.</span></h2>
           <p class="lead">InmoRadar ofrece estimaciones orientativas basadas en datos visibles del anuncio, fuentes públicas y señales urbanas. Sirve para entender mejor una vivienda antes de contactar, no para sustituir una tasación profesional ni garantizar una decisión económica.</p>
+          <div class="section-action">
+            <button class="button" type="button" data-launch-waitlist data-launch-waitlist-source="criterio" data-testid="trust-cta-install">Empieza a descubrir información relevante <span data-icon="ArrowRight"></span></button>
+          </div>
         </div>
       </div>
     </section>
@@ -244,7 +263,7 @@
         <div class="premium-copy">
           <span class="section-label">Para búsquedas intensivas</span>
           <h2>Paga solo durante<br><span class="accent">tu búsqueda activa.</span></h2>
-          <p class="lead">Los 2 días gratis son acceso inicial para todos: no son una prueba Premium de pago. Premium solo empieza si decides continuar.</p>
+          <p class="lead">Cuando se lance para tu navegador, tendrás 2 días gratis para probar InmoRadar en anuncios reales. Premium solo empieza si decides continuar.</p>
         </div>
         <article class="pricing-card">
           <span class="badge">Más popular</span>
@@ -258,7 +277,7 @@
             <li>Señales urbanas y precio por zona.</li>
             <li>Cancelación inmediata, sin permanencia.</li>
           </ul>
-          <button class="button secondary full" type="button" data-checkout-button>Empezar gratis <span data-icon="ArrowRight"></span></button>
+          <button class="button secondary full" type="button" data-checkout-button data-launch-waitlist-source="pricing">Empieza a descubrir información relevante <span data-icon="ArrowRight"></span></button>
         </article>
       </div>
     </section>
@@ -272,6 +291,9 @@
         </div>
         <div class="article-grid" data-articles-grid data-limit="6" data-large-first="true" data-news-list></div>
         <div data-news-archive hidden><div data-news-track></div></div>
+        <div class="section-action">
+          <button class="button" type="button" data-launch-waitlist data-launch-waitlist-source="noticias" data-testid="news-cta-install">Empieza a descubrir información relevante <span data-icon="ArrowRight"></span></button>
+        </div>
       </div>
     </section>
 
@@ -282,12 +304,15 @@
           <h2>Lo que la gente<br><span class="accent">siempre pregunta.</span></h2>
         </div>
         <div data-testid="faq-accordion">
-          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-1" aria-expanded="true" aria-controls="faq-1">Los 2 días gratis, ¿son una prueba Premium?<span>+</span></button><div class="faq-panel open" id="faq-1">No. Son acceso inicial gratuito para todos los usuarios. No tienes que pagar Premium para probar InmoRadar durante esos 2 días.</div></div>
+          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-1" aria-expanded="true" aria-controls="faq-1">¿Ya puedo instalar InmoRadar?<span>+</span></button><div class="faq-panel open" id="faq-1">InmoRadar está preparando su lanzamiento. Déjanos tu email, elige tu navegador y te avisaremos en cuanto esté disponible.</div></div>
           <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-2" aria-expanded="false" aria-controls="faq-2">¿InmoRadar mide datos exactos?<span>+</span></button><div class="faq-panel" id="faq-2">No. Son estimaciones orientativas basadas en datos abiertos, información visible del anuncio y señales urbanas.</div></div>
-          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-3" aria-expanded="false" aria-controls="faq-3">¿Funciona con cualquier portal?<span>+</span></button><div class="faq-panel" id="faq-3">Compatible con Idealista, Fotocasa, Pisos.com y Habitaclia. Iremos sumando otros portales en próximas versiones.</div></div>
-          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-4" aria-expanded="false" aria-controls="faq-4">¿Dónde se guardan mis inmuebles?<span>+</span></button><div class="faq-panel" id="faq-4">Localmente en el navegador salvo que actives funciones que requieran servicios externos.</div></div>
+          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-3" aria-expanded="false" aria-controls="faq-3">¿En qué navegadores estará disponible?<span>+</span></button><div class="faq-panel" id="faq-3">Estamos preparando instalación para Chrome, Edge, Firefox, Opera, Vivaldi y Brave. Si algún navegador no tiene ficha directa, mostraremos el flujo compatible o manual.</div></div>
+          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-4" aria-expanded="false" aria-controls="faq-4">¿Para qué usaréis mi email?<span>+</span></button><div class="faq-panel" id="faq-4">Solo lo usaremos para avisarte sobre el lanzamiento de InmoRadar y la disponibilidad en tu navegador, salvo que aceptes comunicaciones adicionales.</div></div>
           <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-5" aria-expanded="false" aria-controls="faq-5">¿Puedo cancelar Premium cuando quiera?<span>+</span></button><div class="faq-panel" id="faq-5">Sí. Es semanal y sin permanencia.</div></div>
-          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-6" aria-expanded="false" aria-controls="faq-6">¿Necesito crear cuenta para probar?<span>+</span></button><div class="faq-panel" id="faq-6">No para los 2 días iniciales.</div></div>
+          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-6" aria-expanded="false" aria-controls="faq-6">¿La prueba gratis seguirá disponible?<span>+</span></button><div class="faq-panel" id="faq-6">Sí. Queremos que puedas probar InmoRadar gratis durante 2 días en anuncios reales cuando esté disponible para tu navegador.</div></div>
+        </div>
+        <div class="section-action">
+          <button class="button" type="button" data-launch-waitlist data-launch-waitlist-source="faq" data-testid="faq-cta-install">Empieza a descubrir información relevante <span data-icon="ArrowRight"></span></button>
         </div>
       </div>
     </section>
@@ -301,6 +326,9 @@
           <div class="contact-points">
             <div class="contact-point"><span data-icon="Mail"></span><a href="mailto:hola@inmoradar.app">hola@inmoradar.app</a></div>
             <div class="contact-point"><span data-icon="MapPin"></span><p>Madrid · operamos 100% remoto</p></div>
+          </div>
+          <div class="section-action compact-action">
+            <button class="button" type="button" data-launch-waitlist data-launch-waitlist-source="contacto" data-testid="contact-cta-install">Empieza a descubrir información relevante <span data-icon="ArrowRight"></span></button>
           </div>
         </div>
         <form class="contact-card" data-contact-form data-testid="contact-form">
@@ -323,11 +351,11 @@
     <section class="section grid-bg final-cta" data-testid="section-final-cta">
       <div class="container">
         <div class="final-cta-card">
-          <span class="section-label">Empieza sin pago inicial</span>
+          <span class="section-label">Lanzamiento próximo</span>
           <h2>Tu próximo anuncio puede estar mejor explicado.</h2>
-          <p class="lead">Prueba InmoRadar sobre los portales donde ya buscas y decide con más contexto antes de contactar.</p>
+          <p class="lead">Apúntate y te avisaremos cuando InmoRadar esté disponible para probarlo sobre los portales donde ya buscas.</p>
           <div class="hero-actions final-actions">
-            <a class="button" href="/premium" data-testid="final-cta-primary">Analizar mi primer anuncio gratis <span data-icon="ArrowRight"></span></a>
+            <button class="button" type="button" data-testid="final-cta-primary" data-launch-waitlist data-launch-waitlist-source="final_cta">Empieza a descubrir información relevante <span data-icon="ArrowRight"></span></button>
             <a class="button secondary" href="#ejemplo-real" data-testid="final-cta-secondary">Ver ejemplo real</a>
           </div>
         </div>
@@ -341,7 +369,7 @@
         <div>
           <a class="brand" href="/"><span class="brand-mark" data-icon="Radar"></span><span><strong>Inmo</strong><em>Radar</em></span></a>
           <p class="footer-tagline">Copiloto inmobiliario para navegadores modernos.</p>
-          <a class="button" href="/premium" data-testid="footer-cta-premium">Empezar gratis</a>
+          <button class="button" type="button" data-testid="footer-cta-premium" data-launch-waitlist data-launch-waitlist-source="footer">Empieza a descubrir información relevante</button>
         </div>
         <div class="footer-col"><h4>Producto</h4><a href="/que-analiza" data-testid="footer-link-que-analiza">Qué analiza</a><a href="/datos" data-testid="footer-link-datos">APIs</a><a href="/premium" data-testid="footer-link-premium">Premium</a></div>
         <div class="footer-col"><h4>Contenido</h4><a href="/noticias" data-testid="footer-link-noticias">Noticias</a><a href="/faq" data-testid="footer-link-faq">FAQ</a></div>

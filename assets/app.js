@@ -2,8 +2,85 @@ const WAITLIST_EMAIL = "hola@inmoradar.app";
 const CHECKOUT_ENDPOINT = "/api/lemonsqueezy-checkout";
 const PORTAL_ENDPOINT = "/api/lemonsqueezy-portal";
 const CONTACT_ENDPOINT = "/api/contact";
+const BROWSER_WAITLIST_ENDPOINT = "/api/waitlist/browser";
 const LANGUAGE_STORAGE_KEY = "inmoradar_language";
 const PUBLIC_HOSTS = new Set(["inmoradar.app", "www.inmoradar.app"]);
+
+const BROWSER_LAUNCH_WAITLIST = {
+  chrome: {
+    id: "chrome",
+    name: "Chrome",
+    status: "soon",
+    badge: "Próximamente",
+    description: "Instalación desde Chrome Web Store cuando la ficha esté pública.",
+    storeName: "Chrome Web Store",
+    storeUrl: "https://chromewebstore.google.com/search/InmoRadar",
+    label: "Chrome"
+  },
+  edge: {
+    id: "edge",
+    name: "Edge",
+    status: "compatible",
+    badge: "Compatible",
+    description: "Compatible con la base Chromium de Microsoft Edge.",
+    storeName: "Microsoft Edge Add-ons",
+    storeUrl: "https://microsoftedge.microsoft.com/addons/search/InmoRadar",
+    label: "Edge"
+  },
+  firefox: {
+    id: "firefox",
+    name: "Firefox",
+    status: "beta",
+    badge: "Beta",
+    description: "Versión adaptada para el ecosistema Mozilla.",
+    storeName: "Firefox Add-ons",
+    storeUrl: "https://addons.mozilla.org/es/firefox/search/?q=InmoRadar",
+    label: "Firefox"
+  },
+  opera: {
+    id: "opera",
+    name: "Opera",
+    status: "manual",
+    badge: "Instalación manual",
+    description: "Compatible mediante extensiones Chromium cuando esté disponible.",
+    storeName: "Opera Add-ons",
+    storeUrl: "https://addons.opera.com/es/extensions/?query=InmoRadar",
+    label: "Opera"
+  },
+  vivaldi: {
+    id: "vivaldi",
+    name: "Vivaldi",
+    status: "compatible",
+    badge: "Compatible",
+    description: "Instalación compatible desde Chrome Web Store.",
+    storeName: "Chrome Web Store",
+    storeUrl: "https://chromewebstore.google.com/search/InmoRadar",
+    label: "Vivaldi"
+  },
+  brave: {
+    id: "brave",
+    name: "Brave",
+    status: "compatible",
+    badge: "Compatible",
+    description: "Instalación compatible desde Chrome Web Store.",
+    storeName: "Chrome Web Store",
+    storeUrl: "https://chromewebstore.google.com/search/InmoRadar",
+    label: "Brave"
+  }
+};
+
+let launchWaitlistState = {
+  open: false,
+  selectedBrowser: "",
+  detectedBrowser: "",
+  email: "",
+  source: "web",
+  label: "",
+  status: "idle",
+  error: "",
+  alreadyExists: false,
+  opener: null
+};
 
 const articles = [
   {
@@ -32,7 +109,7 @@ const articles = [
     tag: "Precio m2",
     city: "Madrid",
     title: "Precio del metro cuadrado en Madrid",
-    excerpt: "Madrid exige granularidad: barrio, distrito, edificio y comparables pesan mas que una media municipal."
+    excerpt: "Madrid exige granularidad: barrio, distrito, edificio y comparables pesan más que una media municipal."
   },
   {
     slug: "precio-metro-cuadrado-barcelona",
@@ -79,7 +156,7 @@ const I18N = {
     navNews: "Noticias",
     navFaq: "FAQ",
     navContact: "Contacto",
-    navCta: "Empezar gratis",
+    navCta: "Probar gratis 2 días",
     contactSuccess: "Mensaje enviado. Te respondemos en menos de 24h.",
     contactError: "Revisa los campos del formulario.",
     contactSending: "Enviando...",
@@ -190,13 +267,17 @@ const TEXT_TRANSLATIONS_EN = {
   "Términos": "Terms",
   "Terminos": "Terms",
   "Empezar gratis": "Start free",
+  "Empieza a descubrir información relevante": "Start uncovering relevant information",
+  "Probar gratis 2 días": "Try 2 days free",
+  "Apuntarme al lanzamiento": "Join the launch waitlist",
+  "Ser de los primeros en probar InmoRadar": "Be among the first to try InmoRadar",
   "Ver Premium": "See Premium",
   "Volver al inicio": "Back home",
   "Online": "Online",
   "Navegadores modernos": "Modern browsers",
   "Copiloto inmobiliario para navegadores modernos.": "Real-estate copilot for modern browsers.",
   "Copiloto inmobiliario para tu navegador · Idealista, Fotocasa, Pisos.com y Habitaclia": "Real-estate copilot for your browser · Idealista, Fotocasa, Pisos.com and Habitaclia",
-  "Decide si una vivienda merece la pena antes de contactar.": "Decide whether a home is worth it before contacting.",
+  "Descubre lo que el anuncio no te cuenta.": "Discover what the listing does not tell you.",
   "InmoRadar añade una capa de análisis sobre Idealista, Fotocasa, Pisos.com y Habitaclia para mostrarte precio real, coste inicial, zona, transporte, aparcamiento y señales clave en segundos.": "InmoRadar adds an analysis layer on top of Idealista, Fotocasa, Pisos.com and Habitaclia to show real price, initial cost, area, transport, parking and key signals in seconds.",
   "Analizar mi primer anuncio gratis": "Analyse my first listing for free",
   "Ver ejemplo real": "See a real example",
@@ -231,16 +312,23 @@ const TEXT_TRANSLATIONS_EN = {
   "Funciona en tu": "Works in your",
   "navegador favorito.": "favourite browser.",
   "InmoRadar se está preparando como extensión para navegadores modernos. Mostramos el estado real de cada navegador para que sepas cómo instalarlo hoy.": "InmoRadar is being prepared as an extension for modern browsers. We show the real status of each browser so you know how to install it today.",
+  "InmoRadar se está preparando como extensión para navegadores modernos. Mostramos el estado real de cada navegador y te llevamos a la store correspondiente.": "InmoRadar is being prepared as an extension for modern browsers. We show the real status of each browser and take you to the corresponding store.",
   "Instalación principal para usuarios de Chromium.": "Primary installation for Chromium users.",
+  "Instalación desde Chrome Web Store cuando la ficha esté pública.": "Install from Chrome Web Store when the listing is public.",
   "Disponible": "Available",
   "Funciona sobre la base Chromium de Microsoft Edge.": "Works on Microsoft Edge's Chromium base.",
+  "Compatible con la base Chromium de Microsoft Edge.": "Compatible with Microsoft Edge's Chromium base.",
   "Compatible": "Compatible",
   "Versión adaptada para el ecosistema Mozilla.": "Adapted version for the Mozilla ecosystem.",
   "Beta": "Beta",
   "Compatible mediante instalación de extensiones Chromium.": "Compatible via Chromium extension installation.",
+  "Compatible mediante extensiones Chromium cuando esté disponible.": "Compatible via Chromium extensions when available.",
   "Instalación manual": "Manual install",
+  "Próximamente": "Coming soon",
   "Preparado para usuarios avanzados de Chromium.": "Prepared for advanced Chromium users.",
+  "Instalación compatible desde Chrome Web Store.": "Compatible installation from Chrome Web Store.",
   "Compatible con extensiones Chromium y foco en privacidad.": "Compatible with Chromium extensions and privacy-focused browsing.",
+  "Chrome, Vivaldi y Brave comparten Chrome Web Store. Edge, Firefox y Opera tienen stores o flujos compatibles propios.": "Chrome, Vivaldi and Brave share Chrome Web Store. Edge, Firefox and Opera have their own stores or compatible flows.",
   "Coste real": "Real cost",
   "Entorno urbano": "Urban context",
   "Comparativa": "Comparison",
@@ -664,6 +752,302 @@ function showToast(message, tone = "success") {
   setTimeout(() => toast.classList.remove("show"), 3800);
 }
 
+function detectLaunchBrowser() {
+  const ua = navigator.userAgent || "";
+  if (/OPR\//i.test(ua)) return "opera";
+  if (/Vivaldi/i.test(ua)) return "vivaldi";
+  if (/Edg\//i.test(ua)) return "edge";
+  if (/Firefox\//i.test(ua)) return "firefox";
+  if (/Chrome\//i.test(ua) && !/OPR\//i.test(ua) && !/Edg\//i.test(ua)) return "chrome";
+  return "";
+}
+
+function emailDomain(email) {
+  const parts = String(email || "").toLowerCase().split("@");
+  return parts.length === 2 ? parts[1].slice(0, 120) : "";
+}
+
+function launchWaitlistAnalytics(eventName, props = {}) {
+  const safeProps = {
+    ...props,
+    pagePath: location.pathname || "/"
+  };
+  delete safeProps.email;
+  if (safeProps.emailDomain === undefined && props.email) safeProps.emailDomain = emailDomain(props.email);
+  window.dataLayer = window.dataLayer || [];
+  window.dataLayer.push({ event: eventName, ...safeProps });
+  if (typeof window.gtag === "function") {
+    window.gtag("event", eventName, safeProps);
+  }
+}
+
+function launchWaitlistBrowserCards() {
+  return Object.values(BROWSER_LAUNCH_WAITLIST)
+    .map((browser) => {
+      const detected = launchWaitlistState.detectedBrowser === browser.id;
+      return `
+        <a class="launch-browser-card ${detected ? "selected" : ""}" href="${escapeHtml(browser.storeUrl)}" target="_blank" rel="noopener noreferrer" data-browser-store-link="${escapeHtml(browser.id)}">
+          <span class="launch-browser-card-top">
+            <strong>${escapeHtml(browser.name)}</strong>
+            <span class="launch-browser-badges">
+              ${detected ? '<span class="launch-browser-badge detected">Tu navegador</span>' : ""}
+              <span class="launch-browser-badge">${escapeHtml(browser.badge)}</span>
+            </span>
+          </span>
+          <span>${escapeHtml(browser.description)}</span>
+          <span class="launch-browser-store">
+            <span>${escapeHtml(browser.storeName)}</span>
+            ${icon("ArrowRight")}
+          </span>
+        </a>
+      `;
+    })
+    .join("");
+}
+
+function launchWaitlistModalHtml() {
+  return `
+    <div class="launch-modal-backdrop" data-launch-waitlist-backdrop>
+      <section class="launch-modal" role="dialog" aria-modal="true" aria-labelledby="launch-modal-title" aria-describedby="launch-modal-description" tabindex="-1">
+        <button class="launch-modal-close" type="button" data-launch-waitlist-close aria-label="Cerrar">×</button>
+        <div class="launch-modal-head">
+          <p class="section-label">Instalar InmoRadar</p>
+          <h2 id="launch-modal-title">Empieza a descubrir información relevante</h2>
+          <p id="launch-modal-description">Elige tu navegador y abre la store correspondiente. Si la ficha todavía no aparece, busca InmoRadar en esa tienda o vuelve en unos días.</p>
+          <strong>2 días gratis · Sin pago inicial · Premium semanal por 1,99 € solo si decides continuar</strong>
+        </div>
+        <div class="launch-browser-grid" role="group" aria-label="Elige navegador">
+          ${launchWaitlistBrowserCards()}
+        </div>
+        <p class="launch-other-browsers">Chrome, Vivaldi y Brave usan Chrome Web Store. Edge y Firefox tienen sus propias tiendas. Opera puede requerir instalación compatible/manual si la ficha no está publicada todavía.</p>
+        <div class="launch-modal-actions left">
+          <button class="button ghost" type="button" data-launch-waitlist-close>Seguir viendo la web</button>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderLaunchWaitlistModal() {
+  let host = document.querySelector("[data-launch-waitlist-modal]");
+  if (!launchWaitlistState.open) {
+    host?.remove();
+    return;
+  }
+  if (!host) {
+    host = document.createElement("div");
+    host.dataset.launchWaitlistModal = "true";
+    document.body.appendChild(host);
+  }
+  host.innerHTML = launchWaitlistModalHtml();
+  document.body.classList.add("launch-modal-open");
+  bindLaunchWaitlistModal(host);
+  requestAnimationFrame(() => {
+    const focusTarget =
+      host.querySelector("[data-launch-waitlist-success-close]") ||
+      host.querySelector(`[data-browser-store-link="${launchWaitlistState.detectedBrowser}"]`) ||
+      host.querySelector(".launch-browser-card") ||
+      host.querySelector(".launch-modal");
+    focusTarget?.focus?.();
+  });
+}
+
+function closeLaunchWaitlistModal(closeMethod = "secondary_button") {
+  if (!launchWaitlistState.open) return;
+  launchWaitlistAnalytics("launch_waitlist_modal_close", {
+    source: launchWaitlistState.source,
+    closeMethod
+  });
+  const opener = launchWaitlistState.opener;
+  launchWaitlistState.open = false;
+  launchWaitlistState.status = "idle";
+  launchWaitlistState.error = "";
+  document.body.classList.remove("launch-modal-open");
+  renderLaunchWaitlistModal();
+  opener?.focus?.();
+}
+
+function resetLaunchWaitlistForm() {
+  launchWaitlistState.status = "idle";
+  launchWaitlistState.error = "";
+  launchWaitlistState.email = "";
+  launchWaitlistState.alreadyExists = false;
+  renderLaunchWaitlistModal();
+}
+
+function openLaunchWaitlistModal({ source = "web", label = "", opener = null } = {}) {
+  launchWaitlistState.detectedBrowser = detectLaunchBrowser();
+  launchWaitlistState.selectedBrowser = launchWaitlistState.detectedBrowser || "";
+  launchWaitlistState.email = "";
+  launchWaitlistState.error = "";
+  launchWaitlistState.status = "idle";
+  launchWaitlistState.alreadyExists = false;
+  launchWaitlistState.source = source;
+  launchWaitlistState.label = label;
+  launchWaitlistState.opener = opener;
+  launchWaitlistState.open = true;
+  launchWaitlistAnalytics("launch_waitlist_modal_open", { source });
+  renderLaunchWaitlistModal();
+}
+
+function focusableLaunchElements(host) {
+  return Array.from(host.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((node) => !node.disabled && !node.hidden && node.offsetParent !== null);
+}
+
+function bindLaunchWaitlistModal(host) {
+  host.querySelectorAll("[data-launch-waitlist-close]").forEach((button) => {
+    button.addEventListener("click", () => closeLaunchWaitlistModal(button.classList.contains("launch-modal-close") ? "x" : "secondary_button"));
+  });
+  host.querySelector("[data-launch-waitlist-success-close]")?.addEventListener("click", () => closeLaunchWaitlistModal("success_close"));
+  host.querySelector("[data-launch-waitlist-reset]")?.addEventListener("click", resetLaunchWaitlistForm);
+  host.querySelector("[data-launch-waitlist-backdrop]")?.addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) closeLaunchWaitlistModal("backdrop");
+  });
+  host.querySelectorAll("[data-browser-store-link]").forEach((link) => {
+    link.addEventListener("click", () => {
+      launchWaitlistAnalytics("browser_store_click", {
+        browser: link.dataset.browserStoreLink,
+        source: launchWaitlistState.source,
+        storeUrl: link.href
+      });
+    });
+  });
+  const email = host.querySelector("#launch-waitlist-email");
+  email?.addEventListener("input", () => {
+    launchWaitlistState.email = email.value;
+    launchWaitlistState.error = "";
+    const errorNode = host.querySelector("#launch-waitlist-error");
+    if (errorNode) {
+      errorNode.textContent = "";
+      errorNode.hidden = true;
+    }
+    const submit = host.querySelector('[data-launch-waitlist-form] [type="submit"]');
+    if (submit) {
+      submit.disabled = !(launchWaitlistState.selectedBrowser && launchWaitlistState.email.includes("@") && launchWaitlistState.status !== "loading");
+    }
+  });
+  host.querySelector("[data-launch-waitlist-form]")?.addEventListener("submit", submitLaunchWaitlist);
+  host.onkeydown = (event) => {
+    if (event.key === "Escape") {
+      closeLaunchWaitlistModal("escape");
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = focusableLaunchElements(host);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+}
+
+async function submitLaunchWaitlist(event) {
+  event.preventDefault();
+  const browser = launchWaitlistState.selectedBrowser;
+  const email = String(launchWaitlistState.email || "").trim();
+  if (!browser) {
+    launchWaitlistState.error = "Elige tu navegador para continuar.";
+    renderLaunchWaitlistModal();
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    launchWaitlistState.error = "Introduce un email válido.";
+    renderLaunchWaitlistModal();
+    launchWaitlistAnalytics("launch_waitlist_error", {
+      browser,
+      source: launchWaitlistState.source,
+      errorCode: "INVALID_EMAIL"
+    });
+    return;
+  }
+
+  const params = new URLSearchParams(location.search);
+  const payload = {
+    email,
+    browser,
+    source: "launch_waitlist_modal",
+    ctaSource: launchWaitlistState.source,
+    pagePath: location.pathname || "/",
+    referrer: document.referrer || "",
+    utmSource: params.get("utm_source") || "",
+    utmMedium: params.get("utm_medium") || "",
+    utmCampaign: params.get("utm_campaign") || "",
+    userAgent: navigator.userAgent || ""
+  };
+  launchWaitlistAnalytics("launch_waitlist_submit", {
+    browser,
+    source: launchWaitlistState.source,
+    emailDomain: emailDomain(email)
+  });
+  launchWaitlistState.status = "loading";
+  launchWaitlistState.error = "";
+  renderLaunchWaitlistModal();
+  try {
+    const response = await fetch(BROWSER_WAITLIST_ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok === false) {
+      throw new Error(result.error || "SERVER_ERROR");
+    }
+    launchWaitlistState.status = "success";
+    launchWaitlistState.alreadyExists = Boolean(result.alreadyExists);
+    launchWaitlistAnalytics("launch_waitlist_success", {
+      browser,
+      source: launchWaitlistState.source,
+      alreadyExists: Boolean(result.alreadyExists)
+    });
+    renderLaunchWaitlistModal();
+  } catch (error) {
+    launchWaitlistState.status = "idle";
+    launchWaitlistState.error = "No hemos podido guardar tu email. Inténtalo de nuevo en unos segundos.";
+    launchWaitlistAnalytics("launch_waitlist_error", {
+      browser,
+      source: launchWaitlistState.source,
+      errorCode: error.message === "INVALID_EMAIL" ? "INVALID_EMAIL" : "SERVER_ERROR"
+    });
+    renderLaunchWaitlistModal();
+  }
+}
+
+function ctaSourceFromElement(element) {
+  return element.dataset.launchWaitlistSource || element.dataset.checkoutSource || element.dataset.testid || element.getAttribute("aria-label") || normalizedText(element.textContent || "web_cta").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "web_cta";
+}
+
+function isLaunchWaitlistCta(element) {
+  if (element.matches("[data-launch-waitlist], [data-checkout-button]")) return true;
+  if (element.matches('a.button[href="/premium"], a.button[href="/premium.html"]') && !element.closest(".nav-links, .mobile-panel")) return true;
+  return false;
+}
+
+function initLaunchWaitlist() {
+  document.querySelectorAll('a.button[href="/premium"], a.button[href="/premium.html"], [data-checkout-button], [data-launch-waitlist]').forEach((element) => {
+    if (!isLaunchWaitlistCta(element)) return;
+    element.dataset.launchWaitlist = "true";
+    if (!element.dataset.launchWaitlistSource) element.dataset.launchWaitlistSource = ctaSourceFromElement(element);
+    element.addEventListener("click", (event) => {
+      event.preventDefault();
+      launchWaitlistAnalytics("launch_waitlist_cta_click", {
+        source: element.dataset.launchWaitlistSource,
+        label: normalizedText(element.textContent || "")
+      });
+      openLaunchWaitlistModal({
+        source: element.dataset.launchWaitlistSource,
+        label: normalizedText(element.textContent || ""),
+        opener: element
+      });
+    });
+  });
+}
+
 function initContactForm() {
   const form = document.querySelector("[data-contact-form]");
   if (!form) return;
@@ -755,33 +1139,8 @@ function initCheckout() {
   const portalToken = new URLSearchParams(location.search).get("token");
   if (portalToken) openPortalFromToken(portalToken);
 
-  document.querySelectorAll("[data-checkout-button]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      button.disabled = true;
-      try {
-        showToast(t("checkoutPreparing"));
-        const response = await fetch(CHECKOUT_ENDPOINT, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ source: button.dataset.checkoutSource || "web" })
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (payload.error === "test_checkout_blocked_in_production") {
-          throw new Error(t("checkoutSetupIssue"));
-        }
-        if (!response.ok || !payload.checkout_url) throw new Error(payload.message || "checkout_failed");
-        if (payload.test_mode && isPublicProductionHost()) {
-          throw new Error("El checkout de pruebas esta bloqueado en la web publica.");
-        }
-        showToast(t("checkoutOpening"));
-        location.href = payload.checkout_url;
-      } catch (error) {
-        showToast(error.message || t("checkoutManual"), "error");
-      } finally {
-        button.disabled = false;
-      }
-    });
-  });
+  // Las stores aún no son públicas: los CTAs de prueba/instalación los captura
+  // initLaunchWaitlist() y abren la lista de lanzamiento, no el checkout.
   document.querySelectorAll("[data-portal-form]").forEach((form) => {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -831,6 +1190,7 @@ function init() {
   initFaq();
   initContactForm();
   initFooterSocial();
+  initLaunchWaitlist();
   initCheckout();
 }
 
