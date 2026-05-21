@@ -22,11 +22,13 @@ RUNWAYML_API_SECRET=...
 RUNWAY_RENDER_ENABLED=true
 RUNWAY_DEFAULT_MODEL=gen4.5
 RUNWAY_DEFAULT_DURATION_SECONDS=5
-RUNWAY_DEFAULT_RATIO=720:1280
+RUNWAY_DEFAULT_RATIO=1280:720
 RUNWAY_MAX_COST_USD=0.75
 RUNWAY_DAILY_BUDGET_USD=3
 RUNWAY_DRY_RUN_ONLY=false
 ```
+
+Nota: Gen-4.5 en modo texto puro se envia a Runway como `image_to_video` sin `promptImage`, tal como indica la API oficial. En ese modo usamos `1280:720` porque Runway puede rechazar `720:1280` sin imagen de entrada. InmoRadar reencuadra el clip en la composicion vertical final.
 
 ## Tabla Supabase
 
@@ -36,7 +38,7 @@ Ejecuta `database/social-video-jobs.sql` antes de activar renders reales. La tab
 
 1. Genera el storyboard desde `Marketing > Videos`.
 2. Pulsa `Estimar coste`.
-3. Revisa creditos y coste.
+3. Revisa creditos, coste y ratio API.
 4. Marca la confirmacion de coste.
 5. Pulsa `Generar clip Runway`.
 6. Pulsa `Comprobar estado` hasta que Runway devuelva resultado.

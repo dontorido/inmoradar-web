@@ -4,6 +4,20 @@ const RELEASE_TARGETS = ["web", "extension", "backoffice"];
 const MAX_RELEASE_FILE_BYTES = 3 * 1024 * 1024;
 const INITIAL_ADMIN_PATH = window.location.pathname || "";
 const INITIAL_MARKETING_SUBSECTION = INITIAL_ADMIN_PATH.includes("/backoffice/marketing/viraliza") ? "marketing-viraliza" : "";
+const DEFAULT_VIDEO_PROPERTY_DATA = Object.freeze({
+  ciudad: "Madrid",
+  barrio: "Ventas",
+  portal: "Idealista",
+  precio: "245.000 €",
+  metros: "62 m²",
+  precio_m2: "3.951 €/m²",
+  entrada_estimada: "49.000 €",
+  cuota_estimada: "980 €/mes",
+  transporte: "Metro a 9 minutos",
+  aparcamiento: "complicado",
+  score: "6,8/10",
+  veredicto: "lo compararía antes de llamar"
+});
 
 const state = {
   token: sessionStorage.getItem(TOKEN_KEY) || "",
@@ -1927,6 +1941,7 @@ async function importRunwayClip() {
 }
 
 function videoFormPayload(form) {
+  ensureVideoPropertyDataDefault(form);
   const data = new FormData(form);
   const propertyDataRaw = String(data.get("property_data") || "").trim();
   let propertyData = {};
@@ -1974,6 +1989,17 @@ function storedVideoProject(project) {
   const copy = { ...project };
   delete copy.local_background_clip;
   return copy;
+}
+
+function defaultVideoPropertyDataText() {
+  return JSON.stringify(DEFAULT_VIDEO_PROPERTY_DATA, null, 2);
+}
+
+function ensureVideoPropertyDataDefault(form = els.videoForm) {
+  const field = form?.querySelector('[name="property_data"]');
+  if (field && !String(field.value || "").trim()) {
+    field.value = defaultVideoPropertyDataText();
+  }
 }
 
 function realVideoPackText(project) {
@@ -3289,6 +3315,7 @@ els.releaseRows.forEach((rowsEl) => {
 });
 
 if (els.videoForm) {
+  ensureVideoPropertyDataDefault(els.videoForm);
   els.videoForm.addEventListener("submit", (event) => {
     event.preventDefault();
     runVideoGeneration(els.videoForm).catch((error) => showStatus(error.message, "bad"));

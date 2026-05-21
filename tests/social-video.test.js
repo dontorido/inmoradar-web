@@ -4,7 +4,7 @@ const test = require("node:test");
 const { VIDEO_BRANDING_CONFIG } = require("../lib/social-video/branding");
 const { generateSocialVideoProject } = require("../lib/social-video/generator");
 const { socialVideoProjectRow, socialVideoProjectSummary } = require("../lib/social-video/projects");
-const { buildRunwayTextToVideoRequest, estimateRunwayCost, normalizeRunwayRatio, runwaySettings } = require("../lib/social-video/runway");
+const { RunwayApiError, buildRunwayTextToVideoRequest, createRunwayTextToVideo, estimateRunwayCost, normalizeRunwayRatio, runwaySettings } = require("../lib/social-video/runway");
 const { analyzePerformance, generateVideoBrief, seriesConfig } = require("../lib/social-video/videoStrategyInmoRadar");
 
 test("video branding config exige logo y web en posiciones fijas", () => {
@@ -104,7 +104,7 @@ test("runway estimate clamps duration and exposes cost before spending", () => {
   assert.equal(clamped.duration_seconds, 10);
 });
 
-test("runway request uses InmoRadar safe-zone prompt and Gen-4.5 vertical ratio", () => {
+test("runway request uses InmoRadar safe-zone prompt and Gen-4.5 text-only ratio", () => {
   const project = generateSocialVideoProject({
     topic: "parking",
     city: "Madrid",
@@ -120,11 +120,60 @@ test("runway request uses InmoRadar safe-zone prompt and Gen-4.5 vertical ratio"
   assert.equal(request.model, "gen4.5");
   assert.equal(request.endpoint, "image_to_video");
   assert.equal(request.duration, 5);
-  assert.equal(request.ratio, "720:1280");
+  assert.equal(request.ratio, "1280:720");
   assert.ok(request.promptText.length <= 950);
   assert.match(request.promptText, /Dejar espacio libre arriba derecha/);
   assert.match(request.promptText, /Inmoradar\.app/);
   assert.match(request.promptText, /No incluir texto legible, logos externos/);
+});
+
+test("runway request keeps vertical ratio when a prompt image is provided", () => {
+  const project = generateSocialVideoProject({
+    topic: "parking",
+    city: "Madrid",
+    duration_seconds: 24
+  });
+  const request = buildRunwayTextToVideoRequest({
+    project,
+    model: "gen4.5",
+    durationSeconds: 5,
+    ratio: "720:1280",
+    promptImage: "data:image/png;base64,abc"
+  });
+
+  assert.equal(request.endpoint, "image_to_video");
+  assert.equal(request.ratio, "720:1280");
+  assert.equal(request.promptImage, "data:image/png;base64,abc");
+});
+
+test("runway create exposes provider validation details", async () => {
+  const fetchImpl = async () => ({
+    ok: false,
+    status: 400,
+    text: async () => JSON.stringify({ message: "ratio is invalid", code: "validation_error" })
+  });
+
+  await assert.rejects(
+    () =>
+      createRunwayTextToVideo({
+        apiSecret: "secret",
+        fetchImpl,
+        request: {
+          endpoint: "image_to_video",
+          model: "gen4.5",
+          promptText: "test",
+          ratio: "720:1280",
+          duration: 5
+        }
+      }),
+    (error) => {
+      assert.equal(error instanceof RunwayApiError, true);
+      assert.equal(error.status, 400);
+      assert.equal(error.payload.code, "validation_error");
+      assert.equal(error.message, "ratio is invalid");
+      return true;
+    }
+  );
 });
 
 test("runway settings are disabled by default to avoid accidental cost", () => {
@@ -143,6 +192,7 @@ test("runway ratio normaliza valores al formato Gen-4.5", () => {
   assert.equal(normalizeRunwayRatio("768:1280"), "720:1280");
   assert.equal(normalizeRunwayRatio("1280:720"), "1280:720");
   assert.equal(normalizeRunwayRatio("1280:768"), "1280:720");
+  assert.equal(normalizeRunwayRatio("720:1280", { textOnly: true }), "1280:720");
 });
 
 test("videoStrategyInmoRadar genera brief viral prudente para chollo o humo", () => {
