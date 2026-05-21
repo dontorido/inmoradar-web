@@ -19,6 +19,125 @@ const DEFAULT_VIDEO_PROPERTY_DATA = Object.freeze({
   veredicto: "lo compararía antes de llamar"
 });
 
+const VIDEO_TOPIC_PROPERTY_DATA = Object.freeze({
+  random: {
+    ciudad: "Madrid",
+    barrio: "Ventas",
+    portal: "Idealista",
+    precio: "245.000 €",
+    metros: "62 m²",
+    habitaciones: "2",
+    precio_m2: "3.951 €/m²",
+    entrada_estimada: "49.000 €",
+    cuota_estimada: "980 €/mes",
+    transporte: "Metro a 9 minutos",
+    aparcamiento: "complicado",
+    senal_zona: "zona con buena demanda, pero conviene comparar calles cercanas",
+    score: "6,8/10",
+    veredicto: "lo compararía antes de llamar"
+  },
+  precio_m2: {
+    ciudad: "Madrid",
+    barrio: "Tetuán",
+    portal: "Fotocasa",
+    precio: "310.000 €",
+    metros: "68 m²",
+    habitaciones: "2",
+    precio_m2: "4.558 €/m²",
+    entrada_estimada: "62.000 €",
+    cuota_estimada: "1.235 €/mes",
+    transporte: "Metro a 6 minutos",
+    aparcamiento: "difícil en horario laboral",
+    senal_zona: "precio por metro alto para comparar con viviendas cercanas",
+    score: "6,4/10",
+    veredicto: "interesante, pero con señales a revisar"
+  },
+  alquiler: {
+    ciudad: "Valencia",
+    barrio: "Ruzafa",
+    portal: "Idealista",
+    tipo_inmueble: "alquiler",
+    precio: "1.150 €/mes",
+    metros: "54 m²",
+    habitaciones: "1",
+    precio_m2: "21,3 €/m²",
+    entrada_estimada: "2.300 € entre fianza y primer mes",
+    cuota_estimada: "1.150 €/mes",
+    transporte: "Metro y bus a menos de 10 minutos",
+    aparcamiento: "muy limitado",
+    senal_zona: "zona demandada, precio sensible a ubicación exacta",
+    score: "7,1/10",
+    veredicto: "yo pediría más información antes de visitar"
+  },
+  compra: {
+    ciudad: "Barcelona",
+    barrio: "Sants",
+    portal: "Habitaclia",
+    tipo_inmueble: "compra",
+    precio: "365.000 €",
+    metros: "74 m²",
+    habitaciones: "3",
+    precio_m2: "4.932 €/m²",
+    entrada_estimada: "73.000 €",
+    cuota_estimada: "1.455 €/mes",
+    transporte: "Cercanías y metro a 7 minutos",
+    aparcamiento: "zona con presión media",
+    senal_zona: "buena conexión, coste inicial elevado",
+    score: "7,3/10",
+    veredicto: "buena pinta, aunque conviene validar costes"
+  },
+  zona: {
+    ciudad: "Málaga",
+    barrio: "Teatinos",
+    portal: "Pisos.com",
+    precio: "285.000 €",
+    metros: "82 m²",
+    habitaciones: "3",
+    precio_m2: "3.475 €/m²",
+    entrada_estimada: "57.000 €",
+    cuota_estimada: "1.135 €/mes",
+    transporte: "Metro a 11 minutos",
+    aparcamiento: "razonable fuera de hora punta",
+    ruido: "medio",
+    senal_zona: "zona familiar con servicios, revisar distancia real al transporte",
+    score: "7,6/10",
+    veredicto: "yo sí lo visitaría si la zona encaja"
+  },
+  parking: {
+    ciudad: "Madrid",
+    barrio: "Puente de Vallecas",
+    portal: "Idealista",
+    precio: "198.000 €",
+    metros: "59 m²",
+    habitaciones: "2",
+    precio_m2: "3.356 €/m²",
+    entrada_estimada: "39.600 €",
+    cuota_estimada: "790 €/mes",
+    transporte: "Metro a 8 minutos",
+    aparcamiento: "complicado, garaje no incluido",
+    senal_zona: "alta presión de aparcamiento en la calle",
+    score: "6,2/10",
+    veredicto: "yo lo guardaría, pero no lo pondría como primera visita"
+  },
+  errores: {
+    ciudad: "Sevilla",
+    barrio: "Nervión",
+    portal: "Fotocasa",
+    precio: "260.000 €",
+    precio_alt: "275.000 €",
+    metros: "61 m²",
+    habitaciones: "2",
+    precio_m2: "4.262 €/m²",
+    entrada_estimada: "52.000 €",
+    cuota_estimada: "1.035 €/mes",
+    transporte: "Metro a 13 minutos",
+    aparcamiento: "limitado",
+    senal_zona: "el precio total distrae del coste por metro y del entorno",
+    score: "6,5/10",
+    veredicto: "no llamaría todavía sin comparar dos o tres opciones más"
+  }
+});
+
 const state = {
   token: sessionStorage.getItem(TOKEN_KEY) || "",
   activeSection: INITIAL_MARKETING_SUBSECTION ? "marketing" : "ventas",
@@ -129,7 +248,7 @@ const els = {
   videoProjects: document.querySelector("[data-video-projects]"),
   videoRunwayPanel: document.querySelector("[data-video-runway-panel]"),
   videoRunwayModel: document.querySelector("[data-video-runway-model]"),
-  videoRunwayDuration: document.querySelector("[data-video-runway-duration]"),
+  videoRunwayDurationLabel: document.querySelector("[data-video-runway-duration-label]"),
   videoRunwayConfirm: document.querySelector("[data-video-runway-confirm]"),
   videoRunwayStatus: document.querySelector("[data-video-runway-status]"),
   videoRunwayEstimate: document.querySelector("[data-video-runway-estimate]"),
@@ -1645,6 +1764,7 @@ function setVideoActions(enabled) {
   [els.videoCopyPrompt, els.videoDownloadAiPack, els.videoDownloadJson, els.videoDownloadHtml, els.videoExport].forEach((button) => {
     if (button) button.disabled = !enabled || state.video.busy;
   });
+  syncRunwayDurationLabel();
   setRunwayActions();
 }
 
@@ -1689,7 +1809,7 @@ function runwayErrorMessage(error) {
     return message;
   }
   if (code === "runway_estimate_above_max_cost") {
-    return "Ese clip supera el límite de coste por render. Baja la duración a 5 segundos o sube RUNWAY_MAX_COST_USD en Vercel.";
+    return "Ese clip supera el límite de coste por render. Baja la duración del storyboard o sube RUNWAY_MAX_COST_USD en Vercel.";
   }
   if (code === "runway_daily_budget_exceeded") {
     return "Presupuesto diario de Runway agotado. Sube RUNWAY_DAILY_BUDGET_USD o espera a mañana.";
@@ -1807,13 +1927,26 @@ function renderVideoReadiness() {
 }
 
 function runwayPayload(extra = {}) {
+  const duration = currentStoryboardDuration();
   return {
     project: state.video.lastProject,
     model: els.videoRunwayModel?.value || "gen4.5",
-    duration_seconds: Number(els.videoRunwayDuration?.value || 5),
+    duration_seconds: duration,
     scene_index: state.video.selectedSceneIndex || 0,
     ...extra
   };
+}
+
+function currentStoryboardDuration() {
+  const fromProject = Number(state.video.lastProject?.duration_seconds || 0);
+  if (Number.isFinite(fromProject) && fromProject > 0) return fromProject;
+  const fromForm = Number(els.videoForm?.querySelector('[name="duration_seconds"]')?.value || 24);
+  return Number.isFinite(fromForm) && fromForm > 0 ? fromForm : 24;
+}
+
+function syncRunwayDurationLabel() {
+  if (!els.videoRunwayDurationLabel) return;
+  els.videoRunwayDurationLabel.textContent = `${currentStoryboardDuration()} segundos`;
 }
 
 function formatRunwayEstimate(estimate, limits = {}) {
@@ -2000,15 +2133,111 @@ function storedVideoProject(project) {
   return copy;
 }
 
-function defaultVideoPropertyDataText() {
-  return JSON.stringify(DEFAULT_VIDEO_PROPERTY_DATA, null, 2);
+function videoFormValue(form, name, fallback = "") {
+  const field = form?.querySelector(`[name="${name}"]`);
+  return String(field?.value || fallback).trim();
+}
+
+function selectedVideoPropertyData(form = els.videoForm) {
+  const topic = videoFormValue(form, "topic", "random");
+  const series = videoFormValue(form, "series_id", "chollo_o_humo");
+  const platform = videoFormValue(form, "platform", "tiktok");
+  const objective = videoFormValue(form, "objective", "comments_and_installs");
+  const city = videoFormValue(form, "city", "");
+  const base = {
+    ...DEFAULT_VIDEO_PROPERTY_DATA,
+    ...(VIDEO_TOPIC_PROPERTY_DATA[topic] || VIDEO_TOPIC_PROPERTY_DATA.random)
+  };
+  if (city) base.ciudad = city;
+  base.portal = base.portal || "Idealista";
+  base.disclaimer = "Estimaciones orientativas. No es una tasación.";
+  base.cta = objective === "premium_conversion" ? "Pásalo por InmoRadar antes de contactar." : "¿Tú llamarías?";
+  base.url_landing = "https://www.inmoradar.app";
+  base.platform = platform;
+  base.series_id = series;
+  base.topic = topic;
+  base.objective = objective;
+
+  if (series === "piso_a_vs_piso_b") {
+    return {
+      ciudad: base.ciudad,
+      barrio: base.barrio,
+      portal: base.portal,
+      platform,
+      series_id: series,
+      topic,
+      objective,
+      precio_base: base.precio,
+      metros_a: "68",
+      precio_m2_a: base.precio_m2,
+      score_a: base.score,
+      metros_b: "82",
+      precio_m2_b: "3.720 €/m²",
+      score_b: "7,1/10",
+      ventaja_a: "mejor transporte",
+      ventaja_b: "más metros y mejor precio por m²",
+      veredicto: "si vas a diario en transporte público, miraría primero el A",
+      cta: "¿Tú cuál visitarías primero?",
+      disclaimer: base.disclaimer
+    };
+  }
+
+  if (series === "lo_visitarias") {
+    return {
+      ...base,
+      pros: ["precio competitivo", "transporte razonable", "distribución aprovechable"],
+      contras: ["aparcamiento complicado", "conviene validar gastos", "zona a comparar"],
+      veredicto_corto: "pediría más información antes de visitar"
+    };
+  }
+
+  if (series === "mitos_inmobiliarios") {
+    return {
+      ...base,
+      mito: "el piso más barato es siempre el mejor",
+      realidad: "el precio necesita contexto de metros, entrada, cuota y zona",
+      percepcion: "barato",
+      senal_clave: "el coste real"
+    };
+  }
+
+  if (series === "mini_tutoriales") {
+    return {
+      ...base,
+      paso_1: "mira el precio por metro cuadrado",
+      paso_2: "compáralo con la zona",
+      paso_3: "revisa entrada, cuota y entorno",
+      ejemplo: "el precio es alto, la zona no destaca y el coste inicial se dispara"
+    };
+  }
+
+  if (series === "pisos_seguidores") {
+    return {
+      ...base,
+      zona_resumen: `${base.barrio || "zona"} en ${base.ciudad || "ciudad no indicada"}`,
+      accion_recomendada: "pediría más información antes de visitar",
+      razon_principal: "hay señales útiles, pero falta validar costes y entorno"
+    };
+  }
+
+  return base;
+}
+
+function defaultVideoPropertyDataText(form = els.videoForm) {
+  return JSON.stringify(selectedVideoPropertyData(form), null, 2);
 }
 
 function ensureVideoPropertyDataDefault(form = els.videoForm) {
   const field = form?.querySelector('[name="property_data"]');
   if (field && !String(field.value || "").trim()) {
-    field.value = defaultVideoPropertyDataText();
+    field.value = defaultVideoPropertyDataText(form);
   }
+}
+
+function refreshVideoPropertyDataFromSelections(form = els.videoForm) {
+  const field = form?.querySelector('[name="property_data"]');
+  if (!field) return;
+  field.value = defaultVideoPropertyDataText(form);
 }
 
 function realVideoPackText(project) {
@@ -3011,9 +3240,7 @@ async function loadRunwayConfig() {
     const payload = await api("/api/admin?resource=social-video/runway-config");
     state.video.runwayConfig = payload;
     if (payload.default_model && els.videoRunwayModel) els.videoRunwayModel.value = payload.default_model;
-    if (payload.default_duration_seconds && els.videoRunwayDuration) {
-      els.videoRunwayDuration.value = String(payload.default_duration_seconds);
-    }
+    syncRunwayDurationLabel();
     const readiness = runwayReadiness(payload);
     setRunwayStatus(
       `${readiness.status}. ${readiness.detail}`,
@@ -3324,10 +3551,23 @@ els.releaseRows.forEach((rowsEl) => {
 });
 
 if (els.videoForm) {
-  ensureVideoPropertyDataDefault(els.videoForm);
+  refreshVideoPropertyDataFromSelections(els.videoForm);
+  syncRunwayDurationLabel();
   els.videoForm.addEventListener("submit", (event) => {
     event.preventDefault();
     runVideoGeneration(els.videoForm).catch((error) => showStatus(error.message, "bad"));
+  });
+  els.videoForm.querySelectorAll('[name="series_id"], [name="topic"], [name="platform"], [name="objective"], [name="city"]').forEach((control) => {
+    const eventName = control.name === "city" ? "input" : "change";
+    control.addEventListener(eventName, () => {
+      refreshVideoPropertyDataFromSelections(els.videoForm);
+    });
+  });
+  els.videoForm.querySelector('[name="duration_seconds"]')?.addEventListener("change", () => {
+    state.video.runwayEstimate = null;
+    syncRunwayDurationLabel();
+    setRunwayStatus("Duración del storyboard cambiada. Runway usará esta misma duración; vuelve a estimar el coste.", "neutral");
+    setRunwayActions();
   });
   els.videoForm.querySelector('[name="background_clip"]')?.addEventListener("change", () => {
     syncVideoBackgroundClip(els.videoForm);
@@ -3446,14 +3686,6 @@ if (els.videoRunwayModel) {
   els.videoRunwayModel.addEventListener("change", () => {
     state.video.runwayEstimate = null;
     setRunwayStatus("Modelo cambiado. Vuelve a estimar el coste.", "neutral");
-    setRunwayActions();
-  });
-}
-
-if (els.videoRunwayDuration) {
-  els.videoRunwayDuration.addEventListener("change", () => {
-    state.video.runwayEstimate = null;
-    setRunwayStatus("Duración cambiada. Vuelve a estimar el coste.", "neutral");
     setRunwayActions();
   });
 }

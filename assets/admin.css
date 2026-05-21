@@ -2703,6 +2703,29 @@
   gap: 8px;
 }
 
+.admin-video-runway-duration-note {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(9, 9, 11, .08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .78);
+  padding: 12px;
+}
+
+.admin-video-runway .admin-video-runway-duration-note span {
+  color: var(--radar);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+.admin-video-runway .admin-video-runway-duration-note strong {
+  font-size: 18px;
+  letter-spacing: -.02em;
+}
+
 .admin-video-runway select {
   min-height: 46px;
   border: 1px solid rgba(9, 9, 11, .1);

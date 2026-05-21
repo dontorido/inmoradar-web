@@ -979,13 +979,11 @@
                     <option value="gen4.5" selected>Gen-4.5 - 12 créditos/s</option>
                   </select>
                 </label>
-                <label>
-                  <span>Duración clip IA</span>
-                  <select name="runway_duration_seconds" data-video-runway-duration>
-                    <option value="5" selected>5 segundos</option>
-                    <option value="10">10 segundos</option>
-                  </select>
-                </label>
+                <div class="admin-video-runway-duration-note">
+                  <span>Duración Runway</span>
+                  <strong data-video-runway-duration-label>Igual que storyboard</strong>
+                  <p>Runway usará la duración seleccionada en el brief del vídeo.</p>
+                </div>
                 <label class="admin-video-runway-confirm">
                   <input type="checkbox" name="runway_confirm_cost" data-video-runway-confirm>
                   <span>Confirmo lanzar Runway con el coste estimado</span>
