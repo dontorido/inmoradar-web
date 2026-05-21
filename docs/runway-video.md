@@ -22,13 +22,13 @@ RUNWAYML_API_SECRET=...
 RUNWAY_RENDER_ENABLED=true
 RUNWAY_DEFAULT_MODEL=gen4.5
 RUNWAY_DEFAULT_DURATION_SECONDS=5
-RUNWAY_DEFAULT_RATIO=1280:720
+RUNWAY_DEFAULT_RATIO=720:1280
 RUNWAY_MAX_COST_USD=0.75
 RUNWAY_DAILY_BUDGET_USD=3
 RUNWAY_DRY_RUN_ONLY=false
 ```
 
-Nota: Gen-4.5 en modo texto puro se envia a Runway como `image_to_video` sin `promptImage`, tal como indica la API oficial. En ese modo usamos `1280:720` porque Runway puede rechazar `720:1280` sin imagen de entrada. InmoRadar reencuadra el clip en la composicion vertical final.
+Nota: Gen-4.5 en modo texto puro se envia a Runway como `text_to_video`. Si hay una imagen base (`promptImage`), el backend usa `image_to_video`. Para videos verticales usamos `720:1280` siempre que el endpoint lo soporte.
 
 Para evitar rechazos de validacion del cuerpo, el prompt que se envia a Runway se normaliza a una linea corta en ASCII. Si Runway aun rechaza el prompt del storyboard, el backend reintenta una vez con un prompt minimo compatible antes de devolver error.
 

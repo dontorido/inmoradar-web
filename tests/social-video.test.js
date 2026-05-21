@@ -104,7 +104,7 @@ test("runway estimate clamps duration and exposes cost before spending", () => {
   assert.equal(clamped.duration_seconds, 10);
 });
 
-test("runway request uses InmoRadar safe-zone prompt and Gen-4.5 text-only ratio", () => {
+test("runway request uses InmoRadar safe-zone prompt and Gen-4.5 text-to-video endpoint", () => {
   const project = generateSocialVideoProject({
     topic: "parking",
     city: "Madrid",
@@ -118,9 +118,9 @@ test("runway request uses InmoRadar safe-zone prompt and Gen-4.5 text-only ratio
   });
 
   assert.equal(request.model, "gen4.5");
-  assert.equal(request.endpoint, "image_to_video");
+  assert.equal(request.endpoint, "text_to_video");
   assert.equal(request.duration, 5);
-  assert.equal(request.ratio, "1280:720");
+  assert.equal(request.ratio, "720:1280");
   assert.ok(request.promptText.length <= 650);
   assert.match(request.promptText, /Leave clean space top right/);
   assert.match(request.promptText, /Inmoradar\.app/);
@@ -164,7 +164,8 @@ test("runway create exposes provider validation details", async () => {
           model: "gen4.5",
           promptText: "test",
           ratio: "720:1280",
-          duration: 5
+          duration: 5,
+          promptImage: "data:image/png;base64,abc"
         }
       }),
     (error) => {
@@ -179,7 +180,9 @@ test("runway create exposes provider validation details", async () => {
 
 test("runway create retries body validation with minimal fallback prompt", async () => {
   const bodies = [];
-  const fetchImpl = async (_url, options) => {
+  const urls = [];
+  const fetchImpl = async (url, options) => {
+    urls.push(url);
     bodies.push(JSON.parse(options.body));
     if (bodies.length === 1) {
       return {
@@ -209,6 +212,8 @@ test("runway create retries body validation with minimal fallback prompt", async
 
   assert.equal(task.id, "task_123");
   assert.equal(bodies.length, 2);
+  assert.match(urls[0], /\/image_to_video$/);
+  assert.match(urls[1], /\/text_to_video$/);
   assert.equal(bodies[1].promptText, RUNWAY_FALLBACK_PROMPT);
   assert.equal(bodies[1].ratio, "1280:720");
 });
@@ -238,7 +243,8 @@ test("runway ratio normaliza valores al formato Gen-4.5", () => {
   assert.equal(normalizeRunwayRatio("768:1280"), "720:1280");
   assert.equal(normalizeRunwayRatio("1280:720"), "1280:720");
   assert.equal(normalizeRunwayRatio("1280:768"), "1280:720");
-  assert.equal(normalizeRunwayRatio("720:1280", { textOnly: true }), "1280:720");
+  assert.equal(normalizeRunwayRatio("720:1280", { textOnly: true }), "720:1280");
+  assert.equal(normalizeRunwayRatio("", { textOnly: true }), "720:1280");
 });
 
 test("videoStrategyInmoRadar genera brief viral prudente para chollo o humo", () => {

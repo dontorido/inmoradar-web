@@ -1815,9 +1815,10 @@ function formatRunwayEstimate(estimate, limits = {}) {
   if (!estimate) return "Sin estimación.";
   const maxCost = limits.max_cost_usd !== undefined ? ` Límite/render: $${Number(limits.max_cost_usd).toFixed(2)}.` : "";
   const dailyBudget = limits.daily_budget_usd !== undefined ? ` Presupuesto diario: $${Number(limits.daily_budget_usd).toFixed(2)}.` : "";
+  const endpoint = limits.request?.endpoint ? ` Endpoint API: ${limits.request.endpoint}.` : "";
   const ratio = limits.request?.ratio ? ` Ratio API: ${limits.request.ratio}.` : "";
-  const textOnlyNote = limits.request?.ratio === "1280:720" ? " Gen-4.5 en texto puro exige 16:9; InmoRadar lo reencuadra en vertical al componer." : "";
-  return `Estimación Runway: ${estimate.model}, ${estimate.duration_seconds}s, ${estimate.estimated_credits} créditos, $${Number(estimate.estimated_cost_usd).toFixed(2)}.${ratio}${textOnlyNote}${maxCost}${dailyBudget}`;
+  const textOnlyNote = limits.request?.endpoint === "text_to_video" ? " Gen-4.5 en texto puro se envía por text_to_video." : "";
+  return `Estimación Runway: ${estimate.model}, ${estimate.duration_seconds}s, ${estimate.estimated_credits} créditos, $${Number(estimate.estimated_cost_usd).toFixed(2)}.${endpoint}${ratio}${textOnlyNote}${maxCost}${dailyBudget}`;
 }
 
 async function estimateRunwayRender() {
