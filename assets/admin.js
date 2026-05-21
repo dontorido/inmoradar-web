@@ -1806,6 +1806,15 @@ function runwayErrorMessage(error) {
     return message;
   }
   if (code === "runway_estimate_above_max_cost") {
+    const estimate = payload.estimate || {};
+    const estimatedCost = Number(estimate.estimated_cost_usd || 0);
+    const maxCost = Number(payload.max_cost_usd || 0);
+    const duration = Number(estimate.duration_seconds || 0);
+    if (estimatedCost && maxCost) {
+      const recommendedMax = Math.max(estimatedCost, Math.ceil(estimatedCost * 2) / 2);
+      const durationText = duration ? ` de ${duration}s` : "";
+      return `Ese clip${durationText} cuesta aprox. $${estimatedCost.toFixed(2)} y tu límite actual por render es $${maxCost.toFixed(2)}. Para lanzarlo, sube RUNWAY_MAX_COST_USD a ${recommendedMax.toFixed(2)} en Vercel o baja la duración del storyboard.`;
+    }
     return "Ese clip supera el límite de coste por render. Baja la duración del storyboard o sube RUNWAY_MAX_COST_USD en Vercel.";
   }
   if (code === "runway_daily_budget_exceeded") {
