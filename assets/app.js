@@ -3,6 +3,8 @@ const CHECKOUT_ENDPOINT = "/api/lemonsqueezy-checkout";
 const PORTAL_ENDPOINT = "/api/lemonsqueezy-portal";
 const CONTACT_ENDPOINT = "/api/contact";
 const BROWSER_WAITLIST_ENDPOINT = "/api/waitlist/browser";
+const OWNED_ANALYTICS_ENDPOINT = "/api/analytics/event";
+const OWNED_ANALYTICS_SESSION_KEY = "inmoradar_owned_session_id";
 const NEWS_ENDPOINT = "/api/news";
 const CHROME_WEBSTORE_URL = "https://chromewebstore.google.com/detail/inmoradar/mbkjlkagblkmdnjggoggbjiohbjebaab";
 const LANGUAGE_STORAGE_KEY = "inmoradar_language";
@@ -852,6 +854,114 @@ function launchWaitlistAnalytics(eventName, props = {}) {
   }
 }
 
+function ownedAnalyticsSessionId() {
+  try {
+    const current = localStorage.getItem(OWNED_ANALYTICS_SESSION_KEY);
+    if (current) return current;
+    const next = window.crypto?.randomUUID?.() || `anon_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(OWNED_ANALYTICS_SESSION_KEY, next);
+    return next;
+  } catch (error) {
+    return "anon_unavailable";
+  }
+}
+
+function deviceType() {
+  const width = window.innerWidth || document.documentElement.clientWidth || 0;
+  if (width && width < 768) return "mobile";
+  if (width && width < 1100) return "tablet";
+  return "desktop";
+}
+
+function utmPayload() {
+  const params = new URLSearchParams(location.search || "");
+  return {
+    source: params.get("utm_source") || "",
+    medium: params.get("utm_medium") || "",
+    campaign: params.get("utm_campaign") || "",
+    term: params.get("utm_term") || "",
+    content: params.get("utm_content") || ""
+  };
+}
+
+function pageContextFromDom() {
+  const main = document.querySelector("[data-owned-analytics], [data-article-page], .seo-reading, main");
+  const path = location.pathname || "/";
+  const slug = (main?.dataset?.slug || path.replace(/^\/+|\/+$/g, "")).slice(0, 180);
+  const template = main?.dataset?.template || document.querySelector(".seo-reading")?.dataset?.template || "";
+  const isGuide = path.startsWith("/guias/");
+  const isArticle = path.startsWith("/noticias/");
+  const isSeo = Boolean(template || isGuide || path.startsWith("/precio-") || path.startsWith("/saber-si-"));
+  return {
+    page_path: path,
+    page_url: location.href.split("#")[0],
+    page_type: isSeo ? "seo" : isArticle ? "article" : "public",
+    content_type: main?.dataset?.contentType || (isGuide ? "guide" : isArticle ? "article" : isSeo ? "landing" : "page"),
+    template_type: main?.dataset?.templateType || template || (isGuide ? "editorial_guide" : ""),
+    slug,
+    city: main?.dataset?.city || "",
+    topic: main?.dataset?.topic || document.title.split("|")[0].trim().slice(0, 160),
+    referrer: document.referrer || "",
+    utm: utmPayload(),
+    browser: detectLaunchBrowser(),
+    device_type: deviceType()
+  };
+}
+
+function stripAnalyticsPersonalData(payload = {}) {
+  const copy = { ...payload };
+  delete copy.email;
+  delete copy.name;
+  delete copy.phone;
+  if (copy.metadata && typeof copy.metadata === "object") {
+    const metadata = { ...copy.metadata };
+    Object.keys(metadata).forEach((key) => {
+      if (/email|mail|name|phone|token|secret|password|card/i.test(key)) delete metadata[key];
+    });
+    copy.metadata = metadata;
+  }
+  return copy;
+}
+
+function pushExternalAnalytics(eventName, props = {}) {
+  launchWaitlistAnalytics(eventName, props);
+}
+
+function trackOwnedEvent(eventName, props = {}) {
+  const payload = stripAnalyticsPersonalData({
+    ...pageContextFromDom(),
+    ...props,
+    event_name: eventName,
+    anonymous_session_id: ownedAnalyticsSessionId(),
+    metadata: {
+      ...(props.metadata || {})
+    }
+  });
+  const body = JSON.stringify(payload);
+  try {
+    if (navigator.sendBeacon) {
+      const blob = new Blob([body], { type: "application/json" });
+      navigator.sendBeacon(OWNED_ANALYTICS_ENDPOINT, blob);
+      return;
+    }
+  } catch (error) {
+    // Continue with fetch fallback.
+  }
+  fetch(OWNED_ANALYTICS_ENDPOINT, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+    keepalive: true
+  }).catch(() => {});
+}
+
+function installCtaEventName(source = "") {
+  const value = String(source || "");
+  if (value.includes("editorial") || value.includes("guide")) return "guide_cta_click";
+  if (value.includes("article") || value.includes("noticias")) return "article_cta_click";
+  if (value.includes("seo_")) return "seo_cta_click";
+  return "install_click";
+}
 function analyticsErrorCode(value) {
   return String(value || "unknown")
     .toLowerCase()
@@ -861,7 +971,8 @@ function analyticsErrorCode(value) {
 }
 
 function trackConversionEvent(eventName, props = {}) {
-  launchWaitlistAnalytics(eventName, props);
+  pushExternalAnalytics(eventName, props);
+  trackOwnedEvent(eventName, props);
 }
 
 function isInstallableBrowser(browserId) {
@@ -878,6 +989,11 @@ function openChromeWebStore({ browser = "chrome", source = "web", label = "" } =
     source,
     label,
     store: "chrome_web_store"
+  });
+  trackOwnedEvent("chrome_store_click", {
+    browser,
+    source,
+    metadata: { label, store: "chrome_web_store" }
   });
   const url = installUrlForBrowser(browser);
   const link = document.createElement("a");
@@ -1032,6 +1148,7 @@ function openLaunchWaitlistModal({ source = "web", label = "", opener = null, br
   launchWaitlistState.opener = opener;
   launchWaitlistState.open = true;
   launchWaitlistAnalytics("launch_waitlist_modal_open", { source, browser: launchWaitlistState.selectedBrowser });
+  trackOwnedEvent("waitlist_open", { source, browser: launchWaitlistState.selectedBrowser, metadata: { label } });
   renderLaunchWaitlistModal();
 }
 
@@ -1169,6 +1286,11 @@ async function submitLaunchWaitlist(event) {
       source: launchWaitlistState.source,
       alreadyExists: Boolean(result.alreadyExists)
     });
+    trackOwnedEvent("waitlist_submit", {
+      browser,
+      source: launchWaitlistState.source,
+      metadata: { alreadyExists: Boolean(result.alreadyExists) }
+    });
     renderLaunchWaitlistModal();
   } catch (error) {
     launchWaitlistState.status = "idle";
@@ -1192,6 +1314,7 @@ function handleUniversalInstallClick(event, element) {
   const label = normalizedText(element.textContent || "");
   const browser = element.dataset.installBrowser || detectLaunchBrowser();
   launchWaitlistAnalytics("launch_waitlist_cta_click", { source, label, browser });
+  trackOwnedEvent(installCtaEventName(source), { browser, source, metadata: { label } });
   if (isInstallableBrowser(browser)) {
     openChromeWebStore({ browser, source, label });
     return;
@@ -1332,6 +1455,11 @@ function initCheckout() {
       const previousText = button.textContent;
       const source = button.dataset.checkoutSource || ctaSourceFromElement(button);
       const browser = detectLaunchBrowser();
+      trackOwnedEvent("premium_click", {
+        source,
+        browser,
+        metadata: { label: normalizedText(previousText || "") }
+      });
       trackConversionEvent("checkout_start", {
         source,
         label: normalizedText(previousText || ""),
@@ -1424,6 +1552,7 @@ function init() {
   initInstallButtons();
   initLaunchWaitlist();
   initCheckout();
+  trackOwnedEvent("page_view");
 }
 
 init();

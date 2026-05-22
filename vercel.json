@@ -14,6 +14,7 @@
     { "source": "/api/", "destination": "/api/health" },
     { "source": "/api/contact", "destination": "/api/market-price?resource=contact" },
     { "source": "/api/waitlist/browser", "destination": "/api/market-price?resource=browser-waitlist" },
+    { "source": "/api/analytics/event", "destination": "/api/market-price?resource=owned-analytics-event" },
     { "source": "/api/saved-properties/email-report", "destination": "/api/check-premium?resource=saved-properties-email-report" },
     { "source": "/api/admin/summary", "destination": "/api/admin?resource=summary" },
     { "source": "/api/admin/premium/subscriptions", "destination": "/api/admin?resource=premium/subscriptions" },
