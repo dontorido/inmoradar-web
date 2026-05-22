@@ -8,7 +8,7 @@ Este archivo resume el estado actual de `inmoradar-web` para que otro asistente 
 
 `inmoradar-web` es la web publica, API serverless y backoffice de InmoRadar.
 
-InmoRadar es un copiloto inmobiliario para navegador. La web usa el CTA principal **Instalar gratis en Chrome** y un CTA universal: Chrome, Edge, Brave y Vivaldi abren Chrome Web Store; Opera, Firefox, Safari y navegadores desconocidos abren waitlist. Premium se presenta como upgrade posterior con botones **Activar Premium**. La web presenta el producto, enlaza la instalacion publica en Chrome Web Store, gestiona captacion, Premium, contenidos SEO y contacto. Las APIs dan soporte a la extension y al backoffice: comprobacion Premium, precios de mercado, analisis de inmueble, parking, uso de extension, SEO programatico, releases y generacion de videos sociales.
+InmoRadar es un copiloto inmobiliario para navegador. La web usa el CTA principal **Empieza a descubrir información relevante** y un CTA universal: Chrome, Edge, Brave y Vivaldi abren Chrome Web Store; Opera, Firefox, Safari y navegadores desconocidos abren waitlist. Premium se presenta como upgrade posterior con botones **Activar Premium**. La web presenta el producto, enlaza la instalacion publica en Chrome Web Store, gestiona captacion, Premium, contenidos SEO y contacto. Las APIs dan soporte a la extension y al backoffice: comprobacion Premium, precios de mercado, analisis de inmueble, parking, uso de extension, SEO programatico, releases y generacion de videos sociales.
 
 El backoffice vive en `admin.html` y esta protegido por `ADMIN_IMPORT_TOKEN`. Agrupa Ventas, Marketing, KPIs y Operaciones.
 
@@ -189,7 +189,7 @@ Archivos:
 
 Flujo checkout:
 
-1. Botones con `data-install-button`, `data-browser-waitlist` y `data-checkout-button` se gestionan desde `assets/app.js`: CTA universal de instalacion/waitlist, waitlist por navegador y checkout Premium quedan separados. El CTA de instalacion visible es `Instalar gratis en Chrome`; los botones de pago usan `Activar Premium`.
+1. Botones con `data-install-button`, `data-browser-waitlist` y `data-checkout-button` se gestionan desde `assets/app.js`: CTA universal de instalacion/waitlist, waitlist por navegador y checkout Premium quedan separados. El CTA de instalacion visible es `Empieza a descubrir información relevante`; los botones de pago usan `Activar Premium`.
 2. `POST /api/lemonsqueezy-checkout` crea checkout con Lemon Squeezy. El frontend envia eventos no bloqueantes `checkout_start`, `checkout_created` y `checkout_error` a `dataLayer`/`gtag`; no hay persistencia backend propia de estos eventos todavia.
 3. Lemon Squeezy redirige a `success.html` o `cancel.html`.
 4. Webhook `POST /api/lemonsqueezy-webhook` valida firma y sincroniza Supabase.

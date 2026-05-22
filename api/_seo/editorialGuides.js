@@ -21,7 +21,7 @@ const EDITORIAL_GUIDE_TOPICS = [
       "Checklist practico para revisar un anuncio antes de contactar: precio, euros por metro cuadrado, entrada, cuota, transporte y aparcamiento.",
     hook: "La llamada llega demasiado pronto cuando el anuncio todavia no se ha entendido.",
     checklist: ["Precio por metro cuadrado", "Entrada estimada", "Cuota orientativa", "Transporte y zona", "Aparcamiento y entorno"],
-    cta: "Instala InmoRadar en Chrome y revisa el anuncio donde ya estas buscando."
+    cta: "Instala InmoRadar en tu navegador compatible y revisa el anuncio donde ya estas buscando."
   },
   {
     key: "comparar-dos-pisos",
@@ -286,9 +286,9 @@ function buildEditorialGuideLanding(opportunity, sourceData = {}) {
 
         <section class="seo-section" id="cta" data-guide-specific="true">
           <h2>Analiza antes de contactar</h2>
-          <p>${escapeHtml(topic.cta)} La extension esta disponible para Chrome y navegadores Chromium compatibles. Para Firefox y Safari puedes apuntarte a la lista de aviso.</p>
+          <p>${escapeHtml(topic.cta)} La extension esta disponible para navegadores compatibles. Para Firefox, Opera y Safari puedes apuntarte a la lista de aviso.</p>
           <div class="seo-final-actions">
-            <button class="seo-button seo-button-primary" type="button" data-install-button data-install-source="seo_editorial_guide">INSTALAR GRATIS EN CHROME</button>
+            <button class="seo-button seo-button-primary" type="button" data-install-button data-install-source="seo_editorial_guide">EMPIEZA A DESCUBRIR INFORMACIÓN RELEVANTE</button>
             <a class="seo-button seo-button-secondary" href="/noticias">VER MAS GUIAS</a>
           </div>
         </section>
