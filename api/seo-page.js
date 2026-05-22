@@ -198,7 +198,11 @@ function normalizeLandingBodyHtml(bodyHtml = "") {
     .replace(/INSTALAR GRATIS EN CHROME/g, "EMPEZAR GRATIS")
     .replace(/Instalar gratis en Chrome/g, "Empezar gratis")
     .replace(/INSTALAR EN CHROME/g, "EMPEZAR GRATIS")
-    .replace(/Instalar en Chrome/g, "Empezar gratis");
+    .replace(/Instalar en Chrome/g, "Empezar gratis")
+    .replace(/INSTALAR INMORADAR PREMIUM/g, "EMPEZAR GRATIS")
+    .replace(/Instalar InmoRadar Premium/g, "Empezar gratis")
+    .replace(/INSTALAR INMORADAR/g, "EMPEZAR GRATIS")
+    .replace(/Instalar InmoRadar/g, "Empezar gratis");
 }
 function renderLandingHtml(landing) {
   const qualityScore = Number(landing.quality_score) || 0;
