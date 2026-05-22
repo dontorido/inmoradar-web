@@ -39,7 +39,7 @@ El backoffice vive en `admin.html` y esta protegido por `ADMIN_IMPORT_TOKEN`. Ag
 - `api/_seo/`: generador, calidad, textos, fuentes de mercado y render SEO.
 - `api/cron/`: cron serverless de publicacion SEO.
 - `api/og/`: endpoint de imagen Open Graph para landings de precio.
-- `api/waitlist/`: endpoint publico de lista de espera de navegadores.
+- `api/market-price.js?resource=browser-waitlist`: recurso interno que atiende la lista de espera de navegadores sin crear una serverless function adicional.
 - `assets/`: CSS, JS, imagenes, favicons, assets de marca y capturas Chrome Web Store.
 - `data/`: datos de entrada para importadores de mercado.
 - `database/`: SQL de tablas Supabase.
@@ -48,6 +48,7 @@ El backoffice vive en `admin.html` y esta protegido por `ADMIN_IMPORT_TOKEN`. Ag
 - `lib/extension-usage/`: normalizacion y resumen de eventos anonimos de la extension.
 - `lib/operations/`: releases y conector Chrome Web Store.
 - `lib/sales/`: eventos y resumen de ingresos.
+- `lib/browser-waitlist.js`: validacion, saneado, honeypot y persistencia Supabase de la waitlist de navegadores.
 - `lib/social-video/`: generador de proyectos de video, estrategia, branding, Runway y persistencia.
 - `lib/viraliza/`: motor de rutina diaria de viralizacion.
 - `scripts/`: servidor local estatico, generador SEO e importador de informes publicos.
@@ -100,7 +101,7 @@ Rutas limpias definidas en `vercel.json` y `scripts/serve-static.js`: `/`, `/que
 - `GET /api/news`: rewrite a sitemap con formato news.
 - `GET /api/seo-page?slug=...`: render publico de landings SEO.
 - `GET /api/og/price-city`: imagen Open Graph para landings.
-- `POST /api/waitlist/browser`: lista de espera de navegadores. Valida email y navegador, aplica honeypot basico y guarda leads en `browser_waitlist_leads` (`database/browser-waitlist-leads.sql`) desde backend.
+- `POST /api/waitlist/browser`: ruta publica de lista de espera de navegadores. En `vercel.json` reescribe a `api/market-price.js?resource=browser-waitlist` para respetar el limite de Vercel Hobby. Valida email y navegador, aplica honeypot basico y guarda leads en `browser_waitlist_leads` (`database/browser-waitlist-leads.sql`) desde backend.
 
 ### Backoffice
 

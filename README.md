@@ -18,7 +18,7 @@ Web estatica de lanzamiento para InmoRadar.
 - `api/lemonsqueezy-checkout.js`: crea checkouts y abre el Customer Portal de Lemon Squeezy en modo prueba o produccion sin exponer la API key.
 - `api/lemonsqueezy-webhook.js`: webhook preparado para sincronizar suscripciones de Lemon Squeezy.
 - `api/check-premium.js?resource=saved-properties-email-report`: envio Premium de comparativa de inmuebles guardados por Cloudflare Email Service.
-- `api/waitlist/browser.js`: endpoint publico para guardar lista de espera por navegador sin exponer claves Supabase.
+- `lib/browser-waitlist.js`: logica de lista de espera de navegadores. La ruta publica `/api/waitlist/browser` reescribe internamente a `api/market-price.js?resource=browser-waitlist` para no anadir otra serverless function en Vercel Hobby.
 - `admin.html`, `assets/admin.js` y `assets/admin.css`: backoffice protegido por `ADMIN_IMPORT_TOKEN`.
 - `api/admin.js`: backoffice API compacta para Premium, SEO, KPIs, Parking y estado de integraciones. Se usa una sola serverless function para respetar el limite de Vercel Hobby.
 - `lib/social-video/*`: generador de guion, storyboard, preview vertical y paquete exportable para Videos IA, con personas de fondo, musica y branding global obligatorio.

@@ -48,7 +48,7 @@ Recomendacion inmediata: conservar el repo git real como fuente de verdad, mover
 - Resumen de diff local: 10 archivos, 73 inserciones y 27 eliminaciones.
 - Archivos/carpetas sin trackear destacados:
   - logs vacios: `admin-preview.*`, `admin-redesign-preview.*`, `video-preview.*`
-  - `api/waitlist/`
+  - `api/waitlist/` (ya no debe existir como serverless function; la waitlist se resuelve por rewrite hacia `api/market-price.js?resource=browser-waitlist`)
   - `api/admin/`
   - `config/`
   - `tools/`
@@ -318,7 +318,7 @@ Propuesta de capas:
 | `assets/inmoradar-brand-mark.jpg`, `assets/inmoradar-brand-mark-transparent.png`, `assets/favicon-192.png`, `assets/apple-touch-icon.png` | assets de marca no trackeados | pueden ser necesarios para favicon/store | alto | no borrar sin revisar uso en HTML/Vercel/Store |
 | `data/market-price-report-sources.json` | config local de importacion | sample si esta trackeado, real no | alto | revisar manualmente; podria contener fuentes de trabajo |
 | `market-price-public-reports.csv` | salida generada por importador | archivo CSV en raiz | medio | mover fuera del repo o regenerar cuando haga falta |
-| `api/waitlist/`, `config/`, `database/browser-waitlist-leads.sql`, `tests/browser-waitlist.test.js` | feature no trackeada de waitlist | aparece en arbol local y README/PROJECT_CONTEXT lo mencionan como pendiente | alto | no borrar; decidir si se commitea o se descarta como feature incompleta |
+| `lib/browser-waitlist.js`, `database/browser-waitlist-leads.sql`, `tests/browser-waitlist.test.js` | feature de waitlist integrada | la ruta publica `/api/waitlist/browser` reescribe a `api/market-price.js?resource=browser-waitlist` para evitar otra serverless function | no borrar | conservar y ejecutar SQL en Supabase antes de produccion |
 | `api/admin/` | untracked segun `git clean -nd` | no aparecio en `git status` inicial resumido, pero si en clean dry-run | alto | revisar manualmente antes de tocar |
 | `tools/` | utilidades webstore no trackeadas | scripts y HTML de screenshots | medio | revisar; probablemente mover a repo si son utiles |
 | `DEPLOY.md` | cambios locales no commiteados | 36 inserciones | alto | no borrar; revisar diff y decidir commit/revert |
@@ -405,7 +405,7 @@ Fase A: limpieza segura de documentacion/assets obvios.
 3. Borrar o archivar logs vacios.
 4. Mover capturas temporales PNG a `docs/archive` o fuera del repo.
 5. Decidir si `assets/chrome-web-store/` debe commitearse como assets oficiales.
-6. Revisar untracked waitlist (`api/waitlist`, `config`, SQL y test) y decidir si entra en repo.
+6. Waitlist rescatada: mantenerla dentro de `lib/browser-waitlist.js` y no recrear `api/waitlist/browser.js` como funcion serverless independiente.
 
 Fase B: refactor pequeno y modularizacion.
 

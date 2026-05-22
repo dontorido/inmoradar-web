@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { buildWaitlistLead, normalizeBrowser } = require("../api/waitlist/browser")._internal;
+const { buildWaitlistLead, normalizeBrowser } = require("../lib/browser-waitlist");
 
 test("browser waitlist valida navegadores permitidos", () => {
   assert.equal(normalizeBrowser("Chrome"), "chrome");

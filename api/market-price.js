@@ -7,6 +7,7 @@ const {
   checkAddressRateLimit
 } = require("./_address/intelligence");
 const { calculateParkingAssessment, parkingAssessmentPayload } = require("./_parking/intelligence");
+const { browserWaitlistPayload } = require("../lib/browser-waitlist");
 
 const GEO_CONFIDENCE = {
   neighbourhood: 0.85,
@@ -1492,6 +1493,12 @@ async function handler(req, res) {
         return;
       }
       const result = await contactPayload(req);
+      json(res, result.status, result.body);
+      return;
+    }
+
+    if (resource === "browser-waitlist") {
+      const result = await browserWaitlistPayload(req);
       json(res, result.status, result.body);
       return;
     }

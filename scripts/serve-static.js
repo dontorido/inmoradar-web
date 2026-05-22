@@ -21,6 +21,7 @@ const rewrites = {
   "/api": "/api/health",
   "/api/": "/api/health",
   "/api/contact": "/api/market-price?resource=contact",
+  "/api/waitlist/browser": "/api/market-price?resource=browser-waitlist",
   "/api/admin/summary": "/api/admin?resource=summary",
   "/api/admin/premium/subscriptions": "/api/admin?resource=premium/subscriptions",
   "/api/admin/seo/landings": "/api/admin?resource=seo/landings",
