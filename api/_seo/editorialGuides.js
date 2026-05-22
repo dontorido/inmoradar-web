@@ -288,7 +288,7 @@ function buildEditorialGuideLanding(opportunity, sourceData = {}) {
           <h2>Analiza antes de contactar</h2>
           <p>${escapeHtml(topic.cta)} La extension esta disponible para Chrome y navegadores Chromium compatibles. Para Firefox y Safari puedes apuntarte a la lista de aviso.</p>
           <div class="seo-final-actions">
-            <button class="seo-button seo-button-primary" type="button" data-install-button data-install-source="seo_editorial_guide">INSTALAR INMORADAR EN CHROME</button>
+            <button class="seo-button seo-button-primary" type="button" data-install-button data-install-source="seo_editorial_guide">INSTALAR GRATIS EN CHROME</button>
             <a class="seo-button seo-button-secondary" href="/noticias">VER MAS GUIAS</a>
           </div>
         </section>
