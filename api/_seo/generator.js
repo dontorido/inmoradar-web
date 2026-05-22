@@ -1,11 +1,22 @@
 const { hasSupabaseConfig, supabaseFetch } = require("../_utils");
+const {
+  buildEditorialGuideLanding,
+  buildEditorialGuideSourceData,
+  editorialGuideOpportunities,
+  editorialGuideSlugForOpportunity
+} = require("./editorialGuides");
 const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../../lib/seo/cityGuideTemplates");
 const { buildPriceCitySourceData } = require("./marketSources");
+const { buildSeoDailyPolicySnapshot, seoContentTypeForTemplate } = require("./publishingPolicy");
 const { buildPriceCityLanding } = require("./priceCity");
 const { calculateSeoLandingQuality } = require("./quality");
 
-const SUPPORTED_TEMPLATE_TYPES = ["price_city", "rent_city", "expensive_listing_city"];
-const RANDOM_TEMPLATE_TYPES = new Set(["random", "mixed", "all"]);
+const LANDING_TEMPLATE_TYPES = ["price_city", "rent_city", "expensive_listing_city"];
+const EDITORIAL_TEMPLATE_TYPES = ["editorial_guide"];
+const SUPPORTED_TEMPLATE_TYPES = [...LANDING_TEMPLATE_TYPES, ...EDITORIAL_TEMPLATE_TYPES];
+const RANDOM_LANDING_TEMPLATE_TYPES = new Set(["random", "mixed", "landing_random", "landings"]);
+const RANDOM_ALL_TEMPLATE_TYPES = new Set(["all"]);
+const RANDOM_NEWS_TEMPLATE_TYPES = new Set(["news", "guides", "editorial"]);
 
 const DEFAULT_SEED_OPPORTUNITIES = [
   {
@@ -110,9 +121,12 @@ function opportunityForTemplate([city, province, autonomousCommunity, priority],
   };
 }
 
-const CONTROLLED_SEO_OPPORTUNITIES = CITY_OPPORTUNITY_POOL.flatMap((city) =>
-  SUPPORTED_TEMPLATE_TYPES.map((templateType) => opportunityForTemplate(city, templateType))
-);
+const CONTROLLED_SEO_OPPORTUNITIES = [
+  ...CITY_OPPORTUNITY_POOL.flatMap((city) =>
+    LANDING_TEMPLATE_TYPES.map((templateType) => opportunityForTemplate(city, templateType))
+  ),
+  ...editorialGuideOpportunities()
+];
 
 function clampLimit(limit) {
   const parsed = Number.parseInt(String(limit || 5), 10);
@@ -134,11 +148,17 @@ function landingStatus(score, shouldPublish) {
 }
 
 function opportunityKey(opportunity) {
+  if (opportunity.template_type === "editorial_guide") {
+    return `${opportunity.template_type}|${String(opportunity.keyword || "").toLowerCase()}`;
+  }
   return `${opportunity.template_type}|${String(opportunity.city || "").toLowerCase()}`;
 }
 
 function templateTypesForRequest(templateType) {
-  if (RANDOM_TEMPLATE_TYPES.has(String(templateType || "").toLowerCase())) return SUPPORTED_TEMPLATE_TYPES;
+  const normalized = String(templateType || "").toLowerCase();
+  if (RANDOM_LANDING_TEMPLATE_TYPES.has(normalized)) return LANDING_TEMPLATE_TYPES;
+  if (RANDOM_NEWS_TEMPLATE_TYPES.has(normalized)) return EDITORIAL_TEMPLATE_TYPES;
+  if (RANDOM_ALL_TEMPLATE_TYPES.has(normalized)) return SUPPORTED_TEMPLATE_TYPES;
   if (!SUPPORTED_TEMPLATE_TYPES.includes(templateType)) {
     throw new Error(`Unsupported template_type: ${templateType}`);
   }
@@ -146,6 +166,7 @@ function templateTypesForRequest(templateType) {
 }
 
 function opportunitySlug(opportunity) {
+  if (opportunity.template_type === "editorial_guide") return editorialGuideSlugForOpportunity(opportunity);
   const citySlug = String(opportunity.city || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -313,15 +334,16 @@ async function upsertLanding(landing) {
 
 async function countPublishedToday(now) {
   if (!hasSupabaseConfig()) return 0;
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
+  const start = new Date(new Date(now).getTime() - 48 * 60 * 60 * 1000);
   const params = new URLSearchParams({
-    select: "id",
+    select: "id,template_type,status,published_at,updated_at,last_generated_at",
     status: "eq.published",
-    published_at: `gte.${start.toISOString()}`
+    published_at: `gte.${start.toISOString()}`,
+    limit: "5000"
   });
   const rows = await supabaseFetch(`seo_landings?${params.toString()}`);
-  return Array.isArray(rows) ? rows.length : 0;
+  const snapshot = buildSeoDailyPolicySnapshot(Array.isArray(rows) ? rows : [], { now });
+  return snapshot.published_total_today;
 }
 
 function canPublishNow({ mode, autoPublish, quality, publishedToday, publishedThisRun, dailyPublishLimit, maxPublishesPerRun }) {
@@ -363,6 +385,7 @@ function buildLandingForOpportunity(opportunity, sourceData) {
   if (opportunity.template_type === "price_city") return buildPriceCityLanding(opportunity, sourceData);
   if (opportunity.template_type === "rent_city") return buildRentCityLanding(opportunity, sourceData);
   if (opportunity.template_type === "expensive_listing_city") return buildExpensiveListingCityLanding(opportunity, sourceData);
+  if (opportunity.template_type === "editorial_guide") return buildEditorialGuideLanding(opportunity, sourceData);
   throw new Error(`Unsupported template_type: ${opportunity.template_type}`);
 }
 
@@ -420,8 +443,10 @@ async function generateOne({ opportunity, mode, autoPublish, publishedToday, pub
     await updateOpportunity(opportunity, { status: "generating" });
   }
 
-  const rawSourceData = await buildPriceCitySourceData(opportunity);
-  const sourceData = templateSourceData(rawSourceData, opportunity.template_type);
+  const sourceData =
+    opportunity.template_type === "editorial_guide"
+      ? buildEditorialGuideSourceData(opportunity, now)
+      : templateSourceData(await buildPriceCitySourceData(opportunity), opportunity.template_type);
   const landing = buildLandingForOpportunity(opportunity, sourceData);
   const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: landing.faq });
   const canAutoPublish = canPublishNow({
@@ -492,6 +517,9 @@ async function runSeoLandingGeneration(options = {}) {
       includeExistingDrafts
     }));
   let publishedToday = await countPublishedToday(now);
+  if (Number.isFinite(Number(options.publishedToday))) {
+    publishedToday = Number(options.publishedToday);
+  }
   let publishedThisRun = 0;
   const results = [];
 
@@ -519,6 +547,7 @@ async function runSeoLandingGeneration(options = {}) {
     mode,
     dry_run: mode === "dry_run",
     template_type: templateType,
+    content_type: templateTypesForRequest(templateType).every((type) => seoContentTypeForTemplate(type) === "news") ? "news" : "landing",
     limit,
     candidate_limit: publishFirstEligible ? candidateLimit : limit,
     autoPublish,

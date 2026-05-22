@@ -7,6 +7,7 @@ const { buildPriceCitySourceData } = require("../api/_seo/marketSources");
 const { buildPriceCityLanding } = require("../api/_seo/priceCity");
 const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { runSeoLandingGeneration } = require("../api/_seo/generator");
+const { buildSeoDailyPolicySnapshot, selectNextSeoContentType } = require("../api/_seo/publishingPolicy");
 const { getSeedPublishedLanding } = require("../api/_seo/seedPublished");
 const sitemapHandler = require("../api/sitemap");
 const seoPageHandler = require("../api/seo-page");
@@ -89,6 +90,55 @@ test("el generador SEO soporta contenidos aleatorios controlados de alquiler y a
   assert.equal(expensive.results[0].saved, false);
 });
 
+
+test("la politica SEO 2+2 prioriza el tipo con cuota pendiente", () => {
+  const rows = [
+    { template_type: "price_city", status: "published", published_at: "2026-05-22T08:00:00.000Z" },
+    { template_type: "rent_city", status: "published", published_at: "2026-05-22T09:00:00.000Z" },
+    { template_type: "editorial_guide", status: "published", published_at: "2026-05-22T10:00:00.000Z" }
+  ];
+  const snapshot = buildSeoDailyPolicySnapshot(rows, { now: "2026-05-22T12:00:00.000Z" });
+
+  assert.equal(snapshot.published_landings_today, 2);
+  assert.equal(snapshot.published_news_today, 1);
+  assert.equal(snapshot.selected_content_type, "news");
+  assert.equal(snapshot.target_landings_per_day, 2);
+  assert.equal(snapshot.target_news_per_day, 2);
+});
+
+test("la politica SEO 2+2 salta cuando ya se llenaron landings y guias", () => {
+  const selection = selectNextSeoContentType({
+    published_landings_today: 2,
+    published_news_today: 2,
+    published_total_today: 4
+  });
+
+  assert.equal(selection.selected_content_type, null);
+  assert.equal(selection.skipped_reason, "daily_total_quota_reached");
+});
+
+test("el generador SEO crea guias editoriales indexables cuando alcanzan calidad", async () => {
+  const result = await runSeoLandingGeneration({
+    mode: "dry_run",
+    limit: 1,
+    template_type: "editorial_guide",
+    opportunities: [
+      {
+        keyword: "que mirar antes de llamar por un piso",
+        city: "Espana",
+        template_type: "editorial_guide",
+        search_priority: 90
+      }
+    ]
+  });
+
+  const guide = result.results[0];
+  assert.equal(result.content_type, "news");
+  assert.equal(guide.template_type, "editorial_guide");
+  assert.equal(guide.slug, "guias/antes-de-llamar-por-un-piso");
+  assert.ok(guide.quality_score >= 85);
+  assert.ok(guide.word_count >= 700);
+});
 test("las landings publicas cargan analitica solo tras consentimiento", () => {
   const html = renderLandingHtml({
     slug: "precio-metro-cuadrado/logrono",
@@ -159,14 +209,17 @@ test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () 
 
   assert.match(vercel, /precio-alquiler\/:city/);
   assert.match(vercel, /saber-si-piso-esta-caro\/:city/);
+  assert.match(vercel, /guias\/:slug/);
   assert.match(vercel, /"source": "\/datos"/);
   assert.match(vercel, /"source": "\/noticias\/:slug"/);
   assert.match(redirects, /precio-alquiler\/:city/);
   assert.match(redirects, /saber-si-piso-esta-caro\/:city/);
+  assert.match(redirects, /guias\/:slug/);
   assert.match(redirects, /\/datos \/datos\.html/);
   assert.match(redirects, /\/noticias\/:slug \/article\.html/);
   assert.match(localServer, /precio-alquiler/);
   assert.match(localServer, /saber-si-piso-esta-caro/);
+  assert.match(localServer, /guias/);
   assert.match(localServer, /\/datos\.html/);
   assert.match(localServer, /article\.html/);
 });
