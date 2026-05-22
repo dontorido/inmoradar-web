@@ -193,12 +193,20 @@ function seoPageScript() {
   </script>`;
 }
 
+function normalizeLandingBodyHtml(bodyHtml = "") {
+  return String(bodyHtml || "")
+    .replace(/INSTALAR GRATIS EN CHROME/g, "EMPEZAR GRATIS")
+    .replace(/Instalar gratis en Chrome/g, "Empezar gratis")
+    .replace(/INSTALAR EN CHROME/g, "EMPEZAR GRATIS")
+    .replace(/Instalar en Chrome/g, "Empezar gratis");
+}
 function renderLandingHtml(landing) {
   const qualityScore = Number(landing.quality_score) || 0;
   const robots = landing.index_status === "index" && landing.status === "published" && qualityScore >= 75 ? "index,follow" : "noindex,follow";
   const canonical = landing.canonical_url || `${siteUrl()}/${landing.slug}/`;
   const title = landing.meta_title || `${landing.title} · InmoRadar`;
-  const description = landing.meta_description || stripHtml(landing.body_html).slice(0, 155);
+  const bodyHtml = normalizeLandingBodyHtml(landing.body_html);
+  const description = landing.meta_description || stripHtml(bodyHtml).slice(0, 155);
   const imageUrl = ogImageUrl(landing);
 
   return `<!doctype html>
@@ -601,7 +609,7 @@ function renderLandingHtml(landing) {
     </nav>
   </header>
   <main class="seo-shell" data-owned-analytics data-page-type="seo" data-content-type="${escapeHtml(String(landing.template_type || "").includes("guide") ? "guide" : "landing")}" data-template-type="${escapeHtml(landing.template_type || "")}" data-slug="${escapeHtml(landing.slug || "")}" data-city="${escapeHtml(landing.city || "")}" data-topic="${escapeHtml(landing.title || landing.h1 || "")}">
-    ${landing.body_html}
+    ${bodyHtml}
   </main>
   <footer class="seo-global-footer">
     <div class="container footer-grid">
