@@ -123,6 +123,8 @@ Todos pasan por `api/admin.js` y requieren `ADMIN_IMPORT_TOKEN`.
 - `GET/POST /api/admin?resource=viraliza/creators`: lista o guarda cuentas reales revisadas manualmente.
 - `POST /api/admin?resource=viraliza/creators/import`: importa un array JSON de cuentas reales.
 - `GET /api/admin?resource=viraliza/daily-plan`: genera plan diario de cuentas concretas, comentarios y DMs sugeridos.
+- `GET /api/admin?resource=viraliza/performance`: resume acciones, replies, likes, visitas, installs, top creadores, plataformas, tipos de comentario y recomendaciones.
+- `GET /api/admin?resource=viraliza/learning`: devuelve aprendizaje semanal con winners, losers, insights y siguientes acciones.
 - `POST /api/admin?resource=viraliza/actions`: registra acciones/resultados manuales sobre creadores.
 - `GET /api/admin?resource=social-video/runway-config`: configuracion publica de Runway para UI.
 - `GET/POST /api/admin?resource=social-video/render`: estima, lanza o consulta jobs Runway.
@@ -154,8 +156,9 @@ Flujo:
 Viraliza con cuentas reales:
 
 - Persistencia: `database/viraliza.sql` define `viral_creators` y `viral_actions`, ademas de rutinas, keywords, comentarios, hooks, videos guardados y resultados agregados.
-- UI: `admin.html` + `assets/admin.js` muestran import manual/JSON, plan diario, comentarios/DM sugeridos y formulario de resultados.
+- UI: `admin.html` + `assets/admin.js` muestran import manual/JSON, plan diario, comentarios/DM sugeridos, formulario de resultados y panel de aprendizaje.
 - API: todo pasa por `api/admin.js`; no se crea una serverless function nueva.
+- Aprendizaje: `lib/viraliza/engine.js` calcula score por accion, rendimiento por creador/plataforma/tipo de comentario y recomendaciones para el siguiente dia a partir de `viral_actions`.
 - Operativa: el sistema recomienda; el usuario abre perfiles, copia textos, publica/envia manualmente y registra resultados.
 - Limitacion actual: no hay scraping ni integraciones con credenciales sociales. Las cuentas deben cargarse manualmente.
 Secciones actuales:

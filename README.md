@@ -190,6 +190,8 @@ Recursos admin protegidos por `ADMIN_IMPORT_TOKEN`:
 GET/POST /api/admin?resource=viraliza/creators
 POST /api/admin?resource=viraliza/creators/import
 GET /api/admin?resource=viraliza/daily-plan
+GET /api/admin?resource=viraliza/performance
+GET /api/admin?resource=viraliza/learning
 POST /api/admin?resource=viraliza/actions
 ```
 
@@ -220,7 +222,10 @@ Flujo operativo:
 2. Pulsar `Actualizar plan de hoy` en Marketing -> Viraliza.
 3. Abrir perfiles, revisar contexto y copiar comentario o DM solo si encaja.
 4. Registrar manualmente revisado, comentado, seguido, DM enviado o descartado.
-5. Volver despues de 24h y anotar likes, respuestas, visitas de perfil, installs atribuidas y notas.
+5. Volver despues de 24h y anotar likes, respuestas, visitas de perfil, installs atribuidas, estado final y notas.
+6. Revisar `Aprendizaje` para ver score medio, top cuentas, top plataformas, tipos de comentario y recomendaciones para manana.
+
+El score Viraliza es orientativo y pondera mas las respuestas, instalaciones atribuidas y visitas de perfil que los likes. Un DM con respuesta pesa mas que un comentario sin respuesta. El sistema aprende desde `viral_actions`, pero no publica ni envia nada por si solo.
 
 ## Endpoint de mercado
 
