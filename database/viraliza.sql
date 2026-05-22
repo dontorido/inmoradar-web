@@ -190,6 +190,30 @@ create table if not exists public.viral_results (
   payload jsonb not null default '{}'::jsonb
 );
 
+
+create table if not exists public.viral_actions (
+  id text primary key,
+  creator_id text references public.viral_creators(id) on delete set null,
+  action_date date not null default current_date,
+  platform text,
+  action_type text not null,
+  target_url text,
+  suggested_comment text,
+  used_comment text,
+  suggested_dm text,
+  used_dm text,
+  status text not null default 'completed',
+  likes_count integer not null default 0,
+  replies_count integer not null default 0,
+  profile_visits integer not null default 0,
+  installs_attributed integer not null default 0,
+  notes text,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.viral_actions is 'Manual Viraliza actions. Inserts and updates should be made by the admin backend with service role; do not add public write policies.';
 create index if not exists viral_routines_date_idx on public.viral_routines (date desc);
 create index if not exists viral_tasks_routine_idx on public.viral_tasks (routine_id, status);
 create index if not exists viral_keywords_routine_idx on public.viral_keywords (routine_id);
@@ -197,6 +221,8 @@ create index if not exists viral_creators_score_idx on public.viral_creators (cr
 create index if not exists viral_comments_routine_idx on public.viral_comments (routine_id);
 create index if not exists viral_hooks_routine_idx on public.viral_hooks (routine_id);
 create index if not exists viral_results_entity_idx on public.viral_results (entity_type, entity_id);
+create index if not exists viral_actions_creator_date_idx on public.viral_actions (creator_id, action_date desc);
+create index if not exists viral_actions_status_idx on public.viral_actions (status, action_date desc);
 
 alter table public.viral_routines enable row level security;
 alter table public.viral_tasks enable row level security;
@@ -209,3 +235,4 @@ alter table public.viral_hooks enable row level security;
 alter table public.viral_saved_videos enable row level security;
 alter table public.viral_video_briefs enable row level security;
 alter table public.viral_results enable row level security;
+alter table public.viral_actions enable row level security;
