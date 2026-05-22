@@ -108,6 +108,7 @@ Rutas limpias definidas en `vercel.json` y `scripts/serve-static.js`: `/`, `/que
 Todos pasan por `api/admin.js` y requieren `ADMIN_IMPORT_TOKEN`.
 
 - `GET /api/admin?resource=summary`: resumen general de Premium, SEO, KPIs, integraciones, ingresos y extension.
+- `GET /api/admin?resource=alerts`: alertas operativas del BackOffice; diagnostica `CRON_SECRET`, Supabase, publicaciones SEO recientes, leads de waitlist y actividad Premium sin crear otra serverless function.
 - `GET /api/admin?resource=premium/subscriptions`: listado filtrable de suscripciones.
 - `GET /api/admin?resource=extension/usage`: resumen de uso de extension.
 - `GET/POST /api/admin?resource=seo/landings`: listado y acciones sobre landings SEO.
@@ -216,6 +217,16 @@ Cron:
 
 - Vercel ejecuta `/api/cron/seo-publish` a las 07:00 UTC segun `vercel.json`.
 - GitHub Actions lo ejecuta cada 6 horas con `CRON_SECRET`.
+
+Configurar CRON_SECRET para SEO cron:
+
+1. En Vercel debe existir `CRON_SECRET` o, como fallback operativo, `ADMIN_IMPORT_TOKEN` para `/api/cron/seo-publish`.
+2. En GitHub Actions debe existir el secret `CRON_SECRET`.
+3. Ruta: GitHub -> Settings -> Secrets and variables -> Actions -> New repository secret.
+4. Nombre: `CRON_SECRET`.
+5. Valor: debe coincidir con el `CRON_SECRET` configurado en Vercel.
+6. `.github/workflows/seo-cron.yml` falla si `CRON_SECRET` esta vacio.
+7. Si falta, no se publicaran landings/noticias desde GitHub Actions.
 
 Scripts:
 

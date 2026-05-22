@@ -15,7 +15,7 @@ jobs:
           SITE_URL: https://www.inmoradar.app
         run: |
           if [ -z "$CRON_SECRET" ]; then
-            echo "::error::Falta el secret CRON_SECRET en GitHub Actions. Anadelo en Settings > Secrets and variables > Actions."
+            echo "::error title=Missing CRON_SECRET::Falta el secret CRON_SECRET en GitHub Actions. Añádelo en Settings > Secrets and variables > Actions > New repository secret y usa el mismo valor que en Vercel."
             exit 1
           fi
           curl --fail-with-body \

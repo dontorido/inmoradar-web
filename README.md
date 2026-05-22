@@ -263,3 +263,17 @@ Authorization: Bearer CRON_SECRET
 GitHub Actions lo ejecuta cada 6 horas (`0 */6 * * *`) usando el secreto `CRON_SECRET` del repo. Vercel Hobby tambien conserva un cron diario compatible (`0 7 * * *`) porque ese plan no permite crons mas frecuentes. El cron intenta primero landings existentes en `draft`, `needs_review` o `ready_to_publish`, las regenera con datos frescos y publica como maximo una por ejecucion si llega a `quality_score >= 85`. Si no hay datos reales suficientes, la landing queda `noindex` y el cron pasa a la siguiente candidata.
 
 El cron usa `seo_cron_runs` para registrar ejecuciones y evitar solapes dentro de la misma hora. Si esa tabla todavia no existe, el cron no se bloquea: sigue publicando con modo degradado y lo indica en la respuesta.
+
+### Configurar CRON_SECRET para SEO cron
+
+Para que el cron SEO funcione en producción hay dos sitios que deben compartir el mismo secreto:
+
+1. En Vercel debe existir `CRON_SECRET` o, como fallback operativo, `ADMIN_IMPORT_TOKEN` para proteger `/api/cron/seo-publish`.
+2. En GitHub Actions debe existir el repository secret `CRON_SECRET`.
+3. La ruta en GitHub es: Settings -> Secrets and variables -> Actions -> New repository secret.
+4. El nombre debe ser `CRON_SECRET`.
+5. El valor debe coincidir con el `CRON_SECRET` configurado en Vercel.
+6. `.github/workflows/seo-cron.yml` falla de forma explícita si `CRON_SECRET` está vacío.
+7. Si falta, GitHub Actions no publicará landings/noticias desde el workflow SEO.
+
+No documentar valores reales de secretos en el repo.

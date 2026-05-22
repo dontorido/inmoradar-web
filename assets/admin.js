@@ -1,4 +1,5 @@
 const TOKEN_KEY = "inmoradar_admin_token";
+const ALERT_DISMISS_PREFIX = "inmoradar_admin_alert_dismissed:";
 const VIDEO_PROJECT_KEY = "inmoradar_social_video_project";
 const RELEASE_TARGETS = ["web", "extension", "backoffice"];
 const MAX_RELEASE_FILE_BYTES = 3 * 1024 * 1024;
@@ -186,7 +187,8 @@ const state = {
   viraliza: {
     routine: null,
     executionMode: false
-  }
+  },
+  alerts: []
 };
 
 const els = {
@@ -195,6 +197,7 @@ const els = {
   tokenForm: document.querySelector("[data-admin-token-form]"),
   status: document.querySelector("[data-admin-status]"),
   liveStatus: document.querySelector("[data-admin-live-status]"),
+  alerts: document.querySelector("[data-admin-alerts]"),
   logout: document.querySelector("[data-admin-logout]"),
   sectionButtons: document.querySelectorAll("[data-admin-section-button]"),
   views: document.querySelectorAll("[data-admin-view]"),
@@ -334,6 +337,97 @@ async function api(path, options = {}) {
   return payload;
 }
 
+function adminAlertDismissKey(id) {
+  return `${ALERT_DISMISS_PREFIX}${id}`;
+}
+
+function isAdminAlertDismissed(alert) {
+  if (!alert?.id) return false;
+  try {
+    return localStorage.getItem(adminAlertDismissKey(alert.id)) === "1";
+  } catch (error) {
+    return false;
+  }
+}
+
+function dismissAdminAlert(id) {
+  try {
+    localStorage.setItem(adminAlertDismissKey(id), "1");
+  } catch (error) {
+    return;
+  }
+}
+
+function visibleAdminAlerts(alerts = []) {
+  return alerts.filter((alert) => alert?.id && !isAdminAlertDismissed(alert));
+}
+
+function renderAdminAlerts(alerts = []) {
+  state.alerts = Array.isArray(alerts) ? alerts : [];
+  if (!els.alerts) return;
+  const visibleAlerts = visibleAdminAlerts(state.alerts);
+  if (!visibleAlerts.length) {
+    els.alerts.innerHTML = "";
+    els.alerts.hidden = true;
+    return;
+  }
+
+  els.alerts.hidden = false;
+  els.alerts.innerHTML = visibleAlerts
+    .map((alert) => {
+      const severity = String(alert.severity || "info").toLowerCase();
+      const actionButton = alert.action_target
+        ? `<button class="admin-alert-button" type="button" data-admin-alert-action="${escapeHtml(alert.id)}">${escapeHtml(alert.action_label || "Ir al evento")}</button>`
+        : "";
+      const dismissButton = alert.dismissible
+        ? `<button class="admin-alert-button ghost" type="button" data-admin-alert-dismiss="${escapeHtml(alert.id)}">Desactivar notificación</button>`
+        : "";
+      return `
+        <article class="admin-alert admin-alert--${escapeHtml(severity)}" data-admin-alert-id="${escapeHtml(alert.id)}">
+          <div class="admin-alert-copy">
+            <span>${escapeHtml(alert.category || "system")} · ${escapeHtml(severity)}</span>
+            <strong>${escapeHtml(alert.title || "Aviso operativo")}</strong>
+            <p>${escapeHtml(alert.message || "Revisa este evento del BackOffice.")}</p>
+          </div>
+          <div class="admin-alert-actions">
+            ${actionButton}
+            ${dismissButton}
+          </div>
+        </article>`;
+    })
+    .join("");
+}
+
+function goToAdminAlertTarget(target) {
+  const value = String(target || "").trim();
+  if (!value) return;
+  if (/^https?:\/\//i.test(value)) {
+    window.open(value, "_blank", "noopener,noreferrer");
+    return;
+  }
+  if (!value.startsWith("#")) return;
+
+  if (value === "#seo-cron-secret") setAdminSubsection("marketing", "marketing-seo");
+  if (value === "#operaciones-extension") setAdminSubsection("operaciones", "operaciones-extension");
+  if (value === "#ventas-premium") setAdminSection("ventas");
+
+  const targetEl = document.querySelector(value);
+  if (targetEl) {
+    targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  showStatus("No encuentro esa sección en este panel.", "neutral");
+}
+
+async function loadAlerts() {
+  if (!els.alerts || !state.token) return;
+  try {
+    const payload = await api("/api/admin?resource=alerts");
+    renderAdminAlerts(payload.alerts || []);
+  } catch (error) {
+    renderAdminAlerts([]);
+  }
+}
 function requireLogin() {
   els.login.hidden = Boolean(state.token);
   els.app.hidden = !state.token;
@@ -3381,6 +3475,7 @@ async function loadAll() {
   if (!state.token) return;
   showStatus("Cargando backoffice...");
   try {
+    await loadAlerts();
     await Promise.all([
       loadSummary(),
       loadPremium(),
@@ -3545,6 +3640,7 @@ els.tokenForm.addEventListener("submit", async (event) => {
 els.logout.addEventListener("click", () => {
   sessionStorage.removeItem(TOKEN_KEY);
   state.token = "";
+  renderAdminAlerts([]);
   requireLogin();
   showStatus("");
 });
@@ -3781,6 +3877,18 @@ if (els.viralizaContextForm) {
 
 if (els.app) {
   els.app.addEventListener("click", (event) => {
+    const alertAction = event.target.closest("[data-admin-alert-action]");
+    if (alertAction) {
+      const alert = state.alerts.find((item) => item.id === alertAction.dataset.adminAlertAction);
+      goToAdminAlertTarget(alert?.action_target);
+      return;
+    }
+    const alertDismiss = event.target.closest("[data-admin-alert-dismiss]");
+    if (alertDismiss) {
+      dismissAdminAlert(alertDismiss.dataset.adminAlertDismiss);
+      renderAdminAlerts(state.alerts);
+      return;
+    }
     const openButton = event.target.closest("[data-open-url]");
     if (openButton?.dataset.openUrl) {
       window.open(openButton.dataset.openUrl, "_blank", "noopener,noreferrer");

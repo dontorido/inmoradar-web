@@ -3828,3 +3828,106 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+.admin-alerts {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+
+.admin-alerts[hidden] {
+  display: none;
+}
+
+.admin-alert {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, .24);
+  border-radius: var(--admin-radius-sm);
+  background: var(--radar, #ff4500);
+  color: #fff;
+  padding: 16px 18px;
+  box-shadow: 0 14px 34px rgba(255, 69, 0, .18);
+}
+
+.admin-alert--warning {
+  background: #d63d14;
+}
+
+.admin-alert--info {
+  background: #151515;
+}
+
+.admin-alert-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-alert-copy span,
+.admin-alert-copy p,
+.admin-alert-copy strong {
+  color: #fff;
+}
+
+.admin-alert-copy span {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  opacity: .82;
+}
+
+.admin-alert-copy strong {
+  font-size: 16px;
+  line-height: 1.15;
+}
+
+.admin-alert-copy p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  opacity: .92;
+}
+
+.admin-alert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-alert-button {
+  border: 1px solid rgba(255, 255, 255, .95);
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  padding: 10px 14px;
+  text-transform: uppercase;
+}
+
+.admin-alert-button.ghost {
+  background: transparent;
+  color: #fff;
+}
+
+.admin-alert-button:hover {
+  transform: translateY(-1px);
+}
+
+@media (max-width: 760px) {
+  .admin-alert {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-alert-actions {
+    justify-content: flex-start;
+  }
+}

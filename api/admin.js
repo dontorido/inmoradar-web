@@ -108,6 +108,116 @@ async function safeFetch(path, fallback = []) {
   }
 }
 
+function safeRows(result) {
+  return Array.isArray(result) ? result : result?.rows || [];
+}
+
+function safeFetchFailed(result) {
+  return Boolean(result && !Array.isArray(result) && result.error);
+}
+
+function sortAlerts(alerts) {
+  const rank = { critical: 0, warning: 1, info: 2 };
+  return alerts.sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9));
+}
+
+function recentSinceIso(hours = 24) {
+  return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+}
+
+async function handleAlerts() {
+  const alerts = [];
+  const generatedAt = new Date().toISOString();
+
+  if (!process.env.CRON_SECRET) {
+    alerts.push({
+      id: "seo-cron-secret-missing",
+      severity: "critical",
+      title: "El cron SEO no puede ejecutarse",
+      message: "Falta CRON_SECRET. GitHub Actions fallará antes de publicar landings/noticias.",
+      action_label: "Ver guía",
+      action_target: "#seo-cron-secret",
+      dismissible: true,
+      category: "seo"
+    });
+  }
+
+  if (!hasSupabaseConfig()) {
+    alerts.push({
+      id: "supabase-config-missing",
+      severity: "warning",
+      title: "BackOffice con datos limitados",
+      message: "Supabase no está configurado en este entorno. Algunas métricas y estados operativos no podrán cargarse.",
+      action_label: "Ir al evento",
+      action_target: "#admin-live-status",
+      dismissible: true,
+      category: "system"
+    });
+    return { ok: true, generated_at: generatedAt, alerts: sortAlerts(alerts) };
+  }
+
+  const since = recentSinceIso(24);
+  const encodedSince = encodeURIComponent(since);
+  const [recentSeoResult, recentWaitlistResult, recentRevenueResult, recentPremiumResult] = await Promise.all([
+    safeFetch(
+      `seo_landings?select=id,published_at&status=eq.published&index_status=eq.index&published_at=gte.${encodedSince}&order=published_at.desc&limit=1`
+    ),
+    safeFetch(
+      `browser_waitlist_leads?select=id,email,browser,created_at&created_at=gte.${encodedSince}&order=created_at.desc&limit=5`
+    ),
+    safeFetch(
+      `premium_revenue_events?select=id,amount_cents,currency,occurred_at&occurred_at=gte.${encodedSince}&order=occurred_at.desc&limit=1`
+    ),
+    safeFetch(
+      `premium_subscriptions?select=id,status,created_at,updated_at&or=(created_at.gte.${encodedSince},updated_at.gte.${encodedSince})&order=updated_at.desc&limit=1`
+    )
+  ]);
+
+  if (!safeFetchFailed(recentSeoResult) && !safeRows(recentSeoResult).length) {
+    alerts.push({
+      id: "seo-no-recent-publications",
+      severity: "warning",
+      title: "SEO sin publicaciones recientes",
+      message: "No se han publicado páginas SEO indexables en las últimas 24h. Revisa el cron o publica una landing elegible.",
+      action_label: "Ir al evento",
+      action_target: "#seo-cron-secret",
+      dismissible: true,
+      category: "seo"
+    });
+  }
+
+  const waitlistRows = safeRows(recentWaitlistResult);
+  if (!safeFetchFailed(recentWaitlistResult) && waitlistRows.length) {
+    alerts.push({
+      id: "browser-waitlist-leads-recent",
+      severity: "info",
+      title: "Nuevos leads de navegador",
+      message: `Hay ${waitlistRows.length} leads recientes de navegador pendientes de revisar.`,
+      action_label: "Ir al evento",
+      action_target: "#operaciones-extension",
+      dismissible: true,
+      category: "waitlist"
+    });
+  }
+
+  if (
+    (!safeFetchFailed(recentRevenueResult) && safeRows(recentRevenueResult).length) ||
+    (!safeFetchFailed(recentPremiumResult) && safeRows(recentPremiumResult).length)
+  ) {
+    alerts.push({
+      id: "premium-activity-recent",
+      severity: "info",
+      title: "Actividad Premium reciente",
+      message: "Hay actividad Premium registrada en las últimas 24h.",
+      action_label: "Ir al evento",
+      action_target: "#ventas-premium",
+      dismissible: true,
+      category: "sales"
+    });
+  }
+
+  return { ok: true, generated_at: generatedAt, alerts: sortAlerts(alerts) };
+}
 function isProductionRuntime() {
   const runtime = String(process.env.VERCEL_ENV || process.env.NODE_ENV || "").toLowerCase();
   return runtime === "production";
@@ -1592,13 +1702,17 @@ async function handleViraliza(req, url) {
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
   if (!assertAdmin(req, res)) return;
-  if (!hasSupabaseConfig()) {
-    return json(res, 500, { ok: false, error: "supabase_not_configured" });
-  }
 
   const { url, resource } = routeFromRequest(req);
 
   try {
+    if (resource === "alerts") {
+      if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
+      return json(res, 200, await handleAlerts());
+    }
+    if (!hasSupabaseConfig()) {
+      return json(res, 500, { ok: false, error: "supabase_not_configured" });
+    }
     if (resource === "summary") {
       if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
       return json(res, 200, await handleSummary());
