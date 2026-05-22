@@ -2,7 +2,7 @@
 
 ## Descripcion
 
-InmoRadar es una extension Chrome y web app que ayuda a analizar anuncios inmobiliarios antes de contactar con el anunciante. Su objetivo es reducir decisiones impulsivas y aportar contexto sobre precio, coste real, zona y senales del inmueble.
+InmoRadar es una extension para navegadores modernos y web app que ayuda a analizar anuncios inmobiliarios antes de contactar con el anunciante. Su objetivo es reducir decisiones impulsivas y aportar contexto sobre precio, coste real, zona y senales del inmueble.
 
 El producto esta pensado para compradores, inquilinos e inversores que comparan anuncios en portales inmobiliarios. No sustituye una tasacion profesional ni una visita tecnica.
 

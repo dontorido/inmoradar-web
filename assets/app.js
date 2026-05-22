@@ -213,7 +213,7 @@ const I18N = {
     navNews: "Noticias",
     navFaq: "FAQ",
     navContact: "Contacto",
-    navCta: "Instalar gratis en Chrome",
+    navCta: "Empieza a descubrir información relevante",
     contactSuccess: "Mensaje enviado. Te respondemos en menos de 24h.",
     contactError: "Revisa los campos del formulario.",
     contactSending: "Enviando...",
@@ -237,7 +237,7 @@ const I18N = {
     navNews: "News",
     navFaq: "FAQ",
     navContact: "Contact",
-    navCta: "Install free on Chrome",
+    navCta: "Start uncovering relevant information",
     contactSuccess: "Message sent. We will reply in under 24h.",
     contactError: "Please review the form fields.",
     contactSending: "Sending...",
@@ -324,13 +324,13 @@ const TEXT_TRANSLATIONS_EN = {
   "Términos": "Terms",
   "Terminos": "Terms",
   "Empezar gratis": "Start free",
-  "Instalar gratis en Chrome": "Install free on Chrome",
+  "Empieza a descubrir información relevante": "Start uncovering relevant information",
   'Instalar extensión': 'Install extension',
   "Activar Premium": "Activate Premium",
   'Instala la extensión en tu navegador y analiza tu primer anuncio.': 'Install the extension in your browser and analyze your first listing.',
   'Avisadme cuando esté disponible': 'Notify me when it is available',
   "Analiza tu primer anuncio gratis": "Analyze your first listing free",
-  "Disponible para Chrome y navegadores Chromium compatibles": "Available for Chrome and compatible Chromium browsers",
+  "Disponible para navegadores compatibles": "Available for compatible browsers",
   "Empieza a descubrir información relevante": "Start uncovering relevant information",
   "Probar gratis 2 días": "Try 2 days free",
   "Apuntarme al lanzamiento": "Join the launch waitlist",
@@ -786,7 +786,7 @@ function renderArticlePage() {
         <div class="callout"><strong>Tip InmoRadar</strong><p>${currentLanguage === "en" ? "If a home is expensive and the building has no lift, parking is difficult or visual renovation looks likely, ask for more information before moving forward." : "Si una vivienda sale cara y además la finca no tiene ascensor, el parking es difícil o la reforma visual parece probable, pide más información antes de avanzar."}</p></div>
         <div class="article-conversion-cta">
           <strong>${currentLanguage === "en" ? "Analyze your next listing free" : "Analiza tu próximo anuncio gratis"}</strong>
-          <p>${currentLanguage === "en" ? "Install InmoRadar free on Chrome and check price, area and key signals before contacting." : "Instala InmoRadar gratis en Chrome y revisa precio, zona y señales clave antes de contactar."}</p>
+          <p>${currentLanguage === "en" ? "Install InmoRadar in your compatible browser and check price, area and key signals before contacting." : "Instala InmoRadar en tu navegador compatible y revisa precio, zona y señales clave antes de contactar."}</p>
           <button class="button" type="button" data-install-button data-install-source="article_end">${currentLanguage === "en" ? "Analyze your next listing free" : "Analiza tu próximo anuncio gratis"} ${icon("ArrowRight")}</button>
         </div>
       </article>
@@ -1057,14 +1057,14 @@ function launchWaitlistModalHtml() {
         <button class="launch-modal-close" type="button" data-launch-waitlist-close aria-label="Cerrar">&times;</button>
         <div class="launch-modal-head">
           <p class="section-label">Instalar extensi\u00f3n</p>
-          <h2 id="launch-modal-title">${selectedBrowser && !selectedInstallable ? `Estamos trabajando en la versi\u00f3n para ${escapeHtml(browserName)}` : "Instalar gratis en Chrome"}</h2>
+          <h2 id="launch-modal-title">${selectedBrowser && !selectedInstallable ? `Estamos trabajando en la versi\u00f3n para ${escapeHtml(browserName)}` : "Empieza a descubrir información relevante"}</h2>
           <p id="launch-modal-description">${selectedBrowser && !selectedInstallable ? `D\u00e9janos tu email y te avisaremos en cuanto InmoRadar est\u00e9 disponible para ${escapeHtml(browserName)}.` : "Elige tu navegador. Si ya es compatible, te llevamos a la store; si est\u00e1 en preparaci\u00f3n, te avisamos por email."}</p>
           <strong>Instala la extensi\u00f3n en tu navegador y analiza tu primer anuncio.</strong>
         </div>
         <div class="launch-browser-grid" role="group" aria-label="Elige navegador">
           ${launchWaitlistBrowserCards()}
         </div>
-        <p class="launch-other-browsers">Disponible ya para Chrome y navegadores Chromium compatibles. Firefox, Safari y Opera est\u00e1n en preparaci\u00f3n.</p>
+        <p class="launch-other-browsers">Chrome, Edge, Brave y Vivaldi usan una instalación compatible. Firefox, Safari y Opera est\u00e1n en preparaci\u00f3n.</p>
         <form class="launch-form" data-launch-waitlist-form>
           <p class="launch-selected-browser">Navegador elegido: <strong>${escapeHtml(selectedBrowser?.name || "Elige uno")}</strong></p>
           <label class="field" for="launch-waitlist-email">
@@ -1077,7 +1077,7 @@ function launchWaitlistModalHtml() {
           </label>
           <p class="launch-privacy">Solo usaremos tu email para avisarte sobre el lanzamiento de InmoRadar y la disponibilidad en tu navegador. Puedes leer la <a href="/privacidad" target="_blank" rel="noopener noreferrer">pol\u00edtica de privacidad</a>.</p>
           <p class="launch-error" id="launch-waitlist-error" ${launchWaitlistState.error ? "" : "hidden"}>${escapeHtml(launchWaitlistState.error)}</p>
-          <button class="button full" type="submit" ${submitDisabled ? "disabled" : ""}>${selectedInstallable ? "Abrir Chrome Web Store" : launchWaitlistState.status === "loading" ? "Guardando..." : "Avisadme cuando est\u00e9 disponible"}</button>
+          <button class="button full" type="submit" ${submitDisabled ? "disabled" : ""}>${selectedInstallable ? "Abrir store correspondiente" : launchWaitlistState.status === "loading" ? "Guardando..." : "Avisadme cuando est\u00e9 disponible"}</button>
         </form>
         <div class="launch-modal-actions left">
           <button class="button ghost" type="button" data-launch-waitlist-close>Seguir viendo la web</button>

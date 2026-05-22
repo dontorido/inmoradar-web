@@ -1,6 +1,6 @@
 # InmoRadar
 
-InmoRadar es una extension Chrome y web app para analizar anuncios inmobiliarios antes de contactar.
+InmoRadar es una extension para navegadores modernos y web app para analizar anuncios inmobiliarios antes de contactar.
 
 Ayuda a interpretar anuncios de vivienda en Espana con senales orientativas:
 

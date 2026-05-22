@@ -48,13 +48,13 @@ Web estatica publica para InmoRadar.
 
 ## Chrome Web Store
 
-La extension de Chrome esta disponible en:
+La extension para navegadores compatibles esta disponible en:
 
 ```text
 https://chromewebstore.google.com/detail/inmoradar/mbkjlkagblkmdnjggoggbjiohbjebaab
 ```
 
-El CTA principal de venta es **Instalar gratis en Chrome**. El CTA universal detecta navegador: Chrome, Edge, Brave y Vivaldi abren Chrome Web Store; Opera, Firefox, Safari y navegadores desconocidos abren waitlist mediante `/api/waitlist/browser`. Premium se presenta como upgrade posterior con botones **Activar Premium**.
+El CTA principal de venta es **Empieza a descubrir información relevante**. El CTA universal detecta navegador: Chrome, Edge, Brave y Vivaldi abren Chrome Web Store; Opera, Firefox, Safari y navegadores desconocidos abren waitlist mediante `/api/waitlist/browser`. Premium se presenta como upgrade posterior con botones **Activar Premium**.
 
 ## Checkout
 
