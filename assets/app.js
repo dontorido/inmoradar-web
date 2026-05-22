@@ -190,7 +190,8 @@ function normalizeRemoteArticle(item) {
 
 async function loadRemoteArticles() {
   const grids = document.querySelectorAll("[data-articles-grid]");
-  if (!grids.length) return;
+  const articlePage = document.querySelector("[data-article-page]");
+  if (!grids.length && !articlePage) return;
   try {
     const response = await fetch(NEWS_ENDPOINT, { headers: { accept: "application/json" } });
     const payload = await response.json().catch(() => ({}));
