@@ -256,7 +256,7 @@ function finalCta(city) {
     <h2>Compara el precio €/m² de cada anuncio en ${escapeHtml(city)}.</h2>
     <p>Dos inmuebles gratis para probarlo. Premium semanal sin permanencia.</p>
     <div class="seo-final-actions">
-      <a class="seo-button seo-button-primary" href="${CHROME_WEBSTORE_URL}" target="_blank" rel="noopener noreferrer">INSTALAR INMORADAR ${icon("arrowUpRight")}</a>
+      <button class="seo-button seo-button-primary" type="button" data-install-button data-install-source="seo_price_city">EMPEZAR GRATIS ${icon("arrowUpRight")}</button>
       <a class="seo-button seo-button-secondary" href="/#analisis">VER QUÉ ANALIZA</a>
     </div>
   </section>`;
@@ -381,7 +381,7 @@ function buildPrecioMetroCuadradoCiudad({ city, province, autonomousCommunity, s
             <p class="seo-sidebar-kicker">→ AHORRA TIEMPO</p>
             <h3>Analiza anuncios antes de contactar.</h3>
           </div>
-          <a class="seo-button seo-button-secondary" href="${CHROME_WEBSTORE_URL}" target="_blank" rel="noopener noreferrer">INSTALAR INMORADAR</a>
+          <button class="seo-button seo-button-secondary" type="button" data-install-button data-install-source="seo_price_city_inline">EMPEZAR GRATIS</button>
         </div>
       </section>
 
