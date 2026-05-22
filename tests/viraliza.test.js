@@ -5,6 +5,9 @@ const {
   generateDailyRoutine,
   generateKeywordSet,
   scoreCreator,
+  normalizeRealCreator,
+  generateDailyCreatorPlan,
+  normalizeViralAction,
   generateContextualComments,
   generateOutreachMessage,
   recordAction,
@@ -54,6 +57,121 @@ test("scoreCreator prioriza microcreadores espanoles relevantes", () => {
   assert.ok(score >= 80);
 });
 
+
+test("normalizeRealCreator adapta import manual al modelo interno", () => {
+  const creator = normalizeRealCreator({
+    platform: "TikTok",
+    handle: "@hipotecasclaras",
+    display_name: "Hipotecas Claras",
+    profile_url: "https://www.tiktok.com/@hipotecasclaras",
+    category: "asesor_hipotecario",
+    city: "Madrid",
+    topics: "hipoteca, entrada, primera vivienda",
+    followers_count: 25000,
+    avg_views: 12000,
+    avg_comments: 80
+  });
+
+  assert.equal(creator.platform, "tiktok");
+  assert.equal(creator.displayName, "Hipotecas Claras");
+  assert.equal(creator.profileUrl, "https://www.tiktok.com/@hipotecasclaras");
+  assert.deepEqual(creator.topics, ["hipoteca", "entrada", "primera vivienda"]);
+  assert.equal(creator.followers, 25000);
+  assert.ok(creator.creatorFitScore >= 80);
+});
+
+test("generateDailyCreatorPlan recomienda cuentas reales concretas y acciones manuales", () => {
+  const creators = [
+    {
+      platform: "tiktok",
+      handle: "@hipotecasclaras",
+      display_name: "Hipotecas Claras",
+      profile_url: "https://www.tiktok.com/@hipotecasclaras",
+      category: "asesor_hipotecario",
+      city: "Madrid",
+      country: "Espana",
+      topics: ["hipoteca", "entrada", "comprar piso"],
+      followers_count: 25000,
+      avg_views: 12000,
+      avg_comments: 80
+    },
+    {
+      platform: "x",
+      handle: "@memesvivienda",
+      category: "viral_general",
+      country: "Argentina",
+      topics: ["humor"],
+      followers_count: 400000
+    }
+  ];
+
+  const plan = generateDailyCreatorPlan(creators, [], "2026-05-22", { dailyLimits: { realCreators: 1 } });
+
+  assert.equal(plan.length, 1);
+  assert.equal(plan[0].handle, "@hipotecasclaras");
+  assert.equal(plan[0].platform, "tiktok");
+  assert.ok(plan[0].priorityScore >= 70);
+  assert.match(plan[0].whatToLookFor, /entrada|cuota|hipoteca/i);
+  assert.ok(plan[0].suggestedComment.length <= 280);
+  assert.equal(plan[0].status, "pending");
+  assert.ok(["comment", "follow", "dm", "review_profile"].includes(plan[0].recommendedAction));
+});
+
+test("generateDailyCreatorPlan penaliza cuentas contactadas recientemente", () => {
+  const creators = [
+    {
+      id: "creator_recent",
+      platform: "tiktok",
+      handle: "@reciente",
+      category: "asesor_hipotecario",
+      country: "Espana",
+      city: "Madrid",
+      topics: ["hipoteca", "entrada"],
+      followers: 20000,
+      avgViews: 10000,
+      avgComments: 60
+    },
+    {
+      id: "creator_fresh",
+      platform: "instagram",
+      handle: "@fresh",
+      category: "comprar_piso",
+      country: "Espana",
+      city: "Madrid",
+      topics: ["comprar piso", "primera vivienda"],
+      followers: 18000,
+      avgViews: 9000,
+      avgComments: 50
+    }
+  ];
+  const actions = [{ creatorId: "creator_recent", actionType: "dm_sent", actionDate: "2026-05-20" }];
+
+  const plan = generateDailyCreatorPlan(creators, actions, "2026-05-22", { dailyLimits: { realCreators: 1 } });
+
+  assert.equal(plan.length, 1);
+  assert.equal(plan[0].creatorId, "creator_fresh");
+});
+
+test("normalizeViralAction prepara resultados manuales medibles", () => {
+  const action = normalizeViralAction({
+    creator_id: "creator_1",
+    platform: "instagram",
+    action_type: "commented",
+    target_url: "https://www.instagram.com/reel/123",
+    used_comment: "Comentario manual",
+    likes_count: "4",
+    replies_count: 2,
+    profile_visits: 7,
+    installs_attributed: 1
+  });
+
+  assert.equal(action.creatorId, "creator_1");
+  assert.equal(action.actionType, "commented");
+  assert.equal(action.likesCount, 4);
+  assert.equal(action.repliesCount, 2);
+  assert.equal(action.profileVisits, 7);
+  assert.equal(action.installsAttributed, 1);
+});
 test("generateContextualComments recomienda comentarios utiles sin automatizar", () => {
   const result = generateContextualComments({
     creatorType: "asesor_hipotecario",
@@ -107,3 +225,4 @@ test("analyzeWeeklyLearning recomienda repetir winners", () => {
   assert.equal(report.classifications.winner, 1);
   assert.ok(actions.some((action) => /10 variaciones/.test(action)));
 });
+
