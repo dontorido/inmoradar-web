@@ -54,7 +54,7 @@ La extension de Chrome esta disponible en:
 https://chromewebstore.google.com/detail/inmoradar/mbkjlkagblkmdnjggoggbjiohbjebaab
 ```
 
-El CTA universal detecta navegador: Chrome, Edge, Brave y Vivaldi abren Chrome Web Store; Opera, Firefox, Safari y navegadores desconocidos abren waitlist mediante `/api/waitlist/browser`.
+El CTA principal de venta es **Instalar gratis en Chrome**. El CTA universal detecta navegador: Chrome, Edge, Brave y Vivaldi abren Chrome Web Store; Opera, Firefox, Safari y navegadores desconocidos abren waitlist mediante `/api/waitlist/browser`. Premium se presenta como upgrade posterior con botones **Activar Premium**.
 
 ## Checkout
 
@@ -64,7 +64,7 @@ El checkout Premium se crea en backend mediante Lemon Squeezy:
 POST /api/lemonsqueezy-checkout
 ```
 
-Por defecto usa `LEMONSQUEEZY_TEST_MODE=true`, asi que sirve para probar compras sin cobrar dinero real. Los botones con `data-checkout-button` llaman a este endpoint y redirigen al `checkout_url` devuelto por Lemon Squeezy.
+Por defecto usa `LEMONSQUEEZY_TEST_MODE=true`, asi que sirve para probar compras sin cobrar dinero real. Los botones con `data-checkout-button` llaman a este endpoint y redirigen al `checkout_url` devuelto por Lemon Squeezy. El frontend registra eventos no bloqueantes `checkout_start`, `checkout_created` y `checkout_error` en `dataLayer`/`gtag`; queda pendiente persistencia backend propia de funnel si se habilita una tabla o recurso existente adecuado.
 
 ## Probar en local
 

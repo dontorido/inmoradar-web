@@ -211,7 +211,7 @@ const I18N = {
     navNews: "Noticias",
     navFaq: "FAQ",
     navContact: "Contacto",
-    navCta: "Empezar gratis",
+    navCta: "Instalar gratis en Chrome",
     contactSuccess: "Mensaje enviado. Te respondemos en menos de 24h.",
     contactError: "Revisa los campos del formulario.",
     contactSending: "Enviando...",
@@ -235,7 +235,7 @@ const I18N = {
     navNews: "News",
     navFaq: "FAQ",
     navContact: "Contact",
-    navCta: "Start free",
+    navCta: "Install free on Chrome",
     contactSuccess: "Message sent. We will reply in under 24h.",
     contactError: "Please review the form fields.",
     contactSending: "Sending...",
@@ -322,6 +322,7 @@ const TEXT_TRANSLATIONS_EN = {
   "Términos": "Terms",
   "Terminos": "Terms",
   "Empezar gratis": "Start free",
+  "Instalar gratis en Chrome": "Install free on Chrome",
   'Instalar extensión': 'Install extension',
   "Activar Premium": "Activate Premium",
   'Instala la extensión en tu navegador y analiza tu primer anuncio.': 'Install the extension in your browser and analyze your first listing.',
@@ -342,7 +343,7 @@ const TEXT_TRANSLATIONS_EN = {
   "InmoRadar añade una capa de análisis sobre Idealista, Fotocasa, Pisos.com y Habitaclia para mostrarte precio real, coste inicial, zona, transporte, aparcamiento y señales clave en segundos.": "InmoRadar adds an analysis layer on top of Idealista, Fotocasa, Pisos.com and Habitaclia to show real price, initial cost, area, transport, parking and key signals in seconds.",
   "Analizar mi primer anuncio gratis": "Analyse my first listing for free",
   "Ver ejemplo real": "See a real example",
-  "2 días gratis · Sin pago inicial · Premium semanal por 1,99 € solo si decides continuar": "2 free days · No upfront payment · Weekly Premium for €1.99 only if you decide to continue",
+  "2 días gratis · Premium semanal por 1,99 € solo si decides continuar": "2 free days · Weekly Premium for €1.99 only if you decide to continue",
   "2 días": "2 days",
   "acceso inicial sin pagar": "initial access without paying",
   "Premium semanal después": "weekly Premium afterwards",
@@ -468,7 +469,7 @@ const TEXT_TRANSLATIONS_EN = {
   "Los 2 días gratis son acceso inicial para todos: no son una prueba Premium de pago. Premium solo empieza si decides continuar.": "The 2 free days are initial access for everyone: they are not a paid Premium trial. Premium only starts if you decide to continue.",
   "Más popular": "Most popular",
   "/ semana": "/ week",
-  "+ 2 días iniciales · sin tarjeta para probar": "+ 2 initial days · no card to try",
+  "+ 2 días iniciales · sin permanencia": "+ 2 initial days · no commitment",
   "2 días gratis por defecto, sin activar Premium.": "2 free days by default, without activating Premium.",
   "Premium semanal solo si decides continuar.": "Weekly Premium only if you decide to continue.",
   "Análisis ilimitados de fichas.": "Unlimited listing analyses.",
@@ -505,7 +506,6 @@ const TEXT_TRANSLATIONS_EN = {
   "Prensa": "Press",
   "Mensaje": "Message",
   "Enviar mensaje": "Send message",
-  "Empieza sin pago inicial": "Start with no upfront payment",
   "Tu próximo anuncio puede estar mejor explicado.": "Your next listing can be better explained.",
   "Prueba InmoRadar sobre los portales donde ya buscas y decide con más contexto antes de contactar.": "Try InmoRadar on the portals where you already search and decide with more context before contacting.",
   "Redes sociales InmoRadar": "InmoRadar social profiles",
@@ -760,7 +760,7 @@ function renderArticlePage() {
   target.innerHTML = `
     <section class="page-header grid-bg">
       <div class="container article-layout">
-        <a class="button ghost" href="/noticias">${currentLanguage === "en" ? "All posts" : "Todas las públicaciones"}</a>
+        <a class="button ghost" href="/noticias">${currentLanguage === "en" ? "All posts" : "Todas las publicaciones"}</a>
         <p class="pill" style="margin-top:28px"><span class="dot-radar"></span>${escapeHtml(article.tag)} · ${escapeHtml(article.city)}</p>
         <h1>${escapeHtml(article.title)}</h1>
         <p class="lead">${escapeHtml(article.excerpt)}</p>
@@ -782,12 +782,18 @@ function renderArticlePage() {
         <h2>${currentLanguage === "en" ? "How to use it with InmoRadar" : "Cómo usarlo con InmoRadar"}</h2>
         <p>${currentLanguage === "en" ? "Open a compatible listing, review the price and area card, save the strongest candidates and compare homes before contacting. The extension does not replace a valuation or a viewing, but it helps you filter better." : "Abre un anuncio compatible, revisa la ficha de precio y zona, guarda los candidatos fuertes y compara los inmuebles antes de contactar. La extensión no sustituye una tasación ni una visita, pero ayuda a filtrar mejor."}</p>
         <div class="callout"><strong>Tip InmoRadar</strong><p>${currentLanguage === "en" ? "If a home is expensive and the building has no lift, parking is difficult or visual renovation looks likely, ask for more information before moving forward." : "Si una vivienda sale cara y además la finca no tiene ascensor, el parking es difícil o la reforma visual parece probable, pide más información antes de avanzar."}</p></div>
+        <div class="article-conversion-cta">
+          <strong>${currentLanguage === "en" ? "Analyze your next listing free" : "Analiza tu próximo anuncio gratis"}</strong>
+          <p>${currentLanguage === "en" ? "Install InmoRadar free on Chrome and check price, area and key signals before contacting." : "Instala InmoRadar gratis en Chrome y revisa precio, zona y señales clave antes de contactar."}</p>
+          <button class="button" type="button" data-install-button data-install-source="article_end">${currentLanguage === "en" ? "Analyze your next listing free" : "Analiza tu próximo anuncio gratis"} ${icon("ArrowRight")}</button>
+        </div>
       </article>
       <div class="container">
         <div class="article-grid">${related.map((item) => articleCard(item)).join("")}</div>
       </div>
     </section>
   `;
+  bindInstallButtons(target);
 }
 
 function initFaq() {
@@ -844,6 +850,18 @@ function launchWaitlistAnalytics(eventName, props = {}) {
   if (typeof window.gtag === "function") {
     window.gtag("event", eventName, safeProps);
   }
+}
+
+function analyticsErrorCode(value) {
+  return String(value || "unknown")
+    .toLowerCase()
+    .replace(/[^a-z0-9_:-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80) || "unknown";
+}
+
+function trackConversionEvent(eventName, props = {}) {
+  launchWaitlistAnalytics(eventName, props);
 }
 
 function isInstallableBrowser(browserId) {
@@ -923,7 +941,7 @@ function launchWaitlistModalHtml() {
         <button class="launch-modal-close" type="button" data-launch-waitlist-close aria-label="Cerrar">&times;</button>
         <div class="launch-modal-head">
           <p class="section-label">Instalar extensi\u00f3n</p>
-          <h2 id="launch-modal-title">${selectedBrowser && !selectedInstallable ? `Estamos trabajando en la versi\u00f3n para ${escapeHtml(browserName)}` : "Empezar gratis con InmoRadar"}</h2>
+          <h2 id="launch-modal-title">${selectedBrowser && !selectedInstallable ? `Estamos trabajando en la versi\u00f3n para ${escapeHtml(browserName)}` : "Instalar gratis en Chrome"}</h2>
           <p id="launch-modal-description">${selectedBrowser && !selectedInstallable ? `D\u00e9janos tu email y te avisaremos en cuanto InmoRadar est\u00e9 disponible para ${escapeHtml(browserName)}.` : "Elige tu navegador. Si ya es compatible, te llevamos a la store; si est\u00e1 en preparaci\u00f3n, te avisamos por email."}</p>
           <strong>Instala la extensi\u00f3n en tu navegador y analiza tu primer anuncio.</strong>
         </div>
@@ -1186,11 +1204,17 @@ function handleUniversalInstallClick(event, element) {
   });
 }
 
-function initInstallButtons() {
-  document.querySelectorAll("[data-install-button]").forEach((element) => {
+function bindInstallButtons(root = document) {
+  root.querySelectorAll("[data-install-button]").forEach((element) => {
+    if (element.dataset.installBound === "true") return;
     if (!element.dataset.installSource) element.dataset.installSource = ctaSourceFromElement(element);
     element.addEventListener("click", (event) => handleUniversalInstallClick(event, element));
+    element.dataset.installBound = "true";
   });
+}
+
+function initInstallButtons() {
+  bindInstallButtons(document);
 }
 function initLaunchWaitlist() {
   document.querySelectorAll("[data-browser-waitlist], [data-launch-waitlist]").forEach((element) => {
@@ -1306,18 +1330,40 @@ function initCheckout() {
     button.addEventListener("click", async (event) => {
       event.preventDefault();
       const previousText = button.textContent;
+      const source = button.dataset.checkoutSource || ctaSourceFromElement(button);
+      const browser = detectLaunchBrowser();
+      trackConversionEvent("checkout_start", {
+        source,
+        label: normalizedText(previousText || ""),
+        browser,
+        page: location.pathname || "/"
+      });
       button.disabled = true;
       button.textContent = t("checkoutOpening");
       try {
         const response = await fetch(CHECKOUT_ENDPOINT, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ source: button.dataset.checkoutSource || ctaSourceFromElement(button) })
+          body: JSON.stringify({ source })
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || !payload.checkout_url) throw new Error(payload.message || t("checkoutSetupIssue"));
+        trackConversionEvent("checkout_created", {
+          source,
+          browser,
+          page: location.pathname || "/",
+          status: "created",
+          testMode: Boolean(payload.test_mode)
+        });
         location.href = payload.checkout_url;
       } catch (error) {
+        trackConversionEvent("checkout_error", {
+          source,
+          browser,
+          page: location.pathname || "/",
+          status: "error",
+          errorCode: analyticsErrorCode(error.message)
+        });
         showToast(error.message || t("checkoutSetupIssue"), "error");
         button.disabled = false;
         button.textContent = previousText;
