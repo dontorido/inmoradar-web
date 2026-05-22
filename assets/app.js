@@ -213,7 +213,7 @@ const I18N = {
     navNews: "Noticias",
     navFaq: "FAQ",
     navContact: "Contacto",
-    navCta: "Empieza a descubrir información relevante",
+    navCta: "Empezar gratis",
     contactSuccess: "Mensaje enviado. Te respondemos en menos de 24h.",
     contactError: "Revisa los campos del formulario.",
     contactSending: "Enviando...",
@@ -237,7 +237,7 @@ const I18N = {
     navNews: "News",
     navFaq: "FAQ",
     navContact: "Contact",
-    navCta: "Start uncovering relevant information",
+    navCta: "Start free",
     contactSuccess: "Message sent. We will reply in under 24h.",
     contactError: "Please review the form fields.",
     contactSending: "Sending...",
@@ -324,14 +324,12 @@ const TEXT_TRANSLATIONS_EN = {
   "Términos": "Terms",
   "Terminos": "Terms",
   "Empezar gratis": "Start free",
-  "Empieza a descubrir información relevante": "Start uncovering relevant information",
   'Instalar extensión': 'Install extension',
   "Activar Premium": "Activate Premium",
   'Instala la extensión en tu navegador y analiza tu primer anuncio.': 'Install the extension in your browser and analyze your first listing.',
   'Avisadme cuando esté disponible': 'Notify me when it is available',
   "Analiza tu primer anuncio gratis": "Analyze your first listing free",
   "Disponible para navegadores compatibles": "Available for compatible browsers",
-  "Empieza a descubrir información relevante": "Start uncovering relevant information",
   "Probar gratis 2 días": "Try 2 days free",
   "Apuntarme al lanzamiento": "Join the launch waitlist",
   "Ser de los primeros en probar InmoRadar": "Be among the first to try InmoRadar",
@@ -1057,7 +1055,7 @@ function launchWaitlistModalHtml() {
         <button class="launch-modal-close" type="button" data-launch-waitlist-close aria-label="Cerrar">&times;</button>
         <div class="launch-modal-head">
           <p class="section-label">Instalar extensi\u00f3n</p>
-          <h2 id="launch-modal-title">${selectedBrowser && !selectedInstallable ? `Estamos trabajando en la versi\u00f3n para ${escapeHtml(browserName)}` : "Empieza a descubrir información relevante"}</h2>
+          <h2 id="launch-modal-title">${selectedBrowser && !selectedInstallable ? `Estamos trabajando en la versi\u00f3n para ${escapeHtml(browserName)}` : "Empezar gratis"}</h2>
           <p id="launch-modal-description">${selectedBrowser && !selectedInstallable ? `D\u00e9janos tu email y te avisaremos en cuanto InmoRadar est\u00e9 disponible para ${escapeHtml(browserName)}.` : "Elige tu navegador. Si ya es compatible, te llevamos a la store; si est\u00e1 en preparaci\u00f3n, te avisamos por email."}</p>
           <strong>Instala la extensi\u00f3n en tu navegador y analiza tu primer anuncio.</strong>
         </div>

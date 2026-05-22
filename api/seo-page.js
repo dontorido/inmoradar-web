@@ -238,14 +238,14 @@ function normalizeLandingBodyHtml(bodyHtml = "") {
     titleChrome: ["Instalar", "en", "Chrome"].join(" ")
   };
   return String(bodyHtml || "")
-    .replace(new RegExp(legacy.upperChromeFree, "g"), "EMPIEZA A DESCUBRIR INFORMACI\u00d3N RELEVANTE")
-    .replace(new RegExp(legacy.titleChromeFree, "g"), "Empieza a descubrir informaci\u00f3n relevante")
-    .replace(new RegExp(legacy.upperChrome, "g"), "EMPIEZA A DESCUBRIR INFORMACI\u00d3N RELEVANTE")
-    .replace(new RegExp(legacy.titleChrome, "g"), "Empieza a descubrir informaci\u00f3n relevante")
-    .replace(/INSTALAR INMORADAR PREMIUM/g, "EMPIEZA A DESCUBRIR INFORMACI\u00d3N RELEVANTE")
-    .replace(/Instalar InmoRadar Premium/g, "Empieza a descubrir informaci\u00f3n relevante")
-    .replace(/INSTALAR INMORADAR/g, "EMPIEZA A DESCUBRIR INFORMACI\u00d3N RELEVANTE")
-    .replace(/Instalar InmoRadar/g, "Empieza a descubrir informaci\u00f3n relevante");
+    .replace(new RegExp(legacy.upperChromeFree, "g"), "EMPEZAR GRATIS")
+    .replace(new RegExp(legacy.titleChromeFree, "g"), "Empezar gratis")
+    .replace(new RegExp(legacy.upperChrome, "g"), "EMPEZAR GRATIS")
+    .replace(new RegExp(legacy.titleChrome, "g"), "Empezar gratis")
+    .replace(/INSTALAR INMORADAR PREMIUM/g, "EMPEZAR GRATIS")
+    .replace(/Instalar InmoRadar Premium/g, "Empezar gratis")
+    .replace(/INSTALAR INMORADAR/g, "EMPEZAR GRATIS")
+    .replace(/Instalar InmoRadar/g, "Empezar gratis");
 }
 function renderLandingHtml(landing) {
   const qualityScore = Number(landing.quality_score) || 0;
