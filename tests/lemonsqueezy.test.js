@@ -53,16 +53,21 @@ test("lemonConfig usa modo real por defecto en producción", () => {
   const previousEnv = {
     VERCEL_ENV: process.env.VERCEL_ENV,
     NODE_ENV: process.env.NODE_ENV,
-    LEMONSQUEEZY_TEST_MODE: process.env.LEMONSQUEEZY_TEST_MODE
+    LEMONSQUEEZY_TEST_MODE: process.env.LEMONSQUEEZY_TEST_MODE,
+    ALLOW_LEMONSQUEEZY_TEST_MODE_IN_PRODUCTION: process.env.ALLOW_LEMONSQUEEZY_TEST_MODE_IN_PRODUCTION
   };
 
   try {
     process.env.VERCEL_ENV = "production";
+    delete process.env.ALLOW_LEMONSQUEEZY_TEST_MODE_IN_PRODUCTION;
     delete process.env.LEMONSQUEEZY_TEST_MODE;
     assert.equal(lemonTestMode(), false);
     assert.equal(lemonConfig().testMode, false);
 
     process.env.LEMONSQUEEZY_TEST_MODE = "true";
+    assert.equal(lemonTestMode(), false);
+
+    process.env.ALLOW_LEMONSQUEEZY_TEST_MODE_IN_PRODUCTION = "true";
     assert.equal(lemonTestMode(), true);
 
     process.env.LEMONSQUEEZY_TEST_MODE = "false";
@@ -104,7 +109,7 @@ test("buildCustomerPortalEmailPayload genera email de acceso seguro", () => {
   assert.equal(payload.from, "hola@inmoradar.app");
   assert.match(payload.subject, /InmoRadar/);
   assert.match(payload.text, /https:\/\/inmoradar\.app\/clientes\?token=abc/);
-  assert.match(payload.html, /Abrir area de clientes/);
+  assert.match(payload.html, /Abrir (?:area|área|&aacute;rea) de clientes/);
 });
 
 test("getUnsignedCustomerPortalUrl construye el portal de cliente desde la tienda", async () => {
