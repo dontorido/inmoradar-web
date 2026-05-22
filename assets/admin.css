@@ -2874,7 +2874,7 @@
 
 .admin-marketing-dashboard {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   padding: 24px;
 }
@@ -4192,6 +4192,226 @@
 
 @media (max-width: 900px) {
   .admin-viraliza-learning-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-linkedin-panel .admin-panel {
+  overflow: hidden;
+}
+
+.admin-linkedin-notice {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid rgba(9, 9, 11, .1);
+  border-bottom: 1px solid rgba(9, 9, 11, .1);
+  background: rgba(255, 69, 0, .055);
+  padding: 18px 24px;
+  color: rgba(9, 9, 11, .72);
+  line-height: 1.5;
+}
+
+.admin-linkedin-notice[hidden] {
+  display: none;
+}
+
+.admin-linkedin-notice p {
+  margin: 0;
+}
+
+.admin-linkedin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr);
+  gap: 0;
+  border-bottom: 1px solid rgba(9, 9, 11, .1);
+}
+
+.admin-linkedin-grid-editor {
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, .65fr);
+  border-bottom: 0;
+}
+
+.admin-linkedin-card {
+  min-width: 0;
+  border-right: 1px solid rgba(9, 9, 11, .1);
+  background: #ffffff;
+}
+
+.admin-linkedin-card:last-child {
+  border-right: 0;
+}
+
+.admin-linkedin-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid rgba(9, 9, 11, .1);
+  padding: 18px 24px;
+}
+
+.admin-linkedin-card-head > span {
+  color: var(--radar);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+}
+
+.admin-linkedin-status {
+  display: grid;
+}
+
+.admin-linkedin-status-row {
+  display: grid;
+  grid-template-columns: minmax(160px, .45fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-height: 52px;
+  border-bottom: 1px solid rgba(9, 9, 11, .08);
+  padding: 13px 24px;
+}
+
+.admin-linkedin-status-row:last-child {
+  border-bottom: 0;
+}
+
+.admin-linkedin-status-row span,
+.admin-linkedin-form span {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+.admin-linkedin-status-row strong,
+.admin-linkedin-status-row code {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.admin-linkedin-status-row code {
+  border: 1px solid rgba(9, 9, 11, .1);
+  border-radius: 999px;
+  background: var(--bg);
+  padding: 7px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.admin-linkedin-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 24px;
+}
+
+.admin-linkedin-editor {
+  grid-template-columns: 1fr;
+}
+
+.admin-linkedin-wide {
+  grid-column: 1 / -1;
+}
+
+.admin-linkedin-form label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-linkedin-form input,
+.admin-linkedin-form select,
+.admin-linkedin-form textarea {
+  width: 100%;
+  border: 1px solid rgba(9, 9, 11, .1);
+  border-radius: 20px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  padding: 13px 15px;
+  outline: none;
+}
+
+.admin-linkedin-form textarea {
+  min-height: 190px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.admin-linkedin-form input:focus,
+.admin-linkedin-form select:focus,
+.admin-linkedin-form textarea:focus {
+  border-color: var(--radar);
+  box-shadow: 0 0 0 4px rgba(255, 69, 0, .12);
+}
+
+.admin-linkedin-summary {
+  border-bottom: 1px solid rgba(9, 9, 11, .1);
+}
+
+.admin-linkedin-table {
+  min-width: 1180px;
+}
+
+.admin-linkedin-thumb {
+  display: block;
+  width: 74px;
+  aspect-ratio: 4 / 3;
+  border: 1px solid rgba(9, 9, 11, .1);
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--bg);
+}
+
+.admin-linkedin-error {
+  display: block;
+  max-width: 230px;
+  color: rgba(9, 9, 11, .58);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.admin-linkedin-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 1180px) {
+  .admin-marketing-dashboard,
+  .admin-linkedin-grid,
+  .admin-linkedin-grid-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-linkedin-card {
+    border-right: 0;
+    border-bottom: 1px solid rgba(9, 9, 11, .1);
+  }
+
+  .admin-linkedin-card:last-child {
+    border-bottom: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-linkedin-card-head,
+  .admin-linkedin-status-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-linkedin-card-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-linkedin-form {
     grid-template-columns: 1fr;
   }
 }

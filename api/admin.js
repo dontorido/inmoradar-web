@@ -61,6 +61,27 @@ const {
   summarizePagePerformance
 } = require("../lib/analytics/learning");
 
+const {
+  MANUAL_MODE_NOTICE,
+  buildAuthorizationUrl,
+  buildLinkedInPostText,
+  decryptToken,
+  defaultSettings: defaultLinkedInSettings,
+  encryptToken,
+  exchangeAuthorizationCode,
+  generateLinkedInImage,
+  generateLinkedInPost,
+  hasPostForDay,
+  linkedinEnvStatus,
+  nextScheduledAt,
+  normalizeHashtags,
+  normalizeOrganizationUrn,
+  normalizeSettings: normalizeLinkedInSettings,
+  publishPost: publishLinkedInPost,
+  refreshAccessToken,
+  summarizeConnection,
+  validatePublishInput
+} = require("../lib/linkedin/services");
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at";
 
@@ -1112,6 +1133,465 @@ async function handleKpiSettings(req) {
   return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
 }
 
+
+function parseJsonMaybe(value, fallback = null) {
+  if (value == null) return fallback;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    return fallback;
+  }
+}
+
+function normalizeLinkedInPostRow(row = {}) {
+  return {
+    ...row,
+    hashtags: normalizeHashtags(parseJsonMaybe(row.hashtags, row.hashtags || [])),
+    linkedin_response: parseJsonMaybe(row.linkedin_response, row.linkedin_response || null),
+    text: buildLinkedInPostText({
+      hook: row.hook,
+      body: row.body,
+      cta: row.cta,
+      hashtags: parseJsonMaybe(row.hashtags, row.hashtags || [])
+    })
+  };
+}
+
+async function readLinkedInConnection() {
+  try {
+    const rows = await supabaseFetch(
+      "marketing_linkedin_connections?provider=eq.linkedin&select=*&limit=1"
+    );
+    return Array.isArray(rows) ? rows[0] || null : null;
+  } catch (error) {
+    if (/marketing_linkedin_connections/.test(error.message)) return null;
+    throw error;
+  }
+}
+
+async function saveLinkedInConnection(patch = {}) {
+  const body = {
+    provider: "linkedin",
+    ...patch,
+    organization_urn: normalizeOrganizationUrn(patch.organization_urn || process.env.LINKEDIN_ORGANIZATION_URN),
+    updated_at: new Date().toISOString()
+  };
+  const rows = await supabaseFetch("marketing_linkedin_connections?on_conflict=provider", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify([body])
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+async function readLinkedInSettings() {
+  try {
+    const rows = await supabaseFetch("marketing_linkedin_settings?select=*&order=created_at.asc&limit=1");
+    const row = Array.isArray(rows) ? rows[0] || null : null;
+    return {
+      row,
+      settings: normalizeLinkedInSettings(row || defaultLinkedInSettings()),
+      table_missing: false,
+      error: null
+    };
+  } catch (error) {
+    return {
+      row: null,
+      settings: defaultLinkedInSettings(),
+      table_missing: /marketing_linkedin_settings/.test(error.message),
+      error: error.message
+    };
+  }
+}
+
+async function saveLinkedInSettings(input = {}) {
+  const current = await readLinkedInSettings();
+  const settings = normalizeLinkedInSettings({ ...current.settings, ...input });
+  const body = {
+    ...settings,
+    default_hashtags: settings.default_hashtags,
+    updated_at: new Date().toISOString()
+  };
+  const path = current.row?.id
+    ? `marketing_linkedin_settings?id=eq.${encodeURIComponent(current.row.id)}`
+    : "marketing_linkedin_settings";
+  const rows = await supabaseFetch(path, {
+    method: current.row?.id ? "PATCH" : "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(current.row?.id ? body : [body])
+  });
+  const row = Array.isArray(rows) ? rows[0] || null : rows;
+  return { row, settings: normalizeLinkedInSettings(row || settings) };
+}
+
+async function listLinkedInPosts(url, limitOverride) {
+  const pageSize = clampLimit(limitOverride || url.searchParams.get("limit"), 10, 50);
+  const status = String(url.searchParams.get("status") || "all").toLowerCase();
+  const params = new URLSearchParams({
+    select: "*",
+    order: "created_at.desc",
+    limit: String(pageSize)
+  });
+  if (status && status !== "all") params.set("status", `eq.${status}`);
+  try {
+    const rows = await supabaseFetch(`marketing_linkedin_posts?${params.toString()}`);
+    return {
+      posts: (Array.isArray(rows) ? rows : []).map(normalizeLinkedInPostRow),
+      error: null,
+      table_missing: false
+    };
+  } catch (error) {
+    return {
+      posts: [],
+      error: error.message,
+      table_missing: /marketing_linkedin_posts/.test(error.message)
+    };
+  }
+}
+
+function linkedInPostsSummary(posts = []) {
+  const rows = Array.isArray(posts) ? posts : [];
+  const counts = countBy(rows, "status");
+  return {
+    total: rows.length,
+    draft: counts.draft || 0,
+    pending_review: counts.pending_review || 0,
+    scheduled: counts.scheduled || 0,
+    published: counts.published || 0,
+    manually_published: counts.manually_published || 0,
+    failed: counts.failed || 0,
+    cancelled: counts.cancelled || 0,
+    ready_for_manual: rows.filter((row) => ["draft", "pending_review", "scheduled", "failed"].includes(row.status)).length
+  };
+}
+
+async function createLinkedInPost(input = {}, settings = null) {
+  const normalizedSettings = settings || (await readLinkedInSettings()).settings;
+  const generated = generateLinkedInPost(input, normalizedSettings);
+  const body = {
+    title: generated.title,
+    hook: generated.hook,
+    body: generated.body,
+    cta: generated.cta,
+    hashtags: generated.hashtags,
+    image_path: generated.image_path,
+    image_url: generated.image_url,
+    source_type: input.source_type || generated.source_type || "auto",
+    source_reference: input.source_reference || generated.source_reference || null,
+    scheduled_at: input.scheduled_at || generated.scheduled_at || null,
+    status: input.status || generated.status || "pending_review",
+    approval_required: generated.approval_required === false ? false : true
+  };
+  const rows = await supabaseFetch("marketing_linkedin_posts", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify([body])
+  });
+  return normalizeLinkedInPostRow(Array.isArray(rows) ? rows[0] || null : rows);
+}
+
+async function readLinkedInPost(id) {
+  const rows = await supabaseFetch(`marketing_linkedin_posts?id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
+  return normalizeLinkedInPostRow(Array.isArray(rows) ? rows[0] || null : rows);
+}
+
+async function patchLinkedInPost(id, patch = {}) {
+  const rows = await supabaseFetch(`marketing_linkedin_posts?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() })
+  });
+  return normalizeLinkedInPostRow(Array.isArray(rows) ? rows[0] || null : rows);
+}
+
+async function loadLinkedInAccessToken(connection) {
+  const accessToken = decryptToken(connection?.access_token_encrypted || "");
+  if (!accessToken) throw new Error("linkedin_access_token_missing");
+  const expiresAt = connection?.token_expires_at ? new Date(connection.token_expires_at).getTime() : null;
+  if (!expiresAt || expiresAt > Date.now() + 120000) return { accessToken, connection };
+
+  const refreshToken = decryptToken(connection?.refresh_token_encrypted || "");
+  if (!refreshToken) throw new Error("linkedin_token_expired");
+  const refreshed = await refreshAccessToken({ refreshToken });
+  const updated = await saveLinkedInConnection({
+    status: "connected",
+    access_token_encrypted: encryptToken(refreshed.access_token),
+    refresh_token_encrypted: refreshed.refresh_token ? encryptToken(refreshed.refresh_token) : connection.refresh_token_encrypted,
+    token_expires_at: refreshed.token_expires_at,
+    refresh_token_expires_at: refreshed.refresh_token_expires_at || connection.refresh_token_expires_at,
+    scopes: refreshed.scopes?.length ? refreshed.scopes : connection.scopes,
+    last_error: null
+  });
+  return { accessToken: refreshed.access_token, connection: updated };
+}
+
+async function publishLinkedInPostById(id) {
+  const [post, connection, settingsState] = await Promise.all([readLinkedInPost(id), readLinkedInConnection(), readLinkedInSettings()]);
+  const settings = settingsState.settings;
+  validatePublishInput({ post, connection, settings });
+  const { accessToken, connection: freshConnection } = await loadLinkedInAccessToken(connection);
+  const ownerUrn = normalizeOrganizationUrn(freshConnection.organization_urn || process.env.LINKEDIN_ORGANIZATION_URN);
+  await patchLinkedInPost(id, { status: "publishing", error_message: null });
+  try {
+    const result = await publishLinkedInPost({ accessToken, post, ownerUrn });
+    return await patchLinkedInPost(id, {
+      status: "published",
+      published_at: new Date().toISOString(),
+      linkedin_image_urn: result.linkedin_image_urn,
+      linkedin_post_urn: result.linkedin_post_urn,
+      linkedin_response: result.linkedin_response,
+      error_message: null
+    });
+  } catch (error) {
+    const message = String(error.message || "linkedin_publish_failed").slice(0, 800);
+    await saveLinkedInConnection({ status: "error", mode: "manual", last_error: message });
+    return await patchLinkedInPost(id, { status: "failed", error_message: message });
+  }
+}
+
+async function generateDailyLinkedInDraft({ publishIfAllowed = false } = {}) {
+  const settingsState = await readLinkedInSettings();
+  const settings = settingsState.settings;
+  if (!settings.daily_generation_enabled) {
+    return { ok: true, skipped: true, reason: "daily_generation_disabled" };
+  }
+  const recent = await listLinkedInPosts(new URL("https://admin.local/?limit=100"), 100);
+  if (hasPostForDay(recent.posts, new Date())) {
+    return { ok: true, skipped: true, reason: "post_already_exists_today", posts: recent.posts.slice(0, 1) };
+  }
+  const scheduledAt = nextScheduledAt(settings);
+  const post = await createLinkedInPost({ source_type: "auto", source_reference: "daily", scheduled_at: scheduledAt }, settings);
+  if (publishIfAllowed && settings.auto_publish_enabled && !settings.approval_required) {
+    const published = await publishLinkedInPostById(post.id);
+    return { ok: true, skipped: false, post: published, published: published.status === "published" };
+  }
+  return { ok: true, skipped: false, post, published: false };
+}
+
+async function handleLinkedInDashboard(url) {
+  const [connection, settingsState, postsState] = await Promise.all([
+    readLinkedInConnection(),
+    readLinkedInSettings(),
+    listLinkedInPosts(url, 10)
+  ]);
+  const settings = settingsState.settings;
+  const connectionSummary = summarizeConnection(connection, process.env);
+  const lastPublication = postsState.posts.find((post) => post.published_at || post.manually_published_at) || null;
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      connection: connectionSummary,
+      settings,
+      posts: postsState.posts,
+      summary: linkedInPostsSummary(postsState.posts),
+      last_publication: lastPublication,
+      env: linkedinEnvStatus(process.env),
+      manual_mode_notice: MANUAL_MODE_NOTICE,
+      storage: {
+        connection_table_missing: false,
+        settings_table_missing: settingsState.table_missing,
+        posts_table_missing: postsState.table_missing,
+        settings_error: settingsState.error,
+        posts_error: postsState.error
+      }
+    }
+  };
+}
+
+async function handleLinkedInConnect(req, url) {
+  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const scopes = String(url.searchParams.get("scopes") || "")
+    .split(/[\s,]+/)
+    .filter(Boolean);
+  const result = buildAuthorizationUrl({ scopes: scopes.length ? scopes : undefined });
+  return { status: 200, payload: { ok: true, ...result } };
+}
+
+async function handleLinkedInCallback(req) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const body = await readJsonBody(req);
+  if (!body.code) return { status: 400, payload: { ok: false, error: "linkedin_code_required" } };
+  const token = await exchangeAuthorizationCode({ code: body.code });
+  const connection = await saveLinkedInConnection({
+    status: "connected",
+    mode: process.env.LINKEDIN_AUTO_PUBLISH_ENABLED === "true" ? "automatic" : "manual",
+    organization_urn: process.env.LINKEDIN_ORGANIZATION_URN,
+    access_token_encrypted: encryptToken(token.access_token),
+    refresh_token_encrypted: token.refresh_token ? encryptToken(token.refresh_token) : null,
+    token_expires_at: token.token_expires_at,
+    refresh_token_expires_at: token.refresh_token_expires_at,
+    scopes: token.scopes,
+    connected_by_user_id: "backoffice",
+    last_error: null
+  });
+  return { status: 200, payload: { ok: true, connection: summarizeConnection(connection, process.env) } };
+}
+
+async function handleLinkedInDisconnect(req) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const connection = await saveLinkedInConnection({
+    status: "disconnected",
+    mode: "manual",
+    access_token_encrypted: null,
+    refresh_token_encrypted: null,
+    token_expires_at: null,
+    refresh_token_expires_at: null,
+    last_error: null
+  });
+  return { status: 200, payload: { ok: true, connection: summarizeConnection(connection, process.env) } };
+}
+
+async function handleLinkedInTestConnection(req) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const connection = await readLinkedInConnection();
+  const summary = summarizeConnection(connection, process.env);
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      connection: summary,
+      automatic_available: summary.automatic_available,
+      message: summary.automatic_available ? "LinkedIn automatico disponible." : MANUAL_MODE_NOTICE
+    }
+  };
+}
+
+async function handleLinkedInSettings(req) {
+  if (req.method === "GET") {
+    const result = await readLinkedInSettings();
+    return { status: 200, payload: { ok: true, settings: result.settings, updated_at: result.row?.updated_at || null, table_missing: result.table_missing, error: result.error } };
+  }
+  if (req.method === "POST") {
+    const body = await readJsonBody(req);
+    const result = await saveLinkedInSettings(body.settings || body);
+    return { status: 200, payload: { ok: true, settings: result.settings, updated_at: result.row?.updated_at || new Date().toISOString() } };
+  }
+  return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+}
+
+async function handleLinkedInPosts(req, url) {
+  if (req.method === "GET") {
+    const posts = await listLinkedInPosts(url);
+    return { status: 200, payload: { ok: true, posts: posts.posts, summary: linkedInPostsSummary(posts.posts), table_missing: posts.table_missing, error: posts.error } };
+  }
+  if (req.method === "POST") {
+    const body = await readJsonBody(req);
+    if (body.action) return handleLinkedInPostAction(body);
+    const settings = (await readLinkedInSettings()).settings;
+    const post = await createLinkedInPost({ ...body, source_type: body.source_type || "manual", status: body.status || "draft" }, settings);
+    return { status: 200, payload: { ok: true, post } };
+  }
+  if (req.method === "PUT") {
+    const body = await readJsonBody(req);
+    if (!body.id) return { status: 400, payload: { ok: false, error: "linkedin_post_id_required" } };
+    const patch = {
+      title: cleanNullable(body.title),
+      hook: cleanNullable(body.hook),
+      body: String(body.body || "").trim(),
+      cta: cleanNullable(body.cta),
+      hashtags: normalizeHashtags(body.hashtags),
+      image_url: cleanNullable(body.image_url),
+      image_path: cleanNullable(body.image_path),
+      scheduled_at: cleanNullable(body.scheduled_at),
+      status: body.status || "draft",
+      source_type: body.source_type || "manual",
+      source_reference: cleanNullable(body.source_reference)
+    };
+    const post = await patchLinkedInPost(body.id, patch);
+    return { status: 200, payload: { ok: true, post } };
+  }
+  return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+}
+
+function cleanNullable(value) {
+  const text = String(value || "").trim();
+  return text || null;
+}
+
+async function handleLinkedInPostAction(body = {}) {
+  const id = body.id;
+  const action = String(body.action || "").trim();
+  if (!id && action !== "generate_daily") return { status: 400, payload: { ok: false, error: "linkedin_post_id_required" } };
+
+  if (action === "generate_daily") {
+    const result = await generateDailyLinkedInDraft({ publishIfAllowed: body.publishIfAllowed === true });
+    return { status: 200, payload: result };
+  }
+  if (action === "generate_image") {
+    const post = await readLinkedInPost(id);
+    const image_url = generateLinkedInImage(post);
+    const updated = await patchLinkedInPost(id, { image_url, image_path: `linkedin/${id}.svg`, error_message: null });
+    return { status: 200, payload: { ok: true, post: updated } };
+  }
+  if (action === "regenerate_copy") {
+    const settings = (await readLinkedInSettings()).settings;
+    const generated = generateLinkedInPost({ content_mode: body.content_mode || settings.content_mode, source_type: "manual" }, settings, new Date(Date.now() + 86400000));
+    const updated = await patchLinkedInPost(id, {
+      title: generated.title,
+      hook: generated.hook,
+      body: generated.body,
+      cta: generated.cta,
+      hashtags: generated.hashtags,
+      image_url: generated.image_url,
+      source_reference: generated.source_reference,
+      error_message: null
+    });
+    return { status: 200, payload: { ok: true, post: updated } };
+  }
+  if (action === "approve") {
+    const post = await patchLinkedInPost(id, {
+      approved_by_user_id: "backoffice",
+      approved_at: new Date().toISOString(),
+      status: body.scheduled_at ? "scheduled" : "pending_review",
+      scheduled_at: body.scheduled_at || undefined,
+      error_message: null
+    });
+    return { status: 200, payload: { ok: true, post } };
+  }
+  if (action === "schedule") {
+    const settings = (await readLinkedInSettings()).settings;
+    const post = await patchLinkedInPost(id, {
+      scheduled_at: body.scheduled_at || nextScheduledAt(settings),
+      status: "scheduled",
+      error_message: null
+    });
+    return { status: 200, payload: { ok: true, post } };
+  }
+  if (action === "publish_now") {
+    const post = await publishLinkedInPostById(id);
+    return { status: post.status === "published" ? 200 : 400, payload: { ok: post.status === "published", post, error: post.error_message || null } };
+  }
+  if (action === "mark_manually_published") {
+    const post = await patchLinkedInPost(id, {
+      status: "manually_published",
+      manually_published_at: new Date().toISOString(),
+      error_message: null
+    });
+    return { status: 200, payload: { ok: true, post } };
+  }
+  if (action === "retry") {
+    const post = await patchLinkedInPost(id, { status: "pending_review", error_message: null });
+    return { status: 200, payload: { ok: true, post } };
+  }
+  if (action === "cancel") {
+    const post = await patchLinkedInPost(id, { status: "cancelled" });
+    return { status: 200, payload: { ok: true, post } };
+  }
+  return { status: 400, payload: { ok: false, error: "linkedin_action_not_supported" } };
+}
+
+async function handleLinkedIn(req, url, resource) {
+  if (resource === "linkedin") return handleLinkedInDashboard(url);
+  if (resource === "linkedin/connect") return handleLinkedInConnect(req, url);
+  if (resource === "linkedin/callback") return handleLinkedInCallback(req);
+  if (resource === "linkedin/disconnect") return handleLinkedInDisconnect(req);
+  if (resource === "linkedin/test-connection") return handleLinkedInTestConnection(req);
+  if (resource === "linkedin/settings") return handleLinkedInSettings(req);
+  if (resource === "linkedin/posts") return handleLinkedInPosts(req, url);
+  return { status: 404, payload: { ok: false, error: "linkedin_resource_not_found", resource } };
+}
 async function upsertSocialVideoProject(project, overrides = {}) {
   const row = socialVideoProjectRow(project, overrides);
   if (!row.id) throw new Error("social_video_project_id_required");
@@ -2164,6 +2644,10 @@ module.exports = async function handler(req, res) {
     }
     if (resource === "seo/generate-landings") {
       const result = await handleSeoGenerate(req);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "linkedin" || resource.startsWith("linkedin/")) {
+      const result = await handleLinkedIn(req, url, resource);
       return json(res, result.status, result.payload);
     }
     if (resource === "kpis/settings") {
