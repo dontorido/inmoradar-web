@@ -1102,12 +1102,19 @@ function renderSeoSummary(summary = {}, fallbackRows = []) {
   const needsReview = Number(summary.needs_review ?? rows.filter((row) => row.status === "needs_review").length);
   const noindex = Number(summary.noindex ?? rows.filter((row) => row.index_status === "noindex" || row.status === "noindex").length);
   const opportunities = Number(summary.pending_opportunities ?? 0);
+  const landingsToday = Number(summary.published_landings_today ?? 0);
+  const newsToday = Number(summary.published_news_today ?? 0);
+  const targetLandings = Number(summary.target_landings_per_day ?? 2);
+  const targetNews = Number(summary.target_news_per_day ?? 2);
+  const dailyStatus = summary.seo_daily_status === "complete" ? "completo" : "pendiente";
   const averageScore = Number(summary.average_quality_score ?? 0);
 
   els.seoSummary.innerHTML = [
     stat("Total", total, { id: "seo-total", hint: "Landings SEO creadas" }),
     stat("Publicadas", published, { id: "seo-published", hint: "Visibles e indexables" }),
-    stat("Pendientes", pending, { id: "seo-pending", hint: "Draft + revisión + ready" }),
+    stat("Hoy landings", `${landingsToday}/${targetLandings}`, { id: "seo-today-landings", hint: "Objetivo diario programatico" }),
+    stat("Hoy guias", `${newsToday}/${targetNews}`, { id: "seo-today-guides", hint: `Objetivo diario editorial - ${dailyStatus}` }),
+    stat("Pendientes", pending, { id: "seo-pending", hint: "Draft + revision + ready" }),
     stat("Ready", ready, { id: "seo-ready", hint: "Listas para publicar" }),
     stat("Revision", needsReview, { id: "seo-review", hint: "Necesitan criterio humano" }),
     stat("Noindex", noindex, { id: "seo-noindex", hint: "Bloqueadas para indice" }),

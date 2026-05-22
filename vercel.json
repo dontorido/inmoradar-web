@@ -33,6 +33,8 @@
     { "source": "/precio-alquiler/:city/", "destination": "/api/seo-page?slug=precio-alquiler/:city" },
     { "source": "/saber-si-piso-esta-caro/:city", "destination": "/api/seo-page?slug=saber-si-piso-esta-caro/:city" },
     { "source": "/saber-si-piso-esta-caro/:city/", "destination": "/api/seo-page?slug=saber-si-piso-esta-caro/:city" },
+    { "source": "/guias/:slug", "destination": "/api/seo-page?slug=guias/:slug" },
+    { "source": "/guias/:slug/", "destination": "/api/seo-page?slug=guias/:slug" },
     { "source": "/admin", "destination": "/admin.html" },
     { "source": "/backoffice/marketing/viraliza", "destination": "/admin.html" },
     { "source": "/que-analiza", "destination": "/que-analiza.html" },

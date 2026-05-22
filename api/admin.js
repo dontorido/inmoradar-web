@@ -1,5 +1,6 @@
 const { assertAdmin, fetchWithTimeout, handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
 const { runSeoLandingGeneration } = require("./_seo/generator");
+const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
 const {
   KPI_SCHEMA_VERSION,
   KPI_SETTINGS_SCHEMA,
@@ -761,7 +762,7 @@ async function handleSeoLandings(req, url) {
   if (status && status !== "all") params.set("status", `eq.${status}`);
 
   const summaryParams = new URLSearchParams({
-    select: "status,index_status,quality_score,published_at,updated_at",
+    select: "status,index_status,quality_score,template_type,published_at,updated_at,last_generated_at",
     limit: "5000"
   });
   const opportunitiesParams = new URLSearchParams({
@@ -818,6 +819,7 @@ function buildSeoLandingsSummary(rows = [], opportunities = [], activeStatus = "
   const pendingOpportunities = (Array.isArray(opportunities) ? opportunities : []).filter((row) =>
     ["pending", "generating", "draft", "needs_review"].includes(String(row.status || "").toLowerCase())
   ).length;
+  const dailyPolicy = buildSeoDailyPolicySnapshot(landings);
 
   return {
     total_landings: landings.length,
@@ -834,6 +836,11 @@ function buildSeoLandingsSummary(rows = [], opportunities = [], activeStatus = "
     indexable: indexCounts.index || 0,
     pending_landings: pendingLandings,
     pending_opportunities: pendingOpportunities,
+    published_landings_today: dailyPolicy.published_landings_today,
+    published_news_today: dailyPolicy.published_news_today,
+    target_landings_per_day: SEO_DAILY_TARGETS.landings,
+    target_news_per_day: SEO_DAILY_TARGETS.news,
+    seo_daily_status: dailyPolicy.published_landings_today >= SEO_DAILY_TARGETS.landings && dailyPolicy.published_news_today >= SEO_DAILY_TARGETS.news ? "complete" : "pending",
     average_quality_score: scores.length
       ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
       : 0

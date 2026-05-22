@@ -49,7 +49,7 @@ function routeDynamic(pathname) {
   if (article) {
     return `/article.html?slug=${encodeURIComponent(article[1])}`;
   }
-  const seoCity = pathname.match(/^\/(precio-metro-cuadrado|precio-alquiler|saber-si-piso-esta-caro)\/([^/]+)\/?$/);
+  const seoCity = pathname.match(/^\/(precio-metro-cuadrado|precio-alquiler|saber-si-piso-esta-caro|guias)\/([^/]+)\/?$/);
   if (seoCity) {
     return `/api/seo-page?slug=${seoCity[1]}/${encodeURIComponent(seoCity[2])}`;
   }

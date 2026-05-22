@@ -8,6 +8,8 @@
 /precio-alquiler/:city/ /api/seo-page?slug=precio-alquiler/:city 200
 /saber-si-piso-esta-caro/:city /api/seo-page?slug=saber-si-piso-esta-caro/:city 200
 /saber-si-piso-esta-caro/:city/ /api/seo-page?slug=saber-si-piso-esta-caro/:city 200
+/guias/:slug /api/seo-page?slug=guias/:slug 200
+/guias/:slug/ /api/seo-page?slug=guias/:slug 200
 /que-analiza /que-analiza.html 200
 /datos /datos.html 200
 /premium /premium.html 200
