@@ -174,6 +174,41 @@ https://www.inmoradar.app/api/lemonsqueezy-webhook
 ```
 
 
+## Analytics propio y aprendizaje de contenidos
+
+InmoRadar mantiene GTM/dataLayer para analitica externa y anade tracking propio anonimo en Supabase para cruzar SEO, instalacion, waitlist, checkout y Premium sin guardar IP, emails ni datos de pago en la tabla de eventos.
+
+SQL necesario si no esta ejecutado:
+
+```bash
+database/owned-analytics-events.sql
+```
+
+Ruta publica de eventos:
+
+```text
+POST /api/analytics/event
+```
+
+Internamente se reescribe a `api/market-price.js?resource=owned-analytics-event` para no crear otra serverless function en Vercel Hobby. El frontend usa `anonymous_session_id` en `localStorage`, envia eventos best-effort y nunca bloquea navegacion, instalacion ni checkout.
+
+Eventos permitidos:
+
+```text
+page_view, install_click, chrome_store_click, waitlist_open, waitlist_submit,
+premium_click, checkout_start, checkout_created, checkout_error,
+seo_cta_click, guide_cta_click, article_cta_click
+```
+
+Recursos admin protegidos:
+
+```text
+GET /api/admin?resource=analytics/summary
+GET /api/admin?resource=analytics/pages
+GET /api/admin?resource=analytics/learning
+```
+
+El BackOffice muestra en Ventas > Funnel y SEO Performance el ranking de paginas, ciudades, temas, templates y recomendaciones para orientar futuros contenidos.
 ## Viraliza con cuentas reales
 
 Viraliza sigue siendo human-in-the-loop: no hace scraping, no sigue cuentas, no publica comentarios y no envia DMs automaticamente. El BackOffice solo propone acciones para que el usuario revise y ejecute manualmente.

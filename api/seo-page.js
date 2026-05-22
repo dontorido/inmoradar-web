@@ -720,7 +720,7 @@ function renderLandingHtml(landing) {
       </div>
     </nav>
   </header>
-  <main class="seo-shell">
+  <main class="seo-shell" data-owned-analytics data-page-type="seo" data-content-type="${escapeHtml(String(landing.template_type || "").includes("guide") ? "guide" : "landing")}" data-template-type="${escapeHtml(landing.template_type || "")}" data-slug="${escapeHtml(landing.slug || "")}" data-city="${escapeHtml(landing.city || "")}" data-topic="${escapeHtml(landing.title || landing.h1 || "")}">
     ${landing.body_html}
   </main>
   <footer class="seo-global-footer">
@@ -737,6 +737,7 @@ function renderLandingHtml(landing) {
     </div>
   </footer>
   ${seoPageScript()}
+  <script src="/assets/app.js" defer></script>
 </body>
 </html>`;
 }

@@ -102,6 +102,7 @@ Rutas limpias definidas en `vercel.json` y `scripts/serve-static.js`: `/`, `/que
 - `GET /api/seo-page?slug=...`: render publico de landings SEO.
 - `GET /api/og/price-city`: imagen Open Graph para landings.
 - `POST /api/waitlist/browser`: ruta publica de lista de espera para Opera, Firefox y Safari. En `vercel.json` reescribe a `api/market-price.js?resource=browser-waitlist` para respetar el limite de Vercel Hobby. Valida email y navegador, aplica honeypot basico y guarda leads en `browser_waitlist_leads` (`database/browser-waitlist-leads.sql`) desde backend.
+- `POST /api/analytics/event`: ruta publica de analytics propio anonimo. En `vercel.json` reescribe a `api/market-price.js?resource=owned-analytics-event` para evitar otra serverless function. Acepta solo eventos allowlist, sanea metadata y guarda en `owned_analytics_events` (`database/owned-analytics-events.sql`) si Supabase esta configurado.
 
 ### Backoffice
 
@@ -111,6 +112,9 @@ Todos pasan por `api/admin.js` y requieren `ADMIN_IMPORT_TOKEN`.
 - `GET /api/admin?resource=alerts`: alertas operativas del BackOffice; diagnostica `CRON_SECRET`, Supabase, publicaciones SEO recientes, leads de waitlist y actividad Premium sin crear otra serverless function.
 - `GET /api/admin?resource=premium/subscriptions`: listado filtrable de suscripciones.
 - `GET /api/admin?resource=extension/usage`: resumen de uso de extension.
+- `GET /api/admin?resource=analytics/summary`: resumen de funnel propio: visitas, clicks de instalacion, waitlist, checkout y recomendaciones.
+- `GET /api/admin?resource=analytics/pages`: ranking de paginas por conversion.
+- `GET /api/admin?resource=analytics/learning`: aprendizaje de contenidos ganadores y paginas a revisar.
 - `GET/POST /api/admin?resource=seo/landings`: listado y acciones sobre landings SEO.
 - `POST /api/admin?resource=seo/generate-landings`: genera o publica landings.
 - `GET/POST /api/admin?resource=kpis/settings`: lee/guarda configuracion KPI.
@@ -310,6 +314,26 @@ Notas actuales:
 - El backend limita clips Runway a duraciones compatibles y controla coste por render y presupuesto diario.
 - El storyboard puede tener mas duracion que el clip Runway; el compositor reutiliza/ajusta el clip.
 
+## 10.5 Analytics propio y aprendizaje SEO/venta
+
+Archivos:
+
+- `database/owned-analytics-events.sql`: tabla `owned_analytics_events`, indices y RLS sin politicas publicas de escritura.
+- `lib/analytics/ownedEvents.js`: validacion, saneado y guardado best-effort de eventos anonimos.
+- `lib/analytics/learning.js`: resumen por pagina, scoring y recomendaciones de contenido.
+- `assets/app.js`: genera `anonymous_session_id`, mantiene GTM/dataLayer y envia eventos no bloqueantes a `/api/analytics/event`.
+- `api/market-price.js`: aloja el recurso interno `owned-analytics-event` sin nueva funcion serverless.
+- `api/admin.js`: recursos `analytics/summary`, `analytics/pages` y `analytics/learning`.
+- `admin.html` y `assets/admin.js`: panel Ventas > Funnel y SEO Performance.
+- `tests/owned-analytics.test.js`.
+
+Eventos permitidos: `page_view`, `install_click`, `chrome_store_click`, `waitlist_open`, `waitlist_submit`, `premium_click`, `checkout_start`, `checkout_created`, `checkout_error`, `seo_cta_click`, `guide_cta_click` y `article_cta_click`.
+
+Privacidad: no se guarda IP, email, user agent completo ni datos de pago en `owned_analytics_events`. La metadata elimina claves sensibles y valores con formato email. El tracking es best-effort y no bloquea navegacion ni checkout.
+
+Uso del aprendizaje: el BackOffice detecta paginas, templates, ciudades y temas con mejor tasa de instalacion o checkout, y propone repetir contenidos ganadores o mejorar CTAs de paginas con trafico sin conversion.
+
+SQL pendiente tras deploy: ejecutar `database/owned-analytics-events.sql` en Supabase.
 ## 11. Variables de entorno usadas
 
 Solo nombres detectados o documentados; no incluir valores:
