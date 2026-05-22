@@ -3,6 +3,7 @@ const CHECKOUT_ENDPOINT = "/api/lemonsqueezy-checkout";
 const PORTAL_ENDPOINT = "/api/lemonsqueezy-portal";
 const CONTACT_ENDPOINT = "/api/contact";
 const BROWSER_WAITLIST_ENDPOINT = "/api/waitlist/browser";
+const CHROME_WEBSTORE_URL = "https://chromewebstore.google.com/detail/inmoradar/mbkjlkagblkmdnjggoggbjiohbjebaab";
 const LANGUAGE_STORAGE_KEY = "inmoradar_language";
 const PUBLIC_HOSTS = new Set(["inmoradar.app", "www.inmoradar.app"]);
 
@@ -10,62 +11,72 @@ const BROWSER_LAUNCH_WAITLIST = {
   chrome: {
     id: "chrome",
     name: "Chrome",
-    status: "soon",
-    badge: "Próximamente",
-    description: "Instalación desde Chrome Web Store cuando la ficha esté pública.",
+    status: "available",
+    badge: "Disponible",
+    description: "Disponible desde Chrome Web Store.",
     storeName: "Chrome Web Store",
-    storeUrl: "https://chromewebstore.google.com/search/InmoRadar",
+    storeUrl: CHROME_WEBSTORE_URL,
     label: "Chrome"
   },
   edge: {
     id: "edge",
     name: "Edge",
-    status: "compatible",
-    badge: "Compatible",
-    description: "Compatible con la base Chromium de Microsoft Edge.",
-    storeName: "Microsoft Edge Add-ons",
-    storeUrl: "https://microsoftedge.microsoft.com/addons/search/InmoRadar",
+    status: "available",
+    badge: "Chromium compatible",
+    description: "Puede instalarse desde Chrome Web Store en navegadores Chromium compatibles.",
+    storeName: "Chrome Web Store",
+    storeUrl: CHROME_WEBSTORE_URL,
     label: "Edge"
   },
   firefox: {
     id: "firefox",
     name: "Firefox",
-    status: "beta",
-    badge: "Beta",
-    description: "Versión adaptada para el ecosistema Mozilla.",
+    status: "waitlist",
+    badge: "Waitlist",
+    description: "Versión específica en lista de espera.",
     storeName: "Firefox Add-ons",
-    storeUrl: "https://addons.mozilla.org/es/firefox/search/?q=InmoRadar",
+    storeUrl: "",
     label: "Firefox"
   },
   opera: {
     id: "opera",
     name: "Opera",
-    status: "manual",
-    badge: "Instalación manual",
-    description: "Compatible mediante extensiones Chromium cuando esté disponible.",
-    storeName: "Opera Add-ons",
-    storeUrl: "https://addons.opera.com/es/extensions/?query=InmoRadar",
+    status: "available",
+    badge: "Chromium compatible",
+    description: "Puede instalarse desde Chrome Web Store en navegadores Chromium compatibles.",
+    storeName: "Chrome Web Store",
+    storeUrl: CHROME_WEBSTORE_URL,
     label: "Opera"
   },
   vivaldi: {
     id: "vivaldi",
     name: "Vivaldi",
-    status: "compatible",
-    badge: "Compatible",
-    description: "Instalación compatible desde Chrome Web Store.",
+    status: "available",
+    badge: "Chromium compatible",
+    description: "Puede instalarse desde Chrome Web Store en navegadores Chromium compatibles.",
     storeName: "Chrome Web Store",
-    storeUrl: "https://chromewebstore.google.com/search/InmoRadar",
+    storeUrl: CHROME_WEBSTORE_URL,
     label: "Vivaldi"
   },
   brave: {
     id: "brave",
     name: "Brave",
-    status: "compatible",
-    badge: "Compatible",
-    description: "Instalación compatible desde Chrome Web Store.",
+    status: "available",
+    badge: "Chromium compatible",
+    description: "Puede instalarse desde Chrome Web Store en navegadores Chromium compatibles.",
     storeName: "Chrome Web Store",
-    storeUrl: "https://chromewebstore.google.com/search/InmoRadar",
+    storeUrl: CHROME_WEBSTORE_URL,
     label: "Brave"
+  },
+  safari: {
+    id: "safari",
+    name: "Safari",
+    status: "waitlist",
+    badge: "Waitlist",
+    description: "Versión específica en lista de espera.",
+    storeName: "Safari Extensions",
+    storeUrl: "",
+    label: "Safari"
   }
 };
 
@@ -156,7 +167,7 @@ const I18N = {
     navNews: "Noticias",
     navFaq: "FAQ",
     navContact: "Contacto",
-    navCta: "Probar gratis 2 días",
+    navCta: "Instalar en Chrome",
     contactSuccess: "Mensaje enviado. Te respondemos en menos de 24h.",
     contactError: "Revisa los campos del formulario.",
     contactSending: "Enviando...",
@@ -180,7 +191,7 @@ const I18N = {
     navNews: "News",
     navFaq: "FAQ",
     navContact: "Contact",
-    navCta: "Start free",
+    navCta: "Install on Chrome",
     contactSuccess: "Message sent. We will reply in under 24h.",
     contactError: "Please review the form fields.",
     contactSending: "Sending...",
@@ -267,6 +278,12 @@ const TEXT_TRANSLATIONS_EN = {
   "Términos": "Terms",
   "Terminos": "Terms",
   "Empezar gratis": "Start free",
+  "Instalar en Chrome": "Install on Chrome",
+  "Activar Premium": "Activate Premium",
+  "Instala primero la extensión gratis en Chrome": "Install the free Chrome extension first",
+  "Avisarme para Firefox/Safari": "Notify me for Firefox/Safari",
+  "Analiza tu primer anuncio gratis": "Analyze your first listing free",
+  "Disponible para Chrome y navegadores Chromium compatibles": "Available for Chrome and compatible Chromium browsers",
   "Empieza a descubrir información relevante": "Start uncovering relevant information",
   "Probar gratis 2 días": "Try 2 days free",
   "Apuntarme al lanzamiento": "Join the launch waitlist",
@@ -758,6 +775,7 @@ function detectLaunchBrowser() {
   if (/OPR\//i.test(ua)) return "opera";
   if (/Vivaldi/i.test(ua)) return "vivaldi";
   if (/Edg\//i.test(ua)) return "edge";
+  if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua) && !/Chromium\//i.test(ua)) return "safari";
   if (/Firefox\//i.test(ua)) return "firefox";
   if (/Chrome\//i.test(ua) && !/OPR\//i.test(ua) && !/Edg\//i.test(ua)) return "chrome";
   return "";
@@ -782,6 +800,24 @@ function launchWaitlistAnalytics(eventName, props = {}) {
   }
 }
 
+function isInstallableBrowser(browserId) {
+  return BROWSER_LAUNCH_WAITLIST[browserId]?.status === "available";
+}
+
+function installUrlForBrowser(browserId) {
+  return BROWSER_LAUNCH_WAITLIST[browserId]?.storeUrl || CHROME_WEBSTORE_URL;
+}
+
+function openChromeWebStore({ browser = "chrome", source = "web", label = "" } = {}) {
+  launchWaitlistAnalytics("extension_install_click", {
+    browser,
+    source,
+    label,
+    store: "chrome_web_store"
+  });
+  const opened = window.open(installUrlForBrowser(browser), "_blank", "noopener,noreferrer");
+  if (!opened) window.location.href = installUrlForBrowser(browser);
+}
 function launchWaitlistBrowserCards() {
   return Object.values(BROWSER_LAUNCH_WAITLIST)
     .map((browser) => {
@@ -809,7 +845,8 @@ function launchWaitlistBrowserCards() {
 
 function launchWaitlistModalHtml() {
   const selectedBrowser = BROWSER_LAUNCH_WAITLIST[launchWaitlistState.selectedBrowser];
-  const submitDisabled = !(launchWaitlistState.selectedBrowser && launchWaitlistState.email.includes("@") && launchWaitlistState.status !== "loading");
+  const selectedInstallable = isInstallableBrowser(launchWaitlistState.selectedBrowser);
+  const submitDisabled = selectedInstallable ? false : !(launchWaitlistState.selectedBrowser && launchWaitlistState.email.includes("@") && launchWaitlistState.status !== "loading");
   if (launchWaitlistState.status === "success") {
     return `
     <div class="launch-modal-backdrop" data-launch-waitlist-backdrop>
@@ -832,27 +869,27 @@ function launchWaitlistModalHtml() {
         <button class="launch-modal-close" type="button" data-launch-waitlist-close aria-label="Cerrar">×</button>
         <div class="launch-modal-head">
           <p class="section-label">Instalar InmoRadar</p>
-          <h2 id="launch-modal-title">Empieza a descubrir información relevante</h2>
-          <p id="launch-modal-description">Elige tu navegador y abre la store correspondiente. Si la ficha todavía no aparece, busca InmoRadar en esa tienda o vuelve en unos días.</p>
-          <strong>2 días gratis · Sin pago inicial · Premium semanal por 1,99 € solo si decides continuar</strong>
+          <h2 id="launch-modal-title">Instala InmoRadar en Chrome</h2>
+          <p id="launch-modal-description">Disponible para Chrome y navegadores Chromium compatibles. Firefox y Safari siguen en lista de espera.</p>
+          <strong>Analiza tu primer anuncio gratis</strong>
         </div>
         <div class="launch-browser-grid" role="group" aria-label="Elige navegador">
           ${launchWaitlistBrowserCards()}
         </div>
-        <p class="launch-other-browsers">Chrome, Vivaldi y Brave usan Chrome Web Store. Edge y Firefox tienen sus propias tiendas. Opera puede requerir instalación compatible/manual si la ficha no está publicada todavía.</p>
+        <p class="launch-other-browsers">Chrome, Edge, Brave, Vivaldi y Opera pueden instalarse desde Chrome Web Store. Firefox y Safari mantienen lista de espera.</p>
         <form class="launch-form" data-launch-waitlist-form>
           <p class="launch-selected-browser">Navegador elegido: <strong>${escapeHtml(selectedBrowser?.name || "Elige uno")}</strong></p>
           <label class="field" for="launch-waitlist-email">
             <span>Email para avisarte</span>
-            <input id="launch-waitlist-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="tu@email.com" value="${escapeHtml(launchWaitlistState.email)}" required>
+            <input id="launch-waitlist-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="tu@email.com" value="${escapeHtml(launchWaitlistState.email)}" ${selectedInstallable ? "" : "required"}>
           </label>
           <label class="launch-honeypot" aria-hidden="true" tabindex="-1">
             <span>Empresa</span>
             <input name="company" type="text" autocomplete="off" tabindex="-1">
           </label>
-          <p class="launch-privacy">Usaremos este email solo para avisarte del lanzamiento y priorizar compatibilidad por navegador. Puedes leer la <a href="/privacidad" target="_blank" rel="noopener noreferrer">politica de privacidad</a>.</p>
+          <p class="launch-privacy">Usaremos este email solo para avisarte sobre Firefox o Safari y priorizar compatibilidad. Puedes leer la <a href="/privacidad" target="_blank" rel="noopener noreferrer">politica de privacidad</a>.</p>
           <p class="launch-error" id="launch-waitlist-error" ${launchWaitlistState.error ? "" : "hidden"}>${escapeHtml(launchWaitlistState.error)}</p>
-          <button class="button full" type="submit" ${submitDisabled ? "disabled" : ""}>${launchWaitlistState.status === "loading" ? "Guardando..." : "Avisadme cuando este disponible"}</button>
+          <button class="button full" type="submit" ${submitDisabled ? "disabled" : ""}>${selectedInstallable ? "Abrir Chrome Web Store" : launchWaitlistState.status === "loading" ? "Guardando..." : "Avisadme cuando este disponible"}</button>
         </form>
         <div class="launch-modal-actions left">
           <button class="button ghost" type="button" data-launch-waitlist-close>Seguir viendo la web</button>
@@ -910,9 +947,9 @@ function resetLaunchWaitlistForm() {
   renderLaunchWaitlistModal();
 }
 
-function openLaunchWaitlistModal({ source = "web", label = "", opener = null } = {}) {
+function openLaunchWaitlistModal({ source = "web", label = "", opener = null, browser = "" } = {}) {
   launchWaitlistState.detectedBrowser = detectLaunchBrowser();
-  launchWaitlistState.selectedBrowser = launchWaitlistState.detectedBrowser || "chrome";
+  launchWaitlistState.selectedBrowser = browser || launchWaitlistState.detectedBrowser || "firefox";
   launchWaitlistState.email = "";
   launchWaitlistState.error = "";
   launchWaitlistState.status = "idle";
@@ -921,7 +958,7 @@ function openLaunchWaitlistModal({ source = "web", label = "", opener = null } =
   launchWaitlistState.label = label;
   launchWaitlistState.opener = opener;
   launchWaitlistState.open = true;
-  launchWaitlistAnalytics("launch_waitlist_modal_open", { source });
+  launchWaitlistAnalytics("launch_waitlist_modal_open", { source, browser: launchWaitlistState.selectedBrowser });
   renderLaunchWaitlistModal();
 }
 
@@ -960,7 +997,7 @@ function bindLaunchWaitlistModal(host) {
     }
     const submit = host.querySelector('[data-launch-waitlist-form] [type="submit"]');
     if (submit) {
-      submit.disabled = !(launchWaitlistState.selectedBrowser && launchWaitlistState.email.includes("@") && launchWaitlistState.status !== "loading");
+      submit.disabled = isInstallableBrowser(launchWaitlistState.selectedBrowser) ? false : !(launchWaitlistState.selectedBrowser && launchWaitlistState.email.includes("@") && launchWaitlistState.status !== "loading");
     }
   });
   host.querySelector("[data-launch-waitlist-form]")?.addEventListener("submit", submitLaunchWaitlist);
@@ -988,6 +1025,10 @@ async function submitLaunchWaitlist(event) {
   event.preventDefault();
   const browser = launchWaitlistState.selectedBrowser;
   const email = String(launchWaitlistState.email || "").trim();
+  if (isInstallableBrowser(browser)) {
+    openChromeWebStore({ browser, source: launchWaitlistState.source, label: launchWaitlistState.label });
+    return;
+  }
   if (!browser) {
     launchWaitlistState.error = "Elige tu navegador para continuar.";
     renderLaunchWaitlistModal();
@@ -1061,19 +1102,24 @@ async function submitLaunchWaitlist(event) {
 }
 
 function ctaSourceFromElement(element) {
-  return element.dataset.launchWaitlistSource || element.dataset.checkoutSource || element.dataset.testid || element.getAttribute("aria-label") || normalizedText(element.textContent || "web_cta").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "web_cta";
+  return element.dataset.installSource || element.dataset.launchWaitlistSource || element.dataset.checkoutSource || element.dataset.testid || element.getAttribute("aria-label") || normalizedText(element.textContent || "web_cta").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "web_cta";
 }
 
-function isLaunchWaitlistCta(element) {
-  if (element.matches("[data-launch-waitlist], [data-checkout-button]")) return true;
-  if (element.matches('a.button[href="/premium"], a.button[href="/premium.html"]') && !element.closest(".nav-links, .mobile-panel")) return true;
-  return false;
+function initInstallButtons() {
+  document.querySelectorAll("[data-install-button]").forEach((element) => {
+    if (!element.dataset.installSource) element.dataset.installSource = ctaSourceFromElement(element);
+    element.addEventListener("click", (event) => {
+      event.preventDefault();
+      openChromeWebStore({
+        browser: element.dataset.installBrowser || "chrome",
+        source: element.dataset.installSource,
+        label: normalizedText(element.textContent || "")
+      });
+    });
+  });
 }
-
 function initLaunchWaitlist() {
-  document.querySelectorAll('a.button[href="/premium"], a.button[href="/premium.html"], [data-checkout-button], [data-launch-waitlist]').forEach((element) => {
-    if (!isLaunchWaitlistCta(element)) return;
-    element.dataset.launchWaitlist = "true";
+  document.querySelectorAll("[data-browser-waitlist], [data-launch-waitlist]").forEach((element) => {
     if (!element.dataset.launchWaitlistSource) element.dataset.launchWaitlistSource = ctaSourceFromElement(element);
     element.addEventListener("click", (event) => {
       event.preventDefault();
@@ -1084,6 +1130,7 @@ function initLaunchWaitlist() {
       openLaunchWaitlistModal({
         source: element.dataset.launchWaitlistSource,
         label: normalizedText(element.textContent || ""),
+        browser: element.dataset.waitlistBrowser || "",
         opener: element
       });
     });
@@ -1181,8 +1228,29 @@ function initCheckout() {
   const portalToken = new URLSearchParams(location.search).get("token");
   if (portalToken) openPortalFromToken(portalToken);
 
-  // Las stores aún no son públicas: los CTAs de prueba/instalación los captura
-  // initLaunchWaitlist() y abren la lista de lanzamiento, no el checkout.
+  document.querySelectorAll("[data-checkout-button]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      const previousText = button.textContent;
+      button.disabled = true;
+      button.textContent = t("checkoutOpening");
+      try {
+        const response = await fetch(CHECKOUT_ENDPOINT, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ source: button.dataset.checkoutSource || ctaSourceFromElement(button) })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.checkout_url) throw new Error(payload.message || t("checkoutSetupIssue"));
+        location.href = payload.checkout_url;
+      } catch (error) {
+        showToast(error.message || t("checkoutSetupIssue"), "error");
+        button.disabled = false;
+        button.textContent = previousText;
+      }
+    });
+  });
+
   document.querySelectorAll("[data-portal-form]").forEach((form) => {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
