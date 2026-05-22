@@ -188,7 +188,9 @@ const state = {
     routine: null,
     executionMode: false,
     realCreators: [],
-    dailyCreatorPlan: []
+    dailyCreatorPlan: [],
+    creatorsStorageWarning: "",
+    dailyPlanWarning: ""
   },
   alerts: []
 };
@@ -1771,11 +1773,15 @@ function syncViralizaFocusedArea() {
 function renderViralizaRealCreators() {
   if (!els.viralizaRealCreators) return;
   const creators = state.viraliza.realCreators || [];
+  const warning = state.viraliza.creatorsStorageWarning || "";
+  const warningHtml = warning
+    ? `<p class="admin-empty-state">Modo degradado: no se pudo leer o guardar 'viral_creators'. Ejecuta database/viraliza.sql en Supabase. Detalle: ${escapeHtml(warning)}</p>`
+    : "";
   if (!creators.length) {
-    els.viralizaRealCreators.innerHTML = `<p class="admin-empty-state">Aun no hay cuentas reales importadas. Agrega una manualmente o pega un JSON revisado.</p>`;
+    els.viralizaRealCreators.innerHTML = warningHtml || `<p class="admin-empty-state">Aun no hay cuentas reales importadas. Agrega una manualmente o pega un JSON revisado.</p>`;
     return;
   }
-  els.viralizaRealCreators.innerHTML = creators
+  els.viralizaRealCreators.innerHTML = warningHtml + creators
     .map((creator) => `
       <article class="admin-viraliza-real-item">
         <div>
@@ -1795,11 +1801,15 @@ function renderViralizaRealCreators() {
 function renderViralizaDailyPlan() {
   if (!els.viralizaDailyPlan) return;
   const plan = state.viraliza.dailyCreatorPlan || [];
+  const warning = state.viraliza.dailyPlanWarning || "";
+  const warningHtml = warning
+    ? `<p class="admin-empty-state">Modo degradado: no se pudo leer todo el historial de Viraliza. Ejecuta database/viraliza.sql en Supabase. Detalle: ${escapeHtml(warning)}</p>`
+    : "";
   if (!plan.length) {
-    els.viralizaDailyPlan.innerHTML = `<p class="admin-empty-state">Sin plan con cuentas reales. Importa cuentas y pulsa Actualizar plan de hoy.</p>`;
+    els.viralizaDailyPlan.innerHTML = warningHtml || `<p class="admin-empty-state">Sin plan con cuentas reales. Importa cuentas y pulsa Actualizar plan de hoy.</p>`;
     return;
   }
-  els.viralizaDailyPlan.innerHTML = plan
+  els.viralizaDailyPlan.innerHTML = warningHtml + plan
     .map((item) => `
       <article class="admin-viraliza-plan-card">
         <div class="admin-viraliza-card-head">
@@ -1842,6 +1852,7 @@ async function loadViralizaCreators() {
   if (!els.viralizaRealCreators) return;
   const payload = await api("/api/admin?resource=viraliza/creators");
   state.viraliza.realCreators = payload.creators || [];
+  state.viraliza.creatorsStorageWarning = payload.persisted === false ? payload.error || "Falta o falla la tabla viral_creators." : "";
   renderViralizaRealCreators();
 }
 
@@ -1849,6 +1860,7 @@ async function loadViralizaDailyPlan() {
   if (!els.viralizaDailyPlan) return;
   const payload = await api("/api/admin?resource=viraliza/daily-plan");
   state.viraliza.dailyCreatorPlan = payload.dailyCreatorPlan || [];
+  state.viraliza.dailyPlanWarning = payload.persisted === false ? (payload.warnings || []).join(" | ") || "Falta o falla alguna tabla Viraliza." : "";
   renderViralizaDailyPlan();
 }
 
@@ -1859,6 +1871,7 @@ async function saveViralizaCreator(form) {
     body: JSON.stringify({ creator })
   });
   if (payload.creator) {
+    state.viraliza.creatorsStorageWarning = payload.persisted === false ? payload.error || "Falta o falla la tabla viral_creators." : "";
     state.viraliza.realCreators = [payload.creator, ...(state.viraliza.realCreators || []).filter((item) => item.id !== payload.creator.id)];
     renderViralizaRealCreators();
   }
@@ -1870,16 +1883,20 @@ async function saveViralizaCreator(form) {
 async function importViralizaCreators() {
   const raw = els.viralizaImportJson?.value || "";
   if (!raw.trim()) return showStatus("Pega un array JSON de cuentas reales primero.", "bad");
+  let parsed;
   let creators;
   try {
-    creators = JSON.parse(raw);
+    parsed = JSON.parse(raw);
+    creators = Array.isArray(parsed) ? parsed : Array.isArray(parsed.creators) ? parsed.creators : null;
   } catch (error) {
-    return showStatus("JSON no valido. Pega un array de cuentas.", "bad");
+    return showStatus("JSON no valido. Pega un array de cuentas o { creators: [...] }.", "bad");
   }
+  if (!creators) return showStatus("JSON valido, pero debe ser un array o un objeto con creators: [...].", "bad");
   const payload = await api("/api/admin?resource=viraliza/creators/import", {
     method: "POST",
     body: JSON.stringify({ creators })
   });
+  state.viraliza.creatorsStorageWarning = payload.persisted === false ? payload.error || "Falta o falla la tabla viral_creators." : "";
   state.viraliza.realCreators = payload.creators || state.viraliza.realCreators || [];
   renderViralizaRealCreators();
   if (els.viralizaImportJson) els.viralizaImportJson.value = "";
