@@ -18,11 +18,13 @@ Web estatica de lanzamiento para InmoRadar.
 - `api/lemonsqueezy-checkout.js`: crea checkouts y abre el Customer Portal de Lemon Squeezy en modo prueba o produccion sin exponer la API key.
 - `api/lemonsqueezy-webhook.js`: webhook preparado para sincronizar suscripciones de Lemon Squeezy.
 - `api/check-premium.js?resource=saved-properties-email-report`: envio Premium de comparativa de inmuebles guardados por Cloudflare Email Service.
+- `api/waitlist/browser.js`: endpoint publico para guardar lista de espera por navegador sin exponer claves Supabase.
 - `admin.html`, `assets/admin.js` y `assets/admin.css`: backoffice protegido por `ADMIN_IMPORT_TOKEN`.
 - `api/admin.js`: backoffice API compacta para Premium, SEO, KPIs, Parking y estado de integraciones. Se usa una sola serverless function para respetar el limite de Vercel Hobby.
 - `lib/social-video/*`: generador de guion, storyboard, preview vertical y paquete exportable para Videos IA, con personas de fondo, musica y branding global obligatorio.
 - `database/premium-subscriptions.sql`: tabla Supabase para guardar suscripciones Premium.
 - `database/saved-property-email-reports.sql`: auditoria y limite diario de emails Premium enviados.
+- `database/browser-waitlist-leads.sql`: tabla Supabase para leads de lanzamiento por navegador.
 - `database/kpi-settings.sql`: tabla Supabase para guardar reglas, pesos, umbrales y visibilidad de KPIs.
 - `api/market-price.js`: endpoint agregado para que la extension consulte precios de mercado por zona.
 - `database/market-price-sources.sql`: tabla Supabase `market_price_sources` y seed minimo de mercado.
@@ -40,6 +42,7 @@ Web estatica de lanzamiento para InmoRadar.
 - `types/parking.ts`: tipos TypeScript preparados para migrar el endpoint a TS.
 - `database/parking-difficulty.sql`: tablas preparadas para zonas de aparcamiento regulado y cache persistente.
 - `tests/parking-difficulty.test.js`: tests basicos del scoring, parser y cache.
+- `tests/browser-waitlist.test.js`: tests focalizados de validacion de email/navegador y honeypot de la waitlist.
 
 ## Checkout
 

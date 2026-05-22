@@ -485,7 +485,8 @@ function icon(name) {
     MapPin: '<path d="M12 21s7-5 7-12a7 7 0 1 0-14 0c0 7 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>',
     Send: '<path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4z"/>',
     Clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
-    Calendar: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/>'
+    Calendar: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/>',
+    Check: '<path d="m20 6-11 11-5-5"/>'
   };
   return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.Radar}</svg>`;
 }
@@ -785,8 +786,9 @@ function launchWaitlistBrowserCards() {
   return Object.values(BROWSER_LAUNCH_WAITLIST)
     .map((browser) => {
       const detected = launchWaitlistState.detectedBrowser === browser.id;
+      const selected = launchWaitlistState.selectedBrowser === browser.id;
       return `
-        <a class="launch-browser-card ${detected ? "selected" : ""}" href="${escapeHtml(browser.storeUrl)}" target="_blank" rel="noopener noreferrer" data-browser-store-link="${escapeHtml(browser.id)}">
+        <button class="launch-browser-card ${selected ? "selected" : ""}" type="button" data-browser-waitlist-option="${escapeHtml(browser.id)}" aria-pressed="${selected ? "true" : "false"}">
           <span class="launch-browser-card-top">
             <strong>${escapeHtml(browser.name)}</strong>
             <span class="launch-browser-badges">
@@ -796,16 +798,34 @@ function launchWaitlistBrowserCards() {
           </span>
           <span>${escapeHtml(browser.description)}</span>
           <span class="launch-browser-store">
-            <span>${escapeHtml(browser.storeName)}</span>
+            <span>${selected ? "Elegido" : "Elegir navegador"}</span>
             ${icon("ArrowRight")}
           </span>
-        </a>
+        </button>
       `;
     })
     .join("");
 }
 
 function launchWaitlistModalHtml() {
+  const selectedBrowser = BROWSER_LAUNCH_WAITLIST[launchWaitlistState.selectedBrowser];
+  const submitDisabled = !(launchWaitlistState.selectedBrowser && launchWaitlistState.email.includes("@") && launchWaitlistState.status !== "loading");
+  if (launchWaitlistState.status === "success") {
+    return `
+    <div class="launch-modal-backdrop" data-launch-waitlist-backdrop>
+      <section class="launch-modal launch-success" role="dialog" aria-modal="true" aria-labelledby="launch-success-title" tabindex="-1">
+        <button class="launch-modal-close" type="button" data-launch-waitlist-close aria-label="Cerrar">Ã—</button>
+        <span class="launch-success-icon">${icon("Check")}</span>
+        <h2 id="launch-success-title">Te avisaremos en cuanto este disponible.</h2>
+        <p>${launchWaitlistState.alreadyExists ? "Ya estabas en la lista para este navegador." : "Hemos guardado tu email para avisarte del lanzamiento y priorizar compatibilidad."}</p>
+        <div class="launch-modal-actions">
+          <button class="button" type="button" data-launch-waitlist-success-close>Cerrar</button>
+          <button class="button ghost" type="button" data-launch-waitlist-reset>Apuntar otro navegador</button>
+        </div>
+      </section>
+    </div>
+  `;
+  }
   return `
     <div class="launch-modal-backdrop" data-launch-waitlist-backdrop>
       <section class="launch-modal" role="dialog" aria-modal="true" aria-labelledby="launch-modal-title" aria-describedby="launch-modal-description" tabindex="-1">
@@ -820,6 +840,20 @@ function launchWaitlistModalHtml() {
           ${launchWaitlistBrowserCards()}
         </div>
         <p class="launch-other-browsers">Chrome, Vivaldi y Brave usan Chrome Web Store. Edge y Firefox tienen sus propias tiendas. Opera puede requerir instalación compatible/manual si la ficha no está publicada todavía.</p>
+        <form class="launch-form" data-launch-waitlist-form>
+          <p class="launch-selected-browser">Navegador elegido: <strong>${escapeHtml(selectedBrowser?.name || "Elige uno")}</strong></p>
+          <label class="field" for="launch-waitlist-email">
+            <span>Email para avisarte</span>
+            <input id="launch-waitlist-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="tu@email.com" value="${escapeHtml(launchWaitlistState.email)}" required>
+          </label>
+          <label class="launch-honeypot" aria-hidden="true" tabindex="-1">
+            <span>Empresa</span>
+            <input name="company" type="text" autocomplete="off" tabindex="-1">
+          </label>
+          <p class="launch-privacy">Usaremos este email solo para avisarte del lanzamiento y priorizar compatibilidad por navegador. Puedes leer la <a href="/privacidad" target="_blank" rel="noopener noreferrer">politica de privacidad</a>.</p>
+          <p class="launch-error" id="launch-waitlist-error" ${launchWaitlistState.error ? "" : "hidden"}>${escapeHtml(launchWaitlistState.error)}</p>
+          <button class="button full" type="submit" ${submitDisabled ? "disabled" : ""}>${launchWaitlistState.status === "loading" ? "Guardando..." : "Avisadme cuando este disponible"}</button>
+        </form>
         <div class="launch-modal-actions left">
           <button class="button ghost" type="button" data-launch-waitlist-close>Seguir viendo la web</button>
         </div>
@@ -845,7 +879,8 @@ function renderLaunchWaitlistModal() {
   requestAnimationFrame(() => {
     const focusTarget =
       host.querySelector("[data-launch-waitlist-success-close]") ||
-      host.querySelector(`[data-browser-store-link="${launchWaitlistState.detectedBrowser}"]`) ||
+      host.querySelector("#launch-waitlist-email") ||
+      host.querySelector(`[data-browser-waitlist-option="${launchWaitlistState.detectedBrowser}"]`) ||
       host.querySelector(".launch-browser-card") ||
       host.querySelector(".launch-modal");
     focusTarget?.focus?.();
@@ -877,7 +912,7 @@ function resetLaunchWaitlistForm() {
 
 function openLaunchWaitlistModal({ source = "web", label = "", opener = null } = {}) {
   launchWaitlistState.detectedBrowser = detectLaunchBrowser();
-  launchWaitlistState.selectedBrowser = launchWaitlistState.detectedBrowser || "";
+  launchWaitlistState.selectedBrowser = launchWaitlistState.detectedBrowser || "chrome";
   launchWaitlistState.email = "";
   launchWaitlistState.error = "";
   launchWaitlistState.status = "idle";
@@ -903,13 +938,15 @@ function bindLaunchWaitlistModal(host) {
   host.querySelector("[data-launch-waitlist-backdrop]")?.addEventListener("click", (event) => {
     if (event.target === event.currentTarget) closeLaunchWaitlistModal("backdrop");
   });
-  host.querySelectorAll("[data-browser-store-link]").forEach((link) => {
-    link.addEventListener("click", () => {
-      launchWaitlistAnalytics("browser_store_click", {
-        browser: link.dataset.browserStoreLink,
-        source: launchWaitlistState.source,
-        storeUrl: link.href
+  host.querySelectorAll("[data-browser-waitlist-option]").forEach((button) => {
+    button.addEventListener("click", () => {
+      launchWaitlistState.selectedBrowser = button.dataset.browserWaitlistOption || "";
+      launchWaitlistState.error = "";
+      launchWaitlistAnalytics("browser_waitlist_select", {
+        browser: launchWaitlistState.selectedBrowser,
+        source: launchWaitlistState.source
       });
+      renderLaunchWaitlistModal();
     });
   });
   const email = host.querySelector("#launch-waitlist-email");
@@ -968,16 +1005,21 @@ async function submitLaunchWaitlist(event) {
   }
 
   const params = new URLSearchParams(location.search);
+  const honeypot = event.target?.company?.value || "";
   const payload = {
     email,
     browser,
-    source: "launch_waitlist_modal",
-    ctaSource: launchWaitlistState.source,
-    pagePath: location.pathname || "/",
+    source: launchWaitlistState.source || "launch_waitlist_modal",
+    page: location.pathname || "/",
     referrer: document.referrer || "",
-    utmSource: params.get("utm_source") || "",
-    utmMedium: params.get("utm_medium") || "",
-    utmCampaign: params.get("utm_campaign") || "",
+    utm: {
+      source: params.get("utm_source") || "",
+      medium: params.get("utm_medium") || "",
+      campaign: params.get("utm_campaign") || "",
+      term: params.get("utm_term") || "",
+      content: params.get("utm_content") || ""
+    },
+    honeypot,
     userAgent: navigator.userAgent || ""
   };
   launchWaitlistAnalytics("launch_waitlist_submit", {

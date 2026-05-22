@@ -24,7 +24,7 @@ El backoffice vive en `admin.html` y esta protegido por `ADMIN_IMPORT_TOKEN`. Ag
 - Datos externos: Overpass/OpenStreetMap, Nominatim, Photon, fuentes publicas de precio.
 - Tests: `node:test` nativo de Node, sin framework externo.
 - Scripts: Node.js sin build step.
-- TypeScript: hay archivos `.ts` de tipos/config (`types/parking.ts`, `lib/viraliza/types.ts`, `config/browserLaunchWaitlist.ts`), pero no hay compilacion TypeScript declarada en `package.json`.
+- TypeScript: hay archivos `.ts` de tipos/config (`types/parking.ts`, `lib/viraliza/types.ts`), pero no hay compilacion TypeScript declarada en `package.json`.
 - Dependencias npm: `package.json` no declara dependencias.
 
 ## 3. Estructura de carpetas
@@ -39,9 +39,8 @@ El backoffice vive en `admin.html` y esta protegido por `ADMIN_IMPORT_TOKEN`. Ag
 - `api/_seo/`: generador, calidad, textos, fuentes de mercado y render SEO.
 - `api/cron/`: cron serverless de publicacion SEO.
 - `api/og/`: endpoint de imagen Open Graph para landings de precio.
-- `api/waitlist/`: endpoint de lista de espera de navegadores; aparece en el arbol local actual.
+- `api/waitlist/`: endpoint publico de lista de espera de navegadores.
 - `assets/`: CSS, JS, imagenes, favicons, assets de marca y capturas Chrome Web Store.
-- `config/`: configuracion auxiliar; actualmente aparece `browserLaunchWaitlist.ts`.
 - `data/`: datos de entrada para importadores de mercado.
 - `database/`: SQL de tablas Supabase.
 - `docs/`: documentacion tecnica puntual.
@@ -101,7 +100,7 @@ Rutas limpias definidas en `vercel.json` y `scripts/serve-static.js`: `/`, `/que
 - `GET /api/news`: rewrite a sitemap con formato news.
 - `GET /api/seo-page?slug=...`: render publico de landings SEO.
 - `GET /api/og/price-city`: imagen Open Graph para landings.
-- `POST /api/waitlist/browser`: lista de espera de navegadores; aparece en el arbol local actual, pendiente de confirmar si esta desplegado.
+- `POST /api/waitlist/browser`: lista de espera de navegadores. Valida email y navegador, aplica honeypot basico y guarda leads en `browser_waitlist_leads` (`database/browser-waitlist-leads.sql`) desde backend.
 
 ### Backoffice
 
@@ -385,7 +384,7 @@ Para probar flujos con Supabase, Lemon, Runway, Cloudflare u OpenAI hacen falta 
 - Varias cadenas del repo muestran mojibake en consola; cuidado con codificacion al editar textos en espanol.
 - `DEPLOY.md` y `docs/runway-video.md` pueden diferir en detalles de ratio Runway; confirmar con `lib/social-video/runway.js` antes de cambiar comportamiento.
 - El flujo Chrome Web Store guarda artefactos pequenos inline; para paquetes grandes esta pendiente Supabase Storage.
-- `api/waitlist/browser.js`, `config/` y varios assets aparecen en el arbol local; confirmar si deben entrar en commit antes de depender de ellos.
+- La waitlist de navegadores es publica y no tiene rate limit persistente todavia; mantiene honeypot y deduplicacion, pero conviene vigilar abuso si empieza a recibir spam.
 
 ## 15. Recomendaciones para futuros cambios
 
