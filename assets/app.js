@@ -816,8 +816,14 @@ function openChromeWebStore({ browser = "chrome", source = "web", label = "" } =
     label,
     store: "chrome_web_store"
   });
-  const opened = window.open(installUrlForBrowser(browser), "_blank", "noopener,noreferrer");
-  if (!opened) window.location.href = installUrlForBrowser(browser);
+  const url = installUrlForBrowser(browser);
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 function launchWaitlistBrowserCards() {
   return Object.values(BROWSER_LAUNCH_WAITLIST)
