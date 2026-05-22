@@ -1,0 +1,324 @@
+const { canonicalForSlug, countWords, displayName, escapeHtml, slugify } = require("./text");
+
+const EDITORIAL_GUIDE_TOPICS = [
+  {
+    key: "errores-comprar-piso",
+    keyword: "errores al comprar piso",
+    title: "Errores al comprar piso en Espana",
+    metaTitle: "Errores al comprar piso en Espana | InmoRadar",
+    metaDescription:
+      "Guia para detectar errores frecuentes al comprar vivienda en Espana: precio por metro cuadrado, entrada, hipoteca, zona y senales del anuncio.",
+    hook: "Comprar piso no empieza en la visita. Empieza entendiendo si el anuncio merece una llamada.",
+    checklist: ["Mirar solo el precio total", "No calcular entrada y cuota", "Comparar barrios sin contexto", "Ignorar reforma, ruido o aparcamiento"],
+    cta: "Pasa el piso por InmoRadar antes de llamar y usa los numeros como filtro inicial."
+  },
+  {
+    key: "antes-de-llamar-por-un-piso",
+    keyword: "que mirar antes de llamar por un piso",
+    title: "Que mirar antes de llamar por un piso en Espana",
+    metaTitle: "Que mirar antes de llamar por un piso en Espana | InmoRadar",
+    metaDescription:
+      "Checklist practico para revisar un anuncio antes de contactar: precio, euros por metro cuadrado, entrada, cuota, transporte y aparcamiento.",
+    hook: "La llamada llega demasiado pronto cuando el anuncio todavia no se ha entendido.",
+    checklist: ["Precio por metro cuadrado", "Entrada estimada", "Cuota orientativa", "Transporte y zona", "Aparcamiento y entorno"],
+    cta: "Instala InmoRadar en Chrome y revisa el anuncio donde ya estas buscando."
+  },
+  {
+    key: "comparar-dos-pisos",
+    keyword: "como comparar dos pisos",
+    title: "Como comparar dos pisos en Espana sin perder criterio",
+    metaTitle: "Como comparar dos pisos en Espana | InmoRadar",
+    metaDescription:
+      "Metodo sencillo para comparar dos viviendas: coste real, superficie, zona, transporte, aparcamiento y senales que no siempre se ven en las fotos.",
+    hook: "Dos pisos pueden costar lo mismo y exigir decisiones muy distintas.",
+    checklist: ["Normalizar por metro cuadrado", "Revisar coste inicial", "Cruzar zona y transporte", "Separar pros de contras"],
+    cta: "Guarda ambos anuncios en InmoRadar y comparalos con la misma escala."
+  },
+  {
+    key: "entrada-hipoteca-primera-vivienda",
+    keyword: "entrada hipoteca primera vivienda",
+    title: "Entrada e hipoteca al comprar primera vivienda en Espana",
+    metaTitle: "Entrada e hipoteca para primera vivienda en Espana | InmoRadar",
+    metaDescription:
+      "Guia orientativa para entender entrada, cuota y gastos antes de enamorarte de una primera vivienda anunciada online.",
+    hook: "El precio del anuncio no es el dinero que necesitas para empezar.",
+    checklist: ["Entrada inicial", "Gastos asociados", "Cuota mensual", "Margen para imprevistos"],
+    cta: "Usa InmoRadar como primera capa de criterio antes de pedir informacion."
+  },
+  {
+    key: "senales-alerta-anuncio-inmobiliario",
+    keyword: "senales de alerta anuncio inmobiliario",
+    title: "Senales de alerta en anuncios inmobiliarios en Espana",
+    metaTitle: "Senales de alerta en anuncios inmobiliarios en Espana | InmoRadar",
+    metaDescription:
+      "Aprende a leer senales de alerta en anuncios de vivienda: metros, precio, zona, reforma, fotos, transporte y costes ocultos.",
+    hook: "Un anuncio puede parecer perfecto y aun asi esconder preguntas importantes.",
+    checklist: ["Fotos demasiado parciales", "Metros poco claros", "Precio bajo sin explicacion", "Zona descrita de forma vaga"],
+    cta: "Antes de contactar, revisa el anuncio con InmoRadar y prepara preguntas concretas."
+  },
+  {
+    key: "precio-metro-cuadrado-comparar",
+    keyword: "precio metro cuadrado comparar viviendas",
+    title: "Como usar el precio por metro cuadrado en Espana",
+    metaTitle: "Como usar el precio por metro cuadrado en Espana | InmoRadar",
+    metaDescription:
+      "Guia para usar el precio por metro cuadrado como senal inicial, sin confundir referencias agregadas con tasaciones exactas.",
+    hook: "El precio por metro cuadrado no decide por ti, pero cambia la conversacion.",
+    checklist: ["Dividir precio entre metros", "Comparar con referencia disponible", "Entender el nivel geografico", "Revisar estado y extras"],
+    cta: "InmoRadar calcula esta capa directamente sobre el anuncio."
+  },
+  {
+    key: "coste-real-comprar-vivienda",
+    keyword: "coste real comprar vivienda",
+    title: "Coste real de comprar vivienda en Espana",
+    metaTitle: "Coste real de comprar vivienda en Espana | InmoRadar",
+    metaDescription:
+      "Una guia para mirar mas alla del precio del anuncio: entrada, cuota, gastos, reforma, comunidad, transporte y coste diario.",
+    hook: "El coste real de una vivienda no cabe en una sola cifra.",
+    checklist: ["Entrada y gastos", "Cuota mensual", "Comunidad e IBI", "Reforma probable", "Coste de movilidad"],
+    cta: "Analiza tu primer anuncio gratis con InmoRadar y evita revisar pisos a ciegas."
+  },
+  {
+    key: "zona-transporte-aparcamiento",
+    keyword: "zona transporte aparcamiento vivienda",
+    title: "Zona, transporte y aparcamiento antes de comprar en Espana",
+    metaTitle: "Zona, transporte y aparcamiento antes de comprar en Espana | InmoRadar",
+    metaDescription:
+      "Como valorar zona, transporte, ruido y aparcamiento antes de decidir si un anuncio inmobiliario merece una visita.",
+    hook: "Una buena vivienda puede volverse incomoda si la logistica diaria no encaja.",
+    checklist: ["Distancia al transporte", "Ruido y calles cercanas", "Aparcamiento realista", "Servicios diarios"],
+    cta: "InmoRadar cruza senales urbanas para que el anuncio no sea solo fotos y precio."
+  },
+  {
+    key: "reforma-costes-ocultos",
+    keyword: "reforma costes ocultos vivienda",
+    title: "Reforma y costes ocultos al comprar vivienda en Espana",
+    metaTitle: "Reforma y costes ocultos en vivienda en Espana | InmoRadar",
+    metaDescription:
+      "Guia para detectar indicios de reforma y costes ocultos antes de llamar por un piso anunciado online.",
+    hook: "Lo barato puede dejar de serlo cuando aparece la reforma.",
+    checklist: ["Cocina y banos antiguos", "Instalaciones sin detalle", "Certificado energetico", "Comunidad y derramas"],
+    cta: "Usa InmoRadar como filtro previo y valida lo importante antes de visitar."
+  },
+  {
+    key: "comprar-para-alquilar-rentabilidad",
+    keyword: "comprar para alquilar rentabilidad",
+    title: "Comprar para alquilar en Espana: que mirar antes",
+    metaTitle: "Comprar para alquilar en Espana: que mirar antes | InmoRadar",
+    metaDescription:
+      "Guia para revisar una vivienda orientada a alquiler: precio, renta esperada, zona, liquidez, reforma y riesgos de sobrepagar.",
+    hook: "La rentabilidad empieza antes de comprar, no cuando ya tienes las llaves.",
+    checklist: ["Precio de compra", "Renta comparable", "Reforma necesaria", "Demanda de zona", "Riesgo de vacio"],
+    cta: "Compara anuncios con InmoRadar antes de decidir cual merece mas analisis."
+  }
+];
+
+function guideTopicForOpportunity(opportunity = {}) {
+  const keyword = slugify(opportunity.keyword || "");
+  return (
+    EDITORIAL_GUIDE_TOPICS.find((topic) => keyword.includes(topic.key) || keyword.includes(slugify(topic.keyword))) ||
+    EDITORIAL_GUIDE_TOPICS[0]
+  );
+}
+
+function editorialGuideSlugForOpportunity(opportunity = {}) {
+  return `guias/${guideTopicForOpportunity(opportunity).key}`;
+}
+
+function editorialGuideOpportunities() {
+  return EDITORIAL_GUIDE_TOPICS.map((topic, index) => ({
+    keyword: topic.keyword,
+    city: "Espana",
+    province: null,
+    autonomous_community: null,
+    intent: "informational",
+    template_type: "editorial_guide",
+    search_priority: 95 - index * 3,
+    status: "pending"
+  }));
+}
+
+function buildEditorialGuideSourceData(opportunity, now = new Date().toISOString()) {
+  const date = new Date(now);
+  const periodLabel = Number.isNaN(date.getTime()) ? String(now).slice(0, 10) : date.toISOString().slice(0, 10);
+  return {
+    hasRealData: true,
+    hasProvincialOnly: false,
+    records: [
+      {
+        operation: "editorial",
+        source: "inmoradar_editorial",
+        source_url: `${canonicalForSlug("metodologia").replace(/\/$/, "")}`,
+        period_label: periodLabel,
+        period_date: periodLabel,
+        geo_level: "country"
+      }
+    ],
+    sources: [
+      {
+        operation: "editorial",
+        source: "inmoradar_editorial",
+        source_url: `${canonicalForSlug("metodologia").replace(/\/$/, "")}`,
+        period_label: periodLabel,
+        period_date: periodLabel,
+        geo_level: "country"
+      }
+    ],
+    isEditorialGuide: true
+  };
+}
+
+function sourceNote(dateLabel) {
+  return `<aside class="seo-disclaimer">
+    <p class="seo-disclaimer-kicker">-> CRITERIO EDITORIAL</p>
+    <p><strong>Fuente:</strong> metodologia editorial de InmoRadar, basada en lectura de anuncios, criterios de comparacion y senales urbanas. <strong>Fecha del dato:</strong> ${escapeHtml(
+      dateLabel
+    )}. Esta guia es orientativa: no es tasacion, asesoramiento financiero ni recomendacion de compra.</p>
+  </aside>`;
+}
+
+function faq(topic) {
+  return [
+    {
+      question: "InmoRadar decide si debo comprar una vivienda?",
+      answer:
+        "No. InmoRadar ordena senales del anuncio para que decidas con mas criterio antes de contactar. La decision final debe validarse con visita, documentacion y profesionales cuando proceda."
+    },
+    {
+      question: "El precio por metro cuadrado es suficiente?",
+      answer:
+        "No. Sirve como primera comparacion, pero hay que cruzarlo con estado, zona, transporte, coste inicial, comunidad, reforma y tus necesidades reales."
+    },
+    {
+      question: "Puedo usar esta guia para cualquier portal?",
+      answer:
+        "Si. El criterio aplica a anuncios de Idealista, Fotocasa, Pisos.com, Habitaclia y otros portales, aunque InmoRadar automatiza la lectura en portales compatibles."
+    },
+    {
+      question: "Que hago si falta un dato?",
+      answer:
+        "No lo inventes. Si el anuncio no deja claro superficie, gastos, garaje, estado o zona exacta, conviene pedir informacion antes de visitar."
+    },
+    {
+      question: `Como encaja esta guia con ${topic.title}?`,
+      answer:
+        "Usala como checklist previo: primero detecta senales, despues compara alternativas y solo entonces decide si merece la pena llamar."
+    }
+  ];
+}
+
+function faqHtml(items) {
+  return `<section class="seo-section seo-faq" id="faq" data-guide-specific="true">
+    <h2>Preguntas frecuentes</h2>
+${items
+  .map(
+    (item) => `    <details>
+      <summary>${escapeHtml(item.question)}</summary>
+      <p>${escapeHtml(item.answer)}</p>
+    </details>`
+  )
+  .join("\n")}
+  </section>`;
+}
+
+function checklistHtml(topic) {
+  return `<ul>
+${topic.checklist.map((item) => `    <li>${escapeHtml(item)}.</li>`).join("\n")}
+  </ul>`;
+}
+
+function buildEditorialGuideLanding(opportunity, sourceData = {}) {
+  const topic = guideTopicForOpportunity(opportunity);
+  const city = displayName(opportunity.city || "Espana");
+  const dateLabel = sourceData.records?.[0]?.period_label || new Date().toISOString().slice(0, 10);
+  const slug = `guias/${topic.key}`;
+  const faqItems = faq(topic);
+  const bodyHtml = `<article class="seo-reading" data-template="editorial_guide" data-testid="page-editorial-guide-${escapeHtml(topic.key)}">
+    <nav class="seo-breadcrumb" aria-label="Breadcrumb"><a href="/">INMORADAR</a><span>/</span><a href="/noticias">NOTICIAS</a><span>/</span><strong>${escapeHtml(
+      topic.title.toUpperCase()
+    )}</strong></nav>
+    <header class="seo-page-hero" data-guide-specific="true">
+      <p class="seo-page-eyebrow">-> GUIA INMORADAR · ${escapeHtml(city.toUpperCase())}</p>
+      <h1>${escapeHtml(topic.title)}</h1>
+      <p class="seo-lead">${escapeHtml(topic.hook)} Esta guia ayuda a compradores en ${escapeHtml(
+        city
+      )} a revisar anuncios con calma, separar intuicion de numeros y preparar mejores preguntas antes de contactar.</p>
+      <div class="seo-meta-row"><span>LECTURA: 4-6 MIN</span><span>ACTUALIZADA: ${escapeHtml(dateLabel)}</span></div>
+    </header>
+
+    <div class="seo-reading-grid">
+      <aside class="seo-sidebar">
+        <section class="seo-data-card">
+          <p class="seo-sidebar-kicker">-> CHECKLIST RAPIDO</p>
+          ${checklistHtml(topic)}
+          <p class="seo-card-note">Usalo como filtro, no como decision final. Si falta un dato del anuncio, hay que comprobarlo.</p>
+        </section>
+      </aside>
+
+      <div class="seo-content">
+        <section class="seo-section" id="por-que-importa" data-guide-specific="true">
+          <h2>Por que importa antes de contactar</h2>
+          <p>En ${escapeHtml(
+            city
+          )}, muchas busquedas empiezan por fotos, precio total y una sensacion rapida de oportunidad. El problema es que esos tres elementos no explican el coste real de una vivienda. Un anuncio puede parecer barato por precio absoluto y salir caro por metro cuadrado. Otro puede parecer caro y, sin embargo, compensar si tiene mejor zona, menos reforma, transporte cercano o gastos mas previsibles.</p>
+          <p>La utilidad de InmoRadar esta en anadir una capa de criterio donde ya buscas. Antes de llamar, conviene convertir el anuncio en preguntas concretas: cuanto cuesta por metro cuadrado, que entrada exige, que cuota orientativa tendria, que senales da la zona, si el aparcamiento sera un problema y que elementos del anuncio necesitan validacion.</p>
+        </section>
+
+        <section class="seo-section" id="checklist" data-guide-specific="true">
+          <h2>Checklist practico</h2>
+          ${checklistHtml(topic)}
+          <p>Este checklist no sustituye una visita ni una tasacion. Sirve para ordenar la primera lectura. Si dos anuncios parecen parecidos, el checklist ayuda a descubrir cual merece mas tiempo y cual exige demasiadas comprobaciones antes incluso de llamar.</p>
+        </section>
+
+        <section class="seo-section" id="como-leer-numeros" data-guide-specific="true">
+          <h2>Como leer los numeros sin caer en conclusiones rapidas</h2>
+          <p>Empieza por el precio por metro cuadrado, pero no lo uses de forma aislada. La superficie puede ser util o construida, la zona puede estar descrita de forma imprecisa y el estado real de la vivienda puede cambiar mucho el coste final. Por eso la lectura mejora cuando mezclas datos de precio con contexto de zona, transporte, ruido, aparcamiento, comunidad, posible reforma y comparacion con alternativas cercanas.</p>
+          <p>Tambien conviene separar estimacion de certeza. Una cuota orientativa ayuda a saber si el anuncio encaja con tu presupuesto, pero no reemplaza la oferta bancaria. Una referencia de mercado ayuda a detectar desviaciones, pero no dice el valor exacto de una calle o de una vivienda concreta. La idea es llamar con mejores preguntas, no comprar con una respuesta automatica.</p>
+        </section>
+
+        <section class="seo-section" id="ejemplo-uso" data-guide-specific="true">
+          <h2>Ejemplo de uso con InmoRadar</h2>
+          <p>Imagina dos viviendas en ${escapeHtml(
+            city
+          )}. La primera cuesta menos, pero tiene menos metros, peor comunicacion y una reforma probable. La segunda exige mas entrada inicial, pero ofrece mejor transporte y menos senales de coste futuro. Si solo miras el precio total, la primera gana. Si miras coste real, zona y senales del anuncio, la decision cambia.</p>
+          <p>InmoRadar resume esa lectura en una ficha: precio, euros por metro cuadrado, entrada estimada, cuota orientativa, zona, transporte, aparcamiento y senales clave. No decide por ti, pero te da un punto de partida mas limpio para saber si merece la pena contactar.</p>
+        </section>
+
+        <section class="seo-section" id="cta" data-guide-specific="true">
+          <h2>Analiza antes de contactar</h2>
+          <p>${escapeHtml(topic.cta)} La extension esta disponible para Chrome y navegadores Chromium compatibles. Para Firefox y Safari puedes apuntarte a la lista de aviso.</p>
+          <div class="seo-final-actions">
+            <button class="seo-button seo-button-primary" type="button" data-install-button data-install-source="seo_editorial_guide">INSTALAR INMORADAR EN CHROME</button>
+            <a class="seo-button seo-button-secondary" href="/noticias">VER MAS GUIAS</a>
+          </div>
+        </section>
+        ${faqHtml(faqItems)}
+        ${sourceNote(dateLabel)}
+      </div>
+    </div>
+  </article>`;
+
+  return {
+    slug,
+    title: topic.title,
+    meta_title: topic.metaTitle,
+    meta_description: topic.metaDescription,
+    h1: topic.title,
+    body_html: bodyHtml,
+    city,
+    province: displayName(opportunity.province || ""),
+    autonomous_community: displayName(opportunity.autonomous_community || ""),
+    template_type: "editorial_guide",
+    canonical_url: canonicalForSlug(slug),
+    word_count: countWords(bodyHtml),
+    faq: faqItems
+  };
+}
+
+module.exports = {
+  EDITORIAL_GUIDE_TOPICS,
+  buildEditorialGuideLanding,
+  buildEditorialGuideSourceData,
+  editorialGuideOpportunities,
+  editorialGuideSlugForOpportunity
+};

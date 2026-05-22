@@ -11,6 +11,10 @@ function citySpecificBlockCount(bodyHtml) {
   return (String(bodyHtml || "").match(/data-city-specific="true"/g) || []).length;
 }
 
+function guideSpecificBlockCount(bodyHtml) {
+  return (String(bodyHtml || "").match(/data-guide-specific="true"/g) || []).length;
+}
+
 function containsUsefulFaq(landing, sourceData) {
   const faq = sourceData?.faq || landing?.source_data_json?.faq || [];
   if (Array.isArray(faq) && faq.length >= 4) return true;
@@ -18,7 +22,7 @@ function containsUsefulFaq(landing, sourceData) {
 }
 
 function hasClearCta(bodyHtml) {
-  return /Instalar InmoRadar|Analiza anuncios antes de contactar/i.test(String(bodyHtml || ""));
+  return /Instalar InmoRadar|Analiza anuncios antes de contactar|INSTALAR INMORADAR/i.test(String(bodyHtml || ""));
 }
 
 function internalLinkCount(bodyHtml) {
@@ -46,9 +50,10 @@ function hasOverGenericClaims(landing) {
   const body = String(landing?.body_html || "");
   const city = normalizeText(landing?.city);
   const cityMentions = city ? (normalizeText(body).match(new RegExp(`\\b${city}\\b`, "g")) || []).length : 0;
-  const blocks = citySpecificBlockCount(body);
+  const requiredBlocks = landing?.template_type === "editorial_guide" ? guideSpecificBlockCount(body) : citySpecificBlockCount(body);
   const absoluteClaims = /(garantizado|sin duda|valor real exacto|siempre es|siempre será|es el precio exacto|precio exacto de calle)/i.test(body);
-  return cityMentions < 5 || blocks < 3 || absoluteClaims;
+  if (landing?.template_type === "editorial_guide") return requiredBlocks < 3 || absoluteClaims;
+  return cityMentions < 5 || requiredBlocks < 3 || absoluteClaims;
 }
 
 function calculateSeoLandingQuality(landing, sourceData = {}) {
@@ -57,7 +62,8 @@ function calculateSeoLandingQuality(landing, sourceData = {}) {
   let score = 0;
   const wordCount = Number(landing?.word_count) || countWords(landing?.body_html);
   const sourceVisible = hasSourceAndDate(sourceData) && /Fuente:|Fecha del dato:/i.test(String(landing?.body_html || ""));
-  const citySpecific = citySpecificBlockCount(landing?.body_html) >= 3 && !hasOverGenericClaims(landing);
+  const specificBlockCount = landing?.template_type === "editorial_guide" ? guideSpecificBlockCount(landing?.body_html) : citySpecificBlockCount(landing?.body_html);
+  const citySpecific = specificBlockCount >= 3 && !hasOverGenericClaims(landing);
 
   if (sourceData.hasRealData && !sourceData.hasProvincialOnly) {
     score += 25;

@@ -3,6 +3,7 @@ const CHECKOUT_ENDPOINT = "/api/lemonsqueezy-checkout";
 const PORTAL_ENDPOINT = "/api/lemonsqueezy-portal";
 const CONTACT_ENDPOINT = "/api/contact";
 const BROWSER_WAITLIST_ENDPOINT = "/api/waitlist/browser";
+const NEWS_ENDPOINT = "/api/news";
 const CHROME_WEBSTORE_URL = "https://chromewebstore.google.com/detail/inmoradar/mbkjlkagblkmdnjggoggbjiohbjebaab";
 const LANGUAGE_STORAGE_KEY = "inmoradar_language";
 const PUBLIC_HOSTS = new Set(["inmoradar.app", "www.inmoradar.app"]);
@@ -158,7 +159,50 @@ const articles = [
     excerpt: "Una metodología sencilla para interpretar precios y evitar conclusiones demasiado rápidas."
   }
 ];
+let remoteArticles = null;
 
+function activeArticles() {
+  if (!Array.isArray(remoteArticles) || !remoteArticles.length) return articles;
+  const seen = new Set(remoteArticles.map((item) => item.slug));
+  return [...remoteArticles, ...articles.filter((item) => !seen.has(item.slug))];
+}
+
+function newsTagFromMeta(meta) {
+  const value = String(meta || "").toLowerCase();
+  if (value.includes("alquiler")) return "Alquiler";
+  if (value.includes("precio")) return "Precio m2";
+  if (value.includes("analisis") || value.includes("analisis")) return "Analisis";
+  if (value.includes("guia") || value.includes("guia")) return "Guias";
+  return meta || "Guias";
+}
+
+function normalizeRemoteArticle(item) {
+  const slug = String(item?.slug || "").replace(/^\/+|\/+$/g, "");
+  return {
+    slug,
+    url: item?.url || `/${slug}/`,
+    tag: newsTagFromMeta(item?.meta || item?.template_type),
+    city: item?.city || "Espana",
+    title: item?.title || slug,
+    excerpt: item?.description || "Guia InmoRadar para analizar anuncios inmobiliarios antes de contactar."
+  };
+}
+
+async function loadRemoteArticles() {
+  const grids = document.querySelectorAll("[data-articles-grid]");
+  const articlePage = document.querySelector("[data-article-page]");
+  if (!grids.length && !articlePage) return;
+  try {
+    const response = await fetch(NEWS_ENDPOINT, { headers: { accept: "application/json" } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !Array.isArray(payload.news) || !payload.news.length) return;
+    remoteArticles = payload.news.map(normalizeRemoteArticle).filter((item) => item.slug && item.title);
+    renderArticles();
+    renderArticlePage();
+  } catch {
+    // Static article cards remain available if the dynamic news feed is offline.
+  }
+}
 const I18N = {
   es: {
     navAnalysis: "Qué analiza",
@@ -670,18 +714,18 @@ function initHeader() {
 
 function renderArticles() {
   document.querySelectorAll("[data-articles-grid]").forEach((grid) => {
-    const limit = Number(grid.dataset.limit || articles.length);
+    const availableArticles = activeArticles();
+    const limit = Number(grid.dataset.limit || availableArticles.length);
     const filter = grid.dataset.activeFilter || "Todos";
-    const items = articles
+    const items = availableArticles
       .filter((item) => filter === "Todos" || item.tag === filter)
       .slice(0, limit);
     grid.innerHTML = items.map((item, index) => articleCard(localizedArticle(item), index === 0 && grid.dataset.largeFirst === "true")).join("");
   });
 }
-
 function articleCard(item, large = false) {
   return `
-    <a class="article-card ${large ? "large" : ""}" href="/noticias/${escapeHtml(item.slug)}" data-testid="article-card-${escapeHtml(item.slug)}">
+    <a class="article-card ${large ? "large" : ""}" href="${escapeHtml(item.url || `/noticias/${item.slug}`)}" data-testid="article-card-${escapeHtml(item.slug)}">
       <div>
         <div class="article-meta"><span>${escapeHtml(item.tag)}</span><span>${icon("ArrowUpRight")}</span></div>
         <h3>${escapeHtml(item.title)}</h3>
@@ -710,8 +754,9 @@ function renderArticlePage() {
   const target = document.querySelector("[data-article-page]");
   if (!target) return;
   const slug = target.dataset.slug || new URLSearchParams(location.search).get("slug") || location.pathname.split("/").filter(Boolean).pop();
-  const article = localizedArticle(articles.find((item) => item.slug === slug) || articles[0]);
-  const related = articles.filter((item) => item.slug !== article.slug).slice(0, 3).map(localizedArticle);
+  const availableArticles = activeArticles();
+  const article = localizedArticle(availableArticles.find((item) => item.slug === slug) || articles[0]);
+  const related = availableArticles.filter((item) => item.slug !== article.slug).slice(0, 3).map(localizedArticle);
   target.innerHTML = `
     <section class="page-header grid-bg">
       <div class="container article-layout">
@@ -1326,6 +1371,7 @@ function init() {
   initHeader();
   initLanguage();
   initArticleFilters();
+  loadRemoteArticles();
   initFaq();
   initContactForm();
   initFooterSocial();
