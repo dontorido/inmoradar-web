@@ -29,13 +29,13 @@ Web estatica publica para InmoRadar.
 - `database/kpi-settings.sql`: tabla Supabase para guardar reglas, pesos, umbrales y visibilidad de KPIs.
 - `api/market-price.js`: endpoint agregado para que la extension consulte precios de mercado por zona.
 - `database/market-price-sources.sql`: tabla Supabase `market_price_sources` y seed minimo de mercado.
-- `database/seo-landings.sql`: tablas `seo_landing_opportunities` y `seo_landings`, con seed de 5 oportunidades `price_city`.
+- `database/seo-landings.sql`: tablas `seo_landing_opportunities` y `seo_landings`, reutilizadas para landings programaticas y guias editoriales (`template_type=editorial_guide`).
 - `database/seo-cron-runs.sql`: registro y bloqueo suave para evitar ejecuciones SEO solapadas.
 - `api/admin.js?resource=seo/generate-landings`: generador admin protegido por `ADMIN_IMPORT_TOKEN`.
-- `api/cron/seo-publish.js`: cron protegido por `CRON_SECRET` o `ADMIN_IMPORT_TOKEN` para regenerar drafts y publicar una landing elegible.
+- `api/cron/seo-publish.js`: cron protegido por `CRON_SECRET` o `ADMIN_IMPORT_TOKEN` para publicar una pieza SEO por ejecucion siguiendo la politica diaria 2 landings + 2 guias.
 - `.github/workflows/seo-cron.yml`: ejecuta el endpoint SEO cada 6 horas desde GitHub Actions; Vercel Hobby queda con un cron diario compatible.
 - `api/seo-page.js`: render publico de landings SEO por slug.
-- `api/sitemap.js`: sitemap dinamico con landings publicadas e indexables.
+- `api/sitemap.js`: sitemap dinamico y feed `/api/news` con landings/guias publicadas e indexables.
 - `scripts/seo-generate.js`: dry run local del generador SEO.
 - La home incluye una seccion `Noticias` para enlazar publicaciones y guias nuevas.
 - `api/parking-difficulty.js`: Parking Difficulty Score con Overpass/OpenStreetMap, perspectiva visitante/residente, scoring y cache en memoria + Supabase.
@@ -270,7 +270,7 @@ node --test tests/parking-difficulty.test.js
 
 ## SEO programatico controlado
 
-Primera fase implementada solo para `price_city`. El generador no publica por defecto, calcula `quality_score` y deja `noindex` cualquier landing que no este publicada, ademas de cualquier landing por debajo de 75. Las landings publicas renderizadas por `api/seo-page.js` incluyen el mismo Google Tag Manager activo en la web.
+El generador soporta landings programaticas (`price_city`, `rent_city`, `expensive_listing_city`) y guias editoriales (`editorial_guide`) guardadas en `seo_landings`. No publica por defecto, calcula `quality_score` y deja `noindex` cualquier pieza que no este publicada, ademas de cualquier contenido por debajo de 75. Las paginas publicas renderizadas por `api/seo-page.js` incluyen el mismo Google Tag Manager activo en la web.
 
 Migracion:
 
@@ -303,7 +303,7 @@ Body:
 }
 ```
 
-Para generar borradores reales en Supabase, usar `mode: "generate"`. Para publicar automaticamente una pagina desde el endpoint admin, debe usarse `mode: "publish"`, `autoPublish: true`, `quality_score >= 85` y, por defecto, no debe existir otra landing publicada ese mismo dia.
+Para generar borradores reales en Supabase, usar `mode: "generate"`. Para publicar automaticamente una pagina desde el endpoint admin, debe usarse `mode: "publish"`, `autoPublish: true` y `quality_score >= 85`. `template_type=random` o `landing_random` limita a landings programaticas; `template_type=editorial_guide` genera guias editoriales.
 
 Cron de publicacion controlada:
 
@@ -312,9 +312,9 @@ GET /api/cron/seo-publish
 Authorization: Bearer CRON_SECRET
 ```
 
-GitHub Actions lo ejecuta cada 6 horas (`0 */6 * * *`) usando el secreto `CRON_SECRET` del repo. Vercel Hobby tambien conserva un cron diario compatible (`0 7 * * *`) porque ese plan no permite crons mas frecuentes. El cron intenta primero landings existentes en `draft`, `needs_review` o `ready_to_publish`, las regenera con datos frescos y publica como maximo una por ejecucion si llega a `quality_score >= 85`. Si no hay datos reales suficientes, la landing queda `noindex` y el cron pasa a la siguiente candidata.
+GitHub Actions lo ejecuta cada 6 horas (`0 */6 * * *`) usando el secreto `CRON_SECRET` del repo. Vercel Hobby tambien conserva un cron diario compatible (`0 7 * * *`) porque ese plan no permite crons mas frecuentes. La politica diaria usa fecha natural Europe/Madrid: maximo 2 landings programaticas y 2 guias editoriales al dia, con maximo 4 publicaciones totales. Cada ejecucion publica como maximo una pieza; si ya hay 2 landings, prioriza guia; si ya hay 2 guias, prioriza landing; si ambas cuotas estan llenas responde `skipped: true`.
 
-El cron usa `seo_cron_runs` para registrar ejecuciones y evitar solapes dentro de la misma hora. Si esa tabla todavia no existe, el cron no se bloquea: sigue publicando con modo degradado y lo indica en la respuesta.
+El cron usa `seo_cron_runs` para registrar ejecuciones y evitar solapes dentro de la misma hora. Si esa tabla todavia no existe, el cron no se bloquea: sigue publicando con modo degradado y lo indica en la respuesta. No hay SQL nuevo para la politica 2+2: se distingue landing vs guia con `template_type` dentro de `seo_landings`.
 
 ### Configurar CRON_SECRET para SEO cron
 

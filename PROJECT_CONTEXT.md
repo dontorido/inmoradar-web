@@ -203,7 +203,7 @@ Ingresos:
 
 Archivos:
 
-- `api/_seo/generator.js`, `quality.js`, `priceCity.js`, `marketSources.js`, `text.js`, `analytics.js`, `seedPublished.js`.
+- `api/_seo/generator.js`, `quality.js`, `priceCity.js`, `marketSources.js`, `text.js`, `analytics.js`, `seedPublished.js`, `publishingPolicy.js`, `editorialGuides.js`.
 - `lib/seo/cityGuideTemplates.js`.
 - `api/seo-page.js`.
 - `api/sitemap.js`.
@@ -215,20 +215,20 @@ Archivos:
 
 Landings:
 
-- Rutas en `vercel.json`: `/precio-metro-cuadrado/:city`, `/precio-alquiler/:city`, `/saber-si-piso-esta-caro/:city`.
+- Rutas en `vercel.json`: `/precio-metro-cuadrado/:city`, `/precio-alquiler/:city`, `/saber-si-piso-esta-caro/:city`, `/guias/:slug`.
 - `api/seo-page.js` renderiza por `slug`.
 - El generador controla `quality_score`, `status` e `index_status`.
-- Por README, `price_city` es la primera fase documentada; otras rutas existen en rewrites, confirmar cobertura completa antes de ampliar.
+- `seo_landings` guarda tanto landings programaticas como guias editoriales; `template_type=editorial_guide` se considera noticia/guia para cuotas y feed.
 
 Sitemap:
 
 - `/sitemap.xml` reescribe a `/api/sitemap`.
-- Incluye landings publicadas e indexables.
+- Incluye landings y guias publicadas e indexables. `/api/news` reutiliza `api/sitemap.js?format=news` para alimentar home y `/noticias`.
 
 Cron:
 
 - Vercel ejecuta `/api/cron/seo-publish` a las 07:00 UTC segun `vercel.json`.
-- GitHub Actions lo ejecuta cada 6 horas con `CRON_SECRET`.
+- GitHub Actions lo ejecuta cada 6 horas con `CRON_SECRET`. La politica diaria usa Europe/Madrid: 2 landings programaticas + 2 guias editoriales al dia, maximo una publicacion por ejecucion y 4 publicaciones totales.
 
 Configurar CRON_SECRET para SEO cron:
 
