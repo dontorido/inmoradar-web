@@ -195,6 +195,12 @@ const state = {
     creatorsStorageWarning: "",
     dailyPlanWarning: ""
   },
+  analytics: {
+    summary: null,
+    pages: [],
+    learning: null,
+    warning: ""
+  },
   alerts: []
 };
 
@@ -218,6 +224,10 @@ const els = {
   revenueChart: document.querySelector("[data-revenue-chart]"),
   extensionStats: document.querySelector("[data-extension-stats]"),
   extensionBreakdown: document.querySelector("[data-extension-breakdown]"),
+  analyticsSummary: document.querySelector("[data-analytics-summary]"),
+  analyticsPages: document.querySelector("[data-analytics-pages]"),
+  analyticsLearning: document.querySelector("[data-analytics-learning]"),
+  analyticsRefresh: document.querySelector("[data-analytics-refresh]"),
   premiumRows: document.querySelector("[data-premium-rows]"),
   seoSummary: document.querySelector("[data-seo-summary]"),
   seoRows: document.querySelector("[data-seo-rows]"),
@@ -757,6 +767,76 @@ function renderExtensionUsage(payload) {
   ].join("");
 }
 
+function formatRate(value) {
+  const number = Number(value || 0);
+  return `${number.toFixed(number >= 10 ? 0 : 1)}%`;
+}
+
+function analyticsRow(row = {}) {
+  const label = row.page || row.page_path || row.slug || "unknown";
+  const detail = [row.template_type, row.city, row.topic].filter(Boolean).join(" Â· ") || row.content_type || "pagina";
+  return `
+    <article class="admin-analytics-item">
+      <div>
+        <strong>${escapeHtml(label)}</strong>
+        <span>${escapeHtml(detail)}</span>
+      </div>
+      <dl>
+        <div><dt>Visitas</dt><dd>${escapeHtml(row.visits || 0)}</dd></div>
+        <div><dt>Instalacion</dt><dd>${escapeHtml(formatRate(row.install_rate))}</dd></div>
+        <div><dt>Checkout</dt><dd>${escapeHtml(row.checkout_created_count || 0)}</dd></div>
+        <div><dt>Score</dt><dd>${escapeHtml(row.performance_score || 0)}</dd></div>
+      </dl>
+    </article>
+  `;
+}
+
+function analyticsRecommendation(item = {}) {
+  return `
+    <article class="admin-learning-item">
+      <span>${escapeHtml(item.priority || "low")} Â· ${escapeHtml(item.action || "recommendation")}</span>
+      <strong>${escapeHtml(item.title || "Acumular mas datos")}</strong>
+      <p>${escapeHtml(item.detail || "Todavia no hay senal suficiente.")}</p>
+      ${item.source_page ? `<small>${escapeHtml(item.source_page)}</small>` : ""}
+    </article>
+  `;
+}
+
+function renderAnalyticsPerformance(payload = {}) {
+  if (!els.analyticsSummary || !els.analyticsPages || !els.analyticsLearning) return;
+  const summary = payload.summary || {};
+  const pages = payload.top_pages || payload.pages || [];
+  const recommendations = payload.recommendations || [];
+  state.analytics.summary = summary;
+  state.analytics.pages = pages;
+  state.analytics.learning = payload;
+  state.analytics.warning = payload.warning || "";
+
+  els.analyticsSummary.innerHTML = [
+    stat("Eventos 7d", summary.total_events || 0, { id: "analytics-events", hint: payload.table_missing ? "Ejecuta database/owned-analytics-events.sql" : "Eventos anonimos propios" }),
+    stat("Page views", summary.page_views || 0, { id: "analytics-page-views" }),
+    stat("Instalacion", (summary.install_clicks || 0) + (summary.chrome_store_clicks || 0), { id: "analytics-installs", hint: `${formatRate(summary.install_click_rate)} click/view` }),
+    stat("Waitlist", summary.waitlist_submit || 0, { id: "analytics-waitlist" }),
+    stat("Checkout", summary.checkout_created || 0, { id: "analytics-checkout", hint: `${formatRate(summary.checkout_created_rate)} creado/iniciado` })
+  ].join("");
+
+  if (payload.table_missing || (payload.warning && !payload.persisted)) {
+    const message = payload.table_missing
+      ? "Falta la tabla <strong>owned_analytics_events</strong>. Ejecuta <strong>database/owned-analytics-events.sql</strong> en Supabase para activar el ranking."
+      : "Analytics propio esta en modo degradado. Revisa Supabase o vuelve a cargar cuando el backend este configurado.";
+    els.analyticsPages.innerHTML = `<p class="admin-empty-state compact">${message}</p>`;
+    els.analyticsLearning.innerHTML = `<p class="admin-empty-state compact">El aprendizaje aparecera cuando existan eventos anonimos de visitas, instalacion y checkout.</p>`;
+    return;
+  }
+
+  els.analyticsPages.innerHTML = pages.length
+    ? pages.slice(0, 8).map(analyticsRow).join("")
+    : `<p class="admin-empty-state compact">Aun no hay paginas con eventos suficientes.</p>`;
+
+  els.analyticsLearning.innerHTML = recommendations.length
+    ? recommendations.slice(0, 6).map(analyticsRecommendation).join("")
+    : `<p class="admin-empty-state compact">Sin recomendaciones todavia. Se generaran al acumular conversiones.</p>`;
+}
 function renderParkingStats(payload) {
   if (!els.parkingStats) return;
   els.parkingStats.innerHTML = [
@@ -1775,7 +1855,7 @@ function viralizaPerformanceTable(rows = [], type = "creator") {
         <tbody>
           ${rows.map((row) => `
             <tr>
-              <td>${escapeHtml(row.displayName || row.handle || row.label || row.key || "-")}<small>${row.platform ? ` · ${platformLabel(row.platform)}` : row.category ? ` · ${row.category}` : ""}</small></td>
+              <td>${escapeHtml(row.displayName || row.handle || row.label || row.key || "-")}<small>${row.platform ? ` ï¿½ ${platformLabel(row.platform)}` : row.category ? ` ï¿½ ${row.category}` : ""}</small></td>
               <td>${escapeHtml(row.actions || 0)}</td>
               <td>${escapeHtml(row.replies || 0)}</td>
               <td>${escapeHtml(row.installsAttributed || 0)}</td>
@@ -3687,6 +3767,12 @@ async function loadExtensionUsage() {
   renderExtensionUsage(payload);
 }
 
+async function loadAnalytics() {
+  if (!els.analyticsSummary) return;
+  const payload = await api("/api/admin?resource=analytics/summary");
+  renderAnalyticsPerformance(payload);
+}
+
 async function loadSeo() {
   const params = new URLSearchParams({
     limit: String(state.seo.pageSize || 10),
@@ -3791,6 +3877,7 @@ async function loadAll() {
       loadSummary(),
       loadPremium(),
       loadExtensionUsage(),
+      loadAnalytics(),
       loadSeo(),
       loadKpis(),
       loadParking(),
@@ -3979,6 +4066,10 @@ els.premiumFilter.addEventListener("submit", async (event) => {
   state.premium.eventName = String(form.get("event_name") || "").trim();
   await loadPremium();
 });
+
+if (els.analyticsRefresh) {
+  els.analyticsRefresh.addEventListener("click", () => loadAnalytics().catch((error) => showStatus(error.message, "bad")));
+}
 
 els.seoFilter.addEventListener("submit", async (event) => {
   event.preventDefault();

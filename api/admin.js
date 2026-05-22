@@ -55,6 +55,11 @@ const {
   analyzeWeeklyLearning,
   recommendNextActions
 } = require("../lib/viraliza/engine");
+const {
+  buildOwnedAnalyticsLearning,
+  summarizeOwnedAnalytics,
+  summarizePagePerformance
+} = require("../lib/analytics/learning");
 
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at";
@@ -493,6 +498,123 @@ async function handleExtensionUsageSummary() {
   }
 }
 
+function ownedAnalyticsWindowHours(url) {
+  const days = clampLimit(url.searchParams.get("days"), 7, 90);
+  return days * 24;
+}
+
+async function loadOwnedAnalyticsEvents(url) {
+  if (!hasSupabaseConfig()) {
+    return {
+      ok: false,
+      table_missing: false,
+      reason: "supabase_not_configured",
+      events: []
+    };
+  }
+
+  const hours = ownedAnalyticsWindowHours(url);
+  const limit = clampLimit(url.searchParams.get("limit"), 5000, 10000);
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const params = new URLSearchParams({
+    select: "event_name,anonymous_session_id,page_path,page_url,page_type,content_type,template_type,slug,city,topic,source,referrer,utm,browser,device_type,metadata,occurred_at,created_at",
+    occurred_at: `gte.${since}`,
+    order: "occurred_at.desc",
+    limit: String(limit)
+  });
+
+  try {
+    const rows = await supabaseFetch(`owned_analytics_events?${params.toString()}`);
+    return {
+      ok: true,
+      table_missing: false,
+      generated_at: new Date().toISOString(),
+      window_hours: hours,
+      events: Array.isArray(rows) ? rows : []
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      table_missing: /owned_analytics_events/i.test(error.message),
+      reason: "storage_error",
+      error: error.message,
+      generated_at: new Date().toISOString(),
+      window_hours: hours,
+      events: []
+    };
+  }
+}
+
+function analyticsGroup(rows, key, limit = 8) {
+  const groups = (rows || []).reduce((acc, row) => {
+    const label = String(row[key] || "unknown");
+    if (!acc[label]) acc[label] = { label, count: 0, install_clicks: 0, checkout_created: 0 };
+    acc[label].count += 1;
+    if (row.event_name === "install_click" || row.event_name === "chrome_store_click") acc[label].install_clicks += 1;
+    if (row.event_name === "checkout_created") acc[label].checkout_created += 1;
+    return acc;
+  }, {});
+  return Object.values(groups)
+    .sort((a, b) => b.install_clicks - a.install_clicks || b.checkout_created - a.checkout_created || b.count - a.count || a.label.localeCompare(b.label))
+    .slice(0, limit);
+}
+
+async function handleOwnedAnalyticsSummary(req, url) {
+  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const result = await loadOwnedAnalyticsEvents(url);
+  const events = result.events || [];
+  const pages = summarizePagePerformance(events);
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      generated_at: result.generated_at || new Date().toISOString(),
+      persisted: Boolean(result.ok),
+      table_missing: Boolean(result.table_missing),
+      warning: result.ok ? "" : result.reason || result.error || "analytics_unavailable",
+      window_hours: result.window_hours,
+      summary: summarizeOwnedAnalytics(events),
+      top_pages: pages.slice(0, 10),
+      top_cities: analyticsGroup(events, "city"),
+      top_templates: analyticsGroup(events, "template_type"),
+      top_topics: analyticsGroup(events, "topic"),
+      recommendations: buildOwnedAnalyticsLearning(events).recommendations
+    }
+  };
+}
+
+async function handleOwnedAnalyticsPages(req, url) {
+  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const result = await loadOwnedAnalyticsEvents(url);
+  const pages = summarizePagePerformance(result.events || []);
+  const limit = clampLimit(url.searchParams.get("page_limit"), 50, 100);
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      persisted: Boolean(result.ok),
+      table_missing: Boolean(result.table_missing),
+      warning: result.ok ? "" : result.reason || result.error || "analytics_unavailable",
+      pages: pages.slice(0, limit)
+    }
+  };
+}
+
+async function handleOwnedAnalyticsLearning(req, url) {
+  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const result = await loadOwnedAnalyticsEvents(url);
+  const learning = buildOwnedAnalyticsLearning(result.events || []);
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      persisted: Boolean(result.ok),
+      table_missing: Boolean(result.table_missing),
+      warning: result.ok ? "" : result.reason || result.error || "analytics_unavailable",
+      ...learning
+    }
+  };
+}
 async function fetchLanding(slug) {
   const rows = await supabaseFetch(
     `seo_landings?slug=eq.${encodeURIComponent(slug)}&select=${LANDING_SELECT}&limit=1`
@@ -2007,6 +2129,18 @@ module.exports = async function handler(req, res) {
     if (resource === "alerts") {
       if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
       return json(res, 200, await handleAlerts());
+    }
+    if (resource === "analytics/summary") {
+      const result = await handleOwnedAnalyticsSummary(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "analytics/pages") {
+      const result = await handleOwnedAnalyticsPages(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "analytics/learning") {
+      const result = await handleOwnedAnalyticsLearning(req, url);
+      return json(res, result.status, result.payload);
     }
     if (!hasSupabaseConfig()) {
       return json(res, 500, { ok: false, error: "supabase_not_configured" });
