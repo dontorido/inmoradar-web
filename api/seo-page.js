@@ -1,6 +1,7 @@
 const { hasSupabaseConfig, supabaseFetch } = require("./_utils");
 const { googleTagManagerHead, googleTagManagerNoscript } = require("./_seo/analytics");
 const { getSeedPublishedLanding } = require("./_seo/seedPublished");
+const { buildPrecioMetroCuadradoCiudad } = require("./_seo/priceCity");
 const { escapeHtml, siteUrl, stripHtml } = require("./_seo/text");
 
 function parseSlug(req) {
@@ -193,6 +194,42 @@ function seoPageScript() {
   </script>`;
 }
 
+function buildDynamicPriceCityBodyHtml(landing) {
+  if (landing?.template_type !== "price_city") return null;
+  const sources = Array.isArray(landing?.source_data_json?.sources) ? landing.source_data_json.sources : [];
+  const records = sources
+    .map((source) => ({
+      source: source.source,
+      operation: source.operation,
+      source_url: source.source_url,
+      period_label: source.period_label,
+      period_date: source.period_date,
+      geo_level: source.geo_level,
+      price_eur_m2: Number.parseFloat(String(source.price_eur_m2 || "").replace(",", "."))
+    }))
+    .filter((source) => source.operation && source.source && source.source_url && Number.isFinite(source.price_eur_m2));
+
+  if (!records.length || !landing.city) return null;
+
+  const sale = records.find((record) => record.operation === "sale") || null;
+  const rent = records.find((record) => record.operation === "rent") || null;
+  if (!sale && !rent) return null;
+
+  try {
+    return buildPrecioMetroCuadradoCiudad({
+      city: landing.city,
+      province: landing.province || "",
+      autonomousCommunity: landing.autonomous_community || "",
+      slug: String(landing.slug || "").replace(/^precio-metro-cuadrado\//, ""),
+      sourceData: { sale, rent, records, city: landing.city },
+      publishedAt: landing.published_at || landing.last_generated_at || landing.updated_at || new Date(),
+      updatedAt: landing.updated_at || landing.last_generated_at || landing.published_at || new Date()
+    });
+  } catch (error) {
+    console.warn("[seo-page] Dynamic price city body render failed", error.message);
+    return null;
+  }
+}
 function normalizeLandingBodyHtml(bodyHtml = "") {
   return String(bodyHtml || "")
     .replace(/INSTALAR GRATIS EN CHROME/g, "EMPEZAR GRATIS")
@@ -209,7 +246,8 @@ function renderLandingHtml(landing) {
   const robots = landing.index_status === "index" && landing.status === "published" && qualityScore >= 75 ? "index,follow" : "noindex,follow";
   const canonical = landing.canonical_url || `${siteUrl()}/${landing.slug}/`;
   const title = landing.meta_title || `${landing.title} · InmoRadar`;
-  const bodyHtml = normalizeLandingBodyHtml(landing.body_html);
+  const dynamicBodyHtml = buildDynamicPriceCityBodyHtml(landing);
+  const bodyHtml = normalizeLandingBodyHtml(dynamicBodyHtml || landing.body_html);
   const description = landing.meta_description || stripHtml(bodyHtml).slice(0, 155);
   const imageUrl = ogImageUrl(landing);
 
@@ -239,14 +277,21 @@ function renderLandingHtml(landing) {
       --display: "Cabinet Grotesk", Outfit, Inter, sans-serif;
       --body: Satoshi, Inter, ui-sans-serif, system-ui, sans-serif;
       --mono: "JetBrains Mono", ui-monospace, monospace;
-      background: #FAFAFA;
-      color: #52525B;
+      --seo-bg: #FAFAFA;
+      --seo-surface: #FFFFFF;
+      --seo-ink: #09090B;
+      --seo-muted: #52525B;
+      --seo-line: #E4E4E7;
+      --seo-accent: #FF4500;
+      --seo-accent-soft: #FFF1EB;
+      background: var(--seo-bg);
+      color: var(--seo-muted);
       font-family: var(--body);
       letter-spacing: 0;
       text-rendering: geometricPrecision;
     }
     .seo-page::selection,
-    .seo-page ::selection { background: #FF4500; color: #FFFFFF; }
+    .seo-page ::selection { background: var(--seo-accent); color: #FFFFFF; }
     .seo-shell a:not(.seo-button),
     .seo-global-footer a {
       color: #09090B;
@@ -290,6 +335,25 @@ function renderLandingHtml(landing) {
     .seo-breadcrumb strong { color: inherit; font-weight: 700; text-decoration: none; }
     .seo-breadcrumb a:hover { color: #09090B; }
     .seo-breadcrumb span { color: #D4D4D8; }
+    .seo-page-hero {
+      background: linear-gradient(135deg, rgba(255,255,255,.96), rgba(255,241,235,.72));
+      border: 1px solid var(--seo-line);
+      border-radius: 40px;
+      box-shadow: 0 28px 90px -62px rgba(9,9,11,.48);
+      overflow: hidden;
+      padding: clamp(34px, 6vw, 72px);
+      position: relative;
+    }
+    .seo-page-hero::after {
+      background-image: linear-gradient(rgba(9,9,11,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(9,9,11,.045) 1px, transparent 1px);
+      background-size: 56px 56px;
+      content: "";
+      inset: 0;
+      opacity: .62;
+      pointer-events: none;
+      position: absolute;
+    }
+    .seo-page-hero > * { position: relative; z-index: 1; }
     .seo-page-eyebrow,
     .seo-sidebar-kicker,
     .seo-disclaimer-kicker {
@@ -337,6 +401,40 @@ function renderLandingHtml(landing) {
       padding: 7px 12px;
       text-transform: uppercase;
     }
+    .seo-hero-badges {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-top: 34px;
+    }
+    .seo-meta-row .seo-hero-badge {
+      align-items: flex-start;
+      background: rgba(255,255,255,.86);
+      border-radius: 22px;
+      display: grid;
+      gap: 5px;
+      min-height: 104px;
+      padding: 17px 18px;
+    }
+    .seo-hero-badge small,
+    .seo-hero-badge em {
+      color: #71717A;
+      font-family: var(--mono);
+      font-size: 9.5px;
+      font-style: normal;
+      font-weight: 800;
+      letter-spacing: .18em;
+      line-height: 1.35;
+      text-transform: uppercase;
+    }
+    .seo-hero-badge strong {
+      color: var(--seo-ink);
+      font-family: var(--display);
+      font-size: clamp(21px, 2.4vw, 30px);
+      font-weight: 900;
+      letter-spacing: -.035em;
+      line-height: 1.02;
+    }
     .seo-icon, .seo-external-icon {
       fill: none;
       height: 14px;
@@ -353,10 +451,11 @@ function renderLandingHtml(landing) {
       grid-template-columns: minmax(0, 8fr) minmax(310px, 4fr);
       margin-top: 64px;
     }
-    .seo-content { grid-column: 1; grid-row: 1; min-width: 0; }
+    .seo-content { counter-reset: seo-section; grid-column: 1; grid-row: 1; min-width: 0; }
     .seo-sidebar { align-self: start; grid-column: 2; grid-row: 1; position: sticky; top: 112px; }
     .seo-toc,
     .seo-data-card,
+    .seo-product-card,
     .seo-inline-cta,
     .seo-final-cta {
       background: #FFFFFF;
@@ -364,6 +463,30 @@ function renderLandingHtml(landing) {
       border-radius: 28px;
       box-shadow: 0 18px 60px -44px rgba(9, 9, 11, .42);
     }
+    .seo-primary-cards {
+      display: grid;
+      gap: 22px;
+      grid-template-columns: minmax(0, 1.05fr) minmax(320px, .95fr);
+      margin: 28px 0 76px;
+    }
+    .seo-product-card { padding: clamp(24px, 3.8vw, 36px); }
+    .seo-product-card h2 {
+      color: var(--seo-ink);
+      font-family: var(--display);
+      font-size: clamp(28px, 3.8vw, 42px);
+      font-weight: 900;
+      letter-spacing: -.04em;
+      line-height: .98;
+      margin: 0 0 22px;
+      max-width: 12em;
+    }
+    .seo-stat-grid-wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .seo-compact-data {
+      margin-bottom: 0;
+      margin-top: 22px;
+      max-width: none;
+    }
+    .seo-check-card .seo-calculator { margin-top: 18px; }
     .seo-toc { margin-bottom: 20px; padding: 18px; }
     .seo-toc a {
       border-bottom: 1px solid #E4E4E7;
@@ -450,6 +573,18 @@ function renderLandingHtml(landing) {
     .seo-calc-result small[data-tone="good"] { color: #86EFAC; }
     .seo-calc-result small[data-tone="bad"] { color: #FDA4AF; }
     .seo-card-note { line-height: 1.6; margin: 20px 0 0; text-transform: none; }
+    .seo-section[data-section-id] { counter-increment: seo-section; }
+    .seo-section[data-section-id] > h2::before {
+      color: var(--seo-accent);
+      content: "[" counter(seo-section, decimal-leading-zero) "]";
+      display: block;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .24em;
+      line-height: 1;
+      margin-bottom: 14px;
+    }
     .seo-section { margin-top: 88px; scroll-margin-top: 112px; }
     .seo-section:first-child { margin-top: 0; }
     .seo-section h2,
@@ -576,6 +711,8 @@ function renderLandingHtml(landing) {
     .seo-disclaimer small { color: #71717A; display: block; font-family: var(--mono); font-size: 9.5px; letter-spacing: .2em; margin-top: 12px; text-transform: uppercase; }
     @media (max-width: 900px) {
       .seo-shell { padding: 56px 0 72px; width: min(100% - 32px, 720px); }
+      .seo-primary-cards { grid-template-columns: 1fr; margin: 22px 0 52px; }
+      .seo-hero-badges { grid-template-columns: 1fr 1fr; }
       .seo-reading-grid { display: flex; flex-direction: column; gap: 42px; margin-top: 40px; }
       .seo-sidebar { order: 1; position: static; }
       .seo-content { order: 2; }
@@ -583,10 +720,12 @@ function renderLandingHtml(landing) {
       .seo-section { margin-top: 68px; }
       .seo-page-hero h1 { font-size: clamp(42px, 14vw, 58px); }
       .seo-section p, .seo-section li { font-size: 16px; }
-      .seo-data-grid { grid-template-columns: 1fr; }
+      .seo-data-grid, .seo-stat-grid-wide { grid-template-columns: 1fr; }
       .seo-link-bento a { align-items: start; grid-template-columns: 18px minmax(0, 1fr); }
       .seo-link-bento small { grid-column: 2; white-space: normal; }
       .seo-button { width: 100%; }
+      .seo-page-hero { border-radius: 28px; padding: 30px 22px; }
+      .seo-hero-badges { grid-template-columns: 1fr; }
       .seo-inline-cta { align-items: stretch; }
     }
     @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }

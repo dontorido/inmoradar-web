@@ -159,6 +159,53 @@ test("las landings publicas cargan analitica solo tras consentimiento", () => {
   assert.match(html, /\/api\/og\/price-city/);
 });
 
+
+test("price_city render publico aplica plantilla global desde fuentes guardadas", () => {
+  const html = renderLandingHtml({
+    slug: "precio-metro-cuadrado/sevilla",
+    title: "Precio del metro cuadrado en Sevilla",
+    meta_title: "Precio m² en Sevilla",
+    meta_description: "Referencia de precio por metro cuadrado en Sevilla.",
+    body_html: "<article><h1>Plantilla antigua</h1></article>",
+    canonical_url: "https://inmoradar.app/precio-metro-cuadrado/sevilla/",
+    city: "Sevilla",
+    template_type: "price_city",
+    index_status: "index",
+    status: "published",
+    quality_score: 100,
+    source_data_json: {
+      sources: [
+        {
+          operation: "sale",
+          source: "mivau_appraisal",
+          source_url: "https://example.com/venta.csv",
+          period_label: "4T 2025",
+          period_date: "2025-10-01",
+          geo_level: "municipality",
+          price_eur_m2: 2140
+        },
+        {
+          operation: "rent",
+          source: "serpavi",
+          source_url: "https://example.com/alquiler.csv",
+          period_label: "2024",
+          period_date: "2024-01-01",
+          geo_level: "municipality",
+          price_eur_m2: 9.42
+        }
+      ],
+      faq: []
+    }
+  });
+
+  assert.match(html, /seo-primary-cards/);
+  assert.match(html, /seo-hero-badges/);
+  assert.match(html, /PRECIO M²/);
+  assert.match(html, /COMPRUEBA UN ANUNCIO/);
+  assert.match(html, /data-section-id="faq"/);
+  assert.doesNotMatch(html, /Plantilla antigua/);
+});
+
 test("la home tiene seccion Noticias con enlaces a publicaciones", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 
