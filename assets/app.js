@@ -1323,6 +1323,7 @@ function init() {
   initFaq();
   initContactForm();
   initFooterSocial();
+  initInstallButtons();
   initLaunchWaitlist();
   initCheckout();
 }
