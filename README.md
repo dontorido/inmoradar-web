@@ -25,6 +25,7 @@ Web estatica publica para InmoRadar.
 - `database/premium-subscriptions.sql`: tabla Supabase para guardar suscripciones Premium.
 - `database/saved-property-email-reports.sql`: auditoria y limite diario de emails Premium enviados.
 - `database/browser-waitlist-leads.sql`: tabla Supabase para leads de aviso en navegadores no disponibles.
+- `database/viraliza.sql`: tablas Supabase de Viraliza, incluidas cuentas reales importadas manualmente (`viral_creators`) y acciones/resultados manuales (`viral_actions`).
 - `database/kpi-settings.sql`: tabla Supabase para guardar reglas, pesos, umbrales y visibilidad de KPIs.
 - `api/market-price.js`: endpoint agregado para que la extension consulte precios de mercado por zona.
 - `database/market-price-sources.sql`: tabla Supabase `market_price_sources` y seed minimo de mercado.
@@ -43,6 +44,7 @@ Web estatica publica para InmoRadar.
 - `database/parking-difficulty.sql`: tablas preparadas para zonas de aparcamiento regulado y cache persistente.
 - `tests/parking-difficulty.test.js`: tests basicos del scoring, parser y cache.
 - `tests/browser-waitlist.test.js`: tests focalizados de validacion de email/navegador y honeypot de la waitlist Opera, Firefox y Safari.
+- `tests/viraliza.test.js`: tests del motor Viraliza, plan diario con cuentas reales y acciones human-in-the-loop.
 
 ## Chrome Web Store
 
@@ -142,6 +144,7 @@ El panel no indexa y los datos se cargan desde endpoints protegidos con `ADMIN_I
 - cambiar una landing a `noindex` o regenerarla;
 - administrar reglas KPI: pesos de inmueble/zona, umbrales de precio, caps por nivel geografico, costes, entorno, parking y visibilidad de KPIs estaticos.
 - generar paquetes de video IA con escenas humanas cotidianas, musica, logo InmoRadar arriba derecha y firma `Inmoradar.app` abajo derecha en todas las escenas.
+- usar Viraliza con cuentas reales importadas manualmente, plan diario de perfiles a revisar, comentarios/DM sugeridos y registro manual de resultados.
 
 Migracion KPI:
 
@@ -169,6 +172,55 @@ El webhook de Lemon Squeezy debe apuntar a:
 ```text
 https://www.inmoradar.app/api/lemonsqueezy-webhook
 ```
+
+
+## Viraliza con cuentas reales
+
+Viraliza sigue siendo human-in-the-loop: no hace scraping, no sigue cuentas, no publica comentarios y no envia DMs automaticamente. El BackOffice solo propone acciones para que el usuario revise y ejecute manualmente.
+
+SQL necesario si no esta ejecutado:
+
+```bash
+database/viraliza.sql
+```
+
+Recursos admin protegidos por `ADMIN_IMPORT_TOKEN`:
+
+```text
+GET/POST /api/admin?resource=viraliza/creators
+POST /api/admin?resource=viraliza/creators/import
+GET /api/admin?resource=viraliza/daily-plan
+POST /api/admin?resource=viraliza/actions
+```
+
+Formato JSON de import manual:
+
+```json
+[
+  {
+    "platform": "tiktok",
+    "handle": "@cuenta_real",
+    "display_name": "Nombre de cuenta",
+    "profile_url": "https://www.tiktok.com/@cuenta_real",
+    "category": "asesor_hipotecario",
+    "city": "Madrid",
+    "topics": ["hipoteca", "comprar piso", "primera vivienda"],
+    "followers_count": 25000,
+    "avg_views": 12000,
+    "avg_comments": 80,
+    "posting_frequency": "3-5/semana",
+    "notes": "Cuenta real revisada manualmente"
+  }
+]
+```
+
+Flujo operativo:
+
+1. Importar o guardar cuentas reales revisadas manualmente.
+2. Pulsar `Actualizar plan de hoy` en Marketing -> Viraliza.
+3. Abrir perfiles, revisar contexto y copiar comentario o DM solo si encaja.
+4. Registrar manualmente revisado, comentado, seguido, DM enviado o descartado.
+5. Volver despues de 24h y anotar likes, respuestas, visitas de perfil, installs atribuidas y notas.
 
 ## Endpoint de mercado
 
