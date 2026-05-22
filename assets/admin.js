@@ -186,7 +186,9 @@ const state = {
   },
   viraliza: {
     routine: null,
-    executionMode: false
+    executionMode: false,
+    realCreators: [],
+    dailyCreatorPlan: []
   },
   alerts: []
 };
@@ -285,7 +287,14 @@ const els = {
   viralizaExecution: document.querySelector("[data-viraliza-execution]"),
   viralizaSteps: document.querySelector("[data-viraliza-steps]"),
   viralizaContextForm: document.querySelector("[data-viraliza-context-form]"),
-  viralizaContextOutput: document.querySelector("[data-viraliza-context-output]")
+  viralizaContextOutput: document.querySelector("[data-viraliza-context-output]"),
+  viralizaCreatorForm: document.querySelector("[data-viraliza-creator-form]"),
+  viralizaImportJson: document.querySelector("[data-viraliza-import-json]"),
+  viralizaImport: document.querySelector("[data-viraliza-import]"),
+  viralizaDailyPlanRefresh: document.querySelector("[data-viraliza-daily-plan-refresh]"),
+  viralizaRealCreators: document.querySelector("[data-viraliza-real-creators]"),
+  viralizaDailyPlan: document.querySelector("[data-viraliza-daily-plan]"),
+  viralizaResultForm: document.querySelector("[data-viraliza-result-form]")
 };
 
 function escapeHtml(value) {
@@ -1758,6 +1767,175 @@ function syncViralizaFocusedArea() {
   setElementHidden(els.viralizaResultsBlock, false);
 }
 
+
+function renderViralizaRealCreators() {
+  if (!els.viralizaRealCreators) return;
+  const creators = state.viraliza.realCreators || [];
+  if (!creators.length) {
+    els.viralizaRealCreators.innerHTML = `<p class="admin-empty-state">Aun no hay cuentas reales importadas. Agrega una manualmente o pega un JSON revisado.</p>`;
+    return;
+  }
+  els.viralizaRealCreators.innerHTML = creators
+    .map((creator) => `
+      <article class="admin-viraliza-real-item">
+        <div>
+          <strong>${escapeHtml(creator.displayName || creator.name || creator.handle || "Cuenta")}</strong>
+          <span>${escapeHtml(platformLabel(creator.platform))} · ${escapeHtml(creator.handle || "")}</span>
+          <small>${escapeHtml(creator.category || "")} ${creator.city ? `· ${escapeHtml(creator.city)}` : ""}</small>
+        </div>
+        <div class="admin-row-actions">
+          ${chip(`Score ${creator.creatorFitScore || 0}`, scoreTone(creator.creatorFitScore), "score")}
+          ${creator.profileUrl || creator.url ? `<button class="admin-button tiny ghost" type="button" data-open-url="${escapeHtml(creator.profileUrl || creator.url)}">Abrir</button>` : ""}
+        </div>
+      </article>
+    `)
+    .join("");
+}
+
+function renderViralizaDailyPlan() {
+  if (!els.viralizaDailyPlan) return;
+  const plan = state.viraliza.dailyCreatorPlan || [];
+  if (!plan.length) {
+    els.viralizaDailyPlan.innerHTML = `<p class="admin-empty-state">Sin plan con cuentas reales. Importa cuentas y pulsa Actualizar plan de hoy.</p>`;
+    return;
+  }
+  els.viralizaDailyPlan.innerHTML = plan
+    .map((item) => `
+      <article class="admin-viraliza-plan-card">
+        <div class="admin-viraliza-card-head">
+          ${chip(`Score ${item.priorityScore || 0}`, scoreTone(item.priorityScore), "score")}
+          <span>${escapeHtml(platformLabel(item.platform))} · ${escapeHtml(item.recommendedAction || "review_profile")}</span>
+        </div>
+        <h3>${escapeHtml(item.displayName || item.handle || "Cuenta")}</h3>
+        <p><strong>${escapeHtml(item.handle || "")}</strong> ${escapeHtml(item.category || "")}</p>
+        <p>${escapeHtml(item.whyThisCreator || "")}</p>
+        ${guideList([item.whatToLookFor], "Que mirar en su perfil")}
+        <div class="admin-viraliza-message-box">
+          <span>Comentario sugerido</span>
+          <p>${escapeHtml(item.suggestedComment || "")}</p>
+          <button class="admin-button tiny" type="button" data-copy-text="${escapeHtml(item.suggestedComment || "")}">Copiar comentario</button>
+        </div>
+        <div class="admin-viraliza-message-box">
+          <span>DM sugerido</span>
+          <p>${escapeHtml(item.suggestedDm || "")}</p>
+          <button class="admin-button tiny ghost" type="button" data-copy-text="${escapeHtml(item.suggestedDm || "")}">Copiar DM</button>
+        </div>
+        <div class="admin-row-actions">
+          ${item.profileUrl ? `<button class="admin-button tiny ghost" type="button" data-open-url="${escapeHtml(item.profileUrl)}">Abrir perfil</button>` : ""}
+          <button class="admin-button tiny ghost" type="button" data-viraliza-plan-action="reviewed" data-plan-id="${escapeHtml(item.id)}">Revisado</button>
+          <button class="admin-button tiny ghost" type="button" data-viraliza-plan-action="commented" data-plan-id="${escapeHtml(item.id)}">Comentado</button>
+          <button class="admin-button tiny ghost" type="button" data-viraliza-plan-action="followed" data-plan-id="${escapeHtml(item.id)}">Seguido</button>
+          <button class="admin-button tiny ghost" type="button" data-viraliza-plan-action="dm_sent" data-plan-id="${escapeHtml(item.id)}">DM enviado</button>
+          <button class="admin-button tiny ghost" type="button" data-viraliza-plan-action="skipped" data-plan-id="${escapeHtml(item.id)}">Descartar</button>
+          <button class="admin-button tiny" type="button" data-viraliza-result-fill="${escapeHtml(item.id)}">Registrar resultado</button>
+        </div>
+      </article>
+    `)
+    .join("");
+}
+
+function viralizaFormObject(form) {
+  return Object.fromEntries(new FormData(form).entries());
+}
+
+async function loadViralizaCreators() {
+  if (!els.viralizaRealCreators) return;
+  const payload = await api("/api/admin?resource=viraliza/creators");
+  state.viraliza.realCreators = payload.creators || [];
+  renderViralizaRealCreators();
+}
+
+async function loadViralizaDailyPlan() {
+  if (!els.viralizaDailyPlan) return;
+  const payload = await api("/api/admin?resource=viraliza/daily-plan");
+  state.viraliza.dailyCreatorPlan = payload.dailyCreatorPlan || [];
+  renderViralizaDailyPlan();
+}
+
+async function saveViralizaCreator(form) {
+  const creator = viralizaFormObject(form);
+  const payload = await api("/api/admin?resource=viraliza/creators", {
+    method: "POST",
+    body: JSON.stringify({ creator })
+  });
+  if (payload.creator) {
+    state.viraliza.realCreators = [payload.creator, ...(state.viraliza.realCreators || []).filter((item) => item.id !== payload.creator.id)];
+    renderViralizaRealCreators();
+  }
+  form.reset();
+  showStatus(payload.persisted ? "Cuenta real guardada." : "Cuenta preparada, pero no se guardo en Supabase. Revisa database/viraliza.sql.", payload.persisted ? "good" : "neutral");
+  await loadViralizaDailyPlan().catch(() => null);
+}
+
+async function importViralizaCreators() {
+  const raw = els.viralizaImportJson?.value || "";
+  if (!raw.trim()) return showStatus("Pega un array JSON de cuentas reales primero.", "bad");
+  let creators;
+  try {
+    creators = JSON.parse(raw);
+  } catch (error) {
+    return showStatus("JSON no valido. Pega un array de cuentas.", "bad");
+  }
+  const payload = await api("/api/admin?resource=viraliza/creators/import", {
+    method: "POST",
+    body: JSON.stringify({ creators })
+  });
+  state.viraliza.realCreators = payload.creators || state.viraliza.realCreators || [];
+  renderViralizaRealCreators();
+  if (els.viralizaImportJson) els.viralizaImportJson.value = "";
+  showStatus(payload.persisted ? `${payload.count || 0} cuentas importadas.` : `${payload.count || 0} cuentas preparadas, pero no guardadas.`, payload.persisted ? "good" : "neutral");
+  await loadViralizaDailyPlan().catch(() => null);
+}
+
+function viralizaPlanItem(id) {
+  return (state.viraliza.dailyCreatorPlan || []).find((item) => item.id === id);
+}
+
+async function recordViralizaPlanAction(button) {
+  const item = viralizaPlanItem(button.dataset.planId);
+  if (!item) return;
+  const actionType = button.dataset.viralizaPlanAction || "reviewed";
+  const action = {
+    id: `${item.id}_${actionType}`,
+    creatorId: item.creatorId,
+    actionDate: new Date().toISOString().slice(0, 10),
+    platform: item.platform,
+    actionType,
+    targetUrl: item.profileUrl,
+    suggestedComment: item.suggestedComment,
+    suggestedDm: item.suggestedDm,
+    status: "completed"
+  };
+  const payload = await api("/api/admin?resource=viraliza/actions", {
+    method: "POST",
+    body: JSON.stringify(action)
+  });
+  item.status = actionType;
+  button.textContent = "Registrado";
+  button.disabled = true;
+  showStatus(payload.persisted ? "Accion manual registrada." : "Accion anotada, pero no guardada en Supabase.", payload.persisted ? "good" : "neutral");
+}
+
+function prefillViralizaResult(planId) {
+  const item = viralizaPlanItem(planId);
+  if (!item || !els.viralizaResultForm) return;
+  const form = els.viralizaResultForm;
+  form.elements.id.value = `${item.id}_${item.recommendedAction || "reviewed"}`;
+  form.elements.creator_id.value = item.creatorId || "";
+  form.elements.action_type.value = item.recommendedAction || "reviewed";
+  form.elements.target_url.value = item.profileUrl || "";
+  form.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+async function saveViralizaResult(form) {
+  const action = viralizaFormObject(form);
+  const payload = await api("/api/admin?resource=viraliza/actions", {
+    method: "POST",
+    body: JSON.stringify(action)
+  });
+  form.reset();
+  showStatus(payload.persisted ? "Resultado guardado." : "Resultado preparado, pero no guardado en Supabase.", payload.persisted ? "good" : "neutral");
+}
 function renderViraliza(routine) {
   state.viraliza.routine = routine || state.viraliza.routine;
   const current = state.viraliza.routine;
@@ -1796,6 +1974,7 @@ async function loadViraliza() {
   if (!els.viralizaKpis) return;
   const payload = await api("/api/admin?resource=viraliza");
   renderViraliza(payload.routine);
+  await Promise.allSettled([loadViralizaCreators(), loadViralizaDailyPlan()]);
 }
 
 async function generateViralizaRoutine() {
@@ -3868,6 +4047,28 @@ if (els.viralizaOpenSearch) {
   });
 }
 
+
+if (els.viralizaCreatorForm) {
+  els.viralizaCreatorForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveViralizaCreator(els.viralizaCreatorForm).catch((error) => showStatus(error.message, "bad"));
+  });
+}
+
+if (els.viralizaImport) {
+  els.viralizaImport.addEventListener("click", () => importViralizaCreators().catch((error) => showStatus(error.message, "bad")));
+}
+
+if (els.viralizaDailyPlanRefresh) {
+  els.viralizaDailyPlanRefresh.addEventListener("click", () => loadViralizaDailyPlan().catch((error) => showStatus(error.message, "bad")));
+}
+
+if (els.viralizaResultForm) {
+  els.viralizaResultForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveViralizaResult(els.viralizaResultForm).catch((error) => showStatus(error.message, "bad"));
+  });
+}
 if (els.viralizaContextForm) {
   els.viralizaContextForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -3897,6 +4098,16 @@ if (els.app) {
     const copyButton = event.target.closest("[data-copy-text]");
     if (copyButton) {
       copyToClipboard(copyButton.dataset.copyText || "").catch((error) => showStatus(error.message, "bad"));
+      return;
+    }
+    const planActionButton = event.target.closest("[data-viraliza-plan-action]");
+    if (planActionButton) {
+      recordViralizaPlanAction(planActionButton).catch((error) => showStatus(error.message, "bad"));
+      return;
+    }
+    const resultFillButton = event.target.closest("[data-viraliza-result-fill]");
+    if (resultFillButton) {
+      prefillViralizaResult(resultFillButton.dataset.viralizaResultFill);
       return;
     }
     const recordButton = event.target.closest("[data-viraliza-record]");
