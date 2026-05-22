@@ -34,9 +34,16 @@ jobs:
             echo "::error title=Missing CRON_SECRET::Falta el secret CRON_SECRET en GitHub Actions. Añádelo en Settings > Secrets and variables > Actions > New repository secret y usa el mismo valor que en Vercel."
             exit 1
           fi
-          curl --fail-with-body \
+          response="$(curl --fail-with-body \
+            --silent \
+            --show-error \
             --retry 2 \
             --retry-delay 5 \
             --request POST \
             --header "x-cron-secret: $CRON_SECRET" \
-            "$SITE_URL/api/cron/linkedin-daily"
+            "$SITE_URL/api/admin?resource=linkedin/daily")"
+          echo "$response"
+          if echo "$response" | grep -q '"ok":false'; then
+            echo "::error title=LinkedIn cron failed::El endpoint de LinkedIn devolvió ok=false. Revisa el log anterior."
+            exit 1
+          fi

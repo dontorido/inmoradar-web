@@ -1398,6 +1398,7 @@ function renderLinkedInNotice(payload = {}) {
   const messages = [];
   if (missing) messages.push("Faltan tablas de LinkedIn. Ejecuta database/marketing-linkedin.sql en Supabase.");
   if (payload.manual_mode_notice) messages.push(payload.manual_mode_notice);
+  if (storage.connection_error && !storage.connection_table_missing) messages.push(storage.connection_error);
   if (storage.settings_error && !storage.settings_table_missing) messages.push(storage.settings_error);
   if (storage.posts_error && !storage.posts_table_missing) messages.push(storage.posts_error);
   els.linkedinNotice.innerHTML = messages.map((message) => `<p>${escapeHtml(message)}</p>`).join("");

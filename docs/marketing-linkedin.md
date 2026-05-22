@@ -124,13 +124,13 @@ Reglas de seguridad:
 
 ## Cron
 
-El workflow `.github/workflows/seo-cron.yml` llama cada 6 horas a:
+El workflow `.github/workflows/seo-cron.yml` llama cada 6 horas al recurso existente de backoffice:
 
 ```txt
-/api/cron/linkedin-daily
+POST /api/admin?resource=linkedin/daily
 ```
 
-El endpoint evita duplicados por día, así que aunque el workflow se ejecute varias veces, solo crea un post diario.
+La llamada usa `x-cron-secret` y reutiliza `api/admin.js`, por lo que no crea una serverless function adicional en Vercel Hobby. El endpoint evita duplicados por día, así que aunque el workflow se ejecute varias veces, solo crea un post diario. Si faltan las tablas `marketing_linkedin_*`, devuelve `ok: true` con `skipped: true` y `reason: "table_missing"` para que el cron SEO no parezca fallar por LinkedIn.
 
 ## Limitaciones
 
