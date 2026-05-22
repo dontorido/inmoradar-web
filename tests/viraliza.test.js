@@ -8,6 +8,10 @@ const {
   normalizeRealCreator,
   generateDailyCreatorPlan,
   normalizeViralAction,
+  calculateViralActionPerformanceScore,
+  detectViralCommentType,
+  buildViralizaPerformanceReport,
+  analyzeViralizaLearning,
   generateContextualComments,
   generateOutreachMessage,
   recordAction,
@@ -171,6 +175,89 @@ test("normalizeViralAction prepara resultados manuales medibles", () => {
   assert.equal(action.repliesCount, 2);
   assert.equal(action.profileVisits, 7);
   assert.equal(action.installsAttributed, 1);
+});
+
+test("calculateViralActionPerformanceScore pondera replies, visitas e installs", () => {
+  const score = calculateViralActionPerformanceScore({
+    action_type: "commented",
+    likes_count: 4,
+    replies_count: 2,
+    profile_visits: 5,
+    installs_attributed: 1
+  });
+
+  assert.ok(score >= 55);
+  assert.ok(score <= 100);
+});
+
+test("detectViralCommentType clasifica preguntas, checklist, marca y DM", () => {
+  assert.equal(detectViralCommentType({ used_comment: "Checklist antes de contactar: precio, cuota y zona" }), "checklist");
+  assert.equal(detectViralCommentType({ used_comment: "¿Tu llamarias por este piso?" }), "question");
+  assert.equal(detectViralCommentType({ used_comment: "Esto encaja con InmoRadar" }), "brand_soft");
+  assert.equal(detectViralCommentType({ action_type: "dm_sent", used_dm: "Hola" }), "dm");
+});
+
+test("buildViralizaPerformanceReport agrega performance por creador, plataforma y comentario", () => {
+  const creators = [
+    {
+      id: "creator_hipoteca",
+      platform: "tiktok",
+      handle: "@hipotecasclaras",
+      display_name: "Hipotecas Claras",
+      category: "asesor_hipotecario",
+      country: "Espana",
+      topics: ["hipoteca"]
+    }
+  ];
+  const actions = [
+    {
+      creator_id: "creator_hipoteca",
+      action_date: "2026-05-22",
+      platform: "tiktok",
+      action_type: "commented",
+      used_comment: "¿Antes de llamar mirarias entrada o cuota?",
+      likes_count: 3,
+      replies_count: 2,
+      profile_visits: 6,
+      installs_attributed: 1
+    }
+  ];
+  const report = buildViralizaPerformanceReport(creators, actions, { now: "2026-05-22T12:00:00Z" });
+
+  assert.equal(report.summary.actionsLast7Days, 1);
+  assert.equal(report.summary.replies, 2);
+  assert.equal(report.summary.installsAttributed, 1);
+  assert.equal(report.topCreators[0].handle, "@hipotecasclaras");
+  assert.equal(report.topPlatforms[0].key, "tiktok");
+  assert.equal(report.topCommentTypes[0].key, "question");
+  assert.ok(report.recommendations.length >= 1);
+});
+
+test("generateDailyCreatorPlan no recomienda cuentas pausadas", () => {
+  const creators = [
+    { id: "paused", platform: "tiktok", handle: "@pausada", status: "paused", category: "asesor_hipotecario", country: "Espana", topics: ["hipoteca"], avgComments: 80 },
+    { id: "active", platform: "tiktok", handle: "@activa", status: "reviewed", category: "asesor_hipotecario", country: "Espana", topics: ["hipoteca"], avgComments: 80 }
+  ];
+  const plan = generateDailyCreatorPlan(creators, [], "2026-05-22", { dailyLimits: { realCreators: 5 } });
+
+  assert.ok(plan.every((item) => item.creatorId !== "paused"));
+  assert.ok(plan.some((item) => item.creatorId === "active"));
+});
+
+test("analyzeViralizaLearning devuelve recomendaciones con datos vacios y con winners", () => {
+  const empty = analyzeViralizaLearning({ from: "2026-05-15", to: "2026-05-22" }, { creators: [], actions: [] });
+  assert.ok(empty.insights[0]);
+  assert.ok(empty.nextActions.length >= 1);
+
+  const report = analyzeViralizaLearning(
+    { from: "2026-05-15", to: "2026-05-22" },
+    {
+      creators: [{ id: "creator_1", handle: "@buena", platform: "instagram", category: "comprar_piso" }],
+      actions: [{ creator_id: "creator_1", platform: "instagram", action_type: "dm_sent", replies_count: 3, installs_attributed: 1, status: "replied" }]
+    }
+  );
+  assert.ok(report.winners.some((item) => item.type === "creator"));
+  assert.ok(report.insights.some((item) => /respuestas|instalaciones|instagram/i.test(item)));
 });
 test("generateContextualComments recomienda comentarios utiles sin automatizar", () => {
   const result = generateContextualComments({
