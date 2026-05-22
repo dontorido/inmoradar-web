@@ -702,11 +702,24 @@
                   <label><span>Respuestas</span><input name="replies_count" type="number" min="0" step="1"></label>
                   <label><span>Visitas perfil</span><input name="profile_visits" type="number" min="0" step="1"></label>
                   <label><span>Installs atribuidas</span><input name="installs_attributed" type="number" min="0" step="1"></label>
+                  <label><span>Estado final</span><select name="status"><option value="completed">Completado</option><option value="replied">Respondio</option><option value="collaboration_agreed">Colaboracion abierta</option><option value="skipped">Descartado</option></select></label>
                   <label class="admin-viraliza-wide"><span>Notas</span><textarea name="notes" rows="4" placeholder="Que paso despues de comentar, seguir o escribir"></textarea></label>
                   <button class="admin-button tiny" type="submit">Guardar resultado</button>
                 </form>
               </article>
             </div>
+          </section>
+          <section class="admin-panel admin-viraliza-learning-panel" id="marketing-viraliza-learning">
+            <div class="admin-panel-head">
+              <div>
+                <span class="admin-kicker muted">Learning Engine</span>
+                <h2>Aprendizaje</h2>
+                <p class="admin-panel-sub">Resume resultados manuales y convierte likes, respuestas, visitas e installs en recomendaciones para manana.</p>
+              </div>
+              <button class="admin-button tiny ghost" type="button" data-viraliza-learning-refresh>Actualizar aprendizaje</button>
+            </div>
+            <p class="admin-viraliza-safety">Nada se publica automaticamente. El aprendizaje solo usa resultados que registras manualmente en Viraliza.</p>
+            <div data-viraliza-learning-content></div>
           </section>
           <div class="admin-viraliza-layout" data-viraliza-layout>
             <section class="admin-viraliza-column" data-viraliza-routine-block>

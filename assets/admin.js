@@ -189,6 +189,9 @@ const state = {
     executionMode: false,
     realCreators: [],
     dailyCreatorPlan: [],
+    performance: null,
+    learning: null,
+    learningWarning: "",
     creatorsStorageWarning: "",
     dailyPlanWarning: ""
   },
@@ -296,7 +299,9 @@ const els = {
   viralizaDailyPlanRefresh: document.querySelector("[data-viraliza-daily-plan-refresh]"),
   viralizaRealCreators: document.querySelector("[data-viraliza-real-creators]"),
   viralizaDailyPlan: document.querySelector("[data-viraliza-daily-plan]"),
-  viralizaResultForm: document.querySelector("[data-viraliza-result-form]")
+  viralizaResultForm: document.querySelector("[data-viraliza-result-form]"),
+  viralizaLearningContent: document.querySelector("[data-viraliza-learning-content]"),
+  viralizaLearningRefresh: document.querySelector("[data-viraliza-learning-refresh]")
 };
 
 function escapeHtml(value) {
@@ -1745,6 +1750,107 @@ function renderViralizaResults(routine) {
   `;
 }
 
+function viralizaLearningRow(label, value, detail = "") {
+  return `
+    <article class="admin-viraliza-result-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <p>${escapeHtml(detail)}</p>
+    </article>
+  `;
+}
+
+function viralizaLearningList(items = [], empty = "Sin datos suficientes todavia.") {
+  if (!items.length) return `<p class="admin-empty-state">${escapeHtml(empty)}</p>`;
+  return `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+}
+
+function viralizaPerformanceTable(rows = [], type = "creator") {
+  if (!rows.length) return `<p class="admin-empty-state">Aun no hay rendimiento suficiente.</p>`;
+  const firstColumn = type === "creator" ? "Cuenta" : type === "platform" ? "Plataforma" : "Tipo";
+  return `
+    <div class="admin-table-wrap compact">
+      <table class="admin-table admin-viraliza-learning-table">
+        <thead><tr><th>${firstColumn}</th><th>Acciones</th><th>Resp.</th><th>Installs</th><th>Score</th></tr></thead>
+        <tbody>
+          ${rows.map((row) => `
+            <tr>
+              <td>${escapeHtml(row.displayName || row.handle || row.label || row.key || "-")}<small>${row.platform ? ` · ${platformLabel(row.platform)}` : row.category ? ` · ${row.category}` : ""}</small></td>
+              <td>${escapeHtml(row.actions || 0)}</td>
+              <td>${escapeHtml(row.replies || 0)}</td>
+              <td>${escapeHtml(row.installsAttributed || 0)}</td>
+              <td>${chip(row.averageScore || 0, scoreTone(row.averageScore), "score")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderViralizaLearning() {
+  if (!els.viralizaLearningContent) return;
+  const performance = state.viraliza.performance || {};
+  const learning = state.viraliza.learning || {};
+  const summary = performance.summary || {};
+  const warning = state.viraliza.learningWarning || "";
+  const warningHtml = warning ? `<p class="admin-empty-state">Modo degradado: no se pudo leer todo el aprendizaje. Detalle: ${escapeHtml(warning)}</p>` : "";
+  els.viralizaLearningContent.innerHTML = `
+    ${warningHtml}
+    <div class="admin-viraliza-results-grid admin-viraliza-learning-summary">
+      ${viralizaLearningRow("Acciones 7 dias", summary.actionsLast7Days || 0, `${summary.totalActions || 0} acciones historicas`)}
+      ${viralizaLearningRow("Respuestas", summary.replies || 0, "Senal fuerte de conversacion")}
+      ${viralizaLearningRow("Likes", summary.likes || 0, "Senal ligera de interes")}
+      ${viralizaLearningRow("Visitas perfil", summary.profileVisits || 0, "Interes intermedio")}
+      ${viralizaLearningRow("Installs", summary.installsAttributed || 0, "Senal de conversion manual")}
+      ${viralizaLearningRow("Score medio", summary.averageScore || 0, "0-100 ponderado")}
+    </div>
+    <div class="admin-viraliza-learning-grid">
+      <article class="admin-viraliza-result-card admin-viraliza-result-wide">
+        <span>Top cuentas</span>
+        <strong>Que perfiles funcionan</strong>
+        ${viralizaPerformanceTable(performance.topCreators || [], "creator")}
+      </article>
+      <article class="admin-viraliza-result-card">
+        <span>Mejor plataforma</span>
+        <strong>${escapeHtml((performance.topPlatforms || [])[0]?.label || "Pendiente")}</strong>
+        ${viralizaPerformanceTable((performance.topPlatforms || []).slice(0, 4), "platform")}
+      </article>
+      <article class="admin-viraliza-result-card">
+        <span>Mejor comentario</span>
+        <strong>${escapeHtml((performance.topCommentTypes || [])[0]?.label || "Pendiente")}</strong>
+        ${viralizaPerformanceTable((performance.topCommentTypes || []).slice(0, 4), "comment")}
+      </article>
+      <article class="admin-viraliza-result-card admin-viraliza-result-wide">
+        <span>Que esta funcionando</span>
+        <strong>Insights</strong>
+        ${viralizaLearningList(learning.insights || [])}
+      </article>
+      <article class="admin-viraliza-result-card admin-viraliza-result-wide">
+        <span>Recomendaciones para manana</span>
+        <strong>Siguiente rutina</strong>
+        ${viralizaLearningList(learning.nextActions || performance.recommendations || [])}
+      </article>
+    </div>
+  `;
+}
+
+async function loadViralizaLearning() {
+  if (!els.viralizaLearningContent) return;
+  const [performanceResult, learningResult] = await Promise.allSettled([
+    api("/api/admin?resource=viraliza/performance"),
+    api("/api/admin?resource=viraliza/learning")
+  ]);
+  const performancePayload = performanceResult.status === "fulfilled" ? performanceResult.value : {};
+  const learningPayload = learningResult.status === "fulfilled" ? learningResult.value : {};
+  state.viraliza.performance = performancePayload.performance || null;
+  state.viraliza.learning = learningPayload.learning || null;
+  state.viraliza.learningWarning = [
+    ...(performancePayload.persisted === false ? performancePayload.warnings || [performancePayload.error] : []),
+    ...(learningPayload.persisted === false ? learningPayload.warnings || [learningPayload.error] : [])
+  ].filter(Boolean).join(" | ");
+  renderViralizaLearning();
+}
 function syncViralizaFocusedArea() {
   const copy = VIRALIZA_OVERVIEW_COPY;
   if (els.viralizaTitle) els.viralizaTitle.textContent = copy.title;
@@ -1884,7 +1990,7 @@ async function saveViralizaCreator(form) {
   }
   form.reset();
   showStatus(payload.persisted ? "Cuenta real guardada." : "Cuenta preparada, pero no se guardo en Supabase. Revisa database/viraliza.sql.", payload.persisted ? "good" : "neutral");
-  await loadViralizaDailyPlan().catch(() => null);
+  await Promise.allSettled([loadViralizaDailyPlan(), loadViralizaLearning()]);
 }
 
 async function importViralizaCreators() {
@@ -1908,7 +2014,7 @@ async function importViralizaCreators() {
   renderViralizaRealCreators();
   if (els.viralizaImportJson) els.viralizaImportJson.value = "";
   showStatus(payload.persisted ? `${payload.count || 0} cuentas importadas.` : `${payload.count || 0} cuentas preparadas, pero no guardadas.`, payload.persisted ? "good" : "neutral");
-  await loadViralizaDailyPlan().catch(() => null);
+  await Promise.allSettled([loadViralizaDailyPlan(), loadViralizaLearning()]);
 }
 
 function viralizaPlanItem(id) {
@@ -1938,6 +2044,7 @@ async function recordViralizaPlanAction(button) {
   button.textContent = "Registrado";
   button.disabled = true;
   showStatus(payload.persisted ? "Accion manual registrada." : "Accion anotada, pero no guardada en Supabase.", payload.persisted ? "good" : "neutral");
+  await loadViralizaLearning().catch(() => null);
 }
 
 function prefillViralizaResult(planId) {
@@ -1959,6 +2066,7 @@ async function saveViralizaResult(form) {
   });
   form.reset();
   showStatus(payload.persisted ? "Resultado guardado." : "Resultado preparado, pero no guardado en Supabase.", payload.persisted ? "good" : "neutral");
+  await loadViralizaLearning().catch(() => null);
 }
 function renderViraliza(routine) {
   state.viraliza.routine = routine || state.viraliza.routine;
@@ -1998,7 +2106,7 @@ async function loadViraliza() {
   if (!els.viralizaKpis) return;
   const payload = await api("/api/admin?resource=viraliza");
   renderViraliza(payload.routine);
-  await Promise.allSettled([loadViralizaCreators(), loadViralizaDailyPlan()]);
+  await Promise.allSettled([loadViralizaCreators(), loadViralizaDailyPlan(), loadViralizaLearning()]);
 }
 
 async function generateViralizaRoutine() {
@@ -4084,7 +4192,11 @@ if (els.viralizaImport) {
 }
 
 if (els.viralizaDailyPlanRefresh) {
-  els.viralizaDailyPlanRefresh.addEventListener("click", () => loadViralizaDailyPlan().catch((error) => showStatus(error.message, "bad")));
+  els.viralizaDailyPlanRefresh.addEventListener("click", () => Promise.allSettled([loadViralizaDailyPlan(), loadViralizaLearning()]).catch((error) => showStatus(error.message, "bad")));
+}
+
+if (els.viralizaLearningRefresh) {
+  els.viralizaLearningRefresh.addEventListener("click", () => loadViralizaLearning().catch((error) => showStatus(error.message, "bad")));
 }
 
 if (els.viralizaResultForm) {

@@ -48,6 +48,8 @@ const {
   normalizeRealCreator,
   generateDailyCreatorPlan,
   normalizeViralAction,
+  buildViralizaPerformanceReport,
+  analyzeViralizaLearning,
   recordAction,
   recordResult,
   analyzeWeeklyLearning,
@@ -162,7 +164,9 @@ async function handleAlerts() {
 
   const since = recentSinceIso(24);
   const encodedSince = encodeURIComponent(since);
-  const [recentSeoResult, recentWaitlistResult, recentRevenueResult, recentPremiumResult] = await Promise.all([
+  const viralSince = recentSinceIso(168);
+  const encodedViralSince = encodeURIComponent(viralSince);
+  const [recentSeoResult, recentWaitlistResult, recentRevenueResult, recentPremiumResult, recentViralResult] = await Promise.all([
     safeFetch(
       `seo_landings?select=id,published_at&status=eq.published&index_status=eq.index&published_at=gte.${encodedSince}&order=published_at.desc&limit=1`
     ),
@@ -174,6 +178,9 @@ async function handleAlerts() {
     ),
     safeFetch(
       `premium_subscriptions?select=id,status,created_at,updated_at&or=(created_at.gte.${encodedSince},updated_at.gte.${encodedSince})&order=updated_at.desc&limit=1`
+    ),
+    safeFetch(
+      `viral_actions?select=id,action_type,status,likes_count,replies_count,profile_visits,installs_attributed,updated_at&updated_at=gte.${encodedViralSince}&order=updated_at.desc&limit=25`
     )
   ]);
 
@@ -204,6 +211,45 @@ async function handleAlerts() {
     });
   }
 
+  const viralRows = safeRows(recentViralResult);
+  if (!safeFetchFailed(recentViralResult) && !viralRows.length) {
+    alerts.push({
+      id: "viraliza-no-recent-results",
+      severity: "info",
+      title: "Viraliza sin resultados recientes",
+      message: "No se han registrado resultados de Viraliza en 7 dias. El aprendizaje necesita likes, respuestas, visitas o installs manuales.",
+      action_label: "Ir al evento",
+      action_target: "#marketing-viraliza-learning",
+      dismissible: true,
+      category: "viraliza"
+    });
+  }
+  const pendingViralRows = viralRows.filter((row) => /commented|dm_sent/i.test(String(row.action_type || "")) && !Number(row.likes_count || 0) && !Number(row.replies_count || 0) && !Number(row.profile_visits || 0) && !Number(row.installs_attributed || 0));
+  if (!safeFetchFailed(recentViralResult) && pendingViralRows.length) {
+    alerts.push({
+      id: "viraliza-pending-results",
+      severity: "info",
+      title: "Acciones Viraliza pendientes de medir",
+      message: `Hay ${pendingViralRows.length} acciones recientes sin resultado registrado. Revisa likes, respuestas, visitas e instalaciones.`,
+      action_label: "Ir al evento",
+      action_target: "#marketing-viraliza-learning",
+      dismissible: true,
+      category: "viraliza"
+    });
+  }
+  const strongViralRow = viralRows.find((row) => Number(row.installs_attributed || 0) > 0 || Number(row.replies_count || 0) >= 3);
+  if (!safeFetchFailed(recentViralResult) && strongViralRow) {
+    alerts.push({
+      id: "viraliza-high-performance-week",
+      severity: "info",
+      title: "Viraliza detecta una senal fuerte",
+      message: "Hay una accion Viraliza con respuestas o instalaciones esta semana. Revisa el aprendizaje para repetir el formato.",
+      action_label: "Ir al evento",
+      action_target: "#marketing-viraliza-learning",
+      dismissible: true,
+      category: "viraliza"
+    });
+  }
   if (
     (!safeFetchFailed(recentRevenueResult) && safeRows(recentRevenueResult).length) ||
     (!safeFetchFailed(recentPremiumResult) && safeRows(recentPremiumResult).length)
@@ -1814,6 +1860,55 @@ async function handleViralizaAction(req) {
     return { status: 200, payload: { ok: true, action, persisted: false, error: error.message } };
   }
 }
+async function readViralizaCreatorsAndActions(url, actionLimit = 500) {
+  const creatorsResult = await safeFetch(viralCreatorSelectPath(url));
+  const actionUrl = new URL(url.toString());
+  actionUrl.searchParams.set("limit", String(actionLimit));
+  const actionsResult = await safeFetch(viralActionSelectPath(actionUrl, actionLimit));
+  return {
+    creatorsResult,
+    actionsResult,
+    creators: safeRows(creatorsResult).map(mapViralCreatorRow),
+    actions: safeRows(actionsResult).map(mapViralActionRow),
+    persisted: !safeFetchFailed(creatorsResult) && !safeFetchFailed(actionsResult),
+    warnings: [creatorsResult?.error, actionsResult?.error].filter(Boolean)
+  };
+}
+
+async function handleViralizaPerformance(req, url) {
+  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const data = await readViralizaCreatorsAndActions(url, 500);
+  const performance = buildViralizaPerformanceReport(data.creators, data.actions, { days: 7 });
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      performance,
+      creators_count: data.creators.length,
+      actions_count: data.actions.length,
+      persisted: data.persisted,
+      warnings: data.warnings
+    }
+  };
+}
+
+async function handleViralizaLearning(req, url) {
+  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const today = new Date().toISOString().slice(0, 10);
+  const from = String(url.searchParams.get("from") || "").slice(0, 10) || null;
+  const to = String(url.searchParams.get("to") || today).slice(0, 10);
+  const data = await readViralizaCreatorsAndActions(url, 500);
+  const learning = analyzeViralizaLearning({ from, to }, { creators: data.creators, actions: data.actions });
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      learning,
+      persisted: data.persisted,
+      warnings: data.warnings
+    }
+  };
+}
 async function handleViraliza(req, url) {
   const today = new Date().toISOString().slice(0, 10);
   const date = String(url.searchParams.get("date") || today).slice(0, 10);
@@ -1967,6 +2062,14 @@ module.exports = async function handler(req, res) {
     }
     if (resource === "viraliza/creators/import") {
       const result = await handleViralizaCreatorsImport(req);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "viraliza/performance") {
+      const result = await handleViralizaPerformance(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "viraliza/learning") {
+      const result = await handleViralizaLearning(req, url);
       return json(res, result.status, result.payload);
     }
     if (resource === "viraliza/daily-plan") {
