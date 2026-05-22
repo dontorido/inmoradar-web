@@ -126,7 +126,7 @@ function buildRowsHtml(rows) {
   return rows
     .map((row) => {
       const title = row.url
-        ? `<a href="${escapeHtml(row.url)}" style="color:#FFFFFF;text-decoration:underline;text-decoration-color:#CCFF00;">${escapeHtml(row.title)}</a>`
+        ? `<a href="${escapeHtml(row.url)}" style="color:#FFFFFF;text-decoration:underline;text-decoration-color:#FF4500;">${escapeHtml(row.title)}</a>`
         : escapeHtml(row.title);
       return `<tr>
         ${tableCell(`<strong style="color:#FFFFFF;">${title}</strong><br><span style="color:#A3A3A3;">${escapeHtml(row.location)} · ${escapeHtml(row.portal)}</span>`)}
@@ -163,7 +163,7 @@ function buildSavedPropertiesEmail({ email, properties, generatedAt = new Date()
 <body style="margin:0;background:#0A0A0A;color:#D4D4D4;font-family:Arial,Helvetica,sans-serif;">
   <span style="display:none;visibility:hidden;opacity:0;height:0;width:0;">${escapeHtml(preheader)}</span>
   <main style="max-width:980px;margin:0 auto;padding:32px 18px;">
-    <p style="margin:0 0 10px;color:#CCFF00;font-size:11px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;">INMORADAR · PREMIUM</p>
+    <p style="margin:0 0 10px;color:#FF4500;font-size:11px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;">INMORADAR · PREMIUM</p>
     <h1 style="margin:0;color:#FFFFFF;font-size:36px;line-height:1.05;letter-spacing:-.04em;">Comparativa de inmuebles guardados</h1>
     <p style="margin:14px 0 24px;color:#A3A3A3;font-size:15px;line-height:1.6;">Informe generado para ${escapeHtml(email)} el ${escapeHtml(formatDate(generatedAt))}. Incluye datos orientativos de precio, mercado, scores, aparcamiento y costes.</p>
     <section style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid #262626;background:#262626;gap:1px;margin-bottom:24px;">
