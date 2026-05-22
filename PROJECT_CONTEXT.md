@@ -50,7 +50,7 @@ El backoffice vive en `admin.html` y esta protegido por `ADMIN_IMPORT_TOKEN`. Ag
 - `lib/sales/`: eventos y resumen de ingresos.
 - `lib/browser-waitlist.js`: validacion, saneado, honeypot y persistencia Supabase de la waitlist para Opera, Firefox y Safari.
 - `lib/social-video/`: generador de proyectos de video, estrategia, branding, Runway y persistencia.
-- `lib/viraliza/`: motor de rutina diaria de viralizacion.
+- `lib/viraliza/`: motor de rutina diaria de viralizacion, plan con cuentas reales importadas manualmente y aprendizaje human-in-the-loop.
 - `scripts/`: servidor local estatico, generador SEO e importador de informes publicos.
 - `tests/`: tests con `node:test`.
 - `tools/`: utilidades para capturas Chrome Web Store.
@@ -120,6 +120,10 @@ Todos pasan por `api/admin.js` y requieren `ADMIN_IMPORT_TOKEN`.
 - `POST /api/admin?resource=social-video/generate`: crea storyboard/proyecto de video.
 - `GET/POST /api/admin?resource=social-video/projects`: biblioteca de proyectos de video.
 - `GET/POST /api/admin?resource=viraliza`: rutina diaria, acciones, comentarios contextuales y aprendizaje.
+- `GET/POST /api/admin?resource=viraliza/creators`: lista o guarda cuentas reales revisadas manualmente.
+- `POST /api/admin?resource=viraliza/creators/import`: importa un array JSON de cuentas reales.
+- `GET /api/admin?resource=viraliza/daily-plan`: genera plan diario de cuentas concretas, comentarios y DMs sugeridos.
+- `POST /api/admin?resource=viraliza/actions`: registra acciones/resultados manuales sobre creadores.
 - `GET /api/admin?resource=social-video/runway-config`: configuracion publica de Runway para UI.
 - `GET/POST /api/admin?resource=social-video/render`: estima, lanza o consulta jobs Runway.
 - `GET /api/admin?resource=social-video/render-content`: descarga proxy del clip resultante para usarlo en canvas.
@@ -146,10 +150,18 @@ Flujo:
 4. `api/admin.js` valida `ADMIN_IMPORT_TOKEN` via `assertAdmin`.
 5. Cada recurso lee o escribe en Supabase o llama a servicios internos.
 
+
+Viraliza con cuentas reales:
+
+- Persistencia: `database/viraliza.sql` define `viral_creators` y `viral_actions`, ademas de rutinas, keywords, comentarios, hooks, videos guardados y resultados agregados.
+- UI: `admin.html` + `assets/admin.js` muestran import manual/JSON, plan diario, comentarios/DM sugeridos y formulario de resultados.
+- API: todo pasa por `api/admin.js`; no se crea una serverless function nueva.
+- Operativa: el sistema recomienda; el usuario abre perfiles, copia textos, publica/envia manualmente y registra resultados.
+- Limitacion actual: no hay scraping ni integraciones con credenciales sociales. Las cuentas deben cargarse manualmente.
 Secciones actuales:
 
 - Ventas: resumen Premium, tabla de suscriptores, ingresos mensuales y uso de extension.
-- Marketing: Vision general, SEO y Noticias, Viraliza y Videos IA.
+- Marketing: Vision general, SEO y Noticias, Viraliza y Videos IA. Viraliza permite importar cuentas reales, generar un plan diario de perfiles a revisar y registrar resultados manuales sin scraping ni publicacion automatica.
 - KPIs: configuracion de reglas/pesos/visibilidad de KPIs.
 - Operaciones: Parking, Web, Extension y Backoffice.
 

@@ -643,6 +643,71 @@
           <p class="admin-panel-sub">Encuentra conversaciones, comenta con criterio y convierte creadores en distribución para InmoRadar. El sistema propone; tú revisas y ejecutas.</p>
           <section class="admin-stat-grid compact admin-viraliza-kpis" data-viraliza-kpis></section>
           <section class="admin-viraliza-focus-note" data-viraliza-focus-note></section>
+          <section class="admin-viraliza-real" data-viraliza-real-block>
+            <div class="admin-viraliza-real-head">
+              <div>
+                <span class="admin-kicker muted">Cuentas reales</span>
+                <h3>Plan diario con cuentas concretas</h3>
+                <p>Nada se publica automaticamente. Importa cuentas reales revisadas, abre perfiles, copia mensajes y registra el resultado manualmente.</p>
+              </div>
+              <button class="admin-button tiny ghost" type="button" data-viraliza-daily-plan-refresh>Actualizar plan de hoy</button>
+            </div>
+            <div class="admin-viraliza-real-grid">
+              <article class="admin-viraliza-real-card">
+                <div class="admin-viraliza-section-head">
+                  <span>Import manual</span>
+                  <strong>Agregar cuenta</strong>
+                </div>
+                <form class="admin-viraliza-real-form" data-viraliza-creator-form>
+                  <label><span>Plataforma</span><select name="platform"><option value="tiktok">TikTok</option><option value="instagram">Instagram</option><option value="youtube">YouTube</option><option value="linkedin">LinkedIn</option><option value="x">X</option></select></label>
+                  <label><span>Handle</span><input name="handle" placeholder="@cuenta_real" required></label>
+                  <label><span>Nombre visible</span><input name="display_name" placeholder="Nombre de cuenta"></label>
+                  <label><span>URL perfil</span><input name="profile_url" type="url" placeholder="https://..."></label>
+                  <label><span>Categoria</span><select name="category"><option value="asesor_hipotecario">Asesor hipotecario</option><option value="comprar_piso">Comprar piso</option><option value="finanzas_personales">Finanzas personales</option><option value="cuenta_local">Cuenta local</option><option value="inmobiliario_didactico">Inmobiliario didactico</option><option value="arquitecto_tecnico">Arquitecto tecnico</option><option value="abogado_inmobiliario">Abogado inmobiliario</option><option value="inversor_inmobiliario">Inversor inmobiliario</option><option value="reformista">Reformista</option><option value="viral_general">Viral general</option></select></label>
+                  <label><span>Ciudad</span><input name="city" placeholder="Madrid"></label>
+                  <label><span>Pais</span><input name="country" placeholder="Espana"></label>
+                  <label><span>Temas</span><input name="topics" placeholder="hipoteca, comprar piso, barrios"></label>
+                  <label><span>Seguidores</span><input name="followers_count" type="number" min="0" step="1"></label>
+                  <label><span>Views media</span><input name="avg_views" type="number" min="0" step="1"></label>
+                  <label><span>Comentarios media</span><input name="avg_comments" type="number" min="0" step="1"></label>
+                  <label><span>Frecuencia</span><input name="posting_frequency" placeholder="3-5/semana"></label>
+                  <label class="admin-viraliza-wide"><span>Notas</span><textarea name="notes" rows="3" placeholder="Cuenta real revisada manualmente"></textarea></label>
+                  <button class="admin-button tiny" type="submit">Guardar cuenta</button>
+                </form>
+                <div class="admin-viraliza-import">
+                  <label><span>Importar JSON</span><textarea data-viraliza-import-json rows="5" placeholder='[{"platform":"tiktok","handle":"@cuenta_real"}]'></textarea></label>
+                  <button class="admin-button tiny ghost" type="button" data-viraliza-import>Importar cuentas</button>
+                </div>
+                <div class="admin-viraliza-list" data-viraliza-real-creators></div>
+              </article>
+              <article class="admin-viraliza-real-card admin-viraliza-plan-card-wrap">
+                <div class="admin-viraliza-section-head">
+                  <span>Daily plan</span>
+                  <strong>Plan de hoy</strong>
+                </div>
+                <p class="admin-viraliza-safety">Nada se publica automaticamente. Abre el perfil, revisa contexto y publica o envia manualmente solo si aporta valor.</p>
+                <div class="admin-viraliza-list" data-viraliza-daily-plan></div>
+              </article>
+              <article class="admin-viraliza-real-card">
+                <div class="admin-viraliza-section-head">
+                  <span>Manual result</span>
+                  <strong>Registrar resultado</strong>
+                </div>
+                <form class="admin-viraliza-real-form" data-viraliza-result-form>
+                  <label><span>Action ID</span><input name="id" placeholder="Se rellena desde el plan"></label>
+                  <label><span>Creator ID</span><input name="creator_id" placeholder="creator_..."></label>
+                  <label><span>Tipo</span><select name="action_type"><option value="reviewed">Revisado</option><option value="commented">Comentado</option><option value="followed">Seguido</option><option value="dm_sent">DM enviado</option><option value="skipped">Descartado</option></select></label>
+                  <label><span>URL usada</span><input name="target_url" type="url" placeholder="https://..."></label>
+                  <label><span>Likes</span><input name="likes_count" type="number" min="0" step="1"></label>
+                  <label><span>Respuestas</span><input name="replies_count" type="number" min="0" step="1"></label>
+                  <label><span>Visitas perfil</span><input name="profile_visits" type="number" min="0" step="1"></label>
+                  <label><span>Installs atribuidas</span><input name="installs_attributed" type="number" min="0" step="1"></label>
+                  <label class="admin-viraliza-wide"><span>Notas</span><textarea name="notes" rows="4" placeholder="Que paso despues de comentar, seguir o escribir"></textarea></label>
+                  <button class="admin-button tiny" type="submit">Guardar resultado</button>
+                </form>
+              </article>
+            </div>
+          </section>
           <div class="admin-viraliza-layout" data-viraliza-layout>
             <section class="admin-viraliza-column" data-viraliza-routine-block>
               <div class="admin-viraliza-section-head">

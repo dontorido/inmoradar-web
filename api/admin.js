@@ -44,6 +44,9 @@ const {
   generateOutreachMessage,
   generateVideoBriefFromHook,
   generateVideoBriefFromSavedVideo,
+  normalizeRealCreator,
+  generateDailyCreatorPlan,
+  normalizeViralAction,
   recordAction,
   recordResult,
   analyzeWeeklyLearning,
@@ -1454,6 +1457,106 @@ function viralCreatorRows(routine) {
   }));
 }
 
+
+function viralRealCreatorRow(creator) {
+  const normalized = normalizeRealCreator(creator);
+  return {
+    id: normalized.id,
+    name: normalized.displayName || normalized.name || null,
+    handle: normalized.handle || null,
+    platform: normalized.platform || null,
+    url: normalized.profileUrl || normalized.url || null,
+    category: normalized.category || null,
+    city: normalized.city || null,
+    country: normalized.country || null,
+    followers: Number(normalized.followers || 0),
+    avg_views: Number(normalized.avgViews || 0),
+    avg_comments: Number(normalized.avgComments || 0),
+    posting_frequency: normalized.postingFrequency || null,
+    topics: Array.isArray(normalized.topics) ? normalized.topics : [],
+    creator_fit_score: Number(normalized.creatorFitScore || 0),
+    outreach_score: Number(normalized.outreachScore || 0),
+    why_relevant: normalized.whyRelevant || "",
+    best_collab_idea: normalized.bestCollabIdea || "",
+    recommended_action: normalized.recommendedAction || "review_profile",
+    status: normalized.status || "reviewed",
+    notes: normalized.notes || "",
+    payload: normalized,
+    updated_at: new Date().toISOString()
+  };
+}
+
+function viralActionRow(action) {
+  const normalized = normalizeViralAction(action);
+  return {
+    id: normalized.id,
+    creator_id: normalized.creatorId,
+    action_date: normalized.actionDate,
+    platform: normalized.platform,
+    action_type: normalized.actionType,
+    target_url: normalized.targetUrl || null,
+    suggested_comment: normalized.suggestedComment || null,
+    used_comment: normalized.usedComment || null,
+    suggested_dm: normalized.suggestedDm || null,
+    used_dm: normalized.usedDm || null,
+    status: normalized.status || "completed",
+    likes_count: Number(normalized.likesCount || 0),
+    replies_count: Number(normalized.repliesCount || 0),
+    profile_visits: Number(normalized.profileVisits || 0),
+    installs_attributed: Number(normalized.installsAttributed || 0),
+    notes: normalized.notes || "",
+    payload: normalized,
+    updated_at: new Date().toISOString()
+  };
+}
+
+function mapViralCreatorRow(row = {}) {
+  return normalizeRealCreator({
+    ...(row.payload || {}),
+    id: row.id,
+    platform: row.platform,
+    handle: row.handle,
+    displayName: row.name,
+    profileUrl: row.url,
+    category: row.category,
+    city: row.city,
+    country: row.country,
+    topics: row.topics || row.payload?.topics || [],
+    followers: row.followers,
+    avgViews: row.avg_views,
+    avgComments: row.avg_comments,
+    postingFrequency: row.posting_frequency,
+    creatorFitScore: row.creator_fit_score,
+    outreachScore: row.outreach_score,
+    whyRelevant: row.why_relevant,
+    bestCollabIdea: row.best_collab_idea,
+    recommendedAction: row.recommended_action,
+    status: row.status,
+    notes: row.notes
+  });
+}
+
+function mapViralActionRow(row = {}) {
+  return normalizeViralAction({
+    ...(row.payload || {}),
+    id: row.id,
+    creatorId: row.creator_id,
+    actionDate: row.action_date,
+    platform: row.platform,
+    actionType: row.action_type,
+    targetUrl: row.target_url,
+    suggestedComment: row.suggested_comment,
+    usedComment: row.used_comment,
+    suggestedDm: row.suggested_dm,
+    usedDm: row.used_dm,
+    status: row.status,
+    likesCount: row.likes_count,
+    repliesCount: row.replies_count,
+    profileVisits: row.profile_visits,
+    installsAttributed: row.installs_attributed,
+    notes: row.notes
+  });
+}
 function viralTaskRows(routine) {
   return (routine.tasks || []).map((task) => ({
     id: task.id,
@@ -1611,6 +1714,99 @@ async function readViralHistory() {
   };
 }
 
+
+function viralCreatorSelectPath(url) {
+  const params = new URLSearchParams({
+    select: "*",
+    order: "creator_fit_score.desc",
+    limit: String(clampLimit(url.searchParams.get("limit"), 100, 200))
+  });
+  const status = sanitizeSearch(url.searchParams.get("status"));
+  const platform = sanitizeSearch(url.searchParams.get("platform"));
+  if (status) params.set("status", `eq.${status}`);
+  if (platform) params.set("platform", `eq.${platform}`);
+  return `viral_creators?${params.toString()}`;
+}
+
+function viralActionSelectPath(url, fallbackLimit = 200) {
+  const params = new URLSearchParams({
+    select: "*",
+    order: "action_date.desc",
+    limit: String(clampLimit(url.searchParams.get("limit"), fallbackLimit, 500))
+  });
+  const creatorId = String(url.searchParams.get("creator_id") || url.searchParams.get("creatorId") || "").trim();
+  const since = String(url.searchParams.get("since") || "").trim();
+  if (creatorId) params.set("creator_id", `eq.${creatorId}`);
+  if (since) params.set("action_date", `gte.${since.slice(0, 10)}`);
+  return `viral_actions?${params.toString()}`;
+}
+
+async function handleViralizaCreators(req, url) {
+  if (req.method === "GET") {
+    const result = await safeFetch(viralCreatorSelectPath(url));
+    const creators = safeRows(result).map(mapViralCreatorRow);
+    return { status: 200, payload: { ok: true, creators, persisted: !safeFetchFailed(result), error: result?.error || null } };
+  }
+
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const body = await readJsonBody(req);
+  const creator = normalizeRealCreator(body.creator || body);
+  try {
+    await upsertRows("viral_creators", [viralRealCreatorRow(creator)]);
+    return { status: 200, payload: { ok: true, creator, persisted: true } };
+  } catch (error) {
+    return { status: 200, payload: { ok: true, creator, persisted: false, error: error.message } };
+  }
+}
+
+async function handleViralizaCreatorsImport(req) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const body = await readJsonBody(req);
+  const input = Array.isArray(body.creators) ? body.creators : Array.isArray(body) ? body : [];
+  const creators = input.slice(0, 200).map((creator, index) => normalizeRealCreator(creator, index));
+  if (!creators.length) return { status: 400, payload: { ok: false, error: "viraliza_import_empty" } };
+  try {
+    await upsertRows("viral_creators", creators.map(viralRealCreatorRow));
+    return { status: 200, payload: { ok: true, creators, count: creators.length, persisted: true } };
+  } catch (error) {
+    return { status: 200, payload: { ok: true, creators, count: creators.length, persisted: false, error: error.message } };
+  }
+}
+
+async function handleViralizaDailyPlan(req, url) {
+  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const today = new Date().toISOString().slice(0, 10);
+  const date = String(url.searchParams.get("date") || today).slice(0, 10);
+  const creatorsResult = await safeFetch(viralCreatorSelectPath(url));
+  const actionsResult = await safeFetch(viralActionSelectPath(url));
+  const creators = safeRows(creatorsResult).map(mapViralCreatorRow);
+  const actions = safeRows(actionsResult).map(mapViralActionRow);
+  const dailyCreatorPlan = generateDailyCreatorPlan(creators, actions, date, VIRALIZA_DEFAULT_CONFIG);
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      date,
+      dailyCreatorPlan,
+      creators_count: creators.length,
+      actions_count: actions.length,
+      persisted: !safeFetchFailed(creatorsResult) && !safeFetchFailed(actionsResult),
+      warnings: [creatorsResult?.error, actionsResult?.error].filter(Boolean)
+    }
+  };
+}
+
+async function handleViralizaAction(req) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const body = await readJsonBody(req);
+  const action = normalizeViralAction(body.record || body.action || body);
+  try {
+    await upsertRows("viral_actions", [viralActionRow(action)]);
+    return { status: 200, payload: { ok: true, action, persisted: true } };
+  } catch (error) {
+    return { status: 200, payload: { ok: true, action, persisted: false, error: error.message } };
+  }
+}
 async function handleViraliza(req, url) {
   const today = new Date().toISOString().slice(0, 10);
   const date = String(url.searchParams.get("date") || today).slice(0, 10);
@@ -1756,6 +1952,22 @@ module.exports = async function handler(req, res) {
     }
     if (resource === "social-video/projects") {
       const result = await handleSocialVideoProjects(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "viraliza/creators") {
+      const result = await handleViralizaCreators(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "viraliza/creators/import") {
+      const result = await handleViralizaCreatorsImport(req);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "viraliza/daily-plan") {
+      const result = await handleViralizaDailyPlan(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "viraliza/actions") {
+      const result = await handleViralizaAction(req);
       return json(res, result.status, result.payload);
     }
     if (resource === "viraliza") {
