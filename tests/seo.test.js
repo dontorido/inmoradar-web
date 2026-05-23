@@ -162,6 +162,37 @@ test("las landings publicas cargan analitica solo tras consentimiento", () => {
   assert.match(html, /\/api\/og\/price-city/);
 });
 
+test("las landings publicas usan header y footer globales sin Premium en cabecera", () => {
+  const html = renderLandingHtml({
+    slug: "precio-metro-cuadrado/talavera-de-la-reina",
+    title: "Precio del metro cuadrado en Talavera de la Reina",
+    meta_title: "Precio m² en Talavera de la Reina",
+    meta_description: "Referencia de precio por metro cuadrado en Talavera de la Reina.",
+    body_html: "<main><h1>Precio del metro cuadrado en Talavera de la Reina</h1></main>",
+    canonical_url: "https://inmoradar.app/precio-metro-cuadrado/talavera-de-la-reina/",
+    city: "Talavera de la Reina",
+    template_type: "price_city",
+    index_status: "index",
+    status: "published",
+    quality_score: 100,
+    source_data_json: { faq: [] }
+  });
+
+  const header = html.match(/<header class="site-header"[\s\S]*?<\/header>/)?.[0] || "";
+  const footer = html.match(/<footer class="site-footer"[\s\S]*?<\/footer>/)?.[0] || "";
+
+  assert.match(header, /data-site-header/);
+  assert.match(header, /class="nav container"/);
+  assert.match(header, /data-mobile-toggle/);
+  assert.match(header, /data-mobile-panel/);
+  assert.match(header, /Empezar gratis/);
+  assert.doesNotMatch(header, />Premium</);
+  assert.match(footer, /footer-top/);
+  assert.match(footer, /footer-word/);
+  assert.match(footer, /data-footer-social/);
+  assert.doesNotMatch(html, /seo-global-footer/);
+});
+
 
 test("price_city render publico aplica plantilla global desde fuentes guardadas", () => {
   const html = renderLandingHtml({
