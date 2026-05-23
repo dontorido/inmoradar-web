@@ -3541,6 +3541,245 @@
   font-size: 12px;
 }
 
+.admin-seo-performance-panel {
+  background: #ffffff;
+}
+
+.admin-seo-performance-panel .admin-panel-head {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.admin-seo-performance-panel .admin-view-toolbar {
+  margin: 0;
+}
+
+.admin-seo-performance-panel .admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+  border-top: 1px solid var(--admin-line);
+  border-bottom: 1px solid var(--admin-line);
+  background: #f5f5f2;
+  padding: 14px;
+}
+
+.admin-seo-performance-panel .admin-stat {
+  align-content: space-between;
+  align-items: stretch;
+  display: grid;
+  gap: 10px;
+  min-height: 92px;
+  min-width: 0;
+  border: 1px solid rgba(9, 9, 11, .1);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.admin-seo-performance-panel .admin-stat:nth-child(4n),
+.admin-seo-performance-panel .admin-stat:last-child {
+  border-right: 1px solid rgba(9, 9, 11, .1);
+}
+
+.admin-seo-performance-panel .admin-stat span {
+  font-size: 9px;
+  letter-spacing: .16em;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.admin-seo-performance-panel .admin-stat small {
+  max-width: none;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.admin-seo-performance-panel .admin-stat-value {
+  align-items: end;
+  display: flex;
+  gap: 6px;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.admin-seo-performance-panel .admin-stat strong {
+  font-size: clamp(24px, 2.3vw, 34px);
+  letter-spacing: 0;
+  line-height: 1;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.admin-seo-performance-panel .admin-stat em {
+  white-space: nowrap;
+}
+
+.admin-seo-performance-panel .admin-analytics-grid {
+  align-items: start;
+  display: grid;
+  grid-template-columns: minmax(360px, 1.25fr) minmax(250px, .7fr) minmax(300px, .9fr);
+  gap: 16px;
+  margin: 0;
+  padding: 16px;
+  background: #f5f5f2;
+}
+
+.admin-seo-performance-panel .admin-analytics-block {
+  align-content: start;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-seo-performance-panel .admin-analytics-block h3 {
+  align-items: center;
+  display: flex;
+  min-height: 28px;
+  margin: 0;
+  color: #334155;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.admin-seo-performance-panel .admin-analytics-item,
+.admin-seo-performance-panel .admin-learning-item {
+  gap: 0;
+  overflow: hidden;
+  border-color: rgba(9, 9, 11, .1);
+  background: #ffffff;
+  padding: 0;
+}
+
+.admin-seo-performance-panel .admin-analytics-item > div:first-child,
+.admin-seo-performance-panel .admin-learning-item {
+  min-width: 0;
+}
+
+.admin-seo-performance-panel .admin-analytics-item > div:first-child {
+  padding: 13px 14px 11px;
+}
+
+.admin-seo-performance-panel .admin-analytics-item strong,
+.admin-seo-performance-panel .admin-learning-item strong {
+  font-size: 14px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.admin-seo-performance-panel .admin-analytics-item span,
+.admin-seo-performance-panel .admin-learning-item span,
+.admin-seo-performance-panel .admin-learning-item small {
+  display: block;
+  margin-top: 4px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.admin-seo-performance-panel .admin-analytics-item dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid rgba(9, 9, 11, .08);
+  background: #f7f7f4;
+}
+
+.admin-seo-performance-panel .admin-analytics-item dl div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border-right: 1px solid rgba(9, 9, 11, .08);
+  border-bottom: 1px solid rgba(9, 9, 11, .08);
+  padding: 9px 10px;
+}
+
+.admin-seo-performance-panel .admin-analytics-item dl div:nth-child(3n),
+.admin-seo-performance-panel .admin-analytics-item dl div:last-child {
+  border-right: 0;
+}
+
+.admin-seo-performance-panel .admin-analytics-item dt {
+  color: rgba(10, 20, 15, .52);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.admin-seo-performance-panel .admin-analytics-item dd {
+  color: var(--admin-dark);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.admin-seo-performance-panel .admin-analytics-segment-group {
+  gap: 8px;
+}
+
+.admin-seo-performance-panel .admin-analytics-segment-group + .admin-analytics-segment-group {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(9, 9, 11, .08);
+}
+
+.admin-seo-performance-panel .admin-analytics-segment {
+  background: #ffffff;
+  padding: 12px;
+}
+
+.admin-seo-performance-panel .admin-analytics-segment strong,
+.admin-seo-performance-panel .admin-analytics-segment span {
+  white-space: normal;
+}
+
+.admin-seo-performance-panel .admin-learning-item {
+  padding: 14px;
+}
+
+.admin-seo-performance-panel .admin-learning-item p {
+  margin-top: 10px;
+}
+
+@media (max-width: 1180px) {
+  .admin-seo-performance-panel .admin-analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-seo-performance-panel .admin-panel-head {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-seo-performance-panel .admin-stat-grid,
+  .admin-seo-performance-panel .admin-analytics-grid {
+    padding: 12px;
+  }
+
+  .admin-seo-performance-panel .admin-analytics-item dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-seo-performance-panel .admin-analytics-item dl div:nth-child(3n) {
+    border-right: 1px solid rgba(9, 9, 11, .08);
+  }
+
+  .admin-seo-performance-panel .admin-analytics-item dl div:nth-child(2n),
+  .admin-seo-performance-panel .admin-analytics-item dl div:last-child {
+    border-right: 0;
+  }
+}
+
 @media (max-width: 980px) {
   .admin-analytics-grid {
     grid-template-columns: 1fr;
