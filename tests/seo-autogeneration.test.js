@@ -1,4 +1,6 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const test = require("node:test");
 
 const adminHandler = require("../api/admin");
@@ -351,6 +353,13 @@ test("seo autogeneration endpoint protegido rechaza llamadas sin token", async (
 
   assert.equal(res.statusCode, 401);
   assert.equal(JSON.parse(chunks.join("")).error, "unauthorized");
+});
+
+test("seo autogeneration workflow llama al resource real de api/admin", () => {
+  const workflow = fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", "seo-cron.yml"), "utf8");
+
+  assert.match(workflow, /\$SITE_URL\/api\/admin\?resource=seo-autogenerate\/run/);
+  assert.doesNotMatch(workflow, /\$SITE_URL\/api\/admin\/seo-autogenerate\/run/);
 });
 
 test("seo autogeneration usa la misma logica para cron y manual", async () => {
