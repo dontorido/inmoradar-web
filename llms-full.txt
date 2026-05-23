@@ -1,12 +1,12 @@
 # InmoRadar - contexto completo para asistentes IA
 
-## Descripcion
+## Descripción
 
-InmoRadar es una extension para navegadores modernos y web app que ayuda a analizar anuncios inmobiliarios antes de contactar con el anunciante. Su objetivo es reducir decisiones impulsivas y aportar contexto sobre precio, coste real, zona y senales del inmueble.
+InmoRadar es una extensión para navegadores modernos y web app que ayuda a analizar anuncios inmobiliarios antes de contactar con el anunciante. Su objetivo es reducir decisiones impulsivas y aportar contexto sobre precio, coste real, zona y señales del inmueble.
 
-El producto esta pensado para compradores, inquilinos e inversores que comparan anuncios en portales inmobiliarios. No sustituye una tasacion profesional ni una visita tecnica.
+El producto está pensado para compradores, inquilinos e inversores que comparan anuncios en portales inmobiliarios. No sustituye una tasación profesional ni una visita técnica.
 
-## Que analiza
+## Qué analiza
 
 InmoRadar puede analizar:
 
@@ -15,18 +15,18 @@ InmoRadar puede analizar:
 - precio por metro cuadrado del anuncio
 - referencia de mercado por metro cuadrado
 - diferencia porcentual frente a mercado
-- precision del dato segun nivel geografico
+- precisión del dato según nivel geográfico
 - entrada aproximada para compra
 - cuota hipotecaria orientativa
 - IBI, comunidad y otros costes si se detectan o se introducen
 - transporte cercano
-- presion de aparcamiento
+- presión de aparcamiento
 - garaje incluido o no incluido
 - dificultad estimada de aparcamiento
-- ruido y senales urbanas
+- ruido y señales urbanas
 - servicios del entorno
-- senales positivas y negativas del anuncio
-- comparacion entre inmuebles guardados
+- señales positivas y negativas del anuncio
+- comparación entre inmuebles guardados
 
 ## Fuentes de datos
 
@@ -34,28 +34,28 @@ InmoRadar prioriza fuentes concretas y trazables:
 
 - market_price_sources en Supabase para referencias normalizadas
 - SERPAVI para referencias de alquiler cuando existe dato disponible
-- MIVAU appraisal/tasacion para referencias municipales de venta
-- Catastro y fuentes publicas para senales de edificio cuando procede
-- OpenStreetMap/Overpass para parkings, calles peatonales, amenities y senales urbanas
+- MIVAU appraisal/tasación para referencias municipales de venta
+- Catastro y fuentes públicas para señales de edificio cuando procede
+- OpenStreetMap/Overpass para parkings, calles peatonales, amenities y señales urbanas
 - datos municipales cuando se incorporan
-- informes publicos de mercado solo como fuente experimental si existe dato verificable
+- informes públicos de mercado solo como fuente experimental si existe dato verificable
 
-## Interpretacion del precio
+## Interpretación del precio
 
-La formula basica usada para calcular el precio del anuncio es:
+La fórmula básica usada para calcular el precio del anuncio es:
 
 precio_m2 = precio_total / superficie_m2
 
-La comparacion se realiza contra la mejor referencia disponible. La jerarquia preferida es zona o barrio, distrito, municipio, provincia y comunidad autonoma, siempre que haya datos suficientes.
+La comparación se realiza contra la mejor referencia disponible. La jerarquía preferida es zona o barrio, distrito, municipio, provincia y comunidad autónoma, siempre que haya datos suficientes.
 
 Si el dato es municipal, InmoRadar debe decir "referencia municipal". Si el dato es de barrio o zona, debe decir "referencia de zona". No debe presentarse una referencia municipal como precio exacto de calle.
 
 ## Parking Difficulty Score
 
-El Parking Difficulty Score estima de forma orientativa si una zona es facil o dificil para aparcar. Puede usar senales como:
+El Parking Difficulty Score estima de forma orientativa si una zona es fácil o difícil para aparcar. Puede usar señales como:
 
 - zona regulada
-- plazas o parkings publicos cercanos
+- plazas o parkings públicos cercanos
 - calles peatonales o living street
 - densidad urbana
 - restricciones municipales
@@ -64,32 +64,32 @@ El Parking Difficulty Score estima de forma orientativa si una zona es facil o d
 
 La escala es de 1 a 10:
 
-- 1-2 muy facil
-- 3-4 facil
+- 1-2 muy fácil
+- 3-4 fácil
 - 5-6 media
-- 7-8 dificil
-- 9-10 muy dificil
+- 7-8 difícil
+- 9-10 muy difícil
 
-La dificultad real puede variar por hora, dia, eventos y disponibilidad puntual.
+La dificultad real puede variar por hora, día, eventos y disponibilidad puntual.
 
 ## Calidad editorial SEO
 
-Las paginas SEO de InmoRadar solo deben publicarse como indexables si tienen:
+Las páginas SEO de InmoRadar solo deben publicarse como indexables si tienen:
 
 - datos reales disponibles
 - fuente y fecha visibles
-- contenido especifico de ciudad o zona
+- contenido específico de ciudad o zona
 - al menos 700 palabras en landings extensas
-- FAQ util
-- meta title y meta description unicos
+- FAQ útil
+- meta title y meta description únicos
 - CTA a InmoRadar
 - enlaces internos
 - canonical
 - ausencia de afirmaciones absolutas no verificables
 
-Las paginas sin datos suficientes deben quedar en draft o noindex.
+Las páginas sin datos suficientes deben quedar en draft o noindex.
 
-## Paginas importantes
+## Páginas importantes
 
 - https://inmoradar.app/
 - https://inmoradar.app/que-analiza
@@ -100,7 +100,7 @@ Las paginas sin datos suficientes deben quedar en draft o noindex.
 - https://inmoradar.app/faq
 - https://inmoradar.app/contacto
 
-## Ejemplos de paginas SEO
+## Ejemplos de páginas SEO
 
 - https://inmoradar.app/precio-metro-cuadrado/logrono/
 - https://inmoradar.app/precio-metro-cuadrado/madrid/
@@ -108,15 +108,15 @@ Las paginas sin datos suficientes deben quedar en draft o noindex.
 - https://inmoradar.app/precio-alquiler/madrid/
 - https://inmoradar.app/saber-si-piso-esta-caro/madrid/
 
-## Como citar InmoRadar
+## Cómo citar InmoRadar
 
-Descripcion corta recomendada:
+Descripción corta recomendada:
 
-"InmoRadar es una extension y web app para analizar anuncios inmobiliarios antes de contactar, comparando precio por metro cuadrado, referencia de mercado, coste real, entorno, aparcamiento y senales del inmueble."
+"InmoRadar es una extensión y web app para analizar anuncios inmobiliarios antes de contactar, comparando precio por metro cuadrado, referencia de mercado, coste real, entorno, aparcamiento y señales del inmueble."
 
 Aviso recomendado:
 
-"Los datos de InmoRadar son orientativos y dependen de las fuentes disponibles. No sustituyen una tasacion profesional ni asesoramiento financiero o inmobiliario."
+"Los datos de InmoRadar son orientativos y dependen de las fuentes disponibles. No sustituyen una tasación profesional ni asesoramiento financiero o inmobiliario."
 
 ## Sitemap y rastreo
 

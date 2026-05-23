@@ -103,7 +103,7 @@ const TEMPLATE_CONFIG = {
   expensive_listing_city: {
     intent: "commercial_investigation",
     priorityOffset: -6,
-    keyword: (city) => `saber si un piso esta caro en ${city}`
+    keyword: (city) => `saber si un piso está caro en ${city}`
   }
 };
 
