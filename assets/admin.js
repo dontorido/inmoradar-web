@@ -1584,10 +1584,10 @@ function renderLinkedInPosts() {
         <td><span class="admin-linkedin-error">${escapeHtml(post.error_message || "-")}</span></td>
         <td>
           <div class="admin-row-actions">
-            <button class="admin-icon-button" type="button" data-linkedin-row-action="view" data-linkedin-id="${escapeHtml(post.id)}" aria-label="Ver post">V</button>
-            <button class="admin-icon-button" type="button" data-linkedin-row-action="approve" data-linkedin-id="${escapeHtml(post.id)}" aria-label="Aprobar post">A</button>
-            <button class="admin-icon-button" type="button" data-linkedin-row-action="mark_manually_published" data-linkedin-id="${escapeHtml(post.id)}" aria-label="Marcar publicado manualmente">M</button>
-            <button class="admin-icon-button" type="button" data-linkedin-row-action="cancel" data-linkedin-id="${escapeHtml(post.id)}" aria-label="Cancelar post">C</button>
+            <button class="admin-icon-button" type="button" data-linkedin-row-action="view" data-linkedin-id="${escapeHtml(post.id)}" data-tooltip="Abre este post en el editor." aria-label="Ver post">V</button>
+            <button class="admin-icon-button" type="button" data-linkedin-row-action="approve" data-linkedin-id="${escapeHtml(post.id)}" data-tooltip="Aprueba este post para revisarlo o programarlo." aria-label="Aprobar post">A</button>
+            <button class="admin-icon-button" type="button" data-linkedin-row-action="mark_manually_published" data-linkedin-id="${escapeHtml(post.id)}" data-tooltip="Marca este post como publicado manualmente." aria-label="Marcar publicado manualmente">M</button>
+            <button class="admin-icon-button" type="button" data-linkedin-row-action="cancel" data-linkedin-id="${escapeHtml(post.id)}" data-tooltip="Cancela este post." aria-label="Cancelar post">C</button>
           </div>
         </td>
       </tr>
