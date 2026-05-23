@@ -108,6 +108,7 @@ const {
   normalizeSettings: normalizeMetaSettings,
   pickNextLanding,
   publishToPlatform: publishMetaToPlatform,
+  sanitizeSecretText: sanitizeMetaSecretText,
   sanitizePage,
   selectManagedPage,
   shouldRunAutopublisher: shouldRunMetaAutopublisher,
@@ -2274,15 +2275,15 @@ async function publishMetaPostById(id) {
       env: process.env
     });
   } catch (error) {
-    const message = String(error.message || "meta_publish_not_ready").slice(0, 800);
-    const nextStatus = /missing|required|disabled|false|not_ready/.test(message) ? "skipped" : "failed";
+    const message = sanitizeMetaSecretText(error.message || "meta_publish_not_ready");
+    const nextStatus = /missing|required|disabled|false|not_ready|env|frequency|max/.test(message) ? "skipped" : "failed";
     return await patchMetaPost(id, { status: nextStatus, error_message: message });
   }
   let accessToken;
   try {
     accessToken = await loadMetaAccessToken(connection);
   } catch (error) {
-    return await patchMetaPost(id, { status: "skipped", error_message: String(error.message || "meta_access_token_missing").slice(0, 800) });
+    return await patchMetaPost(id, { status: "skipped", error_message: sanitizeMetaSecretText(error.message || "meta_access_token_missing") });
   }
   await patchMetaPost(id, { status: "publishing", error_message: null });
   try {
@@ -2308,7 +2309,7 @@ async function publishMetaPostById(id) {
       error_message: null
     });
   } catch (error) {
-    const message = String(error.message || "meta_publish_failed").slice(0, 800);
+    const message = sanitizeMetaSecretText(error.message || "meta_publish_failed");
     console.warn(`[Meta Autopublisher] failed ${post.platform} publish: ${message}`);
     await saveMetaConnection({ status: "error", last_error: message });
     return await patchMetaPost(id, { status: "failed", error_message: message });
@@ -2332,7 +2333,7 @@ async function runMetaAutopublisherScheduler({ triggerType = "cron" } = {}) {
     return finish({ status: "skipped", skipped_count: 1, published_count: 0, failed_count: 0, error_message: "table_missing" });
   }
   if (settingsState.error || connectionState.error || postsState.error) {
-    const message = settingsState.error || connectionState.error || postsState.error;
+    const message = sanitizeMetaSecretText(settingsState.error || connectionState.error || postsState.error);
     console.warn(`[Meta Autopublisher] failed: ${message}`);
     return finish({ status: "failed", skipped_count: 0, published_count: 0, failed_count: 1, error_message: message });
   }
@@ -2340,8 +2341,9 @@ async function runMetaAutopublisherScheduler({ triggerType = "cron" } = {}) {
   try {
     landings = await listEligibleMetaLandings(80);
   } catch (error) {
-    console.warn(`[Meta Autopublisher] failed: ${error.message}`);
-    return finish({ status: "failed", skipped_count: 0, published_count: 0, failed_count: 1, error_message: error.message });
+    const message = sanitizeMetaSecretText(error.message || "meta_landing_lookup_failed");
+    console.warn(`[Meta Autopublisher] failed: ${message}`);
+    return finish({ status: "failed", skipped_count: 0, published_count: 0, failed_count: 1, error_message: message });
   }
   const settings = settingsState.settings;
   const connection = connectionState.connection;
@@ -2386,7 +2388,7 @@ async function runMetaAutopublisherScheduler({ triggerType = "cron" } = {}) {
       results.push({ platform, status: published.status, post_id: published.id, source_url: published.source_url, error_message: published.error_message || null });
     } catch (error) {
       failedCount += 1;
-      const message = String(error.message || "meta_publish_failed").slice(0, 800);
+      const message = sanitizeMetaSecretText(error.message || "meta_publish_failed");
       console.warn(`[Meta Autopublisher] failed ${platform} publish: ${message}`);
       results.push({ platform, status: "failed", reason: message });
     }
@@ -3664,7 +3666,7 @@ module.exports = async function handler(req, res) {
       const result = await handleMeta(req, url, resource);
       return json(res, result.status, result.payload);
     } catch (error) {
-      return json(res, 500, { ok: false, error: "meta_daily_failed", message: String(error.message || error).slice(0, 500) });
+      return json(res, 500, { ok: false, error: "meta_daily_failed", message: sanitizeMetaSecretText(error.message || error, 500) });
     }
   }
   if (resource === "seo-autogenerate/run") {
@@ -3794,11 +3796,15 @@ module.exports = async function handler(req, res) {
 
     return json(res, 404, { ok: false, error: "admin_resource_not_found", resource });
   } catch (error) {
-    console.error("[admin]", resource, error);
+    if (String(resource || "").startsWith("meta")) {
+      console.error("[admin]", resource, sanitizeMetaSecretText(error.message || error));
+    } else {
+      console.error("[admin]", resource, error);
+    }
     return json(res, 500, {
       ok: false,
       error: "admin_request_failed",
-      message: error.message
+      message: String(resource || "").startsWith("meta") ? sanitizeMetaSecretText(error.message || error) : error.message
     });
   }
 };

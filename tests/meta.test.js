@@ -17,6 +17,7 @@ const {
   publishFacebookPost,
   publishInstagramPost,
   sanitizeMetaPayload,
+  sanitizeSecretText,
   shouldRunAutopublisher,
   summarizeConnection
 } = require("../lib/meta/services");
@@ -107,6 +108,18 @@ test("no publica si faltan permisos Meta", () => {
   });
   assert.equal(decision.ok, false);
   assert.match(decision.reason, /missing_permissions/);
+});
+
+test("no publica si falta configuracion de entorno Meta", () => {
+  const decision = shouldRunAutopublisher({
+    posts: [],
+    settings: { ...defaultSettings(validEnv), autopost_enabled: true },
+    connection: validConnection,
+    platform: "facebook",
+    env: { ...validEnv, META_APP_SECRET: "" }
+  });
+  assert.equal(decision.ok, false);
+  assert.equal(decision.reason, "meta_env_not_configured");
 });
 
 test("genera caption valido para landing saber si piso esta caro", () => {
@@ -221,4 +234,31 @@ test("sanea payloads Meta para no devolver tokens", () => {
   assert.equal(clean.access_token, undefined);
   assert.equal(clean.nested.app_secret, undefined);
   assert.equal(clean.nested.ok, true);
+});
+
+test("sanea mensajes de error que incluyan tokens", async () => {
+  const token = "EAAB" + "x".repeat(80);
+  const cleanMessage = sanitizeSecretText(`Meta error access_token=${token} authorization: bearer ${token}`);
+  assert.equal(cleanMessage.includes(token), false);
+  assert.match(cleanMessage, /\[redacted\]/);
+
+  await assert.rejects(
+    () => publishFacebookPost({
+      accessToken: token,
+      pageId: "123",
+      caption: "caption",
+      link: "https://www.inmoradar.app/?utm_source=facebook",
+      env: validEnv,
+      fetchImpl: async () => ({
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ error: { message: `bad access_token=${token}` } })
+      })
+    }),
+    (error) => {
+      assert.equal(String(error.message).includes(token), false);
+      assert.match(error.message, /access_token=\[redacted\]/);
+      return true;
+    }
+  );
 });
