@@ -260,6 +260,35 @@
           <article class="admin-panel admin-seo-autogen-panel" id="seo-autogeneration">
             <div class="admin-panel-head">
               <div>
+                <span class="admin-kicker muted">SEO Sitemap</span>
+                <h2>Sitemap automatico</h2>
+                <p class="admin-panel-sub">Estado de URLs SEO incluidas, exclusiones y ultima reconstruccion dinamica del sitemap.</p>
+              </div>
+              <div class="admin-view-toolbar">
+                <a class="admin-button ghost" href="/sitemap.xml" target="_blank" rel="noopener">Abrir sitemap</a>
+                <button class="admin-button" type="button" data-seo-sitemap-regenerate>Regenerar sitemap</button>
+              </div>
+            </div>
+            <div class="admin-stat-grid compact" data-seo-sitemap-summary aria-live="polite"></div>
+            <p class="admin-empty-state compact" data-seo-sitemap-note></p>
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>URL excluida</th>
+                    <th>Motivo</th>
+                    <th>Estado</th>
+                    <th>Actualizada</th>
+                  </tr>
+                </thead>
+                <tbody data-seo-sitemap-excluded></tbody>
+              </table>
+            </div>
+            <p class="admin-table-hint">El sitemap publico se reconstruye desde Supabase; no usa ping de Google ni Indexing API.</p>
+          </article>
+          <article class="admin-panel">
+            <div class="admin-panel-head">
+              <div>
                 <span class="admin-kicker muted">SEO Autogeneration</span>
                 <h2>Autogeneración</h2>
                 <p class="admin-panel-sub">Publicación automática cada 6 horas con límites duros, score mínimo y registro de skipped por motivo.</p>

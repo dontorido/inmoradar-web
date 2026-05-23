@@ -9,6 +9,7 @@ const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { runSeoLandingGeneration } = require("../api/_seo/generator");
 const { buildSeoDailyPolicySnapshot, selectNextSeoContentType } = require("../api/_seo/publishingPolicy");
 const { getSeedPublishedLanding } = require("../api/_seo/seedPublished");
+const { buildSitemapReport, buildSitemapXml } = require("../api/_seo/sitemap");
 const sitemapHandler = require("../api/sitemap");
 const seoPageHandler = require("../api/seo-page");
 const { renderLandingHtml } = require("../api/seo-page");
@@ -250,6 +251,77 @@ test("el endpoint de noticias publica landings publicadas e indexables", async (
   assert.equal(payload.ok, true);
   assert.equal(payload.latest_limit, 5);
   assert.equal(payload.news.some((item) => item.slug === "precio-metro-cuadrado/logrono"), true);
+});
+
+test("el sitemap valida landings SEO y conserva lastmod real", async () => {
+  const baseUrl = "https://inmoradar.app";
+  const body = `<article><h1>Guia</h1><p>${Array.from({ length: 180 }, (_, index) => `palabra${index}`).join(" ")}</p></article>`;
+  const valid = {
+    slug: "saber-si-piso-esta-caro/granada",
+    title: "Saber si un piso esta caro en Granada",
+    meta_title: "Saber si un piso esta caro en Granada",
+    meta_description: "Guia para comparar el precio de un piso en Granada antes de llamar.",
+    h1: "Saber si un piso esta caro en Granada",
+    body_html: body,
+    city: "Granada",
+    template_type: "expensive_listing_city",
+    canonical_url: `${baseUrl}/saber-si-piso-esta-caro/granada/`,
+    status: "published",
+    index_status: "index",
+    quality_score: 91,
+    word_count: 180,
+    published_at: "2026-05-20T08:00:00.000Z",
+    updated_at: "2026-05-22T09:30:00.000Z",
+    last_generated_at: "2026-05-20T08:00:00.000Z"
+  };
+  const report = await buildSitemapReport({
+    baseUrl,
+    now: "2026-05-23T10:00:00.000Z",
+    landings: [
+      valid,
+      { ...valid, slug: "saber-si-piso-esta-caro/granada-borrador", status: "draft" },
+      { ...valid, slug: "saber-si-piso-esta-caro/granada-noindex", index_status: "noindex" },
+      { ...valid, slug: "saber-si-piso-esta-caro/granada-canonica", canonical_url: `${baseUrl}/otra-url/` }
+    ]
+  });
+  const xml = buildSitemapXml(report);
+
+  assert.equal(report.seo.total, 4);
+  assert.equal(report.seo.included, 1);
+  assert.equal(report.excluded_count, 3);
+  assert.equal(report.last_modified_at, "2026-05-22");
+  assert.match(xml, /<loc>https:\/\/inmoradar\.app\/saber-si-piso-esta-caro\/granada\/<\/loc>/);
+  assert.match(xml, /<lastmod>2026-05-22<\/lastmod>/);
+  assert.equal(report.excluded.some((item) => item.reason === "not_published"), true);
+  assert.equal(report.excluded.some((item) => item.reason === "noindex"), true);
+  assert.equal(report.excluded.some((item) => item.reason === "canonical_mismatch"), true);
+});
+
+test("el sitemap publico incluye lastmod de la landing seed", async () => {
+  const req = {
+    method: "GET",
+    url: "/sitemap.xml",
+    headers: { host: "www.inmoradar.app" }
+  };
+  const chunks = [];
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+
+  await sitemapHandler(req, res);
+  const xml = chunks.join("");
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.headers["content-type"], "application/xml; charset=utf-8");
+  assert.match(xml, /<loc>https:\/\/inmoradar\.app\/precio-metro-cuadrado\/logrono\/<\/loc>/);
+  assert.match(xml, /<lastmod>2026-05-18<\/lastmod>/);
 });
 
 test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () => {

@@ -13,6 +13,7 @@
     { "source": "/api/admin/summary", "destination": "/api/admin?resource=summary" },
     { "source": "/api/admin/premium/subscriptions", "destination": "/api/admin?resource=premium/subscriptions" },
     { "source": "/api/admin/seo/landings", "destination": "/api/admin?resource=seo/landings" },
+    { "source": "/api/admin/seo/sitemap", "destination": "/api/admin?resource=seo/sitemap" },
     { "source": "/api/admin/seo/generate-landings", "destination": "/api/admin?resource=seo/generate-landings" },
     { "source": "/api/admin/seo-autogenerate/run", "destination": "/api/admin?resource=seo-autogenerate/run" },
     { "source": "/api/admin/kpis/settings", "destination": "/api/admin?resource=kpis/settings" },

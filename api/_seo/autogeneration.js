@@ -2,6 +2,7 @@ const { hasSupabaseConfig, supabaseFetch } = require("../_utils");
 const { buildPriceCitySourceData } = require("./marketSources");
 const { buildPriceCityLanding } = require("./priceCity");
 const { calculateSeoLandingQuality } = require("./quality");
+const { refreshSeoSitemap } = require("./sitemap");
 const { normalizeText, stripHtml } = require("./text");
 const { buildExpensiveListingCityLanding } = require("../../lib/seo/cityGuideTemplates");
 
@@ -734,6 +735,14 @@ async function runSeoAutogeneration(options = {}) {
       limits: buildLimitSnapshot({ recentPublished, now, config, publishedThisRun: publishedCount }),
       config
     };
+    if (!config.dry_run && (publishedCount || draftCount)) {
+      try {
+        summary.sitemap = await refreshSeoSitemap("seo-autogeneration");
+      } catch (error) {
+        console.warn("[SEO Sitemap] refresh after autogeneration failed", safeError(error));
+        summary.sitemap = { ok: false, error: safeError(error) };
+      }
+    }
     await finishRun(storage, run, summary, failedCount ? "failed" : "completed", failedCount ? "candidate_failed" : null);
     return summary;
   } catch (error) {

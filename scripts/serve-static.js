@@ -26,6 +26,7 @@ const rewrites = {
   "/api/admin/summary": "/api/admin?resource=summary",
   "/api/admin/premium/subscriptions": "/api/admin?resource=premium/subscriptions",
   "/api/admin/seo/landings": "/api/admin?resource=seo/landings",
+  "/api/admin/seo/sitemap": "/api/admin?resource=seo/sitemap",
   "/api/admin/seo/generate-landings": "/api/admin?resource=seo/generate-landings",
   "/api/admin/viraliza": "/api/admin?resource=viraliza",
   "/api/admin/linkedin": "/api/admin?resource=linkedin",

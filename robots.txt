@@ -58,4 +58,4 @@ Disallow: /admin
 Disallow: /api/admin/
 Disallow: /api/cron/
 
-Sitemap: https://inmoradar.app/sitemap.xml
+Sitemap: https://www.inmoradar.app/sitemap.xml

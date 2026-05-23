@@ -7,6 +7,12 @@ const {
 const { runSeoLandingGeneration } = require("./_seo/generator");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
 const {
+  buildSitemapReport,
+  logSitemapReport,
+  refreshSeoSitemap,
+  summarizeSitemapReport
+} = require("./_seo/sitemap");
+const {
   KPI_SCHEMA_VERSION,
   KPI_SETTINGS_SCHEMA,
   coerceKpiSettings,
@@ -863,6 +869,15 @@ function opportunityFromLanding(landing) {
   };
 }
 
+async function safeRefreshSeoSitemap(context) {
+  try {
+    return await refreshSeoSitemap(context);
+  } catch (error) {
+    console.warn("[SEO Sitemap] refresh failed", String(error.message || error).slice(0, 500));
+    return { ok: false, error: String(error.message || error).slice(0, 500) };
+  }
+}
+
 async function handleSeoLandingAction(body) {
   const action = String(body.action || "").trim();
   const slug = normalizeSlug(body.slug);
@@ -887,17 +902,20 @@ async function handleSeoLandingAction(body) {
       index_status: "index",
       published_at: landing.published_at || new Date().toISOString()
     });
-    return { status: 200, payload: { ok: true, action, landing: updated } };
+    const sitemap = await safeRefreshSeoSitemap("admin:publish");
+    return { status: 200, payload: { ok: true, action, landing: updated, sitemap } };
   }
 
   if (action === "noindex") {
     const updated = await patchLanding(slug, { status: "noindex", index_status: "noindex" });
-    return { status: 200, payload: { ok: true, action, landing: updated } };
+    const sitemap = await safeRefreshSeoSitemap("admin:noindex");
+    return { status: 200, payload: { ok: true, action, landing: updated, sitemap } };
   }
 
   if (action === "archive") {
     const updated = await patchLanding(slug, { status: "archived", index_status: "noindex" });
-    return { status: 200, payload: { ok: true, action, landing: updated } };
+    const sitemap = await safeRefreshSeoSitemap("admin:archive");
+    return { status: 200, payload: { ok: true, action, landing: updated, sitemap } };
   }
 
   const result = await runSeoLandingGeneration({
@@ -908,6 +926,37 @@ async function handleSeoLandingAction(body) {
     autoPublish: false
   });
   return { status: 200, payload: { ok: true, action, result } };
+}
+
+async function handleSeoSitemap(req) {
+  if (!["GET", "POST"].includes(req.method)) {
+    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  }
+  const report = await buildSitemapReport();
+  if (req.method === "POST") {
+    logSitemapReport(report, "admin:manual");
+  }
+  return {
+    status: 200,
+    payload: {
+      ...summarizeSitemapReport(report),
+      regeneration_mode: "dynamic",
+      validation: {
+        public_route_check: "route-map",
+        robots_check: "local-rules",
+        canonical_check: "stored-canonical",
+        noindex_check: "stored-index-status"
+      },
+      included_urls: report.entries.map((entry) => ({
+        type: entry.type,
+        loc: entry.loc,
+        lastmod: entry.lastmod,
+        slug: entry.slug || null
+      })),
+      excluded: report.excluded,
+      errors: report.errors
+    }
+  };
 }
 
 async function handleReleaseArtifacts(req, url) {
@@ -3069,6 +3118,10 @@ module.exports = async function handler(req, res) {
     }
     if (resource === "analytics/learning") {
       const result = await handleOwnedAnalyticsLearning(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "seo/sitemap") {
+      const result = await handleSeoSitemap(req);
       return json(res, result.status, result.payload);
     }
     if (!hasSupabaseConfig()) {

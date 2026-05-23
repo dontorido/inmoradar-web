@@ -352,6 +352,15 @@ Body:
 
 Para generar borradores reales en Supabase, usar `mode: "generate"`. Para publicar automaticamente una pagina desde el endpoint admin, debe usarse `mode: "publish"`, `autoPublish: true` y `quality_score >= 85`. `template_type=random` o `landing_random` limita a landings programaticas; `template_type=editorial_guide` genera guias editoriales.
 
+Sitemap SEO:
+
+- `/sitemap.xml` reescribe a `api/sitemap.js` y se reconstruye dinamicamente desde `seo_landings`, sin ping de Google ni Indexing API.
+- Solo entran landings con `status=published`, `index_status=index`, `quality_score >= 75`, ruta publica conocida, canonical igual a `PUBLIC_SITE_URL/<slug>/`, contenido minimo y `lastmod` real (`updated_at`, `last_generated_at`, `published_at` o `created_at`).
+- Cada generacion/publicacion SEO llama a la reconstruccion logica del sitemap y deja logs `[SEO Sitemap]`.
+- El BackOffice expone `GET/POST /api/admin?resource=seo/sitemap`; `POST` es el boton manual "Regenerar sitemap".
+- La validacion de 200 HTTP real queda preparada como validacion minima por mapa de rutas en serverless; si se necesita un crawler externo, hacerlo como monitor separado para no bloquear publicaciones.
+- En produccion, `PUBLIC_SITE_URL` debe coincidir con el host canonical real. A 2026-05-23 las landings publicas devuelven canonical `https://inmoradar.app/...`; migrar canonical a `www` requiere actualizar esa variable y regenerar/publicar landings de forma controlada.
+
 Autogeneracion SEO controlada:
 
 ```text

@@ -232,7 +232,10 @@ Landings:
 Sitemap:
 
 - `/sitemap.xml` reescribe a `/api/sitemap`.
-- Incluye landings y guias publicadas e indexables. `/api/news` reutiliza `api/sitemap.js?format=news` para alimentar home y `/noticias`.
+- `api/_seo/sitemap.js` centraliza construccion y validacion. Incluye estaticas y landings/guias publicadas e indexables; excluye borradores, noindex, duplicadas, canonical incorrecto, rutas no publicas, contenido incompleto o sin `lastmod` real.
+- Cada generacion/publicacion SEO dispara una reconstruccion logica y log `[SEO Sitemap]`; el BackOffice tiene `GET/POST /api/admin?resource=seo/sitemap` para estado y boton manual "Regenerar sitemap".
+- `/api/news` reutiliza el sitemap validado para alimentar home y `/noticias`.
+- `PUBLIC_SITE_URL` es la fuente del host canonical. Produccion sirve por `www`, pero el canonical actual de landings y sitemap es `https://inmoradar.app`; no cambiarlo a `www` sin migracion controlada de canonicales.
 
 Autogeneracion SEO:
 

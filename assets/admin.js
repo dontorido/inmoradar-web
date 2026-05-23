@@ -165,6 +165,9 @@ const state = {
     status: null,
     recentRuns: []
   },
+  seoSitemap: {
+    status: null
+  },
   parking: {
     lastProbe: null
   },
@@ -266,6 +269,10 @@ const els = {
   seoAutogenRun: document.querySelector("[data-seo-autogen-run]"),
   seoAutogenDryRun: document.querySelector("[data-seo-autogen-dry-run]"),
   seoAutogenNote: document.querySelector("[data-seo-autogen-note]"),
+  seoSitemapSummary: document.querySelector("[data-seo-sitemap-summary]"),
+  seoSitemapExcluded: document.querySelector("[data-seo-sitemap-excluded]"),
+  seoSitemapRegenerate: document.querySelector("[data-seo-sitemap-regenerate]"),
+  seoSitemapNote: document.querySelector("[data-seo-sitemap-note]"),
   linkedinRefresh: document.querySelector("[data-linkedin-refresh]"),
   linkedinTest: document.querySelector("[data-linkedin-test]"),
   linkedinConnect: document.querySelector("[data-linkedin-connect]"),
@@ -1555,6 +1562,73 @@ function seoAutogenCard(label, value, options = {}) {
       ${options.hint ? `<small>${escapeHtml(options.hint)}</small>` : ""}
     </article>
   `;
+}
+
+function sitemapReasonLabel(reason) {
+  const labels = {
+    slug_required: "Slug vacio",
+    duplicate_slug: "Slug duplicado",
+    duplicate_url: "URL duplicada",
+    not_published: "No publicada",
+    noindex: "Noindex",
+    quality_below_75: "Score bajo",
+    content_incomplete: "Contenido incompleto",
+    route_not_public: "Ruta no publica",
+    blocked_by_robots: "Bloqueada por robots",
+    canonical_mismatch: "Canonical incorrecto",
+    invalid_lastmod: "Sin lastmod real",
+    validation_error: "Error validando"
+  };
+  return labels[reason] || reason || "-";
+}
+
+function renderSeoSitemap(payload = {}) {
+  if (!els.seoSitemapSummary || !els.seoSitemapExcluded) return;
+  state.seoSitemap.status = payload;
+  const seo = payload.seo || {};
+  const included = Number(payload.included_count || 0);
+  const seoIncluded = Number(seo.included || 0);
+  const seoTotal = Number(seo.total || 0);
+  const excluded = Number(payload.excluded_count || 0);
+  const errors = Number(payload.errors_count || 0);
+
+  els.seoSitemapSummary.innerHTML = [
+    stat("SEO generadas", seoTotal, { id: "seo-sitemap-total", hint: "Landings SEO detectadas" }),
+    stat("SEO incluidas", `${seoIncluded}/${seoTotal}`, { id: "seo-sitemap-included", hint: "Publicadas, index y canonical OK" }),
+    stat("URLs sitemap", included, { id: "seo-sitemap-urls", hint: "Estaticas + SEO validas" }),
+    stat("Excluidas", excluded, { id: "seo-sitemap-excluded", hint: "No entran por validacion" }),
+    stat("Ultima gen.", payload.generated_at ? formatDate(payload.generated_at) : "-", { id: "seo-sitemap-generated", hint: payload.regeneration_mode || "dynamic" }),
+    stat("Ultima mod.", payload.last_modified_at ? formatDate(payload.last_modified_at) : "-", { id: "seo-sitemap-lastmod", hint: "lastmod mas reciente incluido" }),
+    stat("Errores", errors, { id: "seo-sitemap-errors", hint: errors ? "Revisar tabla" : "Sin errores" })
+  ].join("");
+
+  if (els.seoSitemapNote) {
+    els.seoSitemapNote.textContent = `Sitemap: ${payload.sitemap_url || "/sitemap.xml"} · modo ${payload.write_mode || "dynamic-serverless"}.`;
+  }
+
+  const excludedRows = payload.excluded || [];
+  if (!excludedRows.length) {
+    els.seoSitemapExcluded.innerHTML = `<tr><td colspan="4">Sin URLs excluidas por la validacion actual.</td></tr>`;
+    return;
+  }
+
+  els.seoSitemapExcluded.innerHTML = excludedRows
+    .slice(0, 25)
+    .map((row) => `
+      <tr>
+        <td>
+          <strong>${escapeHtml(row.url || row.slug || "-")}</strong>
+          <div class="admin-subtle">score ${escapeHtml(row.quality_score ?? "-")}</div>
+        </td>
+        <td>${chip(sitemapReasonLabel(row.reason), row.reason === "validation_error" ? "bad" : "warn")}</td>
+        <td>
+          ${chip(row.status || "-", statusTone(row.status))}
+          ${chip(row.index_status || "-", statusTone(row.index_status))}
+        </td>
+        <td>${escapeHtml(formatDate(row.updated_at))}</td>
+      </tr>
+    `)
+    .join("");
 }
 
 function renderSeoAutogeneration(payload = {}) {
@@ -4589,6 +4663,12 @@ async function loadSeoAutogeneration() {
   renderSeoAutogeneration(payload);
 }
 
+async function loadSeoSitemap() {
+  if (!els.seoSitemapSummary) return;
+  const payload = await api("/api/admin?resource=seo/sitemap");
+  renderSeoSitemap(payload);
+}
+
 async function loadKpis() {
   const payload = await api("/api/admin?resource=kpis/settings");
   renderKpis(payload);
@@ -4686,6 +4766,7 @@ async function loadAll() {
       loadAnalytics(),
       loadSeo(),
       loadSeoAutogeneration(),
+      loadSeoSitemap(),
       loadLinkedIn(),
       loadKpis(),
       loadParking(),
@@ -4837,6 +4918,13 @@ async function runSeoAutogeneration(dryRun = false) {
   showStatus(`Autogeneracion sin publicacion: ${first.reason || result.reason || "sin candidato elegible"}`, "neutral");
 }
 
+async function regenerateSeoSitemap() {
+  showStatus("Regenerando sitemap SEO...");
+  const payload = await api("/api/admin?resource=seo/sitemap", { method: "POST" });
+  renderSeoSitemap(payload);
+  showStatus(`Sitemap regenerado: ${payload.included_count || 0} URLs incluidas, ${payload.excluded_count || 0} excluidas.`, payload.errors_count ? "bad" : "good");
+}
+
 async function runSeoRowAction(action, slug) {
   showStatus(`${action} · ${slug}`);
   await api("/api/admin?resource=seo/landings", {
@@ -4924,6 +5012,9 @@ if (els.seoAutogenRun) {
 }
 if (els.seoAutogenDryRun) {
   els.seoAutogenDryRun.addEventListener("click", () => runSeoAutogeneration(true).catch((error) => showStatus(error.message, "bad")));
+}
+if (els.seoSitemapRegenerate) {
+  els.seoSitemapRegenerate.addEventListener("click", () => regenerateSeoSitemap().catch((error) => showStatus(error.message, "bad")));
 }
 if (els.linkedinRefresh) {
   els.linkedinRefresh.addEventListener("click", () => loadLinkedIn().catch((error) => showStatus(error.message, "bad")));

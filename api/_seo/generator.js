@@ -8,6 +8,7 @@ const {
 const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../../lib/seo/cityGuideTemplates");
 const { buildPriceCitySourceData } = require("./marketSources");
 const { buildSeoDailyPolicySnapshot, seoContentTypeForTemplate } = require("./publishingPolicy");
+const { refreshSeoSitemap } = require("./sitemap");
 const { buildPriceCityLanding } = require("./priceCity");
 const { calculateSeoLandingQuality } = require("./quality");
 
@@ -542,7 +543,7 @@ async function runSeoLandingGeneration(options = {}) {
     if (publishFirstEligible && generated.didPublish) break;
   }
 
-  return {
+  const result = {
     ok: true,
     mode,
     dry_run: mode === "dry_run",
@@ -558,6 +559,15 @@ async function runSeoLandingGeneration(options = {}) {
     published_count: publishedThisRun,
     results
   };
+  if (mode !== "dry_run") {
+    try {
+      result.sitemap = await refreshSeoSitemap(`seo-generator:${mode}`);
+    } catch (error) {
+      console.warn("[SEO Sitemap] refresh after generator failed", error.message);
+      result.sitemap = { ok: false, error: error.message };
+    }
+  }
+  return result;
 }
 
 module.exports = {
