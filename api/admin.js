@@ -90,6 +90,31 @@ const {
   summarizeConnection,
   validatePublishInput
 } = require("../lib/linkedin/services");
+const {
+  META_MANUAL_MODE_NOTICE,
+  META_PLATFORMS,
+  buildAuthorizationUrl: buildMetaAuthorizationUrl,
+  buildMetaPost,
+  decryptToken: decryptMetaToken,
+  defaultSettings: defaultMetaSettings,
+  encryptToken: encryptMetaToken,
+  exchangeAuthorizationCode: exchangeMetaAuthorizationCode,
+  fetchManagedPages,
+  generateMetaImageSvg,
+  imageUrlForLanding,
+  metaConfig,
+  metaEnvStatus,
+  nextScheduledAt: nextMetaScheduledAt,
+  normalizeSettings: normalizeMetaSettings,
+  pickNextLanding,
+  publishToPlatform: publishMetaToPlatform,
+  sanitizePage,
+  selectManagedPage,
+  shouldRunAutopublisher: shouldRunMetaAutopublisher,
+  summarizeConnection: summarizeMetaConnection,
+  validatePublishInput: validateMetaPublishInput,
+  withUtm
+} = require("../lib/meta/services");
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at";
 
@@ -2023,6 +2048,597 @@ async function handleLinkedIn(req, url, resource) {
   if (resource === "linkedin/posts") return handleLinkedInPosts(req, url);
   return { status: 404, payload: { ok: false, error: "linkedin_resource_not_found", resource } };
 }
+
+function normalizeMetaPostRow(row = {}) {
+  return {
+    ...row,
+    meta_response: parseJsonMaybe(row.meta_response, row.meta_response || null)
+  };
+}
+
+async function readMetaConnectionState() {
+  try {
+    const rows = await supabaseFetch("marketing_meta_connections?select=*&order=created_at.asc&limit=1");
+    return { connection: Array.isArray(rows) ? rows[0] || null : rows, table_missing: false, error: null };
+  } catch (error) {
+    return { connection: null, table_missing: /marketing_meta_connections/.test(error.message), error: error.message };
+  }
+}
+
+async function saveMetaConnection(patch = {}) {
+  const current = await readMetaConnectionState();
+  const body = { ...patch, updated_at: new Date().toISOString() };
+  const rows = current.connection?.id
+    ? await supabaseFetch(`marketing_meta_connections?id=eq.${encodeURIComponent(current.connection.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(body)
+      })
+    : await supabaseFetch("marketing_meta_connections", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify([{ ...body, created_at: new Date().toISOString() }])
+      });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+async function readMetaSettings() {
+  try {
+    const rows = await supabaseFetch("marketing_meta_settings?select=*&order=created_at.asc&limit=1");
+    const row = Array.isArray(rows) ? rows[0] || null : rows;
+    return { row, settings: normalizeMetaSettings(row || defaultMetaSettings()), table_missing: false, error: null };
+  } catch (error) {
+    return {
+      row: null,
+      settings: defaultMetaSettings(),
+      table_missing: /marketing_meta_settings/.test(error.message),
+      error: error.message
+    };
+  }
+}
+
+async function saveMetaSettings(input = {}) {
+  const current = await readMetaSettings();
+  const settings = normalizeMetaSettings({ ...current.settings, ...input });
+  const body = {
+    ...settings,
+    updated_at: new Date().toISOString()
+  };
+  const rows = current.row?.id
+    ? await supabaseFetch(`marketing_meta_settings?id=eq.${encodeURIComponent(current.row.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(body)
+      })
+    : await supabaseFetch("marketing_meta_settings", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify([{ ...body, created_at: new Date().toISOString() }])
+      });
+  const row = Array.isArray(rows) ? rows[0] || null : rows;
+  return { row, settings: normalizeMetaSettings(row || settings) };
+}
+
+async function listMetaPosts(url, limitOverride) {
+  const params = new URLSearchParams({
+    select: "*",
+    order: "created_at.desc",
+    limit: String(clampLimit(limitOverride || url.searchParams.get("limit") || 10, 10, 100))
+  });
+  const platform = String(url.searchParams.get("platform") || "").trim();
+  if (META_PLATFORMS.includes(platform)) params.set("platform", `eq.${platform}`);
+  try {
+    const rows = await supabaseFetch(`marketing_meta_posts?${params.toString()}`);
+    return { posts: (Array.isArray(rows) ? rows : []).map(normalizeMetaPostRow), table_missing: false, error: null };
+  } catch (error) {
+    return { posts: [], table_missing: /marketing_meta_posts/.test(error.message), error: error.message };
+  }
+}
+
+function metaPostsSummary(posts = []) {
+  const counts = countBy(posts, "status");
+  return {
+    total: posts.length,
+    draft: counts.draft || 0,
+    queued: counts.queued || 0,
+    publishing: counts.publishing || 0,
+    published: counts.published || 0,
+    failed: counts.failed || 0,
+    skipped: counts.skipped || 0,
+    facebook: posts.filter((post) => post.platform === "facebook").length,
+    instagram: posts.filter((post) => post.platform === "instagram").length
+  };
+}
+
+async function listMetaRuns(limit = 5) {
+  try {
+    const rows = await supabaseFetch(`meta_autopublisher_runs?select=*&order=created_at.desc&limit=${encodeURIComponent(String(limit))}`);
+    return { runs: Array.isArray(rows) ? rows : [], table_missing: false, error: null };
+  } catch (error) {
+    return { runs: [], table_missing: /meta_autopublisher_runs/.test(error.message), error: error.message };
+  }
+}
+
+async function createMetaRun(triggerType = "cron", platform = "multi") {
+  try {
+    const rows = await supabaseFetch("meta_autopublisher_runs", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify([{ status: "running", trigger_type: triggerType, platform }])
+    });
+    return Array.isArray(rows) ? rows[0] || null : rows;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function finishMetaRun(run, patch = {}) {
+  if (!run?.id) return patch;
+  try {
+    const rows = await supabaseFetch(`meta_autopublisher_runs?id=eq.${encodeURIComponent(run.id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(patch)
+    });
+    return Array.isArray(rows) ? rows[0] || patch : rows || patch;
+  } catch (error) {
+    return patch;
+  }
+}
+
+async function listEligibleMetaLandings(limit = 50) {
+  const params = new URLSearchParams({
+    select: "id,slug,title,meta_title,meta_description,h1,city,template_type,status,index_status,quality_score,canonical_url,published_at,updated_at,last_generated_at,source_data_json",
+    status: "eq.published",
+    index_status: "eq.index",
+    quality_score: "gte.75",
+    order: "published_at.desc",
+    limit: String(clampLimit(limit, 50, 100))
+  });
+  const rows = await supabaseFetch(`seo_landings?${params.toString()}`);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function createMetaPostForLanding(landing, platform = "facebook", status = "draft") {
+  const imageUrl = imageUrlForLanding(landing, platform, process.env);
+  if (platform === "instagram" && !imageUrl) {
+    throw new Error("meta_instagram_public_image_required");
+  }
+  const post = buildMetaPost({ landing, platform, status, imageUrl, env: process.env });
+  const rows = await supabaseFetch("marketing_meta_posts", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify([post])
+  });
+  return normalizeMetaPostRow(Array.isArray(rows) ? rows[0] || null : rows);
+}
+
+async function generateNextMetaPost({ platform = "facebook", status = "draft" } = {}) {
+  if (!META_PLATFORMS.includes(platform)) return { ok: false, skipped: true, reason: "unsupported_platform" };
+  const [postsState, landings] = await Promise.all([
+    listMetaPosts(new URL("https://admin.local/?limit=100"), 100),
+    listEligibleMetaLandings(80)
+  ]);
+  if (postsState.table_missing) {
+    return { ok: true, skipped: true, reason: "table_missing", pending_sql: "database/marketing-meta.sql" };
+  }
+  const landing = pickNextLanding({ landings, posts: postsState.posts, platform, env: process.env });
+  if (!landing) return { ok: true, skipped: true, reason: "no_eligible_landing" };
+  const post = await createMetaPostForLanding(landing, platform, status);
+  return { ok: true, skipped: false, post, landing };
+}
+
+async function readMetaPost(id) {
+  const rows = await supabaseFetch(`marketing_meta_posts?id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
+  return normalizeMetaPostRow(Array.isArray(rows) ? rows[0] || null : rows);
+}
+
+async function patchMetaPost(id, patch = {}) {
+  const rows = await supabaseFetch(`marketing_meta_posts?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() })
+  });
+  return normalizeMetaPostRow(Array.isArray(rows) ? rows[0] || null : rows);
+}
+
+async function loadMetaAccessToken(connection) {
+  const encrypted = connection?.page_access_token_encrypted || connection?.access_token_encrypted;
+  const accessToken = decryptMetaToken(encrypted);
+  if (!accessToken) throw new Error("meta_access_token_missing");
+  return accessToken;
+}
+
+async function loadMetaUserAccessToken(connection) {
+  const encrypted = connection?.user_access_token_encrypted || connection?.access_token_encrypted;
+  const accessToken = decryptMetaToken(encrypted);
+  if (!accessToken) throw new Error("meta_user_access_token_missing");
+  return accessToken;
+}
+
+async function publishMetaPostById(id) {
+  const [post, connectionState, settingsState, postsState] = await Promise.all([
+    readMetaPost(id),
+    readMetaConnectionState(),
+    readMetaSettings(),
+    listMetaPosts(new URL("https://admin.local/?limit=100"), 100)
+  ]);
+  const connection = connectionState.connection;
+  const settings = settingsState.settings;
+  try {
+    validateMetaPublishInput({
+      post,
+      posts: postsState.posts.filter((item) => item.id !== post?.id),
+      connection,
+      settings,
+      env: process.env
+    });
+  } catch (error) {
+    const message = String(error.message || "meta_publish_not_ready").slice(0, 800);
+    const nextStatus = /missing|required|disabled|false|not_ready/.test(message) ? "skipped" : "failed";
+    return await patchMetaPost(id, { status: nextStatus, error_message: message });
+  }
+  let accessToken;
+  try {
+    accessToken = await loadMetaAccessToken(connection);
+  } catch (error) {
+    return await patchMetaPost(id, { status: "skipped", error_message: String(error.message || "meta_access_token_missing").slice(0, 800) });
+  }
+  await patchMetaPost(id, { status: "publishing", error_message: null });
+  try {
+    const platform = String(post.platform || "").toLowerCase();
+    const link = withUtm(post.source_url, platform, { city: post.city, slug: post.source_slug }, process.env);
+    const result = await publishMetaToPlatform({
+      platform,
+      accessToken,
+      pageId: connection.facebook_page_id || process.env.META_FACEBOOK_PAGE_ID,
+      instagramBusinessAccountId: connection.instagram_business_account_id || process.env.META_INSTAGRAM_BUSINESS_ACCOUNT_ID,
+      caption: post.caption,
+      link,
+      imageUrl: post.image_url,
+      env: process.env
+    });
+    console.log(`[Meta Autopublisher] published ${platform} post ${result.external_post_id || ""}`.trim());
+    return await patchMetaPost(id, {
+      status: "published",
+      published_at: new Date().toISOString(),
+      external_post_id: result.external_post_id,
+      published_url: result.published_url,
+      meta_response: result.meta_response,
+      error_message: null
+    });
+  } catch (error) {
+    const message = String(error.message || "meta_publish_failed").slice(0, 800);
+    console.warn(`[Meta Autopublisher] failed ${post.platform} publish: ${message}`);
+    await saveMetaConnection({ status: "error", last_error: message });
+    return await patchMetaPost(id, { status: "failed", error_message: message });
+  }
+}
+
+async function runMetaAutopublisherScheduler({ triggerType = "cron" } = {}) {
+  const run = await createMetaRun(triggerType, "multi");
+  const finish = (patch) => finishMetaRun(run, patch).then(() => patch);
+  if (!hasSupabaseConfig()) {
+    console.log("[Meta Autopublisher] skipped: supabase_not_configured");
+    return finish({ status: "skipped", skipped_count: 1, published_count: 0, failed_count: 0, error_message: "supabase_not_configured" });
+  }
+  const [settingsState, connectionState, postsState] = await Promise.all([
+    readMetaSettings(),
+    readMetaConnectionState(),
+    listMetaPosts(new URL("https://admin.local/?limit=100"), 100)
+  ]);
+  if (settingsState.table_missing || connectionState.table_missing || postsState.table_missing) {
+    console.log("[Meta Autopublisher] skipped: table_missing");
+    return finish({ status: "skipped", skipped_count: 1, published_count: 0, failed_count: 0, error_message: "table_missing" });
+  }
+  if (settingsState.error || connectionState.error || postsState.error) {
+    const message = settingsState.error || connectionState.error || postsState.error;
+    console.warn(`[Meta Autopublisher] failed: ${message}`);
+    return finish({ status: "failed", skipped_count: 0, published_count: 0, failed_count: 1, error_message: message });
+  }
+  let landings = [];
+  try {
+    landings = await listEligibleMetaLandings(80);
+  } catch (error) {
+    console.warn(`[Meta Autopublisher] failed: ${error.message}`);
+    return finish({ status: "failed", skipped_count: 0, published_count: 0, failed_count: 1, error_message: error.message });
+  }
+  const settings = settingsState.settings;
+  const connection = connectionState.connection;
+  const platforms = [
+    settings.facebook_enabled ? "facebook" : null,
+    settings.instagram_enabled ? "instagram" : null
+  ].filter(Boolean);
+  const results = [];
+  let publishedCount = 0;
+  let skippedCount = 0;
+  let failedCount = 0;
+  const knownPosts = [...postsState.posts];
+
+  for (const platform of platforms) {
+    const decision = shouldRunMetaAutopublisher({ posts: knownPosts, settings, connection, platform, env: process.env, now: new Date() });
+    if (!decision.ok) {
+      skippedCount += 1;
+      console.log(`[Meta Autopublisher] skipped: ${decision.reason}`);
+      results.push({ platform, status: "skipped", reason: decision.reason, missing_scopes: decision.missing_scopes || [] });
+      continue;
+    }
+    const landing = pickNextLanding({ landings, posts: knownPosts, platform, env: process.env });
+    if (!landing) {
+      skippedCount += 1;
+      console.log("[Meta Autopublisher] skipped: no_eligible_landing");
+      results.push({ platform, status: "skipped", reason: "no_eligible_landing" });
+      continue;
+    }
+    try {
+      const imageUrl = imageUrlForLanding(landing, platform, process.env);
+      if (platform === "instagram" && !imageUrl) throw new Error("meta_instagram_public_image_required");
+      const post = await createMetaPostForLanding(landing, platform, "queued");
+      const published = await publishMetaPostById(post.id);
+      knownPosts.push(published);
+      if (published.status === "published") {
+        publishedCount += 1;
+      } else if (published.status === "skipped") {
+        skippedCount += 1;
+      } else {
+        failedCount += 1;
+      }
+      results.push({ platform, status: published.status, post_id: published.id, source_url: published.source_url, error_message: published.error_message || null });
+    } catch (error) {
+      failedCount += 1;
+      const message = String(error.message || "meta_publish_failed").slice(0, 800);
+      console.warn(`[Meta Autopublisher] failed ${platform} publish: ${message}`);
+      results.push({ platform, status: "failed", reason: message });
+    }
+  }
+
+  const status = publishedCount ? "published" : failedCount ? "failed" : "skipped";
+  return finish({
+    status,
+    platform: platforms.join(",") || "multi",
+    published_count: publishedCount,
+    skipped_count: skippedCount,
+    failed_count: failedCount,
+    result_json: { results },
+    error_message: status === "failed" ? results.find((item) => item.status === "failed")?.reason || "meta_publish_failed" : null
+  });
+}
+
+async function handleMetaDaily(req) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const result = await runMetaAutopublisherScheduler({ triggerType: isCronTokenRequest(req) ? "cron" : "manual" });
+  return {
+    status: result.status === "failed" ? 500 : 200,
+    payload: {
+      ok: result.status !== "failed",
+      skipped: result.status === "skipped",
+      reason: result.error_message || result.status,
+      ...result
+    }
+  };
+}
+
+async function handleMetaDashboard(url) {
+  const [connectionState, settingsState, postsState, runsState] = await Promise.all([
+    readMetaConnectionState(),
+    readMetaSettings(),
+    listMetaPosts(url, 10),
+    listMetaRuns(5)
+  ]);
+  const settings = settingsState.settings;
+  const connection = connectionState.connection;
+  const connectionSummary = summarizeMetaConnection(connection, process.env);
+  const lastPublication = postsState.posts.find((post) => post.published_at) || null;
+  const decisions = Object.fromEntries(META_PLATFORMS.map((platform) => [
+    platform,
+    shouldRunMetaAutopublisher({ posts: postsState.posts, settings, connection, platform, now: new Date() })
+  ]));
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      connection: connectionSummary,
+      settings,
+      posts: postsState.posts,
+      runs: runsState.runs,
+      summary: metaPostsSummary(postsState.posts),
+      last_publication: lastPublication,
+      next_publication: nextMetaScheduledAt(settings),
+      autopublisher: {
+        enabled: settings.autopost_enabled === true && metaConfig(process.env).autopostEnabled,
+        frequency_days: settings.frequency_days || 1,
+        max_per_day: settings.max_per_day || 1,
+        preferred_time: settings.preferred_time || "10:00",
+        timezone: settings.timezone || "Europe/Madrid",
+        next_publication: nextMetaScheduledAt(settings),
+        decisions
+      },
+      env: metaEnvStatus(process.env),
+      manual_mode_notice: META_MANUAL_MODE_NOTICE,
+      storage: {
+        connection_table_missing: connectionState.table_missing,
+        settings_table_missing: settingsState.table_missing,
+        posts_table_missing: postsState.table_missing,
+        runs_table_missing: runsState.table_missing,
+        connection_error: connectionState.error,
+        settings_error: settingsState.error,
+        posts_error: postsState.error,
+        runs_error: runsState.error
+      }
+    }
+  };
+}
+
+async function handleMetaConnect(req, url) {
+  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const scopes = String(url.searchParams.get("scopes") || "")
+    .split(/[\s,]+/)
+    .filter(Boolean);
+  const result = buildMetaAuthorizationUrl({ scopes: scopes.length ? scopes : undefined });
+  return { status: 200, payload: { ok: true, ...result } };
+}
+
+async function handleMetaCallback(req) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const body = await readJsonBody(req);
+  if (!body.code) return { status: 400, payload: { ok: false, error: "meta_code_required" } };
+  const token = await exchangeMetaAuthorizationCode({ code: body.code });
+  const connection = await saveMetaConnection({
+    status: "needs_page",
+    access_token_encrypted: encryptMetaToken(token.access_token),
+    user_access_token_encrypted: encryptMetaToken(token.access_token),
+    page_access_token_encrypted: null,
+    token_expires_at: token.token_expires_at,
+    scopes: token.scopes,
+    last_error: null
+  });
+  return { status: 200, payload: { ok: true, connection: summarizeMetaConnection(connection, process.env) } };
+}
+
+async function handleMetaDisconnect(req) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const connection = await saveMetaConnection({
+    status: "disconnected",
+    access_token_encrypted: null,
+    user_access_token_encrypted: null,
+    page_access_token_encrypted: null,
+    token_expires_at: null,
+    last_error: null
+  });
+  return { status: 200, payload: { ok: true, connection: summarizeMetaConnection(connection, process.env) } };
+}
+
+async function handleMetaPages(req) {
+  const connectionState = await readMetaConnectionState();
+  const connection = connectionState.connection;
+  if (!connection) return { status: 400, payload: { ok: false, error: "meta_connection_missing" } };
+  const userAccessToken = await loadMetaUserAccessToken(connection);
+  const pages = await fetchManagedPages({ userAccessToken });
+  if (req.method === "GET") {
+    return { status: 200, payload: { ok: true, pages: pages.map(sanitizePage) } };
+  }
+  if (req.method === "POST") {
+    const body = await readJsonBody(req);
+    const page = selectManagedPage(pages, body.page_id || body.facebook_page_id);
+    if (!page) return { status: 404, payload: { ok: false, error: "meta_page_not_found" } };
+    if (!page.access_token) return { status: 400, payload: { ok: false, error: "meta_page_access_token_missing" } };
+    const instagram = page.instagram_business_account || null;
+    const connection = await saveMetaConnection({
+      status: "connected",
+      facebook_page_id: page.id,
+      facebook_page_name: page.name,
+      instagram_business_account_id: instagram?.id || null,
+      access_token_encrypted: encryptMetaToken(page.access_token),
+      page_access_token_encrypted: encryptMetaToken(page.access_token),
+      scopes: connectionState.connection?.scopes || [],
+      last_error: instagram?.id ? null : "missing_instagram_business_account_id"
+    });
+    return { status: 200, payload: { ok: true, page: sanitizePage(page), connection: summarizeMetaConnection(connection, process.env) } };
+  }
+  return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+}
+
+async function handleMetaTestConnection(req) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const connectionState = await readMetaConnectionState();
+  const summary = summarizeMetaConnection(connectionState.connection, process.env);
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      connection: summary,
+      table_missing: connectionState.table_missing,
+      error: connectionState.error,
+      automatic_available: summary.automatic_available,
+      missing_scopes: summary.missing_scopes,
+      message: summary.automatic_available ? "Meta automatico disponible." : META_MANUAL_MODE_NOTICE
+    }
+  };
+}
+
+async function handleMetaSettings(req) {
+  if (req.method === "GET") {
+    const result = await readMetaSettings();
+    return { status: 200, payload: { ok: true, settings: result.settings, updated_at: result.row?.updated_at || null, table_missing: result.table_missing, error: result.error } };
+  }
+  if (req.method === "POST") {
+    const body = await readJsonBody(req);
+    const result = await saveMetaSettings(body.settings || body);
+    return { status: 200, payload: { ok: true, settings: result.settings, updated_at: result.row?.updated_at || new Date().toISOString() } };
+  }
+  return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+}
+
+async function handleMetaPosts(req, url) {
+  if (req.method === "GET") {
+    const posts = await listMetaPosts(url);
+    return { status: 200, payload: { ok: true, posts: posts.posts, summary: metaPostsSummary(posts.posts), table_missing: posts.table_missing, error: posts.error } };
+  }
+  if (req.method === "POST") {
+    const body = await readJsonBody(req);
+    if (body.action) return handleMetaPostAction(body);
+    if (!body.id) return { status: 400, payload: { ok: false, error: "meta_post_id_required" } };
+    const post = await patchMetaPost(body.id, body);
+    return { status: 200, payload: { ok: true, post } };
+  }
+  if (req.method === "PUT") {
+    const body = await readJsonBody(req);
+    if (!body.id) return { status: 400, payload: { ok: false, error: "meta_post_id_required" } };
+    const patch = {
+      caption: String(body.caption || "").trim(),
+      image_url: cleanNullable(body.image_url),
+      scheduled_for: cleanNullable(body.scheduled_for),
+      status: body.status || "draft"
+    };
+    const post = await patchMetaPost(body.id, patch);
+    return { status: 200, payload: { ok: true, post } };
+  }
+  return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+}
+
+async function handleMetaPostAction(body = {}) {
+  const id = body.id;
+  const action = String(body.action || "").trim();
+  if (!id && !["generate_next"].includes(action)) return { status: 400, payload: { ok: false, error: "meta_post_id_required" } };
+
+  if (action === "generate_next") {
+    const result = await generateNextMetaPost({ platform: META_PLATFORMS.includes(body.platform) ? body.platform : "facebook", status: "draft" });
+    return { status: 200, payload: result };
+  }
+  if (action === "generate_image") {
+    const post = await readMetaPost(id);
+    const image_url = generateMetaImageSvg(post);
+    const updated = await patchMetaPost(id, { image_url, error_message: null });
+    return { status: 200, payload: { ok: true, post: updated } };
+  }
+  if (action === "publish_now") {
+    const post = await publishMetaPostById(id);
+    return { status: post.status === "published" ? 200 : 400, payload: { ok: post.status === "published", post, error: post.error_message || null } };
+  }
+  if (action === "retry") {
+    const post = await patchMetaPost(id, { status: "queued", error_message: null });
+    return { status: 200, payload: { ok: true, post } };
+  }
+  if (action === "skip") {
+    const post = await patchMetaPost(id, { status: "skipped", error_message: null });
+    return { status: 200, payload: { ok: true, post } };
+  }
+  return { status: 400, payload: { ok: false, error: "meta_action_not_supported" } };
+}
+
+async function handleMeta(req, url, resource) {
+  if (resource === "meta") return handleMetaDashboard(url);
+  if (resource === "meta/daily") return handleMetaDaily(req);
+  if (resource === "meta/autopublisher/run") return handleMetaDaily(req);
+  if (resource === "meta/connect") return handleMetaConnect(req, url);
+  if (resource === "meta/callback") return handleMetaCallback(req);
+  if (resource === "meta/disconnect") return handleMetaDisconnect(req);
+  if (resource === "meta/pages") return handleMetaPages(req);
+  if (resource === "meta/test-connection") return handleMetaTestConnection(req);
+  if (resource === "meta/settings") return handleMetaSettings(req);
+  if (resource === "meta/posts") return handleMetaPosts(req, url);
+  return { status: 404, payload: { ok: false, error: "meta_resource_not_found", resource } };
+}
 async function upsertSocialVideoProject(project, overrides = {}) {
   const row = socialVideoProjectRow(project, overrides);
   if (!row.id) throw new Error("social_video_project_id_required");
@@ -3042,6 +3658,15 @@ module.exports = async function handler(req, res) {
       return json(res, 500, { ok: false, error: "linkedin_daily_failed", message: String(error.message || error).slice(0, 500) });
     }
   }
+  if (resource === "meta/daily" || resource === "meta/autopublisher/run") {
+    if (!assertAdminOrCron(req, res)) return;
+    try {
+      const result = await handleMeta(req, url, resource);
+      return json(res, result.status, result.payload);
+    } catch (error) {
+      return json(res, 500, { ok: false, error: "meta_daily_failed", message: String(error.message || error).slice(0, 500) });
+    }
+  }
   if (resource === "seo-autogenerate/run") {
     if (!assertAdminOrCron(req, res)) return;
     try {
@@ -3097,6 +3722,10 @@ module.exports = async function handler(req, res) {
     }
     if (resource === "linkedin" || resource.startsWith("linkedin/")) {
       const result = await handleLinkedIn(req, url, resource);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "meta" || resource.startsWith("meta/")) {
+      const result = await handleMeta(req, url, resource);
       return json(res, result.status, result.payload);
     }
     if (resource === "kpis/settings") {

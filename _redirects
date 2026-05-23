@@ -2,6 +2,16 @@
 /api /api/health 200
 /api/ /api/health 200
 /api/contact /api/market-price?resource=contact 200
+/api/admin/meta /api/admin?resource=meta 200
+/api/admin/meta/connect /api/admin?resource=meta/connect 200
+/api/admin/meta/callback /api/admin?resource=meta/callback 200
+/api/admin/meta/disconnect /api/admin?resource=meta/disconnect 200
+/api/admin/meta/pages /api/admin?resource=meta/pages 200
+/api/admin/meta/test-connection /api/admin?resource=meta/test-connection 200
+/api/admin/meta/settings /api/admin?resource=meta/settings 200
+/api/admin/meta/posts /api/admin?resource=meta/posts 200
+/api/admin/meta/autopublisher/run /api/admin?resource=meta/autopublisher/run 200
+/backoffice/marketing/meta /admin.html 200
 /precio-metro-cuadrado/:city /api/seo-page?slug=precio-metro-cuadrado/:city 200
 /precio-metro-cuadrado/:city/ /api/seo-page?slug=precio-metro-cuadrado/:city 200
 /precio-alquiler/:city /api/seo-page?slug=precio-alquiler/:city 200

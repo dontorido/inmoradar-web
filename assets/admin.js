@@ -6,7 +6,13 @@ const MAX_RELEASE_FILE_BYTES = 3 * 1024 * 1024;
 const ANALYTICS_DEFAULT_DAYS = 7;
 const ANALYTICS_MAX_RANGE_DAYS = 90;
 const INITIAL_ADMIN_PATH = window.location.pathname || "";
-const INITIAL_MARKETING_SUBSECTION = INITIAL_ADMIN_PATH.includes("/backoffice/marketing/viraliza") ? "marketing-viraliza" : INITIAL_ADMIN_PATH.includes("/backoffice/marketing/linkedin") ? "marketing-linkedin" : "";
+const INITIAL_MARKETING_SUBSECTION = INITIAL_ADMIN_PATH.includes("/backoffice/marketing/viraliza")
+  ? "marketing-viraliza"
+  : INITIAL_ADMIN_PATH.includes("/backoffice/marketing/linkedin")
+    ? "marketing-linkedin"
+    : INITIAL_ADMIN_PATH.includes("/backoffice/marketing/meta")
+      ? "marketing-meta"
+      : "";
 const DEFAULT_VIDEO_PROPERTY_DATA = Object.freeze({
   ciudad: "Madrid",
   barrio: "Ventas",
@@ -222,6 +228,17 @@ const state = {
     lastPublication: null,
     manualNotice: ""
   },
+  meta: {
+    connection: null,
+    settings: {},
+    posts: [],
+    pages: [],
+    summary: {},
+    env: {},
+    currentPostId: "",
+    lastPublication: null,
+    manualNotice: ""
+  },
   alerts: []
 };
 
@@ -281,6 +298,23 @@ const els = {
   linkedinRows: document.querySelector("[data-linkedin-post-rows]"),
   linkedinCopyText: document.querySelector("[data-linkedin-copy-text]"),
   linkedinDownloadImage: document.querySelector("[data-linkedin-download-image]"),
+  metaRefresh: document.querySelector("[data-meta-refresh]"),
+  metaTest: document.querySelector("[data-meta-test]"),
+  metaConnect: document.querySelector("[data-meta-connect]"),
+  metaDisconnect: document.querySelector("[data-meta-disconnect]"),
+  metaLoadPages: document.querySelector("[data-meta-load-pages]"),
+  metaGenerateNext: document.querySelector("[data-meta-generate-next]"),
+  metaPause: document.querySelector("[data-meta-pause]"),
+  metaNotice: document.querySelector("[data-meta-notice]"),
+  metaConnection: document.querySelector("[data-meta-connection]"),
+  metaPages: document.querySelector("[data-meta-pages]"),
+  metaPageForm: document.querySelector("[data-meta-page-form]"),
+  metaSummary: document.querySelector("[data-meta-summary]"),
+  metaSettingsForm: document.querySelector("[data-meta-settings-form]"),
+  metaEditorForm: document.querySelector("[data-meta-editor-form]"),
+  metaRows: document.querySelector("[data-meta-post-rows]"),
+  metaGeneratePlatform: document.querySelector("[data-meta-generate-platform]"),
+  metaCopyCaption: document.querySelector("[data-meta-copy-caption]"),
 
   kpiForm: document.querySelector("[data-kpi-form]"),
   kpiReset: document.querySelector("[data-kpi-reset]"),
@@ -2053,6 +2087,7 @@ async function handleLinkedInOAuthCallbackFromUrl() {
   const stateParam = params.get("state");
   if (!code || !state.token) return;
   const expectedState = sessionStorage.getItem("inmoradar_linkedin_oauth_state") || "";
+  if (!expectedState) return;
   if (expectedState && stateParam && expectedState !== stateParam) {
     showStatus("LinkedIn OAuth: state no coincide. Reintenta la conexi\u00f3n.", "bad");
     return;
@@ -2091,6 +2126,343 @@ function downloadLinkedInImage() {
   link.click();
   link.remove();
   showStatus("Imagen de LinkedIn descargada.", "good");
+}
+
+function metaStatusLabel(value) {
+  const map = {
+    disconnected: "No conectado",
+    needs_connection: "Necesita conexion",
+    needs_page: "Selecciona Page",
+    needs_instagram: "Sin Instagram",
+    needs_permissions: "Faltan permisos",
+    needs_reauth: "Reautorizar",
+    connected: "Conectado",
+    expired: "Token expirado",
+    error: "Error",
+    draft: "Draft",
+    queued: "Queued",
+    publishing: "Publicando",
+    published: "Publicado",
+    failed: "Error",
+    skipped: "Omitido"
+  };
+  return map[String(value || "").toLowerCase()] || value || "-";
+}
+
+function renderMeta(payload = {}) {
+  state.meta.connection = payload.connection || null;
+  state.meta.settings = payload.settings || {};
+  state.meta.posts = payload.posts || [];
+  state.meta.summary = payload.summary || {};
+  state.meta.env = payload.env || {};
+  state.meta.autopublisher = payload.autopublisher || {};
+  state.meta.runs = payload.runs || [];
+  state.meta.lastPublication = payload.last_publication || null;
+  state.meta.manualNotice = payload.manual_mode_notice || "";
+  renderMetaNotice(payload);
+  renderMetaConnection();
+  renderMetaSettings();
+  renderMetaSummary();
+  renderMetaPosts();
+  updateMetaPublishControls();
+  const selected = state.meta.posts.find((post) => post.id === state.meta.currentPostId) || state.meta.posts[0] || null;
+  fillMetaEditor(selected);
+}
+
+function updateMetaPublishControls() {
+  if (!els.metaEditorForm) return;
+  const publishButtons = els.metaEditorForm.querySelectorAll('[data-meta-post-action="publish_now"]');
+  const connected = state.meta.connection?.status === "connected" && Boolean(state.meta.connection?.facebook_page_id);
+  publishButtons.forEach((button) => {
+    button.hidden = !connected;
+    button.disabled = !connected;
+  });
+}
+
+function renderMetaNotice(payload = {}) {
+  if (!els.metaNotice) return;
+  const storage = payload.storage || {};
+  const missing = storage.settings_table_missing || storage.posts_table_missing || storage.connection_table_missing || storage.runs_table_missing;
+  const messages = [];
+  if (missing) messages.push("Faltan tablas de Meta. Ejecuta database/marketing-meta.sql en Supabase.");
+  if (payload.manual_mode_notice) messages.push(payload.manual_mode_notice);
+  if (storage.connection_error && !storage.connection_table_missing) messages.push(storage.connection_error);
+  if (storage.settings_error && !storage.settings_table_missing) messages.push(storage.settings_error);
+  if (storage.posts_error && !storage.posts_table_missing) messages.push(storage.posts_error);
+  if (storage.runs_error && !storage.runs_table_missing) messages.push(storage.runs_error);
+  els.metaNotice.innerHTML = messages.map((message) => `<p>${escapeHtml(message)}</p>`).join("");
+  els.metaNotice.hidden = !messages.length;
+}
+
+function renderMetaConnection() {
+  if (!els.metaConnection) return;
+  const c = state.meta.connection || {};
+  const env = state.meta.env || {};
+  const autopublisher = state.meta.autopublisher || {};
+  els.metaConnection.innerHTML = `
+    <div class="admin-linkedin-status-row"><span>Estado</span>${chip(metaStatusLabel(c.status || "disconnected"), statusTone(c.status))}</div>
+    <div class="admin-linkedin-status-row"><span>Facebook Page</span><strong>${escapeHtml(c.facebook_page_name || env.facebook_page_name || "-")}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Page ID</span><code>${escapeHtml(c.facebook_page_id || "-")}</code></div>
+    <div class="admin-linkedin-status-row"><span>Instagram ID</span><code>${escapeHtml(c.instagram_business_account_id || "-")}</code></div>
+    <div class="admin-linkedin-status-row"><span>Autopublisher</span>${chip(autopublisher.enabled ? "Activo" : "Pausado", autopublisher.enabled ? "published" : "draft")}</div>
+    <div class="admin-linkedin-status-row"><span>Frecuencia</span><strong>${escapeHtml(`${autopublisher.frequency_days || 1} dia(s)`)}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Proximo intento</span><strong>${escapeHtml(formatDate(autopublisher.next_publication))}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Permisos faltantes</span><strong>${escapeHtml((c.missing_scopes || []).join(", ") || "-")}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Token expira</span><strong>${escapeHtml(formatDate(c.token_expires_at))}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Ultimo error</span><strong>${escapeHtml(c.last_error || "-")}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Ultima publicacion</span><strong>${escapeHtml(formatDate(state.meta.lastPublication?.published_at))}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Graph API</span><strong>${escapeHtml(env.graph_version || "-")}</strong></div>
+  `;
+}
+
+function renderMetaPages(pages = state.meta.pages || []) {
+  if (!els.metaPages) return;
+  const current = state.meta.connection?.facebook_page_id || "";
+  els.metaPages.innerHTML = [
+    `<option value="">${pages.length ? "Selecciona Page" : "Cargar Pages"}</option>`,
+    ...pages.map((page) => {
+      const instagram = page.instagram_business_account?.id ? ` · IG ${page.instagram_business_account.id}` : " · sin IG";
+      return `<option value="${escapeHtml(page.id)}"${page.id === current ? " selected" : ""}>${escapeHtml(page.name || page.id)}${escapeHtml(instagram)}</option>`;
+    })
+  ].join("");
+}
+
+function renderMetaSettings() {
+  if (!els.metaSettingsForm) return;
+  const form = els.metaSettingsForm;
+  const settings = state.meta.settings || {};
+  const set = (name, value) => {
+    const field = form.elements[name];
+    if (field) field.value = value ?? "";
+  };
+  set("autopost_enabled", String(settings.autopost_enabled === true));
+  set("facebook_enabled", String(settings.facebook_enabled !== false));
+  set("instagram_enabled", String(settings.instagram_enabled !== false));
+  set("frequency_days", String(settings.frequency_days || 1));
+  set("max_per_day", String(settings.max_per_day || 1));
+  set("preferred_time", settings.preferred_time || "10:00");
+  set("timezone", settings.timezone || "Europe/Madrid");
+  set("content_mode", settings.content_mode || "seo_landings");
+}
+
+function renderMetaSummary() {
+  if (!els.metaSummary) return;
+  const summary = state.meta.summary || {};
+  els.metaSummary.innerHTML = [
+    stat("Total", summary.total || 0, { id: "meta-total", hint: "Posts en cola" }),
+    stat("Draft", summary.draft || 0, { id: "meta-draft", hint: "Borradores" }),
+    stat("Queued", summary.queued || 0, { id: "meta-queued", hint: "Listos" }),
+    stat("Publicados", summary.published || 0, { id: "meta-published", hint: "Facebook o Instagram" }),
+    stat("Errores", summary.failed || 0, { id: "meta-failed", hint: "Revisar permisos o imagen" }),
+    stat("Omitidos", summary.skipped || 0, { id: "meta-skipped", hint: "Saltados por reglas" })
+  ].join("");
+}
+
+function renderMetaPosts() {
+  if (!els.metaRows) return;
+  const rows = state.meta.posts || [];
+  if (!rows.length) {
+    els.metaRows.innerHTML = '<tr><td colspan="7">No hay publicaciones Meta todavia.</td></tr>';
+    return;
+  }
+  els.metaRows.innerHTML = rows.map((post) => `
+    <tr data-meta-post-id="${escapeHtml(post.id)}">
+      <td>${escapeHtml(formatDate(post.created_at))}</td>
+      <td>${chip(post.platform || "-", post.platform === "instagram" ? "ready" : "draft")}</td>
+      <td><strong>${escapeHtml(post.source_slug || post.source_type || "-")}</strong><div class="admin-subtle">${escapeHtml(post.utm_campaign || "-")}</div></td>
+      <td>${chip(metaStatusLabel(post.status), statusTone(post.status))}</td>
+      <td>${escapeHtml(formatDate(post.published_at))}</td>
+      <td><span class="admin-linkedin-error">${escapeHtml(post.error_message || "-")}</span></td>
+      <td>
+        <div class="admin-row-actions">
+          <button class="admin-icon-button admin-linkedin-action-button" type="button" data-meta-row-action="view" data-meta-id="${escapeHtml(post.id)}" title="Ver post">Ver</button>
+          <button class="admin-icon-button admin-linkedin-action-button" type="button" data-meta-row-action="publish_now" data-meta-id="${escapeHtml(post.id)}" title="Publicar ahora">Publicar</button>
+          <button class="admin-icon-button admin-linkedin-action-button" type="button" data-meta-row-action="skip" data-meta-id="${escapeHtml(post.id)}" title="Omitir">Omitir</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+}
+
+function fillMetaEditor(post) {
+  if (!els.metaEditorForm) return;
+  const form = els.metaEditorForm;
+  const selected = post || {};
+  state.meta.currentPostId = selected.id || "";
+  const set = (name, value) => {
+    const field = form.elements[name];
+    if (field) field.value = value ?? "";
+  };
+  set("id", selected.id || "");
+  set("platform", selected.platform || "");
+  set("status", selected.status || "draft");
+  set("source_url", selected.source_url || "");
+  set("caption", selected.caption || "");
+  set("image_url", selected.image_url || "");
+}
+
+function currentMetaPost() {
+  return (state.meta.posts || []).find((post) => post.id === state.meta.currentPostId) || null;
+}
+
+function collectMetaSettings() {
+  const data = new FormData(els.metaSettingsForm);
+  return {
+    autopost_enabled: data.get("autopost_enabled") === "true",
+    facebook_enabled: data.get("facebook_enabled") === "true",
+    instagram_enabled: data.get("instagram_enabled") === "true",
+    frequency_days: Number(data.get("frequency_days") || 1),
+    max_per_day: Number(data.get("max_per_day") || 1),
+    preferred_time: String(data.get("preferred_time") || "10:00"),
+    timezone: String(data.get("timezone") || "Europe/Madrid"),
+    content_mode: String(data.get("content_mode") || "seo_landings")
+  };
+}
+
+function collectMetaPost() {
+  const data = new FormData(els.metaEditorForm);
+  return {
+    id: String(data.get("id") || ""),
+    caption: String(data.get("caption") || ""),
+    image_url: String(data.get("image_url") || ""),
+    status: String(data.get("status") || "draft")
+  };
+}
+
+async function loadMeta() {
+  if (!els.metaConnection) return;
+  const payload = await api("/api/admin?resource=meta");
+  renderMeta(payload);
+}
+
+async function saveMetaSettings() {
+  showStatus("Guardando ajustes de Meta...");
+  const payload = await api("/api/admin?resource=meta/settings", {
+    method: "POST",
+    body: JSON.stringify({ settings: collectMetaSettings() })
+  });
+  state.meta.settings = payload.settings || state.meta.settings;
+  renderMetaSettings();
+  showStatus("Ajustes de Meta guardados.", "good");
+}
+
+async function pauseMetaAutopublisher() {
+  if (!els.metaSettingsForm) return;
+  const field = els.metaSettingsForm.elements.autopost_enabled;
+  if (field) field.value = "false";
+  await saveMetaSettings();
+  showStatus("Meta Autopublisher pausado.", "good");
+}
+
+async function connectMeta() {
+  const payload = await api("/api/admin?resource=meta/connect");
+  if (payload.state) sessionStorage.setItem("inmoradar_meta_oauth_state", payload.state);
+  if (!payload.url) throw new Error("meta_oauth_url_missing");
+  window.location.href = payload.url;
+}
+
+async function disconnectMeta() {
+  if (!window.confirm("Desconectar Meta y pausar publicacion externa?")) return;
+  await api("/api/admin?resource=meta/disconnect", { method: "POST", body: JSON.stringify({}) });
+  await loadMeta();
+  showStatus("Meta desconectado.", "good");
+}
+
+async function loadMetaPages() {
+  showStatus("Cargando Pages de Meta...");
+  const payload = await api("/api/admin?resource=meta/pages");
+  state.meta.pages = payload.pages || [];
+  renderMetaPages();
+  showStatus(state.meta.pages.length ? "Pages cargadas." : "No hay Pages disponibles.", state.meta.pages.length ? "good" : "neutral");
+}
+
+async function saveMetaPageSelection() {
+  const data = new FormData(els.metaPageForm);
+  const pageId = String(data.get("page_id") || "");
+  if (!pageId) throw new Error("Selecciona una Facebook Page.");
+  const payload = await api("/api/admin?resource=meta/pages", {
+    method: "POST",
+    body: JSON.stringify({ page_id: pageId })
+  });
+  if (payload.connection) state.meta.connection = payload.connection;
+  await loadMeta();
+  showStatus("Facebook Page guardada.", "good");
+}
+
+async function testMetaConnection() {
+  const payload = await api("/api/admin?resource=meta/test-connection", { method: "POST", body: JSON.stringify({}) });
+  if (payload.connection) state.meta.connection = payload.connection;
+  renderMetaConnection();
+  showStatus(payload.message || "Conexion Meta comprobada.", payload.automatic_available ? "good" : "neutral");
+}
+
+async function generateNextMetaPost() {
+  const platform = els.metaGeneratePlatform?.value || "facebook";
+  showStatus(`Generando contenido Meta para ${platform}...`);
+  const payload = await api("/api/admin?resource=meta/posts", {
+    method: "POST",
+    body: JSON.stringify({ action: "generate_next", platform })
+  });
+  await loadMeta();
+  const post = payload.post || currentMetaPost();
+  if (post) fillMetaEditor(post);
+  showStatus(payload.skipped ? `Meta omitido: ${payload.reason}` : "Borrador Meta generado.", payload.skipped ? "neutral" : "good");
+}
+
+async function saveMetaPost() {
+  const input = collectMetaPost();
+  if (!input.id) throw new Error("Selecciona un post Meta primero.");
+  showStatus("Guardando post Meta...");
+  const payload = await api("/api/admin?resource=meta/posts", {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
+  await loadMeta();
+  fillMetaEditor(payload.post || currentMetaPost());
+  showStatus("Post Meta guardado.", "good");
+}
+
+async function runMetaAction(action, id = state.meta.currentPostId) {
+  if (!id) throw new Error("Selecciona un post Meta primero.");
+  showStatus(`Meta: ${action}...`);
+  const payload = await api("/api/admin?resource=meta/posts", {
+    method: "POST",
+    body: JSON.stringify({ action, id })
+  });
+  await loadMeta();
+  const post = payload.post || currentMetaPost();
+  if (post) fillMetaEditor(post);
+  showStatus(payload.ok === false ? (payload.error || "Meta no publicado.") : "Accion Meta completada.", payload.ok === false ? "bad" : "good");
+}
+
+async function handleMetaOAuthCallbackFromUrl() {
+  const params = new URLSearchParams(window.location.search || "");
+  const code = params.get("code");
+  const stateParam = params.get("state");
+  if (!code || !state.token) return;
+  const expectedState = sessionStorage.getItem("inmoradar_meta_oauth_state") || "";
+  if (!expectedState) return;
+  if (stateParam && expectedState !== stateParam) {
+    showStatus("Meta OAuth: state no coincide. Reintenta la conexion.", "bad");
+    return;
+  }
+  sessionStorage.removeItem("inmoradar_meta_oauth_state");
+  showStatus("Conectando Meta...");
+  await api("/api/admin?resource=meta/callback", {
+    method: "POST",
+    body: JSON.stringify({ code, state: stateParam })
+  });
+  params.delete("code");
+  params.delete("state");
+  const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash || ""}`;
+  window.history.replaceState({}, document.title, next);
+  await loadMeta();
+  showStatus("Meta conectado. Carga Pages para seleccionar Facebook Page.", "good");
+}
+
+function copyMetaCaption() {
+  const post = { ...currentMetaPost(), ...collectMetaPost() };
+  return copyToClipboard(post.caption || "");
 }
 function renderKpis(payload) {
   state.kpis.schema = payload.schema || [];
@@ -4693,6 +5065,7 @@ async function loadAll() {
       loadSeo(),
       loadSeoAutogeneration(),
       loadLinkedIn(),
+      loadMeta(),
       loadKpis(),
       loadParking(),
       loadReleaseHubs(),
@@ -4996,6 +5369,72 @@ if (els.linkedinRows) {
     if (!row) return;
     const post = state.linkedin.posts.find((item) => item.id === row.dataset.linkedinPostId);
     if (post) fillLinkedInEditor(post);
+  });
+}
+if (els.metaRefresh) {
+  els.metaRefresh.addEventListener("click", () => loadMeta().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.metaTest) {
+  els.metaTest.addEventListener("click", () => testMetaConnection().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.metaConnect) {
+  els.metaConnect.addEventListener("click", () => connectMeta().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.metaDisconnect) {
+  els.metaDisconnect.addEventListener("click", () => disconnectMeta().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.metaLoadPages) {
+  els.metaLoadPages.addEventListener("click", () => loadMetaPages().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.metaGenerateNext) {
+  els.metaGenerateNext.addEventListener("click", () => generateNextMetaPost().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.metaPause) {
+  els.metaPause.addEventListener("click", () => pauseMetaAutopublisher().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.metaSettingsForm) {
+  els.metaSettingsForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveMetaSettings().catch((error) => showStatus(error.message, "bad"));
+  });
+}
+if (els.metaPageForm) {
+  els.metaPageForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveMetaPageSelection().catch((error) => showStatus(error.message, "bad"));
+  });
+}
+if (els.metaEditorForm) {
+  els.metaEditorForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveMetaPost().catch((error) => showStatus(error.message, "bad"));
+  });
+  els.metaEditorForm.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-meta-post-action]");
+    if (!button) return;
+    runMetaAction(button.dataset.metaPostAction).catch((error) => showStatus(error.message, "bad"));
+  });
+}
+if (els.metaCopyCaption) {
+  els.metaCopyCaption.addEventListener("click", () => copyMetaCaption().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.metaRows) {
+  els.metaRows.addEventListener("click", (event) => {
+    const actionButton = event.target.closest("[data-meta-row-action]");
+    if (actionButton) {
+      const id = actionButton.dataset.metaId;
+      if (actionButton.dataset.metaRowAction === "view") {
+        const post = state.meta.posts.find((item) => item.id === id);
+        if (post) fillMetaEditor(post);
+        return;
+      }
+      runMetaAction(actionButton.dataset.metaRowAction, id).catch((error) => showStatus(error.message, "bad"));
+      return;
+    }
+    const row = event.target.closest("[data-meta-post-id]");
+    if (!row) return;
+    const post = state.meta.posts.find((item) => item.id === row.dataset.metaPostId);
+    if (post) fillMetaEditor(post);
   });
 }
 els.kpiForm.addEventListener("submit", (event) => {
@@ -5333,4 +5772,5 @@ renderVideoPipeline();
 renderVideoProjects();
 renderVideoReadiness();
 handleLinkedInOAuthCallbackFromUrl().catch((error) => showStatus(error.message, "bad"));
+handleMetaOAuthCallbackFromUrl().catch((error) => showStatus(error.message, "bad"));
 loadAll();

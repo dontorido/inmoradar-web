@@ -1,4 +1,4 @@
-name: SEO and LinkedIn marketing cron
+name: SEO and marketing cron
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  publish-seo-landing:
+  publish-seo-and-social:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger InmoRadar SEO cron
@@ -15,7 +15,7 @@ jobs:
           SITE_URL: https://www.inmoradar.app
         run: |
           if [ -z "$CRON_SECRET" ]; then
-            echo "::error title=Missing CRON_SECRET::Falta el secret CRON_SECRET en GitHub Actions. Añádelo en Settings > Secrets and variables > Actions > New repository secret y usa el mismo valor que en Vercel."
+            echo "::error title=Missing CRON_SECRET::Falta el secret CRON_SECRET en GitHub Actions. Anadelo en Settings > Secrets and variables > Actions > New repository secret y usa el mismo valor que en Vercel."
             exit 1
           fi
           curl --fail-with-body \
@@ -31,7 +31,7 @@ jobs:
           SITE_URL: https://www.inmoradar.app
         run: |
           if [ -z "$CRON_SECRET" ]; then
-            echo "::error title=Missing CRON_SECRET::Falta el secret CRON_SECRET en GitHub Actions. Añádelo en Settings > Secrets and variables > Actions > New repository secret y usa el mismo valor que en Vercel."
+            echo "::error title=Missing CRON_SECRET::Falta el secret CRON_SECRET en GitHub Actions. Anadelo en Settings > Secrets and variables > Actions > New repository secret y usa el mismo valor que en Vercel."
             exit 1
           fi
           response="$(curl --fail-with-body \
@@ -44,6 +44,29 @@ jobs:
             "$SITE_URL/api/admin?resource=linkedin/daily")"
           echo "$response"
           if echo "$response" | grep -q '"ok":false'; then
-            echo "::error title=LinkedIn cron failed::El endpoint de LinkedIn devolvió ok=false. Revisa el log anterior."
+            echo "::error title=LinkedIn cron failed::El endpoint de LinkedIn devolvio ok=false. Revisa el log anterior."
+            exit 1
+          fi
+
+      - name: Trigger InmoRadar Meta autopublisher
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SITE_URL: https://www.inmoradar.app
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error title=Missing CRON_SECRET::Falta el secret CRON_SECRET en GitHub Actions. Anadelo en Settings > Secrets and variables > Actions > New repository secret y usa el mismo valor que en Vercel."
+            exit 1
+          fi
+          response="$(curl --fail-with-body \
+            --silent \
+            --show-error \
+            --retry 2 \
+            --retry-delay 5 \
+            --request POST \
+            --header "x-cron-secret: $CRON_SECRET" \
+            "$SITE_URL/api/admin?resource=meta/daily")"
+          echo "$response"
+          if echo "$response" | grep -q '"ok":false'; then
+            echo "::error title=Meta cron failed::El endpoint de Meta devolvio ok=false. Revisa el log anterior."
             exit 1
           fi
