@@ -402,6 +402,12 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+function tooltipAttrs(message) {
+  if (!message) return "";
+  const safeMessage = escapeHtml(message);
+  return `data-tooltip="${safeMessage}" title="${safeMessage}" tabindex="0"`;
+}
+
 let adminTooltipEl = null;
 
 function tooltipTargetFromEvent(event) {
@@ -814,8 +820,9 @@ function scoreTone(value) {
 function stat(label, value, options = {}) {
   const id = options.id || slugId(label);
   const isZero = Number(value || 0) === 0;
+  const tooltip = tooltipAttrs(options.tooltip);
   return `
-    <div class="admin-stat${isZero ? " is-zero" : ""}" data-testid="stat-row-${escapeHtml(id)}">
+    <div class="admin-stat${isZero ? " is-zero" : ""}" data-testid="stat-row-${escapeHtml(id)}"${tooltip ? ` ${tooltip}` : ""}>
       <div>
         <span>${escapeHtml(label)}</span>
         ${options.hint ? `<small>${escapeHtml(options.hint)}</small>` : ""}
@@ -1018,6 +1025,19 @@ function formatRate(value) {
   return `${number.toFixed(number >= 10 ? 0 : 1)}%`;
 }
 
+const analyticsKpiTooltips = Object.freeze({
+  events: "Eventos anónimos propios recogidos para el funnel SEO en la ventana seleccionada. Sirve como volumen base, no como usuarios únicos.",
+  pageViews: "Vistas de páginas SEO registradas en la ventana seleccionada. No equivale a usuarios únicos ni a impresiones orgánicas.",
+  installIntent: "Clics hacia Chrome Web Store o hacia el flujo de instalación. Mide intención, no instalación real.",
+  chromeStore: "Usuarios o sesiones que han hecho clic hacia Chrome Web Store o hacia el flujo de instalación. Mide intención, no instalación real.",
+  calculator: "Eventos de calculadora usada/completada en páginas SEO. Mide interacción cualificada, no checkout ni instalación.",
+  scroll: "Eventos de profundidad de scroll al 50%/90% en páginas SEO. Mide lectura o interacción, no conversión.",
+  waitlist: "Registros en waitlist desde el funnel. Mide interés declarado, no checkout, pago ni instalación.",
+  checkout: "Checkouts creados o iniciados respecto al paso anterior del funnel. No equivale necesariamente a pago completado.",
+  visits: "Visitas o page views registradas para esta página SEO dentro de la ventana seleccionada.",
+  score: "Puntuación interna basada en intención de instalación, checkout, waitlist, calculadora, scroll e interacción. No es una nota SEO sobre 100."
+});
+
 function analyticsPageHref(row = {}) {
   const raw = String(row.page_path || row.page_url || row.page || row.slug || "").trim();
   if (!raw || raw === "unknown") return "";
@@ -1034,8 +1054,6 @@ function analyticsRow(row = {}) {
   const label = row.page || row.page_path || row.slug || "unknown";
   const href = analyticsPageHref(row);
   const detail = [row.template_type, row.city, row.topic].filter(Boolean).join(" · ") || row.content_type || "página";
-  const installIntentTooltip = "Clics en CTAs de instalación o salida hacia Chrome Web Store. No confirma instalación real de la extensión.";
-  const scoreTooltip = "Puntuación interna basada en intención de instalación, checkout, waitlist, calculadora, scroll e interacción. No es una nota SEO sobre 100.";
   return `
     <article class="admin-analytics-item">
       <div class="admin-analytics-item-head">
@@ -1046,12 +1064,12 @@ function analyticsRow(row = {}) {
         ${href ? `<a class="admin-button tiny ghost admin-analytics-page-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">Ver p&aacute;gina</a>` : ""}
       </div>
       <dl>
-        <div><dt>Visitas</dt><dd>${escapeHtml(row.visits || 0)}</dd></div>
-        <div><dt data-tooltip="${escapeHtml(installIntentTooltip)}" title="${escapeHtml(installIntentTooltip)}">Intención</dt><dd>${escapeHtml(formatRate(row.install_rate))}</dd></div>
-        <div><dt>Calc</dt><dd>${escapeHtml(row.calculator_used_count || 0)}/${escapeHtml(row.calculator_completed_count || 0)}</dd></div>
-        <div><dt>Scroll</dt><dd>${escapeHtml(row.scroll_depth_50_count || 0)}/${escapeHtml(row.scroll_depth_90_count || 0)}</dd></div>
-        <div><dt>Checkout</dt><dd>${escapeHtml(row.checkout_created_count || 0)}</dd></div>
-        <div><dt data-tooltip="${escapeHtml(scoreTooltip)}" title="${escapeHtml(scoreTooltip)}">Índice interno</dt><dd>${escapeHtml(row.performance_score || 0)}</dd></div>
+        <div><dt ${tooltipAttrs(analyticsKpiTooltips.visits)}>Visitas</dt><dd>${escapeHtml(row.visits || 0)}</dd></div>
+        <div><dt ${tooltipAttrs(analyticsKpiTooltips.installIntent)}>Intención</dt><dd>${escapeHtml(formatRate(row.install_rate))}</dd></div>
+        <div><dt ${tooltipAttrs(analyticsKpiTooltips.calculator)}>Calc</dt><dd>${escapeHtml(row.calculator_used_count || 0)}/${escapeHtml(row.calculator_completed_count || 0)}</dd></div>
+        <div><dt ${tooltipAttrs(analyticsKpiTooltips.scroll)}>Scroll</dt><dd>${escapeHtml(row.scroll_depth_50_count || 0)}/${escapeHtml(row.scroll_depth_90_count || 0)}</dd></div>
+        <div><dt ${tooltipAttrs(analyticsKpiTooltips.checkout)}>Checkout</dt><dd>${escapeHtml(row.checkout_created_count || 0)}</dd></div>
+        <div><dt ${tooltipAttrs(analyticsKpiTooltips.score)}>Índice interno</dt><dd>${escapeHtml(row.performance_score || 0)}</dd></div>
       </dl>
     </article>
   `;
@@ -1140,17 +1158,44 @@ function renderAnalyticsPanel(targets, payload, context = {}) {
   const windowLabel = analyticsWindowLabel(payload, days);
 
   targets.summary.innerHTML = [
-    stat("Eventos", summary.total_events || 0, { id: "analytics-events", hint: payload.table_missing ? "Ejecuta database/owned-analytics-events.sql" : `${windowLabel} - eventos anónimos propios` }),
-    stat("Page views", summary.page_views || 0, { id: "analytics-page-views" }),
+    stat("Eventos", summary.total_events || 0, {
+      id: "analytics-events",
+      hint: payload.table_missing ? "Ejecuta database/owned-analytics-events.sql" : `${windowLabel} - eventos anónimos propios`,
+      tooltip: analyticsKpiTooltips.events
+    }),
+    stat("Page views", summary.page_views || 0, {
+      id: "analytics-page-views",
+      tooltip: analyticsKpiTooltips.pageViews
+    }),
     stat("Intención instalación", (summary.install_clicks || 0) + (summary.chrome_store_clicks || 0), {
       id: "analytics-install-intent",
-      hint: `${formatRate(summary.install_click_rate)} click/view. No confirma instalación real.`
+      hint: `${formatRate(summary.install_click_rate)} click/view. No confirma instalación real.`,
+      tooltip: analyticsKpiTooltips.installIntent
     }),
-    stat("Chrome Store", summary.chrome_store_clicks || 0, { id: "analytics-chrome-store", hint: "Salidas hacia Chrome Web Store" }),
-    stat("Calculadora", `${summary.calculator_used || 0}/${summary.calculator_completed || 0}`, { id: "analytics-calculators", hint: `${formatRate(summary.calculator_completion_rate)} completadas` }),
-    stat("Scroll", `${summary.scroll_depth_50 || 0}/${summary.scroll_depth_90 || 0}`, { id: "analytics-scroll", hint: "50/90 de profundidad" }),
-    stat("Waitlist", summary.waitlist_submit || 0, { id: "analytics-waitlist" }),
-    stat("Checkout", summary.checkout_created || 0, { id: "analytics-checkout", hint: `${formatRate(summary.checkout_created_rate)} creado/iniciado` })
+    stat("Chrome Store", summary.chrome_store_clicks || 0, {
+      id: "analytics-chrome-store",
+      hint: "Salidas hacia Chrome Web Store",
+      tooltip: analyticsKpiTooltips.chromeStore
+    }),
+    stat("Calculadora", `${summary.calculator_used || 0}/${summary.calculator_completed || 0}`, {
+      id: "analytics-calculators",
+      hint: `${formatRate(summary.calculator_completion_rate)} completadas`,
+      tooltip: analyticsKpiTooltips.calculator
+    }),
+    stat("Scroll", `${summary.scroll_depth_50 || 0}/${summary.scroll_depth_90 || 0}`, {
+      id: "analytics-scroll",
+      hint: "50/90 de profundidad",
+      tooltip: analyticsKpiTooltips.scroll
+    }),
+    stat("Waitlist", summary.waitlist_submit || 0, {
+      id: "analytics-waitlist",
+      tooltip: analyticsKpiTooltips.waitlist
+    }),
+    stat("Checkout", summary.checkout_created || 0, {
+      id: "analytics-checkout",
+      hint: `${formatRate(summary.checkout_created_rate)} creado/iniciado`,
+      tooltip: analyticsKpiTooltips.checkout
+    })
   ].join("");
 
   if (payload.table_missing || (payload.warning && !payload.persisted)) {

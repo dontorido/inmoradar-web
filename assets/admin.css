@@ -3600,6 +3600,21 @@
   overflow-wrap: anywhere;
 }
 
+.admin-seo-performance-panel [data-tooltip] {
+  cursor: help;
+}
+
+.admin-seo-performance-panel [data-tooltip]:focus-visible {
+  outline: 2px solid rgba(11, 102, 72, .42);
+  outline-offset: 2px;
+}
+
+.admin-seo-performance-panel .admin-stat[data-tooltip] span,
+.admin-seo-performance-panel .admin-analytics-item dt[data-tooltip] {
+  text-decoration: underline dotted rgba(10, 20, 15, .36);
+  text-underline-offset: 3px;
+}
+
 .admin-seo-performance-panel .admin-stat small {
   max-width: none;
   margin-top: 4px;
