@@ -125,7 +125,7 @@ function brandMarkIcon() {
 
 function seoSocialLinks() {
   return `
-      <nav class="footer-social seo-footer-social" aria-label="Redes sociales InmoRadar">
+      <nav class="footer-social" aria-label="Redes sociales InmoRadar" data-footer-social>
         <a href="https://www.instagram.com/inmoradares/" target="_blank" rel="noopener noreferrer" aria-label="Instagram de InmoRadar">
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" stroke="none"></circle></svg>
           <span>Instagram</span>
@@ -135,6 +135,66 @@ function seoSocialLinks() {
           <span>TikTok</span>
         </a>
       </nav>`;
+}
+
+function siteHeaderHtml() {
+  return `<header class="site-header" data-site-header>
+    <nav class="nav container" aria-label="Principal">
+      <a class="brand" href="/" aria-label="InmoRadar">
+        <span class="brand-mark" aria-hidden="true">${brandMarkIcon()}</span>
+        <span><strong>Inmo</strong><em>Radar</em></span>
+      </a>
+      <div class="nav-links" aria-label="Secciones">
+        <a href="/que-analiza">Qué analiza</a>
+        <a href="/datos">APIs</a>
+        <a href="/noticias">Noticias</a>
+        <a href="/faq">FAQ</a>
+        <a href="/contacto">Contacto</a>
+      </div>
+      <div class="nav-actions">
+        <div class="language-switch" aria-label="Idioma">
+          <button type="button" data-lang="es" aria-pressed="true"><span class="flag flag-es" aria-hidden="true"></span><span>ES</span></button>
+          <button type="button" data-lang="en" aria-pressed="false"><span class="flag flag-en" aria-hidden="true"></span><span>EN</span></button>
+        </div>
+        <a class="client-link" href="/clientes" aria-label="Área de clientes" title="Área de clientes"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle></svg></a>
+        <button class="button" type="button" data-install-button data-install-source="seo_nav">Empezar gratis</button>
+      </div>
+      <button class="mobile-toggle" type="button" data-mobile-toggle aria-label="Abrir menú" aria-expanded="false">
+        <span aria-hidden="true">${brandMarkIcon()}</span>
+      </button>
+    </nav>
+    <div class="mobile-panel" data-mobile-panel>
+      <a href="/que-analiza">Qué analiza</a>
+      <a href="/datos">APIs</a>
+      <a href="/noticias">Noticias</a>
+      <a href="/clientes">Clientes</a>
+      <a href="/faq">FAQ</a>
+      <a href="/contacto">Contacto</a>
+    </div>
+  </header>`;
+}
+
+function siteFooterHtml() {
+  return `<footer class="site-footer">
+    <div class="container">
+      <div class="footer-top">
+        <div>
+          <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">${brandMarkIcon()}</span><span><strong>Inmo</strong><em>Radar</em></span></a>
+          <p class="footer-tagline">Analiza anuncios antes de contactar.</p>
+          <button class="button" type="button" data-install-button data-install-source="seo_footer">Empezar gratis</button>
+        </div>
+        <div class="footer-col"><h4>Producto</h4><a href="/que-analiza">Qué analiza</a><a href="/datos">APIs</a></div>
+        <div class="footer-col"><h4>Contenido</h4><a href="/noticias">Noticias</a><a href="/faq">FAQ</a></div>
+        <div class="footer-col"><h4>Compañía</h4><a href="/contacto">Contacto</a><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></div>
+        <span class="footer-status">Online</span>
+      </div>
+      <div class="footer-word">INMORADAR</div>
+      <div class="footer-social-row">
+        ${seoSocialLinks()}
+      </div>
+      <div class="footer-meta"><span>&copy; <span data-year></span> InmoRadar</span><span>v1.0 · Navegadores modernos</span></div>
+    </div>
+  </footer>`;
 }
 
 function seoPageScript() {
@@ -298,8 +358,7 @@ function renderLandingHtml(landing) {
     }
     .seo-page::selection,
     .seo-page ::selection { background: var(--seo-accent); color: #FFFFFF; }
-    .seo-shell a:not(.seo-button),
-    .seo-global-footer a {
+    .seo-shell a:not(.seo-button) {
       color: #09090B;
       text-decoration: underline;
       text-decoration-color: rgba(255,69,0,.42);
@@ -307,23 +366,9 @@ function renderLandingHtml(landing) {
       text-underline-offset: 4px;
       transition: color 140ms ease, text-decoration-color 140ms ease, border-color 140ms ease, background 140ms ease, transform 140ms ease;
     }
-    .seo-shell a:not(.seo-button):hover,
-    .seo-global-footer a:hover { color: #FF4500; text-decoration-color: #FF4500; }
+    .seo-shell a:not(.seo-button):hover { color: #FF4500; text-decoration-color: #FF4500; }
     .seo-page .site-header a { text-decoration: none; }
     .seo-shell { width: min(1180px, calc(100% - 48px)); margin: 0 auto; padding: 88px 0 104px; }
-    .seo-global-footer {
-      background: #09090B;
-      border-top: 0;
-      color: rgba(255,255,255,.62);
-      padding: 42px 0;
-    }
-    .seo-global-footer .footer-grid { width: min(1180px, calc(100% - 48px)); }
-    .seo-global-footer .footer-social a {
-      color: rgba(255,255,255,.78);
-      text-decoration: none;
-      text-decoration-color: transparent;
-    }
-    .seo-global-footer .footer-social a:hover { color: #FFFFFF; text-decoration: none; }
     .seo-breadcrumb {
       align-items: center;
       color: #71717A;
@@ -734,45 +779,22 @@ function renderLandingHtml(landing) {
       .seo-hero-badges { grid-template-columns: 1fr; }
       .seo-inline-cta { align-items: stretch; }
     }
+    @media (max-width: 480px) {
+      .seo-page .site-header .nav { gap: 12px; }
+      .seo-page .site-header .language-switch { display: none; }
+      .seo-page .site-header .mobile-toggle { flex: 0 0 40px; height: 40px; width: 40px; }
+    }
     @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
   </style>
   ${structuredData(landing, canonical)}
 </head>
 <body class="seo-page">
   ${googleTagManagerNoscript()}
-  <header class="site-header">
-    <nav class="nav" aria-label="Principal">
-      <a class="brand" href="/" aria-label="InmoRadar">
-        <span class="brand-mark" aria-hidden="true">${brandMarkIcon()}</span>
-        <span><strong>Inmo</strong><em>Radar</em></span>
-      </a>
-      <div class="nav-links">
-        <a href="/#analisis">Qué analiza</a>
-        <a href="/#api">APIs</a>
-        <a href="/#noticias">Noticias</a>
-        <a href="/#faq">FAQ</a>
-      </div>
-      <div class="nav-actions">
-        <a class="button secondary" href="/premium">Premium</a>
-      </div>
-    </nav>
-  </header>
+  ${siteHeaderHtml()}
   <main class="seo-shell" data-owned-analytics data-page-type="seo" data-content-type="${escapeHtml(String(landing.template_type || "").includes("guide") ? "guide" : "landing")}" data-template-type="${escapeHtml(landing.template_type || "")}" data-slug="${escapeHtml(landing.slug || "")}" data-city="${escapeHtml(landing.city || "")}" data-topic="${escapeHtml(landing.title || landing.h1 || "")}">
     ${bodyHtml}
   </main>
-  <footer class="seo-global-footer">
-    <div class="container footer-grid">
-      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">${brandMarkIcon()}</span><span><strong>Inmo</strong><em>Radar</em></span></a>
-      <div class="footer-links">
-        <a href="/privacidad">Privacidad</a>
-        <a href="/terminos">Términos</a>
-        <a href="/#noticias">Noticias</a>
-        <a href="mailto:hola@inmoradar.app">Contacto</a>
-      </div>
-      ${seoSocialLinks()}
-      <span>© InmoRadar</span>
-    </div>
-  </footer>
+  ${siteFooterHtml()}
   ${seoPageScript()}
   <script src="/assets/app.js" defer></script>
 </body>
