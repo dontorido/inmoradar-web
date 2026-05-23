@@ -20,9 +20,10 @@ async function fetchPublishedLandings() {
   const seed = await getSeedPublishedLanding("precio-metro-cuadrado/logrono");
   if (!hasSupabaseConfig()) return seed ? [seed] : [];
   const params = new URLSearchParams({
-    select: "slug,title,meta_description,city,template_type,updated_at,published_at,last_generated_at",
+    select: "slug,title,meta_description,city,template_type,quality_score,updated_at,published_at,last_generated_at",
     index_status: "eq.index",
     status: "eq.published",
+    quality_score: "gte.75",
     order: "published_at.desc",
     limit: "500"
   });
@@ -70,12 +71,12 @@ function newsDescription(landing) {
     return `Referencia de alquiler por metro cuadrado en ${landing.city || "España"} con fuente, fecha del dato y pautas para comparar anuncios.`;
   }
   if (landing.template_type === "expensive_listing_city") {
-    return `Guia para saber si un piso esta caro en ${landing.city || "Espana"} comparando precio por metro cuadrado y senales del anuncio.`;
+    return `Guía para saber si un piso está caro en ${landing.city || "España"} comparando precio por metro cuadrado y señales del anuncio.`;
   }
   if (landing.template_type === "editorial_guide") {
-    return landing.meta_description || "Guia editorial de InmoRadar para analizar anuncios inmobiliarios antes de contactar.";
+    return landing.meta_description || "Guía editorial de InmoRadar para analizar anuncios inmobiliarios antes de contactar.";
   }
-  return "Guia publicada por InmoRadar para buscar vivienda con mas contexto antes de contactar.";
+  return "Guía publicada por InmoRadar para buscar vivienda con más contexto antes de contactar.";
 }
 
 function newsItem(landing) {

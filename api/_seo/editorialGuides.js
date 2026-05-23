@@ -180,12 +180,12 @@ function sourceNote(dateLabel) {
 function faq(topic) {
   return [
     {
-      question: "InmoRadar decide si debo comprar una vivienda?",
+      question: "¿InmoRadar decide si debo comprar una vivienda?",
       answer:
         "No. InmoRadar ordena señales del anuncio para que decidas con más criterio antes de contactar. La decisión final debe validarse con visita, documentación y profesionales cuando proceda."
     },
     {
-      question: "El precio por metro cuadrado es suficiente?",
+      question: "¿El precio por metro cuadrado es suficiente?",
       answer:
         "No. Sirve como primera comparación, pero hay que cruzarlo con estado, zona, transporte, coste inicial, comunidad, reforma y tus necesidades reales."
     },

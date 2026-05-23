@@ -371,7 +371,7 @@ function escapeHtml(value) {
 let adminTooltipEl = null;
 
 function tooltipTargetFromEvent(event) {
-  return event.target instanceof Element ? event.target.closest(".admin-linkedin-panel [data-tooltip]") : null;
+  return event.target instanceof Element ? event.target.closest(".admin-linkedin-panel [data-tooltip], .admin-seo-performance-panel [data-tooltip]") : null;
 }
 
 function ensureAdminTooltip() {
@@ -999,7 +999,9 @@ function analyticsPageHref(row = {}) {
 function analyticsRow(row = {}) {
   const label = row.page || row.page_path || row.slug || "unknown";
   const href = analyticsPageHref(row);
-  const detail = [row.template_type, row.city, row.topic].filter(Boolean).join(" · ") || row.content_type || "pagina";
+  const detail = [row.template_type, row.city, row.topic].filter(Boolean).join(" · ") || row.content_type || "página";
+  const installIntentTooltip = "Clics en CTAs de instalación o salida hacia Chrome Web Store. No confirma instalación real de la extensión.";
+  const scoreTooltip = "Puntuación interna basada en intención de instalación, checkout, waitlist, calculadora, scroll e interacción. No es una nota SEO sobre 100.";
   return `
     <article class="admin-analytics-item">
       <div class="admin-analytics-item-head">
@@ -1011,11 +1013,11 @@ function analyticsRow(row = {}) {
       </div>
       <dl>
         <div><dt>Visitas</dt><dd>${escapeHtml(row.visits || 0)}</dd></div>
-        <div><dt>Instalacion</dt><dd>${escapeHtml(formatRate(row.install_rate))}</dd></div>
+        <div><dt data-tooltip="${escapeHtml(installIntentTooltip)}" title="${escapeHtml(installIntentTooltip)}">Intención</dt><dd>${escapeHtml(formatRate(row.install_rate))}</dd></div>
         <div><dt>Calc</dt><dd>${escapeHtml(row.calculator_used_count || 0)}/${escapeHtml(row.calculator_completed_count || 0)}</dd></div>
         <div><dt>Scroll</dt><dd>${escapeHtml(row.scroll_depth_50_count || 0)}/${escapeHtml(row.scroll_depth_90_count || 0)}</dd></div>
         <div><dt>Checkout</dt><dd>${escapeHtml(row.checkout_created_count || 0)}</dd></div>
-        <div><dt>Score</dt><dd>${escapeHtml(row.performance_score || 0)}</dd></div>
+        <div><dt data-tooltip="${escapeHtml(scoreTooltip)}" title="${escapeHtml(scoreTooltip)}">Índice interno</dt><dd>${escapeHtml(row.performance_score || 0)}</dd></div>
       </dl>
     </article>
   `;
@@ -1036,15 +1038,15 @@ function analyticsSignal(item = {}) {
   const type = item.type || "signal";
   const title =
     type === "calculator_to_install"
-      ? `Calculadora + instalacion en ${item.page || "pagina"}`
+      ? `Calculadora + intención en ${item.page || "página"}`
       : type === "calculator_low_conversion"
-        ? `Calculadora con baja conversion en ${item.page || "pagina"}`
-        : `Interaccion alta sin instalacion en ${item.page || "pagina"}`;
+        ? `Calculadora con baja conversión en ${item.page || "página"}`
+        : `Interacción alta sin intención en ${item.page || "página"}`;
   const detail =
     item.reason ||
     (type === "calculator_to_install"
-      ? `${item.sessions_with_calculator_then_install || 0}/${item.sessions_with_calculator || 0} sesiones con instalacion posterior`
-      : "Senal de comportamiento SEO detectada.");
+      ? `${item.sessions_with_calculator_then_install || 0}/${item.sessions_with_calculator || 0} sesiones con intención posterior`
+      : "Señal de comportamiento SEO detectada.");
   return `
     <article class="admin-learning-item">
       <span>signal - ${escapeHtml(type)}</span>
@@ -1080,7 +1082,7 @@ function analyticsSegmentGroup(title, items = []) {
           (item) => `
             <div class="admin-analytics-segment">
               <strong>${escapeHtml(item.label)}</strong>
-              <span>${escapeHtml(item.count || 0)} eventos - ${escapeHtml(item.install_clicks || 0)} instalacion - ${escapeHtml(item.checkout_created || 0)} checkout</span>
+              <span>${escapeHtml(item.count || 0)} eventos - ${escapeHtml(item.install_clicks || 0)} intención - ${escapeHtml(item.checkout_created || 0)} checkout</span>
             </div>
           `
         )
@@ -1104,9 +1106,13 @@ function renderAnalyticsPanel(targets, payload, context = {}) {
   const windowLabel = analyticsWindowLabel(payload, days);
 
   targets.summary.innerHTML = [
-    stat("Eventos", summary.total_events || 0, { id: "analytics-events", hint: payload.table_missing ? "Ejecuta database/owned-analytics-events.sql" : `${windowLabel} - eventos anonimos propios` }),
+    stat("Eventos", summary.total_events || 0, { id: "analytics-events", hint: payload.table_missing ? "Ejecuta database/owned-analytics-events.sql" : `${windowLabel} - eventos anónimos propios` }),
     stat("Page views", summary.page_views || 0, { id: "analytics-page-views" }),
-    stat("Instalacion", (summary.install_clicks || 0) + (summary.chrome_store_clicks || 0), { id: "analytics-installs", hint: `${formatRate(summary.install_click_rate)} click/view` }),
+    stat("Intención instalación", (summary.install_clicks || 0) + (summary.chrome_store_clicks || 0), {
+      id: "analytics-install-intent",
+      hint: `${formatRate(summary.install_click_rate)} click/view. No confirma instalación real.`
+    }),
+    stat("Chrome Store", summary.chrome_store_clicks || 0, { id: "analytics-chrome-store", hint: "Salidas hacia Chrome Web Store" }),
     stat("Calculadora", `${summary.calculator_used || 0}/${summary.calculator_completed || 0}`, { id: "analytics-calculators", hint: `${formatRate(summary.calculator_completion_rate)} completadas` }),
     stat("Scroll", `${summary.scroll_depth_50 || 0}/${summary.scroll_depth_90 || 0}`, { id: "analytics-scroll", hint: "50/90 de profundidad" }),
     stat("Waitlist", summary.waitlist_submit || 0, { id: "analytics-waitlist" }),
@@ -1118,14 +1124,14 @@ function renderAnalyticsPanel(targets, payload, context = {}) {
       ? "Falta la tabla <strong>owned_analytics_events</strong>. Ejecuta <strong>database/owned-analytics-events.sql</strong> en Supabase para activar el ranking."
       : "Analytics propio esta en modo degradado. Revisa Supabase o vuelve a cargar cuando el backend este configurado.";
     targets.pages.innerHTML = `<p class="admin-empty-state compact">${message}</p>`;
-    targets.learning.innerHTML = `<p class="admin-empty-state compact">El aprendizaje aparecera cuando existan eventos anonimos de visitas, instalacion y checkout.</p>`;
+    targets.learning.innerHTML = `<p class="admin-empty-state compact">El aprendizaje aparecerá cuando existan eventos anónimos de visitas, intención de instalación y checkout.</p>`;
     if (targets.segments) targets.segments.innerHTML = `<p class="admin-empty-state compact">Sin segmentos por ciudad o template.</p>`;
     return;
   }
 
   targets.pages.innerHTML = pages.length
     ? pages.slice(0, context.pageLimit || 8).map(analyticsRow).join("")
-    : `<p class="admin-empty-state compact">Aun no hay paginas con eventos suficientes.</p>`;
+    : `<p class="admin-empty-state compact">Aún no hay páginas con eventos suficientes.</p>`;
 
   if (targets.segments) {
     targets.segments.innerHTML = [
@@ -1140,7 +1146,7 @@ function renderAnalyticsPanel(targets, payload, context = {}) {
         ...recommendations.slice(0, 5).map(analyticsRecommendation),
         ...signals.slice(0, 4).map(analyticsSignal)
       ].join("")
-    : `<p class="admin-empty-state compact">Sin recomendaciones todavia. Se generaran al acumular conversiones.</p>`;
+    : `<p class="admin-empty-state compact">Sin recomendaciones todavía. Se generarán al acumular conversiones.</p>`;
 }
 
 function renderAnalyticsPerformance(payload = {}) {
@@ -1587,7 +1593,7 @@ function renderSeoAutogeneration(payload = {}) {
 
   if (els.seoAutogenNote) {
     els.seoAutogenNote.textContent = config.enabled
-      ? `Alcance: precio m2 ciudad y saber si un piso esta caro por ciudad. Pausa con SEO_AUTOGENERATION_ENABLED=false. Ultimo resultado: ${lastResult.reason || lastRun?.status || "sin datos"}.`
+      ? `Alcance: precio m2 ciudad y saber si un piso está caro por ciudad. Pausa con SEO_AUTOGENERATION_ENABLED=false. Último resultado: ${lastResult.reason || lastRun?.status || "sin datos"}.`
       : "Kill switch activo: SEO_AUTOGENERATION_ENABLED=false.";
   }
 
