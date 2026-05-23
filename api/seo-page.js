@@ -2,6 +2,7 @@ const { hasSupabaseConfig, supabaseFetch } = require("./_utils");
 const { googleTagManagerHead, googleTagManagerNoscript } = require("./_seo/analytics");
 const { getSeedPublishedLanding } = require("./_seo/seedPublished");
 const { buildPrecioMetroCuadradoCiudad } = require("./_seo/priceCity");
+const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../lib/seo/cityGuideTemplates");
 const { escapeHtml, siteUrl, stripHtml } = require("./_seo/text");
 
 function parseSlug(req) {
@@ -254,10 +255,9 @@ function seoPageScript() {
   </script>`;
 }
 
-function buildDynamicPriceCityBodyHtml(landing) {
-  if (landing?.template_type !== "price_city") return null;
+function sourceRecordsFromLanding(landing) {
   const sources = Array.isArray(landing?.source_data_json?.sources) ? landing.source_data_json.sources : [];
-  const records = sources
+  return sources
     .map((source) => ({
       source: source.source,
       operation: source.operation,
@@ -268,12 +268,26 @@ function buildDynamicPriceCityBodyHtml(landing) {
       price_eur_m2: Number.parseFloat(String(source.price_eur_m2 || "").replace(",", "."))
     }))
     .filter((source) => source.operation && source.source && source.source_url && Number.isFinite(source.price_eur_m2));
+}
 
+function citySourceDataFromLanding(landing) {
+  const records = sourceRecordsFromLanding(landing);
+  return {
+    sale: records.find((record) => record.operation === "sale") || null,
+    rent: records.find((record) => record.operation === "rent") || null,
+    records,
+    sources: records,
+    city: landing.city || ""
+  };
+}
+
+function buildDynamicPriceCityBodyHtml(landing) {
+  if (landing?.template_type !== "price_city") return null;
+  const sourceData = citySourceDataFromLanding(landing);
+  const records = sourceData.records || [];
   if (!records.length || !landing.city) return null;
 
-  const sale = records.find((record) => record.operation === "sale") || null;
-  const rent = records.find((record) => record.operation === "rent") || null;
-  if (!sale && !rent) return null;
+  if (!sourceData.sale && !sourceData.rent) return null;
 
   try {
     return buildPrecioMetroCuadradoCiudad({
@@ -281,12 +295,33 @@ function buildDynamicPriceCityBodyHtml(landing) {
       province: landing.province || "",
       autonomousCommunity: landing.autonomous_community || "",
       slug: String(landing.slug || "").replace(/^precio-metro-cuadrado\//, ""),
-      sourceData: { sale, rent, records, city: landing.city },
+      sourceData,
       publishedAt: landing.published_at || landing.last_generated_at || landing.updated_at || new Date(),
       updatedAt: landing.updated_at || landing.last_generated_at || landing.published_at || new Date()
     });
   } catch (error) {
     console.warn("[seo-page] Dynamic price city body render failed", error.message);
+    return null;
+  }
+}
+
+function buildDynamicCityGuideLanding(landing) {
+  if (!["rent_city", "expensive_listing_city"].includes(landing?.template_type)) return null;
+  if (!landing.city) return null;
+  const sourceData = citySourceDataFromLanding(landing);
+  if (!sourceData.records.length || (!sourceData.sale && !sourceData.rent)) return null;
+  const opportunity = {
+    city: landing.city,
+    province: landing.province || "",
+    autonomous_community: landing.autonomous_community || "",
+    template_type: landing.template_type
+  };
+  try {
+    return landing.template_type === "rent_city"
+      ? buildRentCityLanding(opportunity, sourceData)
+      : buildExpensiveListingCityLanding(opportunity, sourceData);
+  } catch (error) {
+    console.warn("[seo-page] Dynamic city guide render failed", error.message);
     return null;
   }
 }
@@ -311,11 +346,25 @@ function renderLandingHtml(landing) {
   const qualityScore = Number(landing.quality_score) || 0;
   const robots = landing.index_status === "index" && landing.status === "published" && qualityScore >= 75 ? "index,follow" : "noindex,follow";
   const canonical = landing.canonical_url || `${siteUrl()}/${landing.slug}/`;
-  const title = landing.meta_title || `${landing.title} · InmoRadar`;
+  const dynamicLanding = buildDynamicCityGuideLanding(landing);
+  const renderedLanding = dynamicLanding
+    ? {
+        ...landing,
+        title: dynamicLanding.title || landing.title,
+        meta_title: dynamicLanding.meta_title || landing.meta_title,
+        meta_description: dynamicLanding.meta_description || landing.meta_description,
+        h1: dynamicLanding.h1 || landing.h1,
+        source_data_json: {
+          ...(landing.source_data_json || {}),
+          faq: dynamicLanding.faq || landing.source_data_json?.faq || []
+        }
+      }
+    : landing;
+  const title = renderedLanding.meta_title || `${renderedLanding.title} · InmoRadar`;
   const dynamicBodyHtml = buildDynamicPriceCityBodyHtml(landing);
-  const bodyHtml = normalizeLandingBodyHtml(dynamicBodyHtml || landing.body_html);
-  const description = landing.meta_description || stripHtml(bodyHtml).slice(0, 155);
-  const imageUrl = ogImageUrl(landing);
+  const bodyHtml = normalizeLandingBodyHtml(dynamicBodyHtml || dynamicLanding?.body_html || landing.body_html);
+  const description = renderedLanding.meta_description || stripHtml(bodyHtml).slice(0, 155);
+  const imageUrl = ogImageUrl(renderedLanding);
 
   return `<!doctype html>
 <html lang="es">
@@ -355,6 +404,7 @@ function renderLandingHtml(landing) {
       font-family: var(--body);
       letter-spacing: 0;
       text-rendering: geometricPrecision;
+      overflow-x: hidden;
     }
     .seo-page::selection,
     .seo-page ::selection { background: var(--seo-accent); color: #FFFFFF; }
@@ -779,6 +829,60 @@ function renderLandingHtml(landing) {
       .seo-hero-badges { grid-template-columns: 1fr; }
       .seo-inline-cta { align-items: stretch; }
     }
+    @media (max-width: 560px) {
+      .seo-shell { padding: 38px 0 56px; width: min(100% - 24px, 560px); }
+      .seo-breadcrumb { font-size: 9px; gap: 6px; letter-spacing: .1em; margin-bottom: 18px; overflow-wrap: anywhere; }
+      .seo-page-hero { border-radius: 22px; padding: 24px 16px; }
+      .seo-page-hero h1 {
+        font-size: clamp(32px, 10.5vw, 42px);
+        letter-spacing: 0;
+        line-height: 1;
+        overflow-wrap: anywhere;
+      }
+      .seo-lead { font-size: 16px; line-height: 1.5; margin-top: 18px; }
+      .seo-meta-row { display: grid; gap: 8px; margin-top: 20px; }
+      .seo-meta-row span { border-radius: 16px; justify-content: flex-start; letter-spacing: .08em; min-width: 0; overflow-wrap: anywhere; white-space: normal; width: 100%; }
+      .seo-hero-badges { gap: 10px; margin-top: 22px; }
+      .seo-meta-row .seo-hero-badge { min-height: auto; padding: 14px; }
+      .seo-hero-badge strong { font-size: clamp(22px, 8vw, 28px); letter-spacing: 0; overflow-wrap: anywhere; }
+      .seo-product-card,
+      .seo-data-card,
+      .seo-inline-cta,
+      .seo-final-cta {
+        border-radius: 22px;
+        padding: 20px 16px;
+      }
+      .seo-product-card h2,
+      .seo-section h2,
+      .seo-final-cta h2 {
+        font-size: clamp(28px, 9vw, 36px);
+        letter-spacing: 0;
+        line-height: 1.04;
+        overflow-wrap: anywhere;
+      }
+      .seo-reading-grid { gap: 32px; margin-top: 32px; }
+      .seo-section { margin-top: 52px; }
+      .seo-section p,
+      .seo-section li { font-size: 15.5px; line-height: 1.68; }
+      .seo-section li { gap: 10px; grid-template-columns: 6px minmax(0, 1fr); }
+      .seo-stat-cell { border-radius: 18px; padding: 16px; }
+      .seo-stat-number { font-size: clamp(30px, 11vw, 38px); letter-spacing: 0; overflow-wrap: anywhere; }
+      .seo-stat-label,
+      .seo-stat-meta,
+      .seo-data-label,
+      .seo-card-note,
+      .seo-calculator label span,
+      .seo-calc-label { letter-spacing: .1em; }
+      .seo-data-grid { border-radius: 18px; margin: 18px 0; }
+      .seo-data-label,
+      .seo-data-value { overflow-wrap: anywhere; padding: 12px 14px; }
+      .seo-formula { border-radius: 18px; margin: 26px 0; overflow-x: auto; padding: 18px; }
+      .seo-formula p { letter-spacing: .12em; }
+      .seo-formula code { font-size: 15px; overflow-wrap: anywhere; white-space: normal; }
+      .seo-calc-result strong { font-size: 26px; letter-spacing: 0; overflow-wrap: anywhere; }
+      .seo-link-bento a { border-radius: 18px; padding: 15px; }
+      .seo-final-actions { align-items: stretch; flex-direction: column; }
+    }
     @media (max-width: 480px) {
       .seo-page .site-header .nav { gap: 12px; }
       .seo-page .site-header .language-switch { display: none; }
@@ -786,12 +890,12 @@ function renderLandingHtml(landing) {
     }
     @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
   </style>
-  ${structuredData(landing, canonical)}
+  ${structuredData(renderedLanding, canonical)}
 </head>
 <body class="seo-page">
   ${googleTagManagerNoscript()}
   ${siteHeaderHtml()}
-  <main class="seo-shell" data-owned-analytics data-page-type="seo" data-content-type="${escapeHtml(String(landing.template_type || "").includes("guide") ? "guide" : "landing")}" data-template-type="${escapeHtml(landing.template_type || "")}" data-slug="${escapeHtml(landing.slug || "")}" data-city="${escapeHtml(landing.city || "")}" data-topic="${escapeHtml(landing.title || landing.h1 || "")}">
+  <main class="seo-shell" data-owned-analytics data-page-type="seo" data-content-type="${escapeHtml(String(renderedLanding.template_type || "").includes("guide") ? "guide" : "landing")}" data-template-type="${escapeHtml(renderedLanding.template_type || "")}" data-slug="${escapeHtml(renderedLanding.slug || "")}" data-city="${escapeHtml(renderedLanding.city || "")}" data-topic="${escapeHtml(renderedLanding.title || renderedLanding.h1 || "")}">
     ${bodyHtml}
   </main>
   ${siteFooterHtml()}

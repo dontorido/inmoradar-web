@@ -240,6 +240,101 @@ test("price_city render publico aplica plantilla global desde fuentes guardadas"
   assert.doesNotMatch(html, /Plantilla antigua/);
 });
 
+test("expensive_listing_city render publico regenera textos visibles con tildes", () => {
+  const html = renderLandingHtml({
+    slug: "saber-si-piso-esta-caro/granada",
+    title: "Como saber si un piso esta caro en Granada",
+    meta_title: "Como saber si un piso esta caro en Granada",
+    meta_description: "Guia sin acentos antigua",
+    h1: "Como saber si un piso esta caro en Granada",
+    body_html: "<article><h1>Plantilla antigua sin tildes</h1></article>",
+    canonical_url: "https://inmoradar.app/saber-si-piso-esta-caro/granada/",
+    city: "Granada",
+    template_type: "expensive_listing_city",
+    index_status: "index",
+    status: "published",
+    quality_score: 100,
+    source_data_json: {
+      sources: [
+        {
+          operation: "sale",
+          source: "mivau_appraisal",
+          source_url: "https://example.com/venta.csv",
+          period_label: "4T 2025",
+          period_date: "2025-10-01",
+          geo_level: "municipality",
+          price_eur_m2: 2200
+        },
+        {
+          operation: "rent",
+          source: "serpavi",
+          source_url: "https://example.com/alquiler.csv",
+          period_label: "2024",
+          period_date: "2024-01-01",
+          geo_level: "municipality",
+          price_eur_m2: 10.12
+        }
+      ],
+      faq: []
+    }
+  });
+
+  assert.match(html, /Cómo saber si un piso está caro en Granada/);
+  assert.match(html, /Guía práctica para comparar el precio/);
+  assert.match(html, /Señales que conviene revisar/);
+  assert.match(html, /index,follow/);
+  assert.match(html, /@media \(max-width: 560px\)/);
+  assert.match(html, /overflow-x: hidden/);
+  assert.doesNotMatch(html, /Plantilla antigua sin tildes/);
+});
+
+test("sitemap consulta solo landings publicadas indexables y con quality_score suficiente", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  let requestedUrl = "";
+
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "sb_secret_test";
+  global.fetch = async (url) => {
+    requestedUrl = String(url);
+    return {
+      ok: true,
+      status: 200,
+      text: async () => "[]"
+    };
+  };
+
+  const req = {
+    method: "GET",
+    url: "/api/sitemap.xml",
+    headers: { host: "inmoradar.app" }
+  };
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end() {}
+  };
+
+  try {
+    await sitemapHandler(req, res);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+
+  const params = new URL(requestedUrl).searchParams;
+  assert.equal(params.get("status"), "eq.published");
+  assert.equal(params.get("index_status"), "eq.index");
+  assert.equal(params.get("quality_score"), "gte.75");
+});
+
 test("la home tiene seccion Noticias con enlaces a publicaciones", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 

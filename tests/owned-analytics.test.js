@@ -1,4 +1,6 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const test = require("node:test");
 
 const adminHandler = require("../api/admin");
@@ -288,7 +290,7 @@ test("buildOwnedAnalyticsLearning funciona sin datos", () => {
   assert.equal(learning.recommendations[0].action, "collect_more_data");
 });
 
-test("buildOwnedAnalyticsLearning reconoce paginas con calculadora e instalacion", () => {
+test("buildOwnedAnalyticsLearning reconoce paginas con calculadora e intencion", () => {
   const learning = buildOwnedAnalyticsLearning([
     { event_name: "page_view", page_path: "/precio-metro-cuadrado/sevilla/", template_type: "price_city", city: "Sevilla", anonymous_session_id: "s1", created_at: at(0) },
     { event_name: "calculator_used", page_path: "/precio-metro-cuadrado/sevilla/", template_type: "price_city", city: "Sevilla", anonymous_session_id: "s1", created_at: at(1) },
@@ -303,7 +305,7 @@ test("buildOwnedAnalyticsLearning reconoce paginas con calculadora e instalacion
   assert.equal(learning.calculator_install_pages[0].page, "/precio-metro-cuadrado/sevilla/");
 });
 
-test("summarizePagePerformance calcula instalacion posterior a calculadora por sesion", () => {
+test("summarizePagePerformance calcula intencion posterior a calculadora por sesion", () => {
   const pagePath = "/precio-metro-cuadrado/sevilla/";
   const events = [
     { event_name: "calculator_used", page_path: pagePath, anonymous_session_id: "same-after", created_at: at(1) },
@@ -446,4 +448,17 @@ test("admin analytics resources usan 7 dias por defecto si el rango no es valido
   assert.equal(pages.payload.window_days, 7);
   assert.equal(learning.statusCode, 200);
   assert.equal(learning.payload.window_days, 7);
+});
+
+test("BackOffice presenta intencion de instalacion y score interno sin prometer instalacion real", () => {
+  const script = fs.readFileSync(path.join(__dirname, "..", "assets", "admin.js"), "utf8");
+
+  assert.match(script, /Intención instalación/);
+  assert.match(script, /Chrome Store/);
+  assert.match(script, /Índice interno/);
+  assert.match(script, /No confirma instalación real/);
+  assert.match(script, /No es una nota SEO sobre 100/);
+  assert.match(script, /Ver p&aacute;gina/);
+  assert.doesNotMatch(script, /stat\("Instalacion"/);
+  assert.doesNotMatch(script, /<dt>Score<\/dt>/);
 });
