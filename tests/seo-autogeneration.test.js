@@ -136,6 +136,68 @@ async function run(options = {}) {
   });
 }
 
+async function withEnv(patch, callback) {
+  const previous = new Map();
+  for (const key of Object.keys(patch)) {
+    previous.set(key, process.env[key]);
+    if (patch[key] === undefined) delete process.env[key];
+    else process.env[key] = patch[key];
+  }
+  try {
+    return await callback();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+function createJsonResponse() {
+  const chunks = [];
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+  return {
+    res,
+    payload() {
+      return JSON.parse(chunks.join("") || "{}");
+    }
+  };
+}
+
+async function callSeoAutogenerationResource({ headers = {}, env = {} } = {}) {
+  return withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      CRON_SECRET: "cron-test-token",
+      SEO_AUTOGENERATION_ENABLED: "false",
+      SEO_AUTOGENERATION_DRY_RUN: "true",
+      SUPABASE_URL: undefined,
+      SUPABASE_SERVICE_ROLE_KEY: undefined,
+      ...env
+    },
+    async () => {
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo-autogenerate/run",
+        headers: { host: "inmoradar.app", ...headers },
+        body: {}
+      };
+      await adminHandler(req, res);
+      return { statusCode: res.statusCode, payload: payload() };
+    }
+  );
+}
+
 test("seo autogeneration kill switch impide generar y publicar", async () => {
   const storage = memoryStorage();
   const result = await run({
@@ -321,38 +383,55 @@ test("seo autogeneration registra skipped con reason para score insuficiente", a
 });
 
 test("seo autogeneration endpoint protegido rechaza llamadas sin token", async () => {
-  const previousAdmin = process.env.ADMIN_IMPORT_TOKEN;
-  const previousCron = process.env.CRON_SECRET;
-  process.env.ADMIN_IMPORT_TOKEN = "admin-test-token";
-  process.env.CRON_SECRET = "cron-test-token";
-  const chunks = [];
-  const req = {
-    method: "POST",
-    url: "/api/admin?resource=seo-autogenerate/run",
-    headers: { host: "inmoradar.app" }
-  };
-  const res = {
-    statusCode: 0,
-    headers: {},
-    setHeader(name, value) {
-      this.headers[name.toLowerCase()] = value;
-    },
-    end(chunk) {
-      if (chunk) chunks.push(String(chunk));
-    }
-  };
+  const result = await callSeoAutogenerationResource();
 
-  try {
-    await adminHandler(req, res);
-  } finally {
-    if (previousAdmin === undefined) delete process.env.ADMIN_IMPORT_TOKEN;
-    else process.env.ADMIN_IMPORT_TOKEN = previousAdmin;
-    if (previousCron === undefined) delete process.env.CRON_SECRET;
-    else process.env.CRON_SECRET = previousCron;
-  }
+  assert.equal(result.statusCode, 401);
+  assert.equal(result.payload.error, "unauthorized");
+});
 
-  assert.equal(res.statusCode, 401);
-  assert.equal(JSON.parse(chunks.join("")).error, "unauthorized");
+test("seo autogeneration acepta x-cron-secret correcto", async () => {
+  const result = await callSeoAutogenerationResource({
+    headers: { "X-Cron-Secret": "cron-test-token" }
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.request_source, "cron");
+  assert.equal(result.payload.reason, "autogeneration_disabled");
+});
+
+test("seo autogeneration rechaza x-cron-secret incorrecto", async () => {
+  const result = await callSeoAutogenerationResource({
+    headers: { "x-cron-secret": "wrong-token" }
+  });
+
+  assert.equal(result.statusCode, 401);
+  assert.equal(result.payload.error, "unauthorized");
+});
+
+test("seo autogeneration falla seguro si no hay secret configurado", async () => {
+  const result = await callSeoAutogenerationResource({
+    headers: { "x-cron-secret": "cron-test-token" },
+    env: { ADMIN_IMPORT_TOKEN: undefined, CRON_SECRET: undefined }
+  });
+
+  assert.equal(result.statusCode, 500);
+  assert.equal(result.payload.error, "admin_or_cron_token_not_configured");
+});
+
+test("seo autogeneration acepta x-admin-token y fallback admin en x-cron-secret", async () => {
+  const adminHeader = await callSeoAutogenerationResource({
+    headers: { "x-admin-token": "admin-test-token" }
+  });
+  const adminFallback = await callSeoAutogenerationResource({
+    headers: { "x-cron-secret": "admin-test-token" },
+    env: { CRON_SECRET: undefined }
+  });
+
+  assert.equal(adminHeader.statusCode, 200);
+  assert.equal(adminHeader.payload.request_source, "admin");
+  assert.equal(adminFallback.statusCode, 200);
+  assert.equal(adminFallback.payload.request_source, "admin");
 });
 
 test("seo autogeneration workflow llama al resource real de api/admin", () => {

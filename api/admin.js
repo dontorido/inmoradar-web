@@ -86,18 +86,38 @@ const {
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at";
 
-function adminOrCronTokenFromRequest(req) {
-  const authorization = req.headers.authorization || "";
-  if (authorization.toLowerCase().startsWith("bearer ")) return authorization.slice(7).trim();
-  return String(req.headers["x-cron-secret"] || req.headers["x-admin-token"] || "").trim();
+function requestHeader(req, name) {
+  const headers = req.headers || {};
+  if (headers[name] !== undefined) return headers[name];
+  const lowerName = String(name).toLowerCase();
+  const entry = Object.entries(headers).find(([key]) => String(key).toLowerCase() === lowerName);
+  return entry ? entry[1] : "";
+}
+
+function cleanRequestToken(value) {
+  if (Array.isArray(value)) return cleanRequestToken(value[0]);
+  return String(value || "").trim();
+}
+
+function adminOrCronTokensFromRequest(req) {
+  const tokens = [];
+  const authorization = cleanRequestToken(requestHeader(req, "authorization"));
+  if (authorization.toLowerCase().startsWith("bearer ")) {
+    tokens.push(authorization.slice(7).trim());
+  }
+  for (const header of ["x-cron-secret", "x-admin-token"]) {
+    const token = cleanRequestToken(requestHeader(req, header));
+    if (token) tokens.push(token);
+  }
+  return tokens.filter(Boolean);
 }
 
 function isAdminTokenRequest(req) {
-  return Boolean(process.env.ADMIN_IMPORT_TOKEN && adminOrCronTokenFromRequest(req) === process.env.ADMIN_IMPORT_TOKEN);
+  return Boolean(process.env.ADMIN_IMPORT_TOKEN && adminOrCronTokensFromRequest(req).includes(process.env.ADMIN_IMPORT_TOKEN));
 }
 
 function isCronTokenRequest(req) {
-  return Boolean(process.env.CRON_SECRET && adminOrCronTokenFromRequest(req) === process.env.CRON_SECRET);
+  return Boolean(process.env.CRON_SECRET && adminOrCronTokensFromRequest(req).includes(process.env.CRON_SECRET));
 }
 
 function assertAdminOrCron(req, res) {
@@ -106,7 +126,7 @@ function assertAdminOrCron(req, res) {
     json(res, 500, { ok: false, error: "admin_or_cron_token_not_configured" });
     return false;
   }
-  if (!allowedTokens.includes(adminOrCronTokenFromRequest(req))) {
+  if (!adminOrCronTokensFromRequest(req).some((token) => allowedTokens.includes(token))) {
     json(res, 401, { ok: false, error: "unauthorized" });
     return false;
   }
