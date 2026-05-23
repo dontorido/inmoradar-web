@@ -6,6 +6,7 @@ const test = require("node:test");
 const adminHandler = require("../api/admin");
 const {
   runSeoAutogeneration,
+  buildSeoAutogenerationOperationalAlerts,
   buildSeoAutogenerationConfig
 } = require("../api/_seo/autogeneration");
 const { buildPriceCityLanding } = require("../api/_seo/priceCity");
@@ -466,4 +467,77 @@ test("seo autogeneration mantiene limites por defecto aunque env pida mas", () =
   assert.equal(config.max_per_day, 3);
   assert.equal(config.max_per_week, 10);
   assert.equal(config.min_score, 80);
+});
+
+test("seo autogeneration alerts avisan si el ultimo run falla", () => {
+  const alerts = buildSeoAutogenerationOperationalAlerts(
+    {
+      config: { enabled: true, dry_run: false },
+      limits: { published_last_24h: 0, max_per_day: 3, published_last_7d: 0, max_per_week: 10, published_this_run: 0, max_per_run: 1 },
+      last_run: {
+        status: "failed",
+        error_message: "boom",
+        started_at: NOW
+      },
+      recent_runs: []
+    },
+    { now: NOW }
+  );
+
+  assert.equal(alerts.some((alert) => alert.id === "seo-autogeneration-failing" && alert.severity === "critical"), true);
+});
+
+test("seo autogeneration alerts avisan si los limites estan saturados", () => {
+  const alerts = buildSeoAutogenerationOperationalAlerts(
+    {
+      config: { enabled: true, dry_run: false },
+      limits: { published_last_24h: 4, max_per_day: 3, published_last_7d: 10, max_per_week: 10, published_this_run: 1, max_per_run: 1 },
+      last_run: {
+        status: "completed",
+        started_at: NOW,
+        result_json: { skipped_count: 1 }
+      },
+      recent_runs: []
+    },
+    { now: NOW }
+  );
+
+  assert.equal(alerts.some((alert) => alert.id === "seo-autogeneration-over-limit" && alert.severity === "warning"), true);
+  assert.equal(alerts.some((alert) => alert.id === "seo-autogeneration-healthy"), false);
+});
+
+test("seo autogeneration alerts avisan si dry-run esta activo", () => {
+  const alerts = buildSeoAutogenerationOperationalAlerts(
+    {
+      config: { enabled: true, dry_run: true },
+      limits: { published_last_24h: 0, max_per_day: 3, published_last_7d: 0, max_per_week: 10, published_this_run: 0, max_per_run: 1 },
+      last_run: {
+        status: "completed",
+        started_at: NOW,
+        result_json: { skipped_count: 1 }
+      },
+      recent_runs: []
+    },
+    { now: NOW }
+  );
+
+  assert.equal(alerts.some((alert) => alert.id === "seo-autogeneration-dry-run" && alert.severity === "warning"), true);
+});
+
+test("seo autogeneration alerts confirman estado saludable sin warnings", () => {
+  const alerts = buildSeoAutogenerationOperationalAlerts(
+    {
+      config: { enabled: true, dry_run: false },
+      limits: { published_last_24h: 1, max_per_day: 3, published_last_7d: 2, max_per_week: 10, published_this_run: 1, max_per_run: 1 },
+      last_run: {
+        status: "completed",
+        started_at: NOW,
+        result_json: { published_count: 1 }
+      },
+      recent_runs: []
+    },
+    { now: NOW }
+  );
+
+  assert.deepEqual(alerts.map((alert) => alert.id), ["seo-autogeneration-healthy"]);
 });

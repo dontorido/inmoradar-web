@@ -769,10 +769,134 @@ async function getSeoAutogenerationStatus(options = {}) {
   };
 }
 
+function seoAutogenerationAlert({ id, severity, title, message }) {
+  return {
+    id,
+    severity,
+    title,
+    message,
+    action_label: "Ir al evento",
+    action_target: "#seo-autogeneration",
+    dismissible: true,
+    category: "seo"
+  };
+}
+
+function runStartedAtMs(run = {}) {
+  const timestamp = Date.parse(run.started_at || run.finished_at || run.created_at || "");
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function buildSeoAutogenerationOperationalAlerts(status = {}, options = {}) {
+  const config = status.config || {};
+  const limits = status.limits || {};
+  const recentRuns = Array.isArray(status.recent_runs) ? status.recent_runs : [];
+  const lastRun = status.last_run || recentRuns[0] || null;
+  const nowMs = Date.parse(options.now || status.generated_at || new Date().toISOString());
+  const alerts = [];
+  const failedRuns = recentRuns.filter((run) => String(run.status || "").toLowerCase() === "failed" || run.error_message);
+
+  if (status.ok === false || status.error) {
+    alerts.push(
+      seoAutogenerationAlert({
+        id: "seo-autogeneration-status-error",
+        severity: "critical",
+        title: "La autogeneracion SEO no responde",
+        message: "No se pudo leer el estado de autogeneracion SEO. Revisa el ultimo run y la configuracion del backend."
+      })
+    );
+  }
+
+  if (lastRun && (String(lastRun.status || "").toLowerCase() === "failed" || lastRun.error_message || lastRun.result_json?.ok === false)) {
+    alerts.push(
+      seoAutogenerationAlert({
+        id: "seo-autogeneration-failing",
+        severity: "critical",
+        title: "La autogeneracion SEO esta fallando",
+        message: "Revisa el ultimo run de autogeneracion SEO antes de lanzar nuevas ejecuciones."
+      })
+    );
+  } else if (failedRuns.length >= 2) {
+    alerts.push(
+      seoAutogenerationAlert({
+        id: "seo-autogeneration-recent-failures",
+        severity: "critical",
+        title: "La autogeneracion SEO acumula fallos",
+        message: `Hay ${failedRuns.length} runs fallidos recientes. Revisa el log y la configuracion antes de continuar.`
+      })
+    );
+  }
+
+  if (alerts.some((alert) => alert.severity === "critical")) return alerts;
+
+  const overDailyLimit = Number(limits.published_last_24h || 0) > Number(limits.max_per_day || 0);
+  const overWeeklyLimit = Number(limits.published_last_7d || 0) > Number(limits.max_per_week || 0);
+  const overRunLimit = Number(limits.published_this_run || 0) > Number(limits.max_per_run || 0);
+  if (overDailyLimit || overWeeklyLimit || overRunLimit) {
+    alerts.push(
+      seoAutogenerationAlert({
+        id: "seo-autogeneration-over-limit",
+        severity: "warning",
+        title: "Autogeneracion SEO por encima del limite",
+        message: "Autogeneracion SEO por encima del limite configurado. Revisa variables y runs recientes."
+      })
+    );
+  }
+
+  if (config.enabled && config.dry_run) {
+    alerts.push(
+      seoAutogenerationAlert({
+        id: "seo-autogeneration-dry-run",
+        severity: "warning",
+        title: "Autogeneracion SEO en dry-run",
+        message: "Autogeneracion SEO esta en dry-run. No publicara hasta desactivar dry-run."
+      })
+    );
+  }
+
+  const lastRunMs = lastRun ? runStartedAtMs(lastRun) : null;
+  if (config.enabled && (!lastRunMs || Number.isNaN(nowMs) || nowMs - lastRunMs > DAY_MS)) {
+    alerts.push(
+      seoAutogenerationAlert({
+        id: "seo-autogeneration-no-recent-runs",
+        severity: "warning",
+        title: "Autogeneracion SEO sin ejecuciones recientes",
+        message: "Autogeneracion SEO activada, pero sin ejecuciones recientes."
+      })
+    );
+  }
+
+  if (alerts.some((alert) => alert.severity === "warning")) return alerts;
+
+  if (config.enabled && lastRun) {
+    const result = lastRun.result_json || {};
+    const hasClearResult =
+      String(lastRun.status || "").toLowerCase() === "completed" ||
+      String(lastRun.status || "").toLowerCase() === "skipped" ||
+      result.reason ||
+      Number(result.published_count || 0) > 0 ||
+      Number(result.draft_count || 0) > 0 ||
+      Number(result.skipped_count || 0) > 0;
+    if (hasClearResult) {
+      alerts.push(
+        seoAutogenerationAlert({
+          id: "seo-autogeneration-healthy",
+          severity: "info",
+          title: "Autogeneracion SEO operativa",
+          message: "La autogeneracion SEO esta activa y registrando ejecuciones correctamente."
+        })
+      );
+    }
+  }
+
+  return alerts;
+}
+
 module.exports = {
   ALLOWED_AUTOGENERATION_TEMPLATE_TYPES,
   JOB_NAME,
   SCHEDULE,
+  buildSeoAutogenerationOperationalAlerts,
   buildLimitSnapshot,
   buildSeoAutogenerationConfig,
   createSupabaseStorage,
