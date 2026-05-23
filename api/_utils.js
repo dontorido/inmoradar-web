@@ -8,7 +8,7 @@ function json(res, status, payload) {
   res.setHeader("cache-control", "no-store, max-age=0");
   res.setHeader("access-control-allow-origin", "*");
   res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
-  res.setHeader("access-control-allow-headers", "authorization,content-type,x-admin-token,x-signature,x-event-name");
+  res.setHeader("access-control-allow-headers", "authorization,content-type,x-admin-token,x-cron-secret,x-signature,x-event-name");
   res.end(JSON.stringify(payload));
 }
 

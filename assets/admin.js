@@ -157,6 +157,10 @@ const state = {
     hasNextPage: false,
     hasPreviousPage: false
   },
+  seoAutogeneration: {
+    status: null,
+    recentRuns: []
+  },
   parking: {
     lastProbe: null
   },
@@ -246,6 +250,11 @@ const els = {
   seoFilter: document.querySelector("[data-seo-filter]"),
   seoGenerate: document.querySelector("[data-seo-generate]"),
   seoPublish: document.querySelector("[data-seo-publish]"),
+  seoAutogenSummary: document.querySelector("[data-seo-autogen-summary]"),
+  seoAutogenRuns: document.querySelector("[data-seo-autogen-runs]"),
+  seoAutogenRun: document.querySelector("[data-seo-autogen-run]"),
+  seoAutogenDryRun: document.querySelector("[data-seo-autogen-dry-run]"),
+  seoAutogenNote: document.querySelector("[data-seo-autogen-note]"),
   linkedinRefresh: document.querySelector("[data-linkedin-refresh]"),
   linkedinTest: document.querySelector("[data-linkedin-test]"),
   linkedinConnect: document.querySelector("[data-linkedin-connect]"),
@@ -1285,6 +1294,65 @@ function renderSeoSummary(summary = {}, fallbackRows = []) {
     stat("Oportunidades", opportunities, { id: "seo-opportunities", hint: "Pendientes de generar" }),
     stat("Score medio", averageScore ? averageScore.toFixed(0) : 0, { id: "seo-average-score", unit: "/100", hint: "Solo landings con score" })
   ].join("");
+}
+
+function renderSeoAutogeneration(payload = {}) {
+  if (!els.seoAutogenSummary || !els.seoAutogenRuns) return;
+  state.seoAutogeneration.status = payload;
+  state.seoAutogeneration.recentRuns = payload.recent_runs || [];
+  const config = payload.config || {};
+  const limits = payload.limits || {};
+  const lastRun = payload.last_run || null;
+  const lastResult = lastRun?.result_json || {};
+  const enabledLabel = config.enabled ? "Activa" : "Pausada";
+  const dryRunLabel = config.dry_run ? "Dry run" : "Publica";
+
+  els.seoAutogenSummary.innerHTML = [
+    stat("Estado", enabledLabel, { id: "seo-autogen-enabled", hint: "SEO_AUTOGENERATION_ENABLED" }),
+    stat("Modo", dryRunLabel, { id: "seo-autogen-dry-run", hint: "SEO_AUTOGENERATION_DRY_RUN" }),
+    stat("Run", `${limits.published_this_run || 0}/${limits.max_per_run || 1}`, { id: "seo-autogen-run-limit", hint: "Maximo por ejecucion" }),
+    stat("24h", `${limits.published_last_24h || 0}/${limits.max_per_day || 3}`, { id: "seo-autogen-day-limit", hint: "Limite ultimas 24h" }),
+    stat("7 dias", `${limits.published_last_7d || 0}/${limits.max_per_week || 10}`, { id: "seo-autogen-week-limit", hint: "Limite semanal" }),
+    stat("Min score", config.min_score || 80, { id: "seo-autogen-min-score", unit: "/100" }),
+    stat("Ultima", lastRun ? formatDate(lastRun.started_at) : "-", { id: "seo-autogen-last-run", hint: lastRun?.status || "Sin ejecuciones" }),
+    stat("Proxima", payload.next_scheduled_at ? formatDate(payload.next_scheduled_at) : "-", { id: "seo-autogen-next-run", hint: config.schedule || "0 */6 * * *" })
+  ].join("");
+
+  if (els.seoAutogenNote) {
+    els.seoAutogenNote.textContent = config.enabled
+      ? `Alcance: precio m2 ciudad y saber si un piso esta caro por ciudad. Pausa con SEO_AUTOGENERATION_ENABLED=false. Ultimo resultado: ${lastResult.reason || lastRun?.status || "sin datos"}.`
+      : "Kill switch activo: SEO_AUTOGENERATION_ENABLED=false.";
+  }
+
+  const runs = payload.recent_runs || [];
+  if (!runs.length) {
+    els.seoAutogenRuns.innerHTML = `<tr><td colspan="4">Sin ejecuciones registradas.</td></tr>`;
+    return;
+  }
+
+  els.seoAutogenRuns.innerHTML = runs
+    .map((row) => {
+      const result = row.result_json || {};
+      const items = Array.isArray(result.results) ? result.results : [];
+      const counts = `${Number(result.published_count || 0)} pub · ${Number(result.draft_count || 0)} draft · ${Number(result.skipped_count || 0)} skip`;
+      const detail =
+        items
+          .slice(0, 3)
+          .map((item) => [item.target_path, item.reason || item.status, item.final_score ? `score ${item.final_score}` : ""].filter(Boolean).join(" · "))
+          .join(" | ") || result.reason;
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(formatDate(row.started_at))}</strong>
+            <div class="admin-subtle">${escapeHtml(row.run_key || "-")}</div>
+          </td>
+          <td>${chip(row.status || "unknown", statusTone(row.status))}</td>
+          <td>${escapeHtml(counts)}</td>
+          <td>${escapeHtml(detail || row.error_message || "-")}</td>
+        </tr>
+      `;
+    })
+    .join("");
 }
 
 function renderSeoPagination(payload) {
@@ -4169,6 +4237,12 @@ async function loadSeo() {
   renderSeo(payload);
 }
 
+async function loadSeoAutogeneration() {
+  if (!els.seoAutogenSummary) return;
+  const payload = await api("/api/admin?resource=seo-autogenerate/run");
+  renderSeoAutogeneration(payload);
+}
+
 async function loadKpis() {
   const payload = await api("/api/admin?resource=kpis/settings");
   renderKpis(payload);
@@ -4265,6 +4339,7 @@ async function loadAll() {
       loadExtensionUsage(),
       loadAnalytics(),
       loadSeo(),
+      loadSeoAutogeneration(),
       loadLinkedIn(),
       loadKpis(),
       loadParking(),
@@ -4397,6 +4472,25 @@ async function runSeoGeneration(mode) {
   showStatus(`Draft SEO generado: ${first?.slug || "landing SEO"} · score ${first?.quality_score || 0}`, "good");
 }
 
+async function runSeoAutogeneration(dryRun = false) {
+  showStatus(dryRun ? "Probando autogeneracion SEO..." : "Ejecutando autogeneracion SEO...");
+  const result = await api("/api/admin?resource=seo-autogenerate/run", {
+    method: "POST",
+    body: JSON.stringify({ dry_run: dryRun })
+  });
+  await Promise.allSettled([loadSeo(), loadSeoAutogeneration()]);
+  const first = result.results?.[0] || {};
+  if (result.published_count) {
+    showStatus(`Autogeneracion publicada: ${first.target_path || "pagina SEO"} - score ${first.final_score || 0}`, "good");
+    return;
+  }
+  if (result.would_publish_count) {
+    showStatus(`Dry run OK: publicaria ${first.target_path || "pagina SEO"} - score ${first.final_score || 0}`, "neutral");
+    return;
+  }
+  showStatus(`Autogeneracion sin publicacion: ${first.reason || result.reason || "sin candidato elegible"}`, "neutral");
+}
+
 async function runSeoRowAction(action, slug) {
   showStatus(`${action} · ${slug}`);
   await api("/api/admin?resource=seo/landings", {
@@ -4468,6 +4562,12 @@ els.seoFilter.addEventListener("submit", async (event) => {
 
 els.seoGenerate.addEventListener("click", () => runSeoGeneration("generate").catch((error) => showStatus(error.message, "bad")));
 els.seoPublish.addEventListener("click", () => runSeoGeneration("publish").catch((error) => showStatus(error.message, "bad")));
+if (els.seoAutogenRun) {
+  els.seoAutogenRun.addEventListener("click", () => runSeoAutogeneration(false).catch((error) => showStatus(error.message, "bad")));
+}
+if (els.seoAutogenDryRun) {
+  els.seoAutogenDryRun.addEventListener("click", () => runSeoAutogeneration(true).catch((error) => showStatus(error.message, "bad")));
+}
 if (els.linkedinRefresh) {
   els.linkedinRefresh.addEventListener("click", () => loadLinkedIn().catch((error) => showStatus(error.message, "bad")));
 }

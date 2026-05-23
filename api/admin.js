@@ -1,4 +1,5 @@
 const { assertAdmin, fetchWithTimeout, handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
+const { getSeoAutogenerationStatus, runSeoAutogeneration } = require("./_seo/autogeneration");
 const { runSeoLandingGeneration } = require("./_seo/generator");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
 const {
@@ -89,6 +90,14 @@ function adminOrCronTokenFromRequest(req) {
   const authorization = req.headers.authorization || "";
   if (authorization.toLowerCase().startsWith("bearer ")) return authorization.slice(7).trim();
   return String(req.headers["x-cron-secret"] || req.headers["x-admin-token"] || "").trim();
+}
+
+function isAdminTokenRequest(req) {
+  return Boolean(process.env.ADMIN_IMPORT_TOKEN && adminOrCronTokenFromRequest(req) === process.env.ADMIN_IMPORT_TOKEN);
+}
+
+function isCronTokenRequest(req) {
+  return Boolean(process.env.CRON_SECRET && adminOrCronTokenFromRequest(req) === process.env.CRON_SECRET);
 }
 
 function assertAdminOrCron(req, res) {
@@ -1076,6 +1085,32 @@ async function handleSeoGenerate(req) {
     maxPublishesPerRun: typeof body.maxPublishesPerRun === "number" ? body.maxPublishesPerRun : undefined
   });
   return { status: 200, payload: result };
+}
+
+function dryRunOverrideFromRequest(req, url, body) {
+  if (!isAdminTokenRequest(req)) return undefined;
+  if (typeof body?.dry_run === "boolean") return body.dry_run;
+  if (typeof body?.dryRun === "boolean") return body.dryRun;
+  const value = url.searchParams.get("dry_run") || url.searchParams.get("dryRun");
+  if (value === null) return undefined;
+  return ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
+}
+
+async function handleSeoAutogeneration(req, url) {
+  if (req.method === "GET" && isAdminTokenRequest(req) && url.searchParams.get("run") !== "1") {
+    return { status: 200, payload: await getSeoAutogenerationStatus() };
+  }
+  if (!["GET", "POST"].includes(req.method)) {
+    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  }
+
+  const body = req.method === "POST" ? await readJsonBody(req) : {};
+  const dryRun = dryRunOverrideFromRequest(req, url, body);
+  const config = {};
+  if (typeof dryRun === "boolean") config.dryRun = dryRun;
+  const requestSource = isCronTokenRequest(req) && !isAdminTokenRequest(req) ? "cron" : "admin";
+  const result = await runSeoAutogeneration({ requestSource, config });
+  return { status: result.ok === false ? 500 : 200, payload: result };
 }
 
 async function readKpiSettings() {
@@ -2723,6 +2758,15 @@ module.exports = async function handler(req, res) {
       return json(res, result.status, result.payload);
     } catch (error) {
       return json(res, 500, { ok: false, error: "linkedin_daily_failed", message: String(error.message || error).slice(0, 500) });
+    }
+  }
+  if (resource === "seo-autogenerate/run") {
+    if (!assertAdminOrCron(req, res)) return;
+    try {
+      const result = await handleSeoAutogeneration(req, url);
+      return json(res, result.status, result.payload);
+    } catch (error) {
+      return json(res, 500, { ok: false, error: "seo_autogeneration_failed", message: String(error.message || error).slice(0, 500) });
     }
   }
 
