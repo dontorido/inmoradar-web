@@ -7,6 +7,7 @@ const OWNED_ANALYTICS_ENDPOINT = "/api/analytics/event";
 const OWNED_ANALYTICS_SESSION_KEY = "inmoradar_owned_session_id";
 const SEO_ORIGIN_SESSION_KEY = "seo_origin_session_id";
 const SEO_LAST_ORIGIN_KEY = "inmoradar_seo_last_origin";
+const SEO_ORIGIN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const NEWS_ENDPOINT = "/api/news";
 const CHROME_WEBSTORE_URL = "https://chromewebstore.google.com/detail/inmoradar/mbkjlkagblkmdnjggoggbjiohbjebaab";
 const LANGUAGE_STORAGE_KEY = "inmoradar_language";
@@ -18,8 +19,8 @@ const BROWSER_LAUNCH_WAITLIST = {
     name: "Chrome",
     status: "available",
     badge: "Disponible",
-    description: "Instalaci\u00f3n disponible desde Chrome Web Store.",
-    storeName: "Chrome Web Store",
+    description: "Instalaci\u00f3n autom\u00e1tica disponible en este entorno.",
+    storeName: "Flujo compatible",
     storeUrl: CHROME_WEBSTORE_URL,
     label: "Chrome"
   },
@@ -28,17 +29,17 @@ const BROWSER_LAUNCH_WAITLIST = {
     name: "Edge",
     status: "available",
     badge: "Compatible Chromium",
-    description: "Instalaci\u00f3n disponible desde Chrome Web Store en Edge.",
-    storeName: "Chrome Web Store",
+    description: "Instalaci\u00f3n autom\u00e1tica disponible en este entorno.",
+    storeName: "Flujo compatible",
     storeUrl: CHROME_WEBSTORE_URL,
     label: "Edge"
   },
   firefox: {
     id: "firefox",
     name: "Firefox",
-    status: "waitlist",
-    badge: "Muy pronto",
-    description: "Estamos preparando la versi\u00f3n para Firefox.",
+    status: "unsupported",
+    badge: "No disponible",
+    description: "La instalaci\u00f3n autom\u00e1tica no est\u00e1 disponible en este entorno.",
     storeName: "Firefox Add-ons",
     storeUrl: "",
     label: "Firefox"
@@ -46,9 +47,9 @@ const BROWSER_LAUNCH_WAITLIST = {
   opera: {
     id: "opera",
     name: "Opera",
-    status: "waitlist",
-    badge: "Muy pronto",
-    description: "Estamos preparando la versi\u00f3n para Opera.",
+    status: "unsupported",
+    badge: "No disponible",
+    description: "La instalaci\u00f3n autom\u00e1tica no est\u00e1 disponible en este entorno.",
     storeName: "Opera Add-ons",
     storeUrl: "",
     label: "Opera"
@@ -58,8 +59,8 @@ const BROWSER_LAUNCH_WAITLIST = {
     name: "Vivaldi",
     status: "available",
     badge: "Compatible Chromium",
-    description: "Instalaci\u00f3n disponible desde Chrome Web Store en Vivaldi.",
-    storeName: "Chrome Web Store",
+    description: "Instalaci\u00f3n autom\u00e1tica disponible en este entorno.",
+    storeName: "Flujo compatible",
     storeUrl: CHROME_WEBSTORE_URL,
     label: "Vivaldi"
   },
@@ -68,17 +69,17 @@ const BROWSER_LAUNCH_WAITLIST = {
     name: "Brave",
     status: "available",
     badge: "Compatible Chromium",
-    description: "Instalaci\u00f3n disponible desde Chrome Web Store en Brave.",
-    storeName: "Chrome Web Store",
+    description: "Instalaci\u00f3n autom\u00e1tica disponible en este entorno.",
+    storeName: "Flujo compatible",
     storeUrl: CHROME_WEBSTORE_URL,
     label: "Brave"
   },
   safari: {
     id: "safari",
     name: "Safari",
-    status: "waitlist",
-    badge: "Muy pronto",
-    description: "Estamos preparando la versi\u00f3n para Safari.",
+    status: "unsupported",
+    badge: "No disponible",
+    description: "La instalaci\u00f3n autom\u00e1tica no est\u00e1 disponible en este entorno.",
     storeName: "Safari Extensions",
     storeUrl: "",
     label: "Safari"
@@ -97,6 +98,8 @@ let launchWaitlistState = {
   alreadyExists: false,
   opener: null
 };
+let seoInternalLinkAnalyticsBound = false;
+let seoScrollDepthAnalyticsBound = false;
 
 const articles = [
   {
@@ -186,9 +189,9 @@ function normalizeRemoteArticle(item) {
     slug,
     url: item?.url || `/${slug}/`,
     tag: newsTagFromMeta(item?.meta || item?.template_type),
-    city: item?.city || "Espana",
+    city: item?.city || "España",
     title: item?.title || slug,
-    excerpt: item?.description || "Guia InmoRadar para analizar anuncios inmobiliarios antes de contactar."
+    excerpt: item?.description || "Guía InmoRadar para analizar anuncios inmobiliarios antes de contactar."
   };
 }
 
@@ -215,7 +218,7 @@ const I18N = {
     navNews: "Noticias",
     navFaq: "FAQ",
     navContact: "Contacto",
-    navCta: "Empieza a descubrir información relevante",
+    navCta: "Empezar gratis",
     contactSuccess: "Mensaje enviado. Te respondemos en menos de 24h.",
     contactError: "Revisa los campos del formulario.",
     contactSending: "Enviando...",
@@ -239,7 +242,7 @@ const I18N = {
     navNews: "News",
     navFaq: "FAQ",
     navContact: "Contact",
-    navCta: "Start uncovering relevant information",
+    navCta: "Start free",
     contactSuccess: "Message sent. We will reply in under 24h.",
     contactError: "Please review the form fields.",
     contactSending: "Sending...",
@@ -312,8 +315,8 @@ const TEXT_TRANSLATIONS_EN = {
   "Principal": "Main",
   "Secciones": "Sections",
   "Idioma": "Language",
-  "Abrir menu": "Open menu",
-  "Area de clientes": "Customer area",
+  "Abrir menú": "Open menu",
+  "Área de clientes": "Customer area",
   "Área de clientes": "Customer area",
   "Qué analiza": "What it checks",
   "Noticias": "News",
@@ -321,36 +324,36 @@ const TEXT_TRANSLATIONS_EN = {
   "Producto": "Product",
   "Contenido": "Content",
   "Compañía": "Company",
-  "Compania": "Company",
+  "Compañía": "Company",
   "Privacidad": "Privacy",
   "Términos": "Terms",
-  "Terminos": "Terms",
+  "Términos": "Terms",
   "Empezar gratis": "Start free",
-  "Empieza a descubrir información relevante": "Start uncovering relevant information",
+  "Instalar InmoRadar": "Install InmoRadar",
   'Instalar extensión': 'Install extension',
-  "Activar Premium": "Activate Premium",
+  "Ver condiciones de Premium": "See Premium terms",
   'Instala la extensión en tu navegador y analiza tu primer anuncio.': 'Install the extension in your browser and analyze your first listing.',
-  'Avisadme cuando esté disponible': 'Notify me when it is available',
+  'Solicitar soporte': 'Request support',
   "Analiza tu primer anuncio gratis": "Analyze your first listing free",
   "Disponible para navegadores compatibles": "Available for compatible browsers",
-  "Empieza a descubrir información relevante": "Start uncovering relevant information",
-  "Probar gratis 2 días": "Try 2 days free",
-  "Apuntarme al lanzamiento": "Join the launch waitlist",
+  "Analizar un anuncio": "Analyze a listing",
+  "Empezar gratis": "Start free",
+  "Iniciar instalación": "Start installation",
   "Ser de los primeros en probar InmoRadar": "Be among the first to try InmoRadar",
   "Ver Premium": "See Premium",
   "Volver al inicio": "Back home",
   "Online": "Online",
   "Navegadores modernos": "Modern browsers",
-  "Copiloto inmobiliario para navegadores modernos.": "Real-estate copilot for modern browsers.",
-  "Copiloto inmobiliario para tu navegador · Idealista, Fotocasa, Pisos.com y Habitaclia": "Real-estate copilot for your browser · Idealista, Fotocasa, Pisos.com and Habitaclia",
+  "Copiloto inmobiliario para navegadores modernos.": "Analyze listings before contacting.",
+  "Copiloto inmobiliario para tu navegador · Idealista, Fotocasa, Pisos.com y Habitaclia": "Real-estate listing analysis · Idealista, Fotocasa, Pisos.com and Habitaclia",
   "Descubre lo que el anuncio no te cuenta.": "Discover what the listing does not tell you.",
-  "InmoRadar añade una capa de análisis sobre Idealista, Fotocasa, Pisos.com y Habitaclia para mostrarte precio real, coste inicial, zona, transporte, aparcamiento y señales clave en segundos.": "InmoRadar adds an analysis layer on top of Idealista, Fotocasa, Pisos.com and Habitaclia to show real price, initial cost, area, transport, parking and key signals in seconds.",
+  "InmoRadar añade una capa de análisis sobre Idealista, Fotocasa, Pisos.com y Habitaclia para mostrarte precio real, coste inicial, zona, transporte, aparcamiento y señales clave en segundos.": "InmoRadar adds an analysis layer on top of Idealista, Fotocasa, Pisos.com and Habitaclia to help you understand price, initial cost, area, transport, parking and key signals in seconds.",
   "Analizar mi primer anuncio gratis": "Analyse my first listing for free",
-  "Ver ejemplo real": "See a real example",
-  "2 días gratis · Premium semanal por 1,99 € solo si decides continuar": "2 free days · Weekly Premium for €1.99 only if you decide to continue",
-  "2 días": "2 days",
-  "acceso inicial sin pagar": "initial access without paying",
-  "Premium semanal después": "weekly Premium afterwards",
+  "Ver qué analiza": "See what it checks",
+  "Pulsa Empezar gratis para iniciar la instalación compatible.": "Click Start free to begin the compatible installation.",
+  "Precio": "Price",
+  "acceso inicial sin pagar": "reference comparison",
+  "Señales antes de contactar": "signals before contacting",
   "índice de valoración": "rating index",
   "Vista previa · InmoRadar": "Preview · InmoRadar",
   "Calle Goya · Madrid": "Goya Street · Madrid",
@@ -374,13 +377,13 @@ const TEXT_TRANSLATIONS_EN = {
   "Los hace más claros.": "It makes them clearer.",
   "Sigues buscando en Idealista, Fotocasa, Pisos.com y Habitaclia. InmoRadar trabaja encima de esas páginas para ordenar la información, detectar señales útiles y ayudarte a priorizar qué anuncios merecen una visita.": "You keep searching on Idealista, Fotocasa, Pisos.com and Habitaclia. InmoRadar works on top of those pages to organise the information, detect useful signals and help you prioritise which listings deserve a viewing.",
   "Portales compatibles": "Compatible portals",
-  "Extensión multi-navegador": "Multi-browser extension",
+  "Extensión multi-navegador": "Installation",
   "Funciona en tu": "Works in your",
   "navegador favorito.": "favourite browser.",
-  "InmoRadar se está preparando como extensión para navegadores modernos. Mostramos el estado real de cada navegador para que sepas cómo instalarlo hoy.": "InmoRadar is being prepared as an extension for modern browsers. We show the real status of each browser so you know how to install it today.",
-  "InmoRadar se está preparando como extensión para navegadores modernos. Mostramos el estado real de cada navegador y te llevamos a la store correspondiente.": "InmoRadar is being prepared as an extension for modern browsers. We show the real status of each browser and take you to the corresponding store.",
-  "Instalación principal para usuarios de Chromium.": "Primary installation for Chromium users.",
-  "Instalación desde Chrome Web Store cuando la ficha esté pública.": "Install from Chrome Web Store when the listing is public.",
+  "InmoRadar se está preparando como extensión para navegadores modernos. Mostramos el estado real de cada navegador para que sepas cómo instalarlo hoy.": "Click Start free to begin the compatible installation flow.",
+  "InmoRadar detecta el entorno compatible e inicia el flujo de instalación correspondiente.": "InmoRadar detects the compatible environment and starts the corresponding installation flow.",
+  "Instalación principal para usuarios de Chromium.": "Main installation for compatible environments.",
+  "Instalación automática cuando el navegador es compatible.": "Automatic installation when the browser is compatible.",
   "Disponible": "Available",
   "Funciona sobre la base Chromium de Microsoft Edge.": "Works on Microsoft Edge's Chromium base.",
   "Compatible con la base Chromium de Microsoft Edge.": "Compatible with Microsoft Edge's Chromium base.",
@@ -392,9 +395,9 @@ const TEXT_TRANSLATIONS_EN = {
   "Instalación manual": "Manual install",
   "Próximamente": "Coming soon",
   "Preparado para usuarios avanzados de Chromium.": "Prepared for advanced Chromium users.",
-  "Instalación compatible desde Chrome Web Store.": "Compatible installation from Chrome Web Store.",
+  "Instalación compatible automática.": "Automatic compatible installation.",
   "Compatible con extensiones Chromium y foco en privacidad.": "Compatible with Chromium extensions and privacy-focused browsing.",
-  "Chrome, Vivaldi y Brave comparten Chrome Web Store. Edge, Firefox y Opera tienen stores o flujos compatibles propios.": "Chrome, Vivaldi and Brave share Chrome Web Store. Edge, Firefox and Opera have their own stores or compatible flows.",
+  "InmoRadar detecta el entorno compatible y continúa con el flujo disponible.": "InmoRadar detects the compatible environment and continues with the available flow.",
   "Coste real": "Real cost",
   "Entorno urbano": "Urban context",
   "Comparativa": "Comparison",
@@ -468,14 +471,14 @@ const TEXT_TRANSLATIONS_EN = {
   "Es una capa de criterio.": "It is a layer of judgement.",
   "InmoRadar ofrece estimaciones orientativas basadas en datos visibles del anuncio, fuentes públicas y señales urbanas. Sirve para entender mejor una vivienda antes de contactar, no para sustituir una tasación profesional ni garantizar una decisión económica.": "InmoRadar provides indicative estimates based on visible listing data, public sources and urban signals. It helps you understand a home better before contacting, not replace a professional valuation or guarantee a financial decision.",
   "Para búsquedas intensivas": "For active searches",
-  "Paga solo durante": "Pay only during",
+  "Más contexto para": "More context for",
   "tu búsqueda activa.": "your active search.",
-  "Los 2 días gratis son acceso inicial para todos: no son una prueba Premium de pago. Premium solo empieza si decides continuar.": "The 2 free days are initial access for everyone: they are not a paid Premium trial. Premium only starts if you decide to continue.",
-  "Más popular": "Most popular",
-  "/ semana": "/ week",
-  "+ 2 días iniciales · sin permanencia": "+ 2 initial days · no commitment",
-  "2 días gratis por defecto, sin activar Premium.": "2 free days by default, without activating Premium.",
-  "Premium semanal solo si decides continuar.": "Weekly Premium only if you decide to continue.",
+  "El checkout mostrará las condiciones vigentes antes de confirmar Premium.": "Checkout will show the current terms before confirming Premium.",
+  "Opcional": "Optional",
+  "según checkout": "according to checkout",
+  "Condiciones visibles antes de confirmar el pago.": "Terms visible before confirming payment.",
+  "Análisis ampliados de fichas.": "Expanded listing analyses.",
+  "Gestión de la suscripción desde el área de clientes.": "Subscription management from the customer area.",
   "Análisis ilimitados de fichas.": "Unlimited listing analyses.",
   "Comparativa de inmuebles guardados.": "Comparison of saved homes.",
   "Señales urbanas y precio por zona.": "Urban signals and area price.",
@@ -486,18 +489,18 @@ const TEXT_TRANSLATIONS_EN = {
   "Preguntas frecuentes": "Frequently asked questions",
   "Lo que la gente": "What people",
   "siempre pregunta.": "always ask.",
-  "Los 2 días gratis, ¿son una prueba Premium?": "Are the 2 free days a Premium trial?",
-  "No. Son acceso inicial gratuito para todos los usuarios. No tienes que pagar Premium para probar InmoRadar durante esos 2 días.": "No. They are free initial access for all users. You do not need to pay Premium to try InmoRadar during those 2 days.",
+  "¿Cómo instalo InmoRadar?": "How do I install InmoRadar?",
+  "Pulsa Empezar gratis y se iniciará el flujo de instalación compatible con tu navegador. Después podrás analizar anuncios directamente donde ya buscas.": "Click Start free and the compatible installation flow will begin. Then you can analyze listings directly where you already search.",
   "¿InmoRadar mide datos exactos?": "Does InmoRadar measure exact data?",
   "No. Son estimaciones orientativas basadas en datos abiertos, información visible del anuncio y señales urbanas.": "No. They are indicative estimates based on open data, visible listing information and urban signals.",
   "¿Funciona con cualquier portal?": "Does it work with any portal?",
   "Compatible con Idealista, Fotocasa, Pisos.com y Habitaclia. Iremos sumando otros portales en próximas versiones.": "Compatible with Idealista, Fotocasa, Pisos.com and Habitaclia. We will add more portals in upcoming versions.",
   "¿Dónde se guardan mis inmuebles?": "Where are my saved homes stored?",
   "Localmente en el navegador salvo que actives funciones que requieran servicios externos.": "Locally in your browser unless you enable features that require external services.",
-  "¿Puedo cancelar Premium cuando quiera?": "Can I cancel Premium whenever I want?",
-  "Sí. Es semanal y sin permanencia.": "Yes. It is weekly and has no commitment.",
-  "¿Necesito crear cuenta para probar?": "Do I need to create an account to try it?",
-  "No para los 2 días iniciales.": "Not for the initial 2 days.",
+  "¿Tengo que elegir navegador?": "Do I have to choose a browser?",
+  "No. El sistema detecta el entorno compatible e inicia el flujo de instalación correspondiente.": "No. The system detects the compatible environment and starts the corresponding installation flow.",
+  "¿Qué pasa con Premium?": "What about Premium?",
+  "Premium es opcional. Si abres el checkout, verás las condiciones vigentes antes de confirmar cualquier pago.": "Premium is optional. If you open checkout, you will see the current terms before confirming any payment.",
   "Cuéntanos qué te": "Tell us what",
   "trae por aquí.": "brings you here.",
   "Soporte, prensa, partners o feedback de producto. Leemos todo desde hola@inmoradar.app.": "Support, press, partners or product feedback. We read everything at hola@inmoradar.app.",
@@ -1025,13 +1028,31 @@ function rememberSeoOrigin(reason = "page_view") {
   return origin;
 }
 
+function clearSeoOrigin() {
+  try {
+    localStorage.removeItem(SEO_ORIGIN_SESSION_KEY);
+    localStorage.removeItem(SEO_LAST_ORIGIN_KEY);
+  } catch (error) {
+    // Storage can be unavailable in private or restricted contexts.
+  }
+}
+
 function readSeoOrigin() {
+  let origin = null;
   try {
     const raw = localStorage.getItem(SEO_LAST_ORIGIN_KEY);
-    return raw ? JSON.parse(raw) : null;
+    origin = raw ? JSON.parse(raw) : null;
   } catch (error) {
+    clearSeoOrigin();
     return null;
   }
+  if (!origin) return null;
+  const savedAt = Date.parse(origin.saved_at || "");
+  if (!Number.isFinite(savedAt) || Date.now() - savedAt > SEO_ORIGIN_TTL_MS) {
+    clearSeoOrigin();
+    return null;
+  }
+  return origin;
 }
 
 function seoOriginMetadata(origin = null) {
@@ -1114,6 +1135,7 @@ function initSeoCalculatorAnalytics(root = document) {
       if (calculator.dataset.calculatorCompletedTracked !== "true" && state.has_result) {
         trackOwnedEvent("calculator_completed", {
           metadata: {
+            calculator_type: state.calculator_type,
             result_band: state.result_band,
             diff_band: state.diff_band
           }
@@ -1148,11 +1170,14 @@ function linkContextFor(anchor) {
 }
 
 function initSeoInternalLinkAnalytics() {
+  if (seoInternalLinkAnalyticsBound) return;
   const context = pageContextFromDom();
   if (!isSeoAnalyticsContext(context)) return;
+  seoInternalLinkAnalyticsBound = true;
   document.addEventListener(
     "click",
     (event) => {
+      if (!isSeoAnalyticsContext()) return;
       const anchor = event.target.closest?.("a[href]");
       if (!anchor) return;
       let target;
@@ -1177,10 +1202,13 @@ function initSeoInternalLinkAnalytics() {
 }
 
 function initSeoScrollDepthAnalytics() {
+  if (seoScrollDepthAnalyticsBound) return;
   const context = pageContextFromDom();
   if (!isSeoAnalyticsContext(context)) return;
+  seoScrollDepthAnalyticsBound = true;
   const tracked = new Set();
   let ticking = false;
+  let hasScrolled = false;
   const checkDepth = () => {
     ticking = false;
     const doc = document.documentElement;
@@ -1196,13 +1224,16 @@ function initSeoScrollDepthAnalytics() {
     });
   };
   const schedule = () => {
+    hasScrolled = true;
     if (ticking) return;
     ticking = true;
     requestAnimationFrame(checkDepth);
   };
+  const scheduleAfterScroll = () => {
+    if (hasScrolled) schedule();
+  };
   window.addEventListener("scroll", schedule, { passive: true });
-  window.addEventListener("resize", schedule, { passive: true });
-  setTimeout(schedule, 250);
+  window.addEventListener("resize", scheduleAfterScroll, { passive: true });
 }
 
 function initSeoInteractionAnalytics() {
@@ -1258,7 +1289,7 @@ function launchWaitlistBrowserCards() {
           </span>
           <span>${escapeHtml(browser.description)}</span>
           <span class="launch-browser-store">
-            <span>${selected ? "Elegido" : "Elegir navegador"}</span>
+            <span>${selected ? "Detectado" : "Ver entorno"}</span>
             ${icon("ArrowRight")}
           </span>
         </button>
@@ -1278,12 +1309,12 @@ function launchWaitlistModalHtml() {
       <section class="launch-modal launch-success" role="dialog" aria-modal="true" aria-labelledby="launch-success-title" tabindex="-1">
         <button class="launch-modal-close" type="button" data-launch-waitlist-close aria-label="Cerrar">&times;</button>
         <span class="launch-success-icon">${icon("Check")}</span>
-        <h2 id="launch-success-title">Listo, est\u00e1s en la lista</h2>
-        <p>${launchWaitlistState.alreadyExists ? `Ya ten\u00edamos tu email en la lista para ${escapeHtml(browserName)}. Te avisaremos igualmente cuando est\u00e9 disponible.` : `Te avisaremos en cuanto InmoRadar est\u00e9 disponible para ${escapeHtml(browserName)}.`}</p>
-        <p>Gracias por apuntarte. Nos ayudar\u00e1 a priorizar el lanzamiento por navegador.</p>
+        <h2 id="launch-success-title">Solicitud recibida</h2>
+        <p>${launchWaitlistState.alreadyExists ? `Ya ten\u00edamos tu email asociado a ${escapeHtml(browserName)}.` : `Hemos recibido tu solicitud para ${escapeHtml(browserName)}.`}</p>
+        <p>Gracias. Revisaremos la compatibilidad del entorno antes de cualquier comunicaci\u00f3n.</p>
         <div class="launch-modal-actions">
           <button class="button" type="button" data-launch-waitlist-success-close>Cerrar</button>
-          <button class="button ghost" type="button" data-launch-waitlist-reset>Apuntar otro navegador</button>
+          <button class="button ghost" type="button" data-launch-waitlist-reset>Revisar otro entorno</button>
         </div>
       </section>
     </div>
@@ -1294,17 +1325,17 @@ function launchWaitlistModalHtml() {
       <section class="launch-modal" role="dialog" aria-modal="true" aria-labelledby="launch-modal-title" aria-describedby="launch-modal-description" tabindex="-1">
         <button class="launch-modal-close" type="button" data-launch-waitlist-close aria-label="Cerrar">&times;</button>
         <div class="launch-modal-head">
-          <p class="section-label">Instalar extensi\u00f3n</p>
-          <h2 id="launch-modal-title">${selectedBrowser && !selectedInstallable ? `Estamos trabajando en la versi\u00f3n para ${escapeHtml(browserName)}` : "Empieza a descubrir información relevante"}</h2>
-          <p id="launch-modal-description">${selectedBrowser && !selectedInstallable ? `D\u00e9janos tu email y te avisaremos en cuanto InmoRadar est\u00e9 disponible para ${escapeHtml(browserName)}.` : "Elige tu navegador. Si ya es compatible, te llevamos a la store; si est\u00e1 en preparaci\u00f3n, te avisamos por email."}</p>
-          <strong>Instala la extensi\u00f3n en tu navegador y analiza tu primer anuncio.</strong>
+          <p class="section-label">Instalar InmoRadar</p>
+          <h2 id="launch-modal-title">${selectedBrowser && !selectedInstallable ? `Instalaci\u00f3n no disponible en ${escapeHtml(browserName)}` : "Empezar gratis"}</h2>
+          <p id="launch-modal-description">${selectedBrowser && !selectedInstallable ? `No hemos podido iniciar la instalaci\u00f3n autom\u00e1tica en ${escapeHtml(browserName)} desde esta web.` : "Pulsa Empezar gratis para iniciar el flujo de instalaci\u00f3n compatible con tu navegador."}</p>
+          <strong>Instala InmoRadar y analiza tu primer anuncio donde ya buscas.</strong>
         </div>
-        <div class="launch-browser-grid" role="group" aria-label="Elige navegador">
+        <div class="launch-browser-grid" role="group" aria-label="Entorno detectado">
           ${launchWaitlistBrowserCards()}
         </div>
-        <p class="launch-other-browsers">Chrome, Edge, Brave y Vivaldi usan una instalación compatible. Firefox, Safari y Opera est\u00e1n en preparaci\u00f3n.</p>
+        <p class="launch-other-browsers">InmoRadar inicia el flujo disponible cuando el entorno es compatible.</p>
         <form class="launch-form" data-launch-waitlist-form>
-          <p class="launch-selected-browser">Navegador elegido: <strong>${escapeHtml(selectedBrowser?.name || "Elige uno")}</strong></p>
+          <p class="launch-selected-browser">Entorno detectado: <strong>${escapeHtml(selectedBrowser?.name || "No identificado")}</strong></p>
           <label class="field" for="launch-waitlist-email">
             <span>Tu email</span>
             <input id="launch-waitlist-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="tu@email.com" value="${escapeHtml(launchWaitlistState.email)}" ${selectedInstallable ? "" : "required"}>
@@ -1313,9 +1344,9 @@ function launchWaitlistModalHtml() {
             <span>Empresa</span>
             <input name="company" type="text" autocomplete="off" tabindex="-1">
           </label>
-          <p class="launch-privacy">Solo usaremos tu email para avisarte sobre el lanzamiento de InmoRadar y la disponibilidad en tu navegador. Puedes leer la <a href="/privacidad" target="_blank" rel="noopener noreferrer">pol\u00edtica de privacidad</a>.</p>
+          <p class="launch-privacy">Solo usaremos tu email si solicitas soporte sobre compatibilidad o acceso. Puedes leer la <a href="/privacidad" target="_blank" rel="noopener noreferrer">pol\u00edtica de privacidad</a>.</p>
           <p class="launch-error" id="launch-waitlist-error" ${launchWaitlistState.error ? "" : "hidden"}>${escapeHtml(launchWaitlistState.error)}</p>
-          <button class="button full" type="submit" ${submitDisabled ? "disabled" : ""}>${selectedInstallable ? "Abrir store correspondiente" : launchWaitlistState.status === "loading" ? "Guardando..." : "Avisadme cuando est\u00e9 disponible"}</button>
+          <button class="button full" type="submit" ${submitDisabled ? "disabled" : ""}>${selectedInstallable ? "Iniciar instalaci\u00f3n" : launchWaitlistState.status === "loading" ? "Guardando..." : "Solicitar soporte"}</button>
         </form>
         <div class="launch-modal-actions left">
           <button class="button ghost" type="button" data-launch-waitlist-close>Seguir viendo la web</button>
@@ -1466,7 +1497,7 @@ async function submitLaunchWaitlist(event) {
     return;
   }
   if (!browser) {
-    launchWaitlistState.error = "Elige tu navegador para continuar.";
+    launchWaitlistState.error = "No hemos podido detectar un entorno compatible.";
     renderLaunchWaitlistModal();
     return;
   }
@@ -1558,12 +1589,12 @@ function handleUniversalInstallClick(event, element) {
     openChromeWebStore({ browser, source, label });
     return;
   }
-  openLaunchWaitlistModal({
+  trackOwnedEvent("install_click", {
+    browser,
     source,
-    label,
-    browser: BROWSER_LAUNCH_WAITLIST[browser] ? browser : "",
-    opener: element
+    metadata: { label, status: "unsupported_browser" }
   });
+  showToast("No hemos podido iniciar la instalación automática en este navegador. Prueba desde Chrome, Edge, Brave o Vivaldi.", "error");
 }
 
 function bindInstallButtons(root = document) {

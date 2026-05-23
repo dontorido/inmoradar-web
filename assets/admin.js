@@ -815,7 +815,7 @@ function analyticsSignal(item = {}) {
   const detail =
     item.reason ||
     (type === "calculator_to_install"
-      ? `${item.calculator_used || 0} usos de calculadora y ${item.install_intent || 0} clicks de instalacion`
+      ? `${item.sessions_with_calculator_then_install || 0}/${item.sessions_with_calculator || 0} sesiones con instalacion posterior`
       : "Senal de comportamiento SEO detectada.");
   return `
     <article class="admin-learning-item">
