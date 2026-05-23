@@ -4377,10 +4377,41 @@
   line-height: 1.35;
 }
 
+.admin-linkedin-action-button {
+  width: auto;
+  min-width: 36px;
+  padding: 0 10px;
+}
+
 .admin-linkedin-editor-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.admin-floating-tooltip {
+  position: fixed;
+  z-index: 10000;
+  max-width: min(270px, calc(100vw - 24px));
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 8px;
+  background: var(--ink);
+  box-shadow: 0 16px 34px rgba(9, 9, 11, .22);
+  color: #ffffff;
+  font-family: var(--body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.35;
+  padding: 8px 10px;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  pointer-events: none;
+}
+
+.admin-floating-tooltip[hidden] {
+  display: none;
 }
 
 @media (max-width: 1180px) {

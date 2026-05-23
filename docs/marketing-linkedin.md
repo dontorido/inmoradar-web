@@ -1,28 +1,36 @@
-# Módulo LinkedIn de Marketing
+# Modulo LinkedIn Autopublisher
 
-El módulo `Marketing > LinkedIn` permite generar cada día un post para LinkedIn con texto, CTA, hashtags e imagen. Está diseñado con dos modos:
+Destino real de publicacion:
 
-- **Modo manual / fallback**: siempre disponible. Genera el copy, genera una imagen en formato SVG descargable, permite copiar el texto, descargar la imagen y marcar el post como publicado manualmente.
-- **Modo automático**: solo publica si existen credenciales válidas, `LINKEDIN_AUTO_PUBLISH_ENABLED=true`, una `LINKEDIN_ORGANIZATION_URN` configurada, permisos aprobados por LinkedIn y una imagen compatible con LinkedIn Images API.
+```txt
+https://www.linkedin.com/company/inmoradar-app/
+```
 
-No se usa scraping, automatización de navegador ni APIs no oficiales.
+La Fase 1 genera posts del tipo `precio_sexy_coste_oculto`: vivienda atractiva, precio visible tipo `895 €/mes`, pregunta `¿Lo alquilarias?` y copy sobre costes ocultos como aparcamiento, parking caro, IBI, comunidad, ruido, transporte, reformas y coste real de vivir ahi.
+
+No se usa scraping, automatizacion de navegador, credenciales manuales, likes, follows ni comentarios.
 
 ## Variables de entorno
 
-Añadir en Vercel, al menos en Production y Preview si quieres probarlo:
-
 ```env
+LINKEDIN_AUTOPOST_ENABLED=false
+LINKEDIN_AUTOPOST_FREQUENCY_DAYS=2
+LINKEDIN_AUTOPOST_MAX_PER_DAY=1
+LINKEDIN_COMPANY_URL=https://www.linkedin.com/company/inmoradar-app/
+LINKEDIN_ORGANIZATION_ID=
+LINKEDIN_ORGANIZATION_URN=
 LINKEDIN_CLIENT_ID=
 LINKEDIN_CLIENT_SECRET=
 LINKEDIN_REDIRECT_URI=https://www.inmoradar.app/admin
 LINKEDIN_API_VERSION=202605
-LINKEDIN_ORGANIZATION_URN=urn:li:organization:TU_ID
-LINKEDIN_AUTO_PUBLISH_ENABLED=false
-LINKEDIN_DAILY_POST_TIME=09:30
-LINKEDIN_TIMEZONE=Europe/Madrid
+LINKEDIN_AUTOPOST_TIME=10:00
+LINKEDIN_AUTOPOST_TIMEZONE=Europe/Madrid
+LINKEDIN_ACCESS_TOKEN_ENCRYPTION_KEY=
 ```
 
-También deben existir las variables ya usadas por el backoffice:
+`LINKEDIN_AUTO_PUBLISH_ENABLED`, `LINKEDIN_DAILY_POST_TIME` y `LINKEDIN_TIMEZONE` siguen aceptandose como alias legacy, pero la configuracion nueva debe usar `LINKEDIN_AUTOPOST_*`.
+
+Tambien deben existir las variables ya usadas por el backoffice:
 
 ```env
 SUPABASE_URL=
@@ -39,101 +47,98 @@ Ejecuta en Supabase SQL Editor:
 -- database/marketing-linkedin.sql
 ```
 
-Crea estas tablas:
+Crea o amplia:
 
 - `marketing_linkedin_connections`
 - `marketing_linkedin_settings`
 - `marketing_linkedin_posts`
+- `linkedin_autopublisher_runs`
 
-Los tokens se guardan cifrados desde backend con AES-256-GCM. No se imprimen en logs.
+Los tokens se guardan cifrados desde backend. No se exponen en frontend ni se escriben en logs.
 
-## Crear app en LinkedIn Developers
+## OAuth y permisos
 
-1. Entra en [LinkedIn Developers](https://www.linkedin.com/developers/).
-2. Crea una aplicación para InmoRadar.
-3. Configura como redirect URL el valor de `LINKEDIN_REDIRECT_URI`.
-4. Solicita el producto/permisos necesarios para Community Management.
-5. Pide a LinkedIn acceso a la Community Management API si quieres publicar en una LinkedIn Page.
+1. Crea una app en LinkedIn Developers para InmoRadar.
+2. Configura `LINKEDIN_REDIRECT_URI`.
+3. Solicita acceso a Community Management API.
+4. Conecta desde BackOffice > Marketing > LinkedIn.
 
-Documentación oficial usada como referencia:
-
-- OAuth 2.0 / Authorization Code Flow: <https://learn.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow>
-- Acceso y permisos de APIs LinkedIn: <https://learn.microsoft.com/en-us/linkedin/shared/authentication/getting-access>
-- Posts API: <https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api>
-- Images API: <https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/images-api>
-
-## Scopes necesarios
-
-Para publicar en una página de empresa:
+Scope requerido para MVP:
 
 - `w_organization_social`
-- `r_organization_social`, si está disponible y aprobado
 
-Para fallback o pruebas de perfil personal:
+Scope opcional posterior:
 
-- `w_member_social`
+- `r_organization_social`
 
-El usuario que conecte LinkedIn debe tener rol válido en la LinkedIn Page:
-
-- `ADMINISTRATOR`
-- `CONTENT_ADMIN`
-- `DIRECT_SPONSORED_CONTENT_POSTER`
+El usuario que conecta debe poder publicar en la LinkedIn Company Page.
 
 ## Organization URN
 
-Debe tener formato:
+Formato esperado:
 
 ```txt
 urn:li:organization:123456
 ```
 
-Si solo tienes el número, el backend lo normaliza automáticamente.
+Para obtenerlo, localiza el `organization_id` de la pagina de empresa desde LinkedIn Developers, el panel de administracion de la organizacion o APIs aprobadas de organizacion. Guarda `LINKEDIN_ORGANIZATION_ID=123456` o directamente `LINKEDIN_ORGANIZATION_URN=urn:li:organization:123456`.
 
-## Uso manual
+El backend usa ese URN como `author` en Posts API. No publica como perfil personal.
 
-1. Entra en `/admin`.
-2. Ve a `Marketing > LinkedIn`.
-3. Pulsa `Generar post diario` o `Crear borrador`.
-4. Revisa hook, cuerpo, CTA y hashtags.
-5. Pulsa `Generar imagen` si quieres regenerar la pieza visual.
-6. Pulsa `Copiar texto`.
-7. Pulsa `Descargar imagen`.
-8. Publica manualmente en LinkedIn.
-9. Marca el post como `Publicado manualmente`.
+## Reglas del scheduler
 
-Este modo funciona aunque LinkedIn no haya aprobado todavía la API.
-
-## Activar automático
-
-1. Configura credenciales OAuth.
-2. Configura `LINKEDIN_ORGANIZATION_URN`.
-3. Asegúrate de tener permisos aprobados por LinkedIn.
-4. Cambia `LINKEDIN_AUTO_PUBLISH_ENABLED=true` en Vercel.
-5. En Backoffice > Marketing > LinkedIn, activa `Publicación automática`.
-6. Decide si mantienes `Aprobación previa`.
-
-Reglas de seguridad:
-
-- No publica si falta conexión.
-- No publica si falta `organization_urn`.
-- No publica si el body está vacío.
-- No publica si falta imagen.
-- No publica si el token está expirado y no se puede refrescar.
-- No publica dos posts del mismo día salvo acción manual explícita.
-- Si LinkedIn devuelve error de permisos, se marca el post como `failed` y se fuerza modo manual en la conexión.
-
-## Cron
-
-El workflow `.github/workflows/seo-cron.yml` llama cada 6 horas al recurso existente de backoffice:
+El workflow `.github/workflows/seo-cron.yml` llama cada 6 horas al endpoint:
 
 ```txt
 POST /api/admin?resource=linkedin/daily
 ```
 
-La llamada usa `x-cron-secret` y reutiliza `api/admin.js`, por lo que no crea una serverless function adicional en Vercel Hobby. El endpoint evita duplicados por día, así que aunque el workflow se ejecute varias veces, solo crea un post diario. Si faltan las tablas `marketing_linkedin_*`, devuelve `ok: true` con `skipped: true` y `reason: "table_missing"` para que el cron SEO no parezca fallar por LinkedIn.
+Alias recomendado:
 
-## Limitaciones
+```txt
+POST /api/admin/linkedin/autopublisher/run
+```
 
-- La publicación automática en páginas de empresa depende de aprobación de LinkedIn Community Management API.
-- La imagen generada por fallback es SVG descargable para publicación manual. Para publicación automática, usa una URL o data URL compatible con `jpg`, `png` o `webp`.
-- El módulo no intenta publicar en LinkedIn usando navegador ni scraping.
+El endpoint decide si toca publicar:
+
+- no publica si `LINKEDIN_AUTOPOST_ENABLED=false`;
+- no publica si `autopost_enabled=false` en BackOffice;
+- no publica si falta conexion OAuth;
+- no publica si falta `organization_urn`;
+- no publica si ya se publico hoy;
+- no publica mas de `LINKEDIN_AUTOPOST_MAX_PER_DAY=1`;
+- respeta `LINKEDIN_AUTOPOST_FREQUENCY_DAYS=2`;
+- registra `published`, `skipped` o `failed` en `linkedin_autopublisher_runs`.
+
+## BackOffice
+
+La seccion `Marketing > LinkedIn` muestra:
+
+- pagina destino InmoRadar;
+- company URL;
+- estado de conexion;
+- `organization_id` y `organization_urn`;
+- enabled/paused;
+- frecuencia;
+- proxima publicacion;
+- ultimos posts;
+- preview de imagen;
+- copy generado;
+- error si falla;
+- botones `Generar borrador ahora`, `Publicar ahora` si connected y `Pausar`.
+
+## Probar sin publicar
+
+Mantener:
+
+```env
+LINKEDIN_AUTOPOST_ENABLED=false
+```
+
+Desde BackOffice se puede generar borrador, copiar texto y descargar el placeholder. El scheduler registrara `skipped` si esta desactivado.
+
+## Limitaciones MVP
+
+- La publicacion real depende de permisos LinkedIn aprobados.
+- El fallback visual es SVG para preview/descarga manual. Para publicacion automatica con imagen, usa URL o data URL `jpg`, `png` o `webp`; si no, el MVP no bloquea el sistema.
+- No hay lectura de analitica de posts hasta incorporar `r_organization_social`.
