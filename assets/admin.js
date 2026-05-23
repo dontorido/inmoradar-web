@@ -247,6 +247,7 @@ const els = {
   revenueSummary: document.querySelector("[data-revenue-summary]"),
   revenueChart: document.querySelector("[data-revenue-chart]"),
   extensionStats: document.querySelector("[data-extension-stats]"),
+  extensionDiagnostics: document.querySelector("[data-extension-diagnostics]"),
   extensionBreakdown: document.querySelector("[data-extension-breakdown]"),
   analyticsSummary: document.querySelector("[data-analytics-summary]"),
   analyticsPages: document.querySelector("[data-analytics-pages]"),
@@ -946,8 +947,53 @@ function renderUsageList(title, rows) {
   `;
 }
 
+function extensionTrackingLabel(status) {
+  const labels = {
+    receiving_events: "Recibiendo eventos",
+    no_events_30d: "Sin eventos 30d",
+    table_missing: "Tabla no creada",
+    read_error: "Error de lectura"
+  };
+  return labels[status] || "Estado desconocido";
+}
+
+function renderExtensionDiagnosticItem(label, value, hint = "") {
+  return `
+    <article class="admin-extension-diagnostic">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value || "-")}</strong>
+      ${hint ? `<p>${escapeHtml(hint)}</p>` : ""}
+    </article>
+  `;
+}
+
+function renderExtensionDiagnostics(payload = {}) {
+  if (!els.extensionDiagnostics) return;
+  const lastEvent = payload.last_event || null;
+  const lastLabel = lastEvent
+    ? `${lastEvent.event_name || "unknown"} - ${formatDate(lastEvent.occurred_at || lastEvent.received_at)}`
+    : "Sin eventos";
+  const lastHint = lastEvent
+    ? [lastEvent.browser, lastEvent.country, lastEvent.extension_version, lastEvent.page_domain]
+        .filter(Boolean)
+        .join(" - ")
+    : payload.message || "El panel esta leyendo la tabla, pero no hay actividad registrada.";
+  const missing = Array.isArray(payload.missing_expected_events) ? payload.missing_expected_events : [];
+  const trackingHint = payload.schema_warning
+    ? "La tabla existe, pero faltan columnas nuevas; se uso lectura compatible."
+    : payload.message || "";
+
+  els.extensionDiagnostics.innerHTML = [
+    renderExtensionDiagnosticItem("Estado tracking", extensionTrackingLabel(payload.tracking_status), trackingHint),
+    renderExtensionDiagnosticItem("Ultimo evento", lastLabel, lastHint),
+    renderExtensionDiagnosticItem("Eventos 24h", payload.total_events_24h || 0, missing.length ? `Faltan minimos: ${missing.join(", ")}` : "Eventos minimos cubiertos o sin datos suficientes."),
+    renderExtensionDiagnosticItem("Endpoint/lectura", payload.endpoint_status || "unknown", payload.read_error || payload.error || payload.endpoint_url || "/api/extension-usage")
+  ].join("");
+}
+
 function renderExtensionUsage(payload) {
   if (!els.extensionStats || !els.extensionBreakdown) return;
+  renderExtensionDiagnostics(payload || {});
   if (!payload?.ok && payload?.table_missing) {
     els.extensionStats.innerHTML = [
       stat("Usuarios 30d", 0, { id: "extension-users", hint: "Ejecuta database/extension-usage-events.sql" }),
@@ -4615,7 +4661,15 @@ async function loadPremium() {
 
 async function loadExtensionUsage() {
   if (!els.extensionStats) return;
-  const payload = await api("/api/admin?resource=extension/usage");
+  const payload = await api("/api/admin?resource=extension/usage").catch((error) => error.payload || {
+    ok: false,
+    tracking_status: "read_error",
+    endpoint_status: "read_error",
+    total_events: 0,
+    total_events_24h: 0,
+    read_error: error.message || "extension_usage_unavailable",
+    message: "No se pudo leer el diagnostico de uso de extension."
+  });
   renderExtensionUsage(payload);
 }
 

@@ -2,6 +2,7 @@
 /api/admin/seo/sitemap /api/admin?resource=seo/sitemap 200
 /api /api/health 200
 /api/ /api/health 200
+/api/extension-usage /api/extension-version?resource=usage 200
 /api/contact /api/market-price?resource=contact 200
 /precio-metro-cuadrado/:city /api/seo-page?slug=precio-metro-cuadrado/:city 200
 /precio-metro-cuadrado/:city/ /api/seo-page?slug=precio-metro-cuadrado/:city 200

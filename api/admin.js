@@ -558,39 +558,82 @@ async function handlePremiumSubscriptions(url) {
 async function handleExtensionUsageSummary() {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const params = new URLSearchParams({
-    select:
-      "event_name,anonymous_id_hash,session_id_hash,browser_name,browser_version,platform,country,extension_version,duration_seconds,active_seconds,created_at",
     created_at: `gte.${since}`,
     order: "created_at.desc",
     limit: "5000"
   });
+  const select =
+    "event_name,anonymous_id_hash,session_id_hash,browser_name,browser_version,platform,country,extension_version,page_domain,duration_seconds,active_seconds,occurred_at,created_at";
+  const legacySelect =
+    "event_name,anonymous_id_hash,session_id_hash,browser_name,browser_version,platform,country,extension_version,duration_seconds,active_seconds,created_at";
+
+  async function readRows() {
+    const nextParams = new URLSearchParams(params);
+    nextParams.set("select", select);
+    try {
+      return {
+        rows: await supabaseFetch(`extension_usage_events?${nextParams.toString()}`),
+        schema_warning: null
+      };
+    } catch (error) {
+      if (!/occurred_at|page_domain|schema cache|column/i.test(error.message || "")) throw error;
+      const legacyParams = new URLSearchParams(params);
+      legacyParams.set("select", legacySelect);
+      return {
+        rows: await supabaseFetch(`extension_usage_events?${legacyParams.toString()}`),
+        schema_warning: "missing_extension_usage_occurrence_columns"
+      };
+    }
+  }
 
   try {
-    const rows = await supabaseFetch(`extension_usage_events?${params.toString()}`);
+    const result = await readRows();
+    const summary = summarizeExtensionUsage(Array.isArray(result.rows) ? result.rows : []);
+    const trackingStatus = summary.total_events ? "receiving_events" : "no_events_30d";
     return {
       ok: true,
       generated_at: new Date().toISOString(),
       window_days: 30,
-      ...summarizeExtensionUsage(Array.isArray(rows) ? rows : [])
+      endpoint_url: "/api/extension-usage",
+      endpoint_status: "readable",
+      tracking_status: trackingStatus,
+      read_error: null,
+      schema_warning: result.schema_warning,
+      message: summary.total_events
+        ? "Tracking activo: el backoffice esta leyendo eventos anonimos de la extension."
+        : "No hay eventos anonimos de extension en los ultimos 30 dias. Si la extension esta en uso, revisa que el cliente este enviando eventos a /api/extension-usage.",
+      ...summary
     };
   } catch (error) {
+    const tableMissing = /extension_usage_events/.test(error.message);
     return {
       ok: false,
       generated_at: new Date().toISOString(),
       window_days: 30,
+      endpoint_url: "/api/extension-usage",
+      endpoint_status: "read_error",
+      tracking_status: tableMissing ? "table_missing" : "read_error",
       total_events: 0,
+      total_events_24h: 0,
       unique_users_30d: 0,
       active_users_7d: 0,
       active_users_24h: 0,
       sessions_30d: 0,
       active_seconds_30d: 0,
       average_session_seconds: 0,
+      last_event: null,
+      expected_events: [],
+      missing_expected_events: [],
       by_browser: [],
       by_country: [],
       by_extension_version: [],
       by_event_name: [],
-      table_missing: /extension_usage_events/.test(error.message),
-      error: error.message
+      table_missing: tableMissing,
+      read_error: error.message,
+      error: error.message,
+      message: tableMissing
+        ? "Falta la tabla extension_usage_events en Supabase."
+        : "El backoffice no pudo leer extension_usage_events. Revisa permisos, columnas o configuracion de Supabase."
     };
   }
 }

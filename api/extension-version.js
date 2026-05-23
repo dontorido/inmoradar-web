@@ -1,11 +1,49 @@
 const { handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
 const { extensionUsageEventFromInput } = require("../lib/extension-usage/metrics");
 
+function requestResource(req) {
+  if (req.query?.resource) return req.query.resource;
+  const url = new URL(req.url || "/", `https://${req.headers.host || "inmoradar.app"}`);
+  return url.searchParams.get("resource") || "";
+}
+
 async function readJsonBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
   if (typeof req.body === "string") return req.body ? JSON.parse(req.body) : {};
   const raw = await readRawBody(req);
   return raw ? JSON.parse(raw) : {};
+}
+
+function isMissingUsageSchemaColumn(error) {
+  return /occurred_at|page_domain|schema cache|column/i.test(String(error?.message || error || ""));
+}
+
+async function storeExtensionUsageEvent(event) {
+  try {
+    await supabaseFetch("extension_usage_events", {
+      method: "POST",
+      body: JSON.stringify(event)
+    });
+    return { stored: true, degraded_schema: false };
+  } catch (error) {
+    if (!isMissingUsageSchemaColumn(error)) throw error;
+    const legacyEvent = {
+      ...event,
+      metadata: {
+        ...(event.metadata || {}),
+        occurred_at: event.occurred_at,
+        page_domain: event.page_domain,
+        schema_warning: "missing_extension_usage_occurrence_columns"
+      }
+    };
+    delete legacyEvent.occurred_at;
+    delete legacyEvent.page_domain;
+    await supabaseFetch("extension_usage_events", {
+      method: "POST",
+      body: JSON.stringify(legacyEvent)
+    });
+    return { stored: true, degraded_schema: true };
+  }
 }
 
 async function handleExtensionUsage(req, res) {
@@ -19,11 +57,8 @@ async function handleExtensionUsage(req, res) {
   try {
     const body = await readJsonBody(req);
     const event = extensionUsageEventFromInput(body, req.headers || {});
-    await supabaseFetch("extension_usage_events", {
-      method: "POST",
-      body: JSON.stringify(event)
-    });
-    return json(res, 200, { ok: true, accepted: true });
+    const result = await storeExtensionUsageEvent(event);
+    return json(res, 200, { ok: true, accepted: true, ...result });
   } catch (error) {
     return json(res, 400, {
       ok: false,
@@ -39,7 +74,7 @@ module.exports = async function handler(req, res) {
   res.setHeader("cache-control", "no-store, max-age=0");
   res.setHeader("access-control-allow-origin", "*");
 
-  if (req.query?.resource === "usage") {
+  if (requestResource(req) === "usage") {
     return handleExtensionUsage(req, res);
   }
 

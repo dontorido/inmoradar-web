@@ -23,6 +23,7 @@ const rewrites = {
   "/api/contact": "/api/market-price?resource=contact",
   "/api/waitlist/browser": "/api/market-price?resource=browser-waitlist",
   "/api/analytics/event": "/api/market-price?resource=owned-analytics-event",
+  "/api/extension-usage": "/api/extension-version?resource=usage",
   "/api/admin/summary": "/api/admin?resource=summary",
   "/api/admin/premium/subscriptions": "/api/admin?resource=premium/subscriptions",
   "/api/admin/seo/landings": "/api/admin?resource=seo/landings",

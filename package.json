@@ -5,6 +5,7 @@
   "scripts": {
     "market:import-public": "node scripts/import-market-public-reports.js",
     "seo:generate": "node scripts/seo-generate.js",
+    "extension-usage:seed": "node scripts/seed-extension-usage-events.js",
     "serve": "node scripts/serve-static.js",
     "test": "node --test tests/*.test.js"
   }
