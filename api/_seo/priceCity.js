@@ -243,7 +243,7 @@ function usefulLinks() {
       </a>
       <a href="/premium">
         ${icon("arrowUpRight")}
-        <span>Acceso Premium · 1,99€/semana</span>
+        <span>Funciones Premium opcionales</span>
         <small>INMORADAR.APP/PREMIUM</small>
       </a>
     </div>
@@ -252,11 +252,11 @@ function usefulLinks() {
 
 function finalCta(city) {
   return `<section class="seo-final-cta" data-testid="page-precio-m2-${escapeHtml(slugify(city))}-final-cta">
-    <p class="seo-sidebar-kicker">→ EMPIEZA AHORA · 1,99€/SEMANA</p>
+    <p class="seo-sidebar-kicker">→ ANALIZA ANTES DE CONTACTAR</p>
     <h2>Compara el precio €/m² de cada anuncio en ${escapeHtml(city)}.</h2>
-    <p>Dos inmuebles gratis para probarlo. Premium semanal sin permanencia.</p>
+    <p>Instala InmoRadar y empieza a analizar anuncios donde ya buscas.</p>
     <div class="seo-final-actions">
-      <button class="seo-button seo-button-primary" type="button" data-install-button data-install-source="seo_price_city">EMPIEZA A DESCUBRIR INFORMACIÓN RELEVANTE ${icon("arrowUpRight")}</button>
+      <button class="seo-button seo-button-primary" type="button" data-install-button data-install-source="seo_price_city">EMPEZAR GRATIS ${icon("arrowUpRight")}</button>
       <a class="seo-button seo-button-secondary" href="/#analisis">VER QUÉ ANALIZA</a>
     </div>
   </section>`;
@@ -381,7 +381,7 @@ function buildPrecioMetroCuadradoCiudad({ city, province, autonomousCommunity, s
             <p class="seo-sidebar-kicker">→ AHORRA TIEMPO</p>
             <h3>Analiza anuncios antes de contactar.</h3>
           </div>
-          <button class="seo-button seo-button-secondary" type="button" data-install-button data-install-source="seo_price_city_inline">EMPIEZA A DESCUBRIR INFORMACIÓN RELEVANTE</button>
+          <button class="seo-button seo-button-secondary" type="button" data-install-button data-install-source="seo_price_city_inline">EMPEZAR GRATIS</button>
         </div>
       </section>
 
