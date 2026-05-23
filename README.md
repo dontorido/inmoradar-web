@@ -32,8 +32,9 @@ Web estatica publica para InmoRadar.
 - `database/seo-landings.sql`: tablas `seo_landing_opportunities` y `seo_landings`, reutilizadas para landings programaticas y guias editoriales (`template_type=editorial_guide`).
 - `database/seo-cron-runs.sql`: registro y bloqueo suave para evitar ejecuciones SEO solapadas.
 - `api/admin.js?resource=seo/generate-landings`: generador admin protegido por `ADMIN_IMPORT_TOKEN`.
-- `api/cron/seo-publish.js`: cron protegido por `CRON_SECRET` o `ADMIN_IMPORT_TOKEN` para publicar una pieza SEO por ejecucion siguiendo la politica diaria 2 landings + 2 guias.
-- `.github/workflows/seo-cron.yml`: ejecuta el endpoint SEO cada 6 horas desde GitHub Actions; Vercel Hobby queda con un cron diario compatible.
+- `api/admin.js?resource=seo-autogenerate/run`: cron/admin protegido por `CRON_SECRET` o `ADMIN_IMPORT_TOKEN` para detectar oportunidades SEO y publicar automaticamente como maximo una pagina elegible por ejecucion.
+- `api/cron/seo-publish.js`: cron SEO anterior protegido por `CRON_SECRET` o `ADMIN_IMPORT_TOKEN`, conservado como fallback operativo.
+- `.github/workflows/seo-cron.yml`: ejecuta el endpoint SEO de autogeneracion cada 6 horas desde GitHub Actions.
 - `api/seo-page.js`: render publico de landings SEO por slug.
 - `api/sitemap.js`: sitemap dinamico y feed `/api/news` con landings/guias publicadas e indexables.
 - `scripts/seo-generate.js`: dry run local del generador SEO.
@@ -104,6 +105,12 @@ CLOUDFLARE_EMAIL_FROM=hola@inmoradar.app
 ADMIN_IMPORT_TOKEN=
 CRON_SECRET=
 PUBLIC_SITE_URL=https://inmoradar.app
+SEO_AUTOGENERATION_ENABLED=true
+SEO_AUTOGENERATION_DRY_RUN=false
+SEO_AUTOGENERATION_MAX_PER_RUN=1
+SEO_AUTOGENERATION_MAX_PER_DAY=3
+SEO_AUTOGENERATION_MAX_PER_WEEK=10
+SEO_AUTOGENERATION_MIN_SCORE=80
 ```
 
 El endpoint de checkout quedara en:
@@ -345,14 +352,40 @@ Body:
 
 Para generar borradores reales en Supabase, usar `mode: "generate"`. Para publicar automaticamente una pagina desde el endpoint admin, debe usarse `mode: "publish"`, `autoPublish: true` y `quality_score >= 85`. `template_type=random` o `landing_random` limita a landings programaticas; `template_type=editorial_guide` genera guias editoriales.
 
-Cron de publicacion controlada:
+Autogeneracion SEO controlada:
+
+```text
+POST /api/admin/seo-autogenerate/run
+Authorization: Bearer CRON_SECRET
+```
+
+El mismo recurso acepta ejecucion manual desde el BackOffice con `ADMIN_IMPORT_TOKEN`. El parametro `dry_run` solo se respeta para admin. En produccion puede salir con `SEO_AUTOGENERATION_ENABLED=true` y `SEO_AUTOGENERATION_DRY_RUN=false`, pero el codigo mantiene limites duros: maximo 1 publicacion por ejecucion, 3 en 24h, 10 en 7 dias, solo `price_city` y `expensive_listing_city`, sin barrios ni guias largas, sin duplicar `target_path` ni ciudad/tipo y sin publicar si `final_score < 80` o faltan datos/fuente/fecha. Las ejecuciones se registran en `seo_cron_runs` con `job_name=seo-autogeneration` y detalle de `published`, `draft`, `skipped` y `reason`.
+
+Config minima:
+
+```text
+SEO_AUTOGENERATION_ENABLED=true
+SEO_AUTOGENERATION_DRY_RUN=false
+SEO_AUTOGENERATION_MAX_PER_RUN=1
+SEO_AUTOGENERATION_MAX_PER_DAY=3
+SEO_AUTOGENERATION_MAX_PER_WEEK=10
+SEO_AUTOGENERATION_MIN_SCORE=80
+```
+
+Kill switch:
+
+```text
+SEO_AUTOGENERATION_ENABLED=false
+```
+
+Cron de publicacion controlada anterior:
 
 ```text
 GET /api/cron/seo-publish
 Authorization: Bearer CRON_SECRET
 ```
 
-GitHub Actions lo ejecuta cada 6 horas (`0 */6 * * *`) usando el secreto `CRON_SECRET` del repo. Vercel Hobby tambien conserva un cron diario compatible (`0 7 * * *`) porque ese plan no permite crons mas frecuentes. La politica diaria usa fecha natural Europe/Madrid: maximo 2 landings programaticas y 2 guias editoriales al dia, con maximo 4 publicaciones totales. Cada ejecucion publica como maximo una pieza; si ya hay 2 landings, prioriza guia; si ya hay 2 guias, prioriza landing; si ambas cuotas estan llenas responde `skipped: true`.
+El endpoint anterior queda conservado, pero GitHub Actions y Vercel apuntan a `/api/admin/seo-autogenerate/run`. La politica antigua usaba fecha natural Europe/Madrid: maximo 2 landings programaticas y 2 guias editoriales al dia, con maximo 4 publicaciones totales. Cada ejecucion publicaba como maximo una pieza; si ya hay 2 landings, prioriza guia; si ya hay 2 guias, prioriza landing; si ambas cuotas estan llenas responde `skipped: true`.
 
 El cron usa `seo_cron_runs` para registrar ejecuciones y evitar solapes dentro de la misma hora. Si esa tabla todavia no existe, el cron no se bloquea: sigue publicando con modo degradado y lo indica en la respuesta. No hay SQL nuevo para la politica 2+2: se distingue landing vs guia con `template_type` dentro de `seo_landings`.
 
@@ -360,7 +393,7 @@ El cron usa `seo_cron_runs` para registrar ejecuciones y evitar solapes dentro d
 
 Para que el cron SEO funcione en producción hay dos sitios que deben compartir el mismo secreto:
 
-1. En Vercel debe existir `CRON_SECRET` o, como fallback operativo, `ADMIN_IMPORT_TOKEN` para proteger `/api/cron/seo-publish`.
+1. En Vercel debe existir `CRON_SECRET` o, como fallback operativo, `ADMIN_IMPORT_TOKEN` para proteger `/api/admin/seo-autogenerate/run`.
 2. En GitHub Actions debe existir el repository secret `CRON_SECRET`.
 3. La ruta en GitHub es: Settings -> Secrets and variables -> Actions -> New repository secret.
 4. El nombre debe ser `CRON_SECRET`.

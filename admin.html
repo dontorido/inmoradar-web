@@ -278,6 +278,35 @@
             <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
             <div class="admin-pagination" data-seo-pagination></div>
           </article>
+          <article class="admin-panel">
+            <div class="admin-panel-head">
+              <div>
+                <span class="admin-kicker muted">SEO Autogeneration</span>
+                <h2>Autogeneración</h2>
+                <p class="admin-panel-sub">Publicación automática cada 6 horas con límites duros, score mínimo y registro de skipped por motivo.</p>
+              </div>
+              <div class="admin-view-toolbar">
+                <button class="admin-button ghost" type="button" data-seo-autogen-dry-run>Dry run</button>
+                <button class="admin-button" type="button" data-seo-autogen-run>Run now</button>
+              </div>
+            </div>
+            <div class="admin-stat-grid compact" data-seo-autogen-summary aria-live="polite"></div>
+            <p class="admin-empty-state compact" data-seo-autogen-note></p>
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Ejecución</th>
+                    <th>Estado</th>
+                    <th>Resultado</th>
+                    <th>Detalle</th>
+                  </tr>
+                </thead>
+                <tbody data-seo-autogen-runs></tbody>
+              </table>
+            </div>
+            <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
+          </article>
         </section>
 
         <section class="admin-subsection-panel admin-linkedin-panel" data-admin-subsection-panel="marketing-linkedin" hidden>

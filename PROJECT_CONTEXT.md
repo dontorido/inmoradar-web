@@ -36,7 +36,7 @@ El backoffice vive en `admin.html` y esta protegido por `ADMIN_IMPORT_TOKEN`. Ag
 - `api/_parking/`: calculo, senales, cache, Overpass y adaptadores municipales para parking.
 - `api/_photo/`: analisis visual de fotos con modelo de vision y cache.
 - `api/_reports/`: construccion del email de comparativa de inmuebles guardados.
-- `api/_seo/`: generador, calidad, textos, fuentes de mercado y render SEO.
+- `api/_seo/`: generador, autogeneracion, calidad, textos, fuentes de mercado y render SEO.
 - `api/cron/`: cron serverless de publicacion SEO.
 - `api/og/`: endpoint de imagen Open Graph para landings de precio.
 - `api/market-price.js?resource=browser-waitlist`: recurso interno que atiende la lista de espera de Opera, Firefox y Safari sin crear una serverless function adicional.
@@ -117,6 +117,7 @@ Todos pasan por `api/admin.js` y requieren `ADMIN_IMPORT_TOKEN`.
 - `GET /api/admin?resource=analytics/learning`: aprendizaje de contenidos ganadores y paginas a revisar.
 - `GET/POST /api/admin?resource=seo/landings`: listado y acciones sobre landings SEO.
 - `POST /api/admin?resource=seo/generate-landings`: genera o publica landings.
+- `GET/POST /api/admin?resource=seo-autogenerate/run`: estado y ejecucion protegida de autogeneracion SEO cada 6 horas; acepta `dry_run` solo con token admin.
 - `GET/POST /api/admin?resource=kpis/settings`: lee/guarda configuracion KPI.
 - `GET /api/admin?resource=parking/summary`: resumen de cache parking.
 - `GET/POST /api/admin?resource=operations/releases`: gestiona artefactos de release.
@@ -136,7 +137,8 @@ Todos pasan por `api/admin.js` y requieren `ADMIN_IMPORT_TOKEN`.
 
 ### Crons
 
-- `POST /api/cron/seo-publish`: cron SEO protegido por `CRON_SECRET` o `ADMIN_IMPORT_TOKEN`.
+- `POST /api/admin/seo-autogenerate/run`: cron SEO protegido por `CRON_SECRET` o `ADMIN_IMPORT_TOKEN`, reutilizando `api/admin.js` para no crear otra funcion serverless.
+- `POST /api/cron/seo-publish`: cron SEO anterior protegido por `CRON_SECRET` o `ADMIN_IMPORT_TOKEN`, conservado como fallback.
 
 ## 6. Backoffice: archivos y flujo general
 
@@ -210,7 +212,7 @@ Ingresos:
 
 Archivos:
 
-- `api/_seo/generator.js`, `quality.js`, `priceCity.js`, `marketSources.js`, `text.js`, `analytics.js`, `seedPublished.js`, `publishingPolicy.js`, `editorialGuides.js`.
+- `api/_seo/generator.js`, `autogeneration.js`, `quality.js`, `priceCity.js`, `marketSources.js`, `text.js`, `analytics.js`, `seedPublished.js`, `publishingPolicy.js`, `editorialGuides.js`.
 - `lib/seo/cityGuideTemplates.js`.
 - `api/seo-page.js`.
 - `api/sitemap.js`.
@@ -232,14 +234,23 @@ Sitemap:
 - `/sitemap.xml` reescribe a `/api/sitemap`.
 - Incluye landings y guias publicadas e indexables. `/api/news` reutiliza `api/sitemap.js?format=news` para alimentar home y `/noticias`.
 
-Cron:
+Autogeneracion SEO:
 
-- Vercel ejecuta `/api/cron/seo-publish` a las 07:00 UTC segun `vercel.json`.
-- GitHub Actions lo ejecuta cada 6 horas con `CRON_SECRET`. La politica diaria usa Europe/Madrid: 2 landings programaticas + 2 guias editoriales al dia, maximo una publicacion por ejecucion y 4 publicaciones totales.
+- Vercel ejecuta `/api/admin/seo-autogenerate/run` cada 6 horas segun `vercel.json`.
+- GitHub Actions llama el mismo endpoint cada 6 horas con `CRON_SECRET`.
+- Alcance fase 1: solo `price_city` (`/precio-metro-cuadrado/[ciudad]/`) y `expensive_listing_city` (`/saber-si-piso-esta-caro/[ciudad]/`).
+- No genera barrios, comparativas, coste oculto, guias largas, paginas sin ciudad ni experimentos.
+- Limites duros en codigo: 1 publicacion por ejecucion, 3 en 24h, 10 en 7 dias, `final_score >= 80`, una pagina por ciudad/tipo, `target_path` nuevo, title/H1/meta description unicos, datos reales con fuente y fecha, y bloqueo por similitud excesiva.
+- `SEO_AUTOGENERATION_ENABLED=false` actua como kill switch. Con `SEO_AUTOGENERATION_DRY_RUN=false` puede publicar automaticamente si todos los controles pasan.
+- Las ejecuciones se registran en `seo_cron_runs` con `job_name=seo-autogeneration`; `result_json` incluye published/draft/skipped/failed y reason por candidato.
+
+Cron anterior:
+
+- `/api/cron/seo-publish` queda conservado como fallback operativo. Su politica diaria usaba Europe/Madrid: 2 landings programaticas + 2 guias editoriales al dia, maximo una publicacion por ejecucion y 4 publicaciones totales.
 
 Configurar CRON_SECRET para SEO cron:
 
-1. En Vercel debe existir `CRON_SECRET` o, como fallback operativo, `ADMIN_IMPORT_TOKEN` para `/api/cron/seo-publish`.
+1. En Vercel debe existir `CRON_SECRET` o, como fallback operativo, `ADMIN_IMPORT_TOKEN` para `/api/admin/seo-autogenerate/run`.
 2. En GitHub Actions debe existir el secret `CRON_SECRET`.
 3. Ruta: GitHub -> Settings -> Secrets and variables -> Actions -> New repository secret.
 4. Nombre: `CRON_SECRET`.
@@ -376,6 +387,14 @@ Solo nombres detectados o documentados; no incluir valores:
 - `RUNWAY_MAX_COST_USD`
 - `RUNWAY_RENDER_ENABLED`
 - `RUNWAYML_API_SECRET`
+- `SEO_AUTOGENERATION_CANDIDATE_LIMIT`
+- `SEO_AUTOGENERATION_DRY_RUN`
+- `SEO_AUTOGENERATION_ENABLED`
+- `SEO_AUTOGENERATION_MAX_PER_DAY`
+- `SEO_AUTOGENERATION_MAX_PER_RUN`
+- `SEO_AUTOGENERATION_MAX_PER_WEEK`
+- `SEO_AUTOGENERATION_MIN_SCORE`
+- `SEO_AUTOGENERATION_TARGET_CITIES`
 - `SITE_URL`
 - `SUPABASE_FETCH_TIMEOUT_MS`
 - `SUPABASE_SERVICE_ROLE_KEY`
