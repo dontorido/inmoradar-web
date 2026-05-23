@@ -264,6 +264,7 @@ const els = {
   linkedinConnect: document.querySelector("[data-linkedin-connect]"),
   linkedinDisconnect: document.querySelector("[data-linkedin-disconnect]"),
   linkedinGenerateDaily: document.querySelector("[data-linkedin-generate-daily]"),
+  linkedinPause: document.querySelector("[data-linkedin-pause]"),
   linkedinCreatePost: document.querySelector("[data-linkedin-create-post]"),
   linkedinNotice: document.querySelector("[data-linkedin-notice]"),
   linkedinConnection: document.querySelector("[data-linkedin-connection]"),
@@ -358,6 +359,52 @@ function escapeHtml(value) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+let adminTooltipEl = null;
+
+function tooltipTargetFromEvent(event) {
+  return event.target instanceof Element ? event.target.closest(".admin-linkedin-panel [data-tooltip]") : null;
+}
+
+function ensureAdminTooltip() {
+  if (!adminTooltipEl) {
+    adminTooltipEl = document.createElement("div");
+    adminTooltipEl.className = "admin-floating-tooltip";
+    adminTooltipEl.setAttribute("role", "tooltip");
+    adminTooltipEl.hidden = true;
+    document.body.append(adminTooltipEl);
+  }
+  return adminTooltipEl;
+}
+
+function positionAdminTooltip(target) {
+  const tooltip = ensureAdminTooltip();
+  const rect = target.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const gap = 10;
+  const margin = 8;
+  const topCandidate = rect.top - tooltipRect.height - gap;
+  const top = topCandidate >= margin ? topCandidate : rect.bottom + gap;
+  const left = Math.min(
+    Math.max(rect.left + (rect.width / 2) - (tooltipRect.width / 2), margin),
+    window.innerWidth - tooltipRect.width - margin
+  );
+  tooltip.style.left = `${Math.round(left)}px`;
+  tooltip.style.top = `${Math.round(top)}px`;
+}
+
+function showAdminTooltip(target) {
+  const message = target?.dataset?.tooltip;
+  if (!message) return;
+  const tooltip = ensureAdminTooltip();
+  tooltip.textContent = message;
+  tooltip.hidden = false;
+  positionAdminTooltip(target);
+}
+
+function hideAdminTooltip() {
+  if (adminTooltipEl) adminTooltipEl.hidden = true;
 }
 
 function formatDate(value) {
@@ -615,10 +662,10 @@ function chip(value, variant = "", kind = "status") {
 function statusTone(value) {
   const normalized = String(value || "").toLowerCase();
   if (["published", "active", "on_trial", "connected", "manually_published"].includes(normalized)) return "published";
-  if (["ready_to_publish", "index", "paid", "scheduled", "pending_review"].includes(normalized)) return "ready";
-  if (["cancelled", "expired", "noindex", "unpaid", "payment_failed", "failed", "error", "disconnected"].includes(normalized)) return "bad";
+  if (["ready", "ready_to_publish", "index", "paid", "scheduled", "pending_review"].includes(normalized)) return "ready";
+  if (["cancelled", "expired", "needs_reauth", "needs_connection", "noindex", "unpaid", "payment_failed", "failed", "error", "disconnected"].includes(normalized)) return "bad";
   if (["past_due", "publishing"].includes(normalized)) return "warn";
-  if (["draft", "needs_review", "manual"].includes(normalized)) return "draft";
+  if (["draft", "image_pending", "needs_review", "manual", "skipped"].includes(normalized)) return "draft";
   if (["archived"].includes(normalized)) return "muted";
   return "draft";
 }
@@ -1562,15 +1609,20 @@ function linkedInStatusLabel(value) {
   const map = {
     disconnected: "No conectado",
     connected: "Conectado",
+    needs_connection: "Necesita conexi\u00f3n",
+    needs_reauth: "Reautorizaci\u00f3n",
     expired: "Token expirado",
     error: "Error",
     draft: "Draft",
+    image_pending: "Imagen pendiente",
+    ready: "Ready",
     pending_review: "Pendiente",
     scheduled: "Programado",
     publishing: "Publicando",
     published: "Publicado",
     manually_published: "Manual",
     failed: "Error",
+    skipped: "Omitido",
     cancelled: "Cancelado"
   };
   return map[String(value || "").toLowerCase()] || value || "-";
@@ -1590,6 +1642,8 @@ function renderLinkedIn(payload = {}) {
   state.linkedin.posts = payload.posts || [];
   state.linkedin.summary = payload.summary || {};
   state.linkedin.env = payload.env || {};
+  state.linkedin.autopublisher = payload.autopublisher || {};
+  state.linkedin.runs = payload.runs || [];
   state.linkedin.lastPublication = payload.last_publication || null;
   state.linkedin.manualNotice = payload.manual_mode_notice || "";
   renderLinkedInNotice(payload);
@@ -1597,20 +1651,32 @@ function renderLinkedIn(payload = {}) {
   renderLinkedInSettings();
   renderLinkedInSummary();
   renderLinkedInPosts();
+  updateLinkedInPublishControls();
   const selected = state.linkedin.posts.find((post) => post.id === state.linkedin.currentPostId) || state.linkedin.posts[0] || null;
   fillLinkedInEditor(selected);
+}
+
+function updateLinkedInPublishControls() {
+  if (!els.linkedinEditorForm) return;
+  const publishButtons = els.linkedinEditorForm.querySelectorAll('[data-linkedin-post-action="publish_now"]');
+  const connected = state.linkedin.connection?.status === "connected" && Boolean(state.linkedin.connection?.organization_urn);
+  publishButtons.forEach((button) => {
+    button.hidden = !connected;
+    button.disabled = !connected;
+  });
 }
 
 function renderLinkedInNotice(payload = {}) {
   if (!els.linkedinNotice) return;
   const storage = payload.storage || {};
-  const missing = storage.settings_table_missing || storage.posts_table_missing || storage.connection_table_missing;
+  const missing = storage.settings_table_missing || storage.posts_table_missing || storage.connection_table_missing || storage.runs_table_missing;
   const messages = [];
   if (missing) messages.push("Faltan tablas de LinkedIn. Ejecuta database/marketing-linkedin.sql en Supabase.");
   if (payload.manual_mode_notice) messages.push(payload.manual_mode_notice);
   if (storage.connection_error && !storage.connection_table_missing) messages.push(storage.connection_error);
   if (storage.settings_error && !storage.settings_table_missing) messages.push(storage.settings_error);
   if (storage.posts_error && !storage.posts_table_missing) messages.push(storage.posts_error);
+  if (storage.runs_error && !storage.runs_table_missing) messages.push(storage.runs_error);
   els.linkedinNotice.innerHTML = messages.map((message) => `<p>${escapeHtml(message)}</p>`).join("");
   els.linkedinNotice.hidden = !messages.length;
 }
@@ -1619,12 +1685,17 @@ function renderLinkedInConnection() {
   if (!els.linkedinConnection) return;
   const c = state.linkedin.connection || {};
   const env = state.linkedin.env || {};
+  const autopublisher = state.linkedin.autopublisher || {};
   const hasPage = Boolean(c.organization_name || c.organization_urn || env.organization_urn_configured);
   els.linkedinConnection.innerHTML = `
     <div class="admin-linkedin-status-row"><span>Estado</span>${chip(linkedInStatusLabel(c.status || "disconnected"), statusTone(c.status))}</div>
+    <div class="admin-linkedin-status-row"><span>P\u00e1gina destino</span><strong>${escapeHtml(autopublisher.company_url || c.linkedin_company_url || env.company_url || "-")}</strong></div>
     <div class="admin-linkedin-status-row"><span>Modo manual</span>${chip(c.manual_available ? "Activo" : "No", c.manual_available ? "published" : "bad")}</div>
-    <div class="admin-linkedin-status-row"><span>Modo autom\u00e1tico</span>${chip(c.automatic_available ? "Disponible" : "No disponible", c.automatic_available ? "published" : "draft")}</div>
+    <div class="admin-linkedin-status-row"><span>Autopublisher</span>${chip(autopublisher.enabled ? "Activo" : "Pausado", autopublisher.enabled ? "published" : "draft")}</div>
+    <div class="admin-linkedin-status-row"><span>Frecuencia</span><strong>${escapeHtml(autopublisher.frequency || "every_2_days")}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Pr\u00f3xima publicaci\u00f3n</span><strong>${escapeHtml(formatDate(autopublisher.next_publication))}</strong></div>
     <div class="admin-linkedin-status-row"><span>P\u00e1gina configurada</span><strong>${escapeHtml(hasPage ? "Si" : "No")}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Organization ID</span><strong>${escapeHtml(c.organization_id || env.organization_id || "-")}</strong></div>
     <div class="admin-linkedin-status-row"><span>Organization URN</span><code>${escapeHtml(c.organization_urn || "-")}</code></div>
     <div class="admin-linkedin-status-row"><span>Token expira</span><strong>${escapeHtml(formatDate(c.token_expires_at))}</strong></div>
     <div class="admin-linkedin-status-row"><span>\u00daltimo error</span><strong>${escapeHtml(c.last_error || "-")}</strong></div>
@@ -1641,12 +1712,18 @@ function renderLinkedInSettings() {
     const field = form.elements[name];
     if (field) field.value = value ?? "";
   };
+  set("linkedin_company_url", settings.linkedin_company_url || state.linkedin.autopublisher?.company_url || "https://www.linkedin.com/company/inmoradar-app/");
+  set("organization_id", settings.organization_id || state.linkedin.connection?.organization_id || "");
+  set("organization_urn", settings.organization_urn || state.linkedin.connection?.organization_urn || "");
   set("daily_generation_enabled", String(settings.daily_generation_enabled !== false));
-  set("auto_publish_enabled", String(settings.auto_publish_enabled === true));
+  set("autopost_enabled", String(settings.autopost_enabled === true || settings.auto_publish_enabled === true));
   set("approval_required", String(settings.approval_required !== false));
-  set("daily_post_time", settings.daily_post_time || "09:30");
+  set("daily_post_time", settings.daily_post_time || "10:00");
   set("timezone", settings.timezone || "Europe/Madrid");
-  set("content_mode", settings.content_mode || "mixed");
+  set("frequency_days", String(settings.frequency_days || 2));
+  set("max_posts_per_day", String(settings.max_posts_per_day || 1));
+  set("active_post_type", settings.active_post_type || "precio_sexy_coste_oculto");
+  set("content_mode", settings.content_mode || settings.active_post_type || "precio_sexy_coste_oculto");
   set("default_cta", settings.default_cta || "Analiza antes de contactar: https://inmoradar.app");
   set("default_hashtags", (settings.default_hashtags || []).map((tag) => `#${String(tag).replace(/^#/, "")}`).join(" "));
   set("destination_url", settings.destination_url || "https://inmoradar.app");
@@ -1657,7 +1734,8 @@ function renderLinkedInSummary() {
   const summary = state.linkedin.summary || {};
   els.linkedinSummary.innerHTML = [
     stat("Total", summary.total || 0, { id: "linkedin-total", hint: "Posts en cola" }),
-    stat("Pendientes", summary.pending_review || 0, { id: "linkedin-pending", hint: "Requieren revisi\u00f3n" }),
+    stat("Ready", summary.ready || 0, { id: "linkedin-ready", hint: "Listos para publicar" }),
+    stat("Pendientes", summary.pending_review || summary.needs_connection || 0, { id: "linkedin-pending", hint: "Requieren revisi\u00f3n o conexi\u00f3n" }),
     stat("Programados", summary.scheduled || 0, { id: "linkedin-scheduled", hint: "Listos para fecha" }),
     stat("Publicados", (summary.published || 0) + (summary.manually_published || 0), { id: "linkedin-published", hint: "API o manual" }),
     stat("Errores", summary.failed || 0, { id: "linkedin-failed", hint: "Reintentar o revisar" })
@@ -1687,10 +1765,10 @@ function renderLinkedInPosts() {
         <td><span class="admin-linkedin-error">${escapeHtml(post.error_message || "-")}</span></td>
         <td>
           <div class="admin-row-actions">
-            <button class="admin-icon-button" type="button" data-linkedin-row-action="view" data-linkedin-id="${escapeHtml(post.id)}" data-tooltip="Abre este post en el editor." aria-label="Ver post">V</button>
-            <button class="admin-icon-button" type="button" data-linkedin-row-action="approve" data-linkedin-id="${escapeHtml(post.id)}" data-tooltip="Aprueba este post para revisarlo o programarlo." aria-label="Aprobar post">A</button>
-            <button class="admin-icon-button" type="button" data-linkedin-row-action="mark_manually_published" data-linkedin-id="${escapeHtml(post.id)}" data-tooltip="Marca este post como publicado manualmente." aria-label="Marcar publicado manualmente">M</button>
-            <button class="admin-icon-button" type="button" data-linkedin-row-action="cancel" data-linkedin-id="${escapeHtml(post.id)}" data-tooltip="Cancela este post." aria-label="Cancelar post">C</button>
+            <button class="admin-icon-button admin-linkedin-action-button" type="button" data-linkedin-row-action="view" data-linkedin-id="${escapeHtml(post.id)}" data-tooltip="Abre este post en el editor." title="Abre este post en el editor." aria-label="Ver post">Ver</button>
+            <button class="admin-icon-button admin-linkedin-action-button" type="button" data-linkedin-row-action="approve" data-linkedin-id="${escapeHtml(post.id)}" data-tooltip="Aprueba este post para revisarlo o programarlo." title="Aprueba este post para revisarlo o programarlo." aria-label="Aprobar post">Aprobar</button>
+            <button class="admin-icon-button admin-linkedin-action-button" type="button" data-linkedin-row-action="mark_manually_published" data-linkedin-id="${escapeHtml(post.id)}" data-tooltip="Marca este post como publicado manualmente." title="Marca este post como publicado manualmente." aria-label="Marcar publicado manualmente">Manual</button>
+            <button class="admin-icon-button admin-linkedin-action-button" type="button" data-linkedin-row-action="cancel" data-linkedin-id="${escapeHtml(post.id)}" data-tooltip="Cancela este post." title="Cancela este post." aria-label="Cancelar post">Cancelar</button>
           </div>
         </td>
       </tr>
@@ -1708,11 +1786,15 @@ function fillLinkedInEditor(post) {
     if (field) field.value = value ?? "";
   };
   set("id", selected.id || "");
+  set("price_display", selected.price_display || "");
+  set("city", selected.city || "");
   set("hook", selected.hook || "");
   set("body", selected.body || "");
+  set("hidden_costs", (selected.hidden_costs || []).join("\n"));
   set("cta", selected.cta || "");
   set("hashtags", (selected.hashtags || []).map((tag) => `#${String(tag).replace(/^#/, "")}`).join(" "));
   set("image_url", selected.image_url || "");
+  set("image_prompt", selected.image_prompt || "");
   set("scheduled_at", toLocalDatetimeValue(selected.scheduled_at));
   set("status", selected.status || "draft");
   set("source_reference", selected.source_reference || "");
@@ -1725,12 +1807,19 @@ function currentLinkedInPost() {
 function collectLinkedInSettings() {
   const data = new FormData(els.linkedinSettingsForm);
   return {
+    linkedin_company_url: String(data.get("linkedin_company_url") || "https://www.linkedin.com/company/inmoradar-app/"),
+    organization_id: String(data.get("organization_id") || ""),
+    organization_urn: String(data.get("organization_urn") || ""),
     daily_generation_enabled: data.get("daily_generation_enabled") === "true",
-    auto_publish_enabled: data.get("auto_publish_enabled") === "true",
+    autopost_enabled: data.get("autopost_enabled") === "true",
+    auto_publish_enabled: data.get("autopost_enabled") === "true",
     approval_required: data.get("approval_required") === "true",
-    daily_post_time: String(data.get("daily_post_time") || "09:30"),
+    daily_post_time: String(data.get("daily_post_time") || "10:00"),
     timezone: String(data.get("timezone") || "Europe/Madrid"),
-    content_mode: String(data.get("content_mode") || "mixed"),
+    frequency_days: Number(data.get("frequency_days") || 2),
+    max_posts_per_day: Number(data.get("max_posts_per_day") || 1),
+    active_post_type: String(data.get("active_post_type") || "precio_sexy_coste_oculto"),
+    content_mode: String(data.get("content_mode") || "precio_sexy_coste_oculto"),
     default_cta: String(data.get("default_cta") || ""),
     default_hashtags: String(data.get("default_hashtags") || ""),
     destination_url: String(data.get("destination_url") || "https://inmoradar.app")
@@ -1741,11 +1830,18 @@ function collectLinkedInPost() {
   const data = new FormData(els.linkedinEditorForm);
   return {
     id: String(data.get("id") || ""),
+    post_type: "precio_sexy_coste_oculto",
+    price_display: String(data.get("price_display") || ""),
+    city: String(data.get("city") || ""),
     hook: String(data.get("hook") || ""),
+    headline: String(data.get("hook") || ""),
     body: String(data.get("body") || ""),
+    copy: String(data.get("body") || ""),
+    hidden_costs: String(data.get("hidden_costs") || ""),
     cta: String(data.get("cta") || ""),
     hashtags: String(data.get("hashtags") || ""),
     image_url: String(data.get("image_url") || ""),
+    image_prompt: String(data.get("image_prompt") || ""),
     scheduled_at: fromLocalDatetimeValue(String(data.get("scheduled_at") || "")),
     status: String(data.get("status") || "draft"),
     source_reference: String(data.get("source_reference") || ""),
@@ -1768,6 +1864,14 @@ async function saveLinkedInSettings() {
   state.linkedin.settings = payload.settings || state.linkedin.settings;
   renderLinkedInSettings();
   showStatus("Ajustes de LinkedIn guardados.", "good");
+}
+
+async function pauseLinkedInAutopublisher() {
+  if (!els.linkedinSettingsForm) return;
+  const field = els.linkedinSettingsForm.elements.autopost_enabled;
+  if (field) field.value = "false";
+  await saveLinkedInSettings();
+  showStatus("LinkedIn Autopublisher pausado.", "good");
 }
 
 async function saveLinkedInPost() {
@@ -4718,6 +4822,9 @@ if (els.linkedinDisconnect) {
 if (els.linkedinGenerateDaily) {
   els.linkedinGenerateDaily.addEventListener("click", () => runLinkedInAction("generate_daily", "").catch((error) => showStatus(error.message, "bad")));
 }
+if (els.linkedinPause) {
+  els.linkedinPause.addEventListener("click", () => pauseLinkedInAutopublisher().catch((error) => showStatus(error.message, "bad")));
+}
 if (els.linkedinCreatePost) {
   els.linkedinCreatePost.addEventListener("click", () => {
     state.linkedin.currentPostId = "";
@@ -5053,6 +5160,42 @@ if (els.seoPagination) {
     loadSeo().catch((error) => showStatus(error.message, "bad"));
   });
 }
+
+document.addEventListener("pointerover", (event) => {
+  const target = tooltipTargetFromEvent(event);
+  if (target) showAdminTooltip(target);
+});
+
+document.addEventListener("pointerout", (event) => {
+  const target = tooltipTargetFromEvent(event);
+  if (!target) return;
+  if (event.relatedTarget instanceof Node && target.contains(event.relatedTarget)) return;
+  hideAdminTooltip();
+});
+
+document.addEventListener("mouseover", (event) => {
+  const target = tooltipTargetFromEvent(event);
+  if (target) showAdminTooltip(target);
+});
+
+document.addEventListener("mouseout", (event) => {
+  const target = tooltipTargetFromEvent(event);
+  if (!target) return;
+  if (event.relatedTarget instanceof Node && target.contains(event.relatedTarget)) return;
+  hideAdminTooltip();
+});
+
+document.addEventListener("focusin", (event) => {
+  const target = tooltipTargetFromEvent(event);
+  if (target) showAdminTooltip(target);
+});
+
+document.addEventListener("focusout", (event) => {
+  if (tooltipTargetFromEvent(event)) hideAdminTooltip();
+});
+
+window.addEventListener("scroll", hideAdminTooltip, true);
+window.addEventListener("resize", hideAdminTooltip);
 
 requireLogin();
 setAdminSection(state.activeSection);

@@ -410,6 +410,17 @@ Solo nombres detectados o documentados; no incluir valores:
 
 No hay script de build.
 
+## LinkedIn Autopublisher
+
+- Destino real: `https://www.linkedin.com/company/inmoradar-app/`.
+- Modulo: `lib/linkedin/services.js`, rutas en `api/admin.js`, UI en `admin.html` + `assets/admin.js`.
+- Tipo MVP activo: `precio_sexy_coste_oculto`.
+- Scheduler: el workflow existente llama `POST /api/admin?resource=linkedin/daily`; tambien existe alias `/api/admin/linkedin/autopublisher/run`.
+- Reglas: `LINKEDIN_AUTOPOST_ENABLED=false` por defecto, frecuencia cada 2 dias, hora `10:00`, zona `Europe/Madrid`, maximo 1 post por dia.
+- Storage: usa `marketing_linkedin_connections`, `marketing_linkedin_settings`, `marketing_linkedin_posts` y `linkedin_autopublisher_runs`.
+- Seguridad: tokens cifrados backend-only, sin tokens en frontend/logs, author siempre `organization_urn`.
+- Permiso MVP: `w_organization_social`. `r_organization_social` queda como opcional posterior.
+
 ## 13. Como probar en local
 
 Opcion estatica simple:
