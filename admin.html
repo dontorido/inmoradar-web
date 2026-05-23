@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#0A140F">
   <link rel="icon" href="/assets/favicon-32.png?v=20260519b" type="image/png" sizes="32x32">
   <link rel="stylesheet" href="/assets/styles.css">
-  <link rel="stylesheet" href="/assets/admin.css?v=20260523-seo-performance-redesign">
+  <link rel="stylesheet" href="/assets/admin.css?v=20260523-seo-performance-date-range">
   <link rel="stylesheet" href="/assets/admin-video-busy.css">
 </head>
 <body class="admin-body">
@@ -295,13 +295,12 @@
               </div>
               <div class="admin-view-toolbar">
                 <label class="admin-range-control">
-                  <span>Rango</span>
-                  <select data-analytics-days>
-                    <option value="1">1 dia</option>
-                    <option value="7" selected>7 dias</option>
-                    <option value="30">30 dias</option>
-                    <option value="90">90 dias</option>
-                  </select>
+                  <span>Desde</span>
+                  <input type="date" data-analytics-from>
+                </label>
+                <label class="admin-range-control">
+                  <span>Hasta</span>
+                  <input type="date" data-analytics-to>
                 </label>
                 <button class="admin-button tiny ghost" type="button" data-analytics-refresh>Actualizar funnel</button>
               </div>
@@ -1327,6 +1326,6 @@
     </section>
   </main>
 
-  <script src="/assets/admin.js?v=20260523-seo-performance-redesign"></script>
+  <script src="/assets/admin.js?v=20260523-seo-performance-date-range"></script>
 </body>
 </html>

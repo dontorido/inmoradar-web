@@ -3,6 +3,8 @@ const ALERT_DISMISS_PREFIX = "inmoradar_admin_alert_dismissed:";
 const VIDEO_PROJECT_KEY = "inmoradar_social_video_project";
 const RELEASE_TARGETS = ["web", "extension", "backoffice"];
 const MAX_RELEASE_FILE_BYTES = 3 * 1024 * 1024;
+const ANALYTICS_DEFAULT_DAYS = 7;
+const ANALYTICS_MAX_RANGE_DAYS = 90;
 const INITIAL_ADMIN_PATH = window.location.pathname || "";
 const INITIAL_MARKETING_SUBSECTION = INITIAL_ADMIN_PATH.includes("/backoffice/marketing/viraliza") ? "marketing-viraliza" : INITIAL_ADMIN_PATH.includes("/backoffice/marketing/linkedin") ? "marketing-linkedin" : "";
 const DEFAULT_VIDEO_PROPERTY_DATA = Object.freeze({
@@ -139,6 +141,8 @@ const VIDEO_TOPIC_PROPERTY_DATA = Object.freeze({
   }
 });
 
+const INITIAL_ANALYTICS_RANGE = defaultAnalyticsDateRange();
+
 const state = {
   token: sessionStorage.getItem(TOKEN_KEY) || "",
   activeSection: INITIAL_MARKETING_SUBSECTION ? "marketing" : "ventas",
@@ -200,7 +204,9 @@ const state = {
     dailyPlanWarning: ""
   },
   analytics: {
-    days: 7,
+    days: ANALYTICS_DEFAULT_DAYS,
+    fromDate: INITIAL_ANALYTICS_RANGE.from,
+    toDate: INITIAL_ANALYTICS_RANGE.to,
     summary: null,
     pages: [],
     learning: null,
@@ -244,7 +250,8 @@ const els = {
   analyticsLearning: document.querySelector("[data-analytics-learning]"),
   analyticsRefresh: document.querySelector("[data-analytics-refresh]"),
   analyticsPanels: document.querySelectorAll("[data-analytics-panel]"),
-  analyticsDaySelectors: document.querySelectorAll("[data-analytics-days]"),
+  analyticsFromInputs: document.querySelectorAll("[data-analytics-from]"),
+  analyticsToInputs: document.querySelectorAll("[data-analytics-to]"),
   analyticsRefreshButtons: document.querySelectorAll("[data-analytics-refresh]"),
   premiumRows: document.querySelector("[data-premium-rows]"),
   seoSummary: document.querySelector("[data-seo-summary]"),
@@ -448,6 +455,99 @@ function fromLocalDatetimeValue(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toISOString();
+}
+
+function toLocalDateValue(value) {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offsetMs = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
+function parseLocalDateValue(value) {
+  const normalized = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null;
+  const date = new Date(`${normalized}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return toLocalDateValue(date) === normalized ? date : null;
+}
+
+function addLocalDays(date, days) {
+  const next = new Date(date.getTime());
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function defaultAnalyticsDateRange() {
+  const to = new Date();
+  const from = addLocalDays(to, -(ANALYTICS_DEFAULT_DAYS - 1));
+  return {
+    from: toLocalDateValue(from),
+    to: toLocalDateValue(to)
+  };
+}
+
+function normalizeAnalyticsDateRange(fromValue, toValue) {
+  const defaults = defaultAnalyticsDateRange();
+  let from = parseLocalDateValue(fromValue) || parseLocalDateValue(defaults.from);
+  let to = parseLocalDateValue(toValue) || parseLocalDateValue(defaults.to);
+  if (!from || !to) return defaults;
+  if (from > to) [from, to] = [to, from];
+
+  const earliest = addLocalDays(to, -(ANALYTICS_MAX_RANGE_DAYS - 1));
+  if (from < earliest) from = earliest;
+
+  return {
+    from: toLocalDateValue(from),
+    to: toLocalDateValue(to)
+  };
+}
+
+function analyticsRangeParams(resource, range, extra = {}) {
+  const params = new URLSearchParams({ resource, ...extra });
+  params.set("from", range.from);
+  params.set("to", range.to);
+  return params;
+}
+
+function syncAnalyticsDateInputs() {
+  els.analyticsFromInputs?.forEach((node) => {
+    node.value = state.analytics.fromDate || "";
+  });
+  els.analyticsToInputs?.forEach((node) => {
+    node.value = state.analytics.toDate || "";
+  });
+}
+
+function readAnalyticsDateInputs() {
+  const fromInput = Array.from(els.analyticsFromInputs || []).find((node) => node.value);
+  const toInput = Array.from(els.analyticsToInputs || []).find((node) => node.value);
+  const range = normalizeAnalyticsDateRange(
+    fromInput?.value || state.analytics.fromDate,
+    toInput?.value || state.analytics.toDate
+  );
+  state.analytics.fromDate = range.from;
+  state.analytics.toDate = range.to;
+  syncAnalyticsDateInputs();
+  return range;
+}
+
+function formatDateOnly(value) {
+  const date = parseLocalDateValue(value) || new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit"
+  }).format(date);
+}
+
+function analyticsWindowLabel(payload = {}, fallbackDays = ANALYTICS_DEFAULT_DAYS) {
+  if (payload.window_from_date && payload.window_to_date) {
+    return `${formatDateOnly(payload.window_from_date)} - ${formatDateOnly(payload.window_to_date)}`;
+  }
+  return `${fallbackDays} dias`;
 }
 
 function authHeaders() {
@@ -985,9 +1085,10 @@ function renderAnalyticsPanel(targets, payload, context = {}) {
   const recommendations = payload.recommendations || [];
   const signals = analyticsSignals(payload);
   const days = Number(payload.window_days || state.analytics.days || 7);
+  const windowLabel = analyticsWindowLabel(payload, days);
 
   targets.summary.innerHTML = [
-    stat(`Eventos ${days}d`, summary.total_events || 0, { id: "analytics-events", hint: payload.table_missing ? "Ejecuta database/owned-analytics-events.sql" : "Eventos anonimos propios" }),
+    stat("Eventos", summary.total_events || 0, { id: "analytics-events", hint: payload.table_missing ? "Ejecuta database/owned-analytics-events.sql" : `${windowLabel} - eventos anonimos propios` }),
     stat("Page views", summary.page_views || 0, { id: "analytics-page-views" }),
     stat("Instalacion", (summary.install_clicks || 0) + (summary.chrome_store_clicks || 0), { id: "analytics-installs", hint: `${formatRate(summary.install_click_rate)} click/view` }),
     stat("Calculadora", `${summary.calculator_used || 0}/${summary.calculator_completed || 0}`, { id: "analytics-calculators", hint: `${formatRate(summary.calculator_completion_rate)} completadas` }),
@@ -1042,10 +1143,10 @@ function renderAnalyticsPerformance(payload = {}) {
   state.analytics.pages = pages;
   state.analytics.learning = payload;
   state.analytics.warning = payload.warning || payload.pages_warning || payload.learning_warning || "";
-
-  els.analyticsDaySelectors.forEach((selector) => {
-    selector.value = String(state.analytics.days);
-  });
+  const normalizedRange = normalizeAnalyticsDateRange(payload.window_from_date || state.analytics.fromDate, payload.window_to_date || state.analytics.toDate);
+  state.analytics.fromDate = normalizedRange.from;
+  state.analytics.toDate = normalizedRange.to;
+  syncAnalyticsDateInputs();
 
   targets.forEach((target) => renderAnalyticsPanel(target, payload));
 }
@@ -4430,10 +4531,10 @@ async function loadExtensionUsage() {
 
 async function loadAnalytics() {
   if (!els.analyticsPanels?.length && !els.analyticsSummary) return;
-  const days = [1, 7, 30, 90].includes(Number(state.analytics.days)) ? Number(state.analytics.days) : 7;
-  const summaryParams = new URLSearchParams({ resource: "analytics/summary", days: String(days) });
-  const pagesParams = new URLSearchParams({ resource: "analytics/pages", days: String(days), page_limit: "50" });
-  const learningParams = new URLSearchParams({ resource: "analytics/learning", days: String(days) });
+  const range = readAnalyticsDateInputs();
+  const summaryParams = analyticsRangeParams("analytics/summary", range);
+  const pagesParams = analyticsRangeParams("analytics/pages", range, { page_limit: "50" });
+  const learningParams = analyticsRangeParams("analytics/learning", range);
   const [summaryPayload, pagesPayload, learningPayload] = await Promise.all([
     api(`/api/admin?${summaryParams.toString()}`),
     api(`/api/admin?${pagesParams.toString()}`),
@@ -4449,8 +4550,10 @@ async function loadAnalytics() {
     calculator_low_conversion: learningPayload.calculator_low_conversion || summaryPayload.calculator_low_conversion || [],
     pages_warning: pagesPayload.warning || "",
     learning_warning: learningPayload.warning || "",
-    window_days: summaryPayload.window_days || pagesPayload.window_days || learningPayload.window_days || days,
-    window_hours: summaryPayload.window_hours || pagesPayload.window_hours || learningPayload.window_hours || days * 24
+    window_days: summaryPayload.window_days || pagesPayload.window_days || learningPayload.window_days || state.analytics.days,
+    window_hours: summaryPayload.window_hours || pagesPayload.window_hours || learningPayload.window_hours || state.analytics.days * 24,
+    window_from_date: summaryPayload.window_from_date || pagesPayload.window_from_date || learningPayload.window_from_date || range.from,
+    window_to_date: summaryPayload.window_to_date || pagesPayload.window_to_date || learningPayload.window_to_date || range.to
   });
 }
 
@@ -4776,17 +4879,16 @@ els.premiumFilter.addEventListener("submit", async (event) => {
 });
 
 els.analyticsRefreshButtons.forEach((button) => {
-  button.addEventListener("click", () => loadAnalytics().catch((error) => showStatus(error.message, "bad")));
+  button.addEventListener("click", () => {
+    readAnalyticsDateInputs();
+    loadAnalytics().catch((error) => showStatus(error.message, "bad"));
+  });
 });
 
-els.analyticsDaySelectors.forEach((selector) => {
-  selector.value = String(state.analytics.days);
-  selector.addEventListener("change", () => {
-    const nextDays = Number.parseInt(selector.value || "7", 10);
-    state.analytics.days = [1, 7, 30, 90].includes(nextDays) ? nextDays : 7;
-    els.analyticsDaySelectors.forEach((node) => {
-      node.value = String(state.analytics.days);
-    });
+syncAnalyticsDateInputs();
+[...els.analyticsFromInputs, ...els.analyticsToInputs].forEach((input) => {
+  input.addEventListener("change", () => {
+    readAnalyticsDateInputs();
     loadAnalytics().catch((error) => showStatus(error.message, "bad"));
   });
 });

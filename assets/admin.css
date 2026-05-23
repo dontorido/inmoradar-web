@@ -149,7 +149,9 @@
 
 .admin-token-form input:focus,
 .admin-filter input:focus,
-.admin-filter select:focus {
+.admin-filter select:focus,
+.admin-range-control input:focus,
+.admin-range-control select:focus {
   border-color: var(--accent);
 }
 
@@ -168,7 +170,8 @@
   text-transform: uppercase;
 }
 
-.admin-range-control select {
+.admin-range-control select,
+.admin-range-control input[type="date"] {
   min-height: 32px;
   border: 1px solid #8f8f8f;
   border-radius: var(--admin-radius-sm);
@@ -177,6 +180,11 @@
   padding: 0 28px 0 10px;
   font-family: var(--body);
   font-size: 13px;
+}
+
+.admin-range-control input[type="date"] {
+  width: 132px;
+  padding: 0 10px;
 }
 
 .admin-button {
@@ -3553,6 +3561,7 @@
 }
 
 .admin-seo-performance-panel .admin-view-toolbar {
+  justify-content: flex-end;
   margin: 0;
 }
 

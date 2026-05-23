@@ -366,6 +366,74 @@ test("admin analytics summary acepta rangos permitidos de dias", async () => {
   assert.equal(ninetyDays.payload.window_hours, 2160);
 });
 
+test("admin analytics resources aceptan rango explicito desde hasta", async () => {
+  const summary = await callAdminAnalyticsResource("analytics/summary", "from=2026-05-01&to=2026-05-10");
+  const pages = await callAdminAnalyticsResource("analytics/pages", "from=2026-05-01T00%3A00%3A00.000Z&to=2026-05-10T23%3A59%3A59.999Z");
+
+  assert.equal(summary.statusCode, 200);
+  assert.equal(summary.payload.window_mode, "date_range");
+  assert.equal(summary.payload.window_from_date, "2026-05-01");
+  assert.equal(summary.payload.window_to_date, "2026-05-10");
+  assert.equal(summary.payload.window_days, 10);
+  assert.equal(summary.payload.window_hours, 240);
+  assert.equal(pages.statusCode, 200);
+  assert.equal(pages.payload.window_mode, "date_range");
+  assert.equal(pages.payload.window_from_date, "2026-05-01");
+  assert.equal(pages.payload.window_to_date, "2026-05-10");
+});
+
+test("admin analytics aplica el rango explicito al filtro de Supabase", async () => {
+  const previousFetch = global.fetch;
+  let requestedUrl = "";
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url) => {
+        requestedUrl = String(url);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [],
+          text: async () => ""
+        };
+      };
+
+      try {
+        const { res, payload } = createJsonResponse();
+        const req = {
+          method: "GET",
+          url: "/api/admin?resource=analytics/summary&from=2026-05-01&to=2026-05-10",
+          headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" }
+        };
+        await adminHandler(req, res);
+        assert.equal(res.statusCode, 200);
+        assert.equal(payload().window_mode, "date_range");
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+
+  const filters = new URL(requestedUrl).searchParams.getAll("occurred_at");
+  assert.deepEqual(filters, ["gte.2026-05-01T00:00:00.000Z", "lte.2026-05-10T23:59:59.999Z"]);
+});
+
+test("admin analytics limita rangos explicitos a 90 dias", async () => {
+  const summary = await callAdminAnalyticsResource("analytics/summary", "from=2026-01-01&to=2026-05-23");
+
+  assert.equal(summary.statusCode, 200);
+  assert.equal(summary.payload.window_mode, "date_range");
+  assert.equal(summary.payload.window_clamped, true);
+  assert.equal(summary.payload.window_from_date, "2026-02-23");
+  assert.equal(summary.payload.window_to_date, "2026-05-23");
+  assert.equal(summary.payload.window_days, 90);
+});
+
 test("admin analytics resources usan 7 dias por defecto si el rango no es valido", async () => {
   const summary = await callAdminAnalyticsResource("analytics/summary", "days=2");
   const pages = await callAdminAnalyticsResource("analytics/pages", "days=abc");
