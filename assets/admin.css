@@ -4383,6 +4383,57 @@
   gap: 8px;
 }
 
+.admin-linkedin-panel [data-tooltip] {
+  position: relative;
+}
+
+.admin-linkedin-panel [data-tooltip]::before,
+.admin-linkedin-panel [data-tooltip]::after {
+  position: absolute;
+  left: 50%;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+  z-index: 30;
+}
+
+.admin-linkedin-panel [data-tooltip]::before {
+  content: attr(data-tooltip);
+  bottom: calc(100% + 10px);
+  width: max-content;
+  max-width: min(270px, 76vw);
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 8px;
+  background: var(--ink);
+  box-shadow: 0 16px 34px rgba(9, 9, 11, .22);
+  color: #ffffff;
+  font-family: var(--body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.35;
+  padding: 8px 10px;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+}
+
+.admin-linkedin-panel [data-tooltip]::after {
+  content: "";
+  bottom: calc(100% + 4px);
+  border: 6px solid transparent;
+  border-top-color: var(--ink);
+}
+
+.admin-linkedin-panel [data-tooltip]:hover::before,
+.admin-linkedin-panel [data-tooltip]:hover::after,
+.admin-linkedin-panel [data-tooltip]:focus-visible::before,
+.admin-linkedin-panel [data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 @media (max-width: 1180px) {
   .admin-marketing-dashboard,
   .admin-linkedin-grid,

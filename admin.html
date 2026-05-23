@@ -318,9 +318,9 @@
                 <p class="admin-panel-sub">Genera cada d&iacute;a un post de LinkedIn con imagen y texto. El modo manual funciona siempre; el modo autom&aacute;tico queda bloqueado hasta tener permisos oficiales aprobados.</p>
               </div>
               <div class="admin-row-actions">
-                <button class="admin-button tiny ghost" type="button" data-linkedin-refresh>Actualizar</button>
-                <button class="admin-button tiny ghost" type="button" data-linkedin-test>Probar conexi&oacute;n</button>
-                <button class="admin-button tiny" type="button" data-linkedin-generate-daily>Generar post diario</button>
+                <button class="admin-button tiny ghost" type="button" data-linkedin-refresh data-tooltip="Recarga el estado, los ajustes y la cola desde el servidor.">Actualizar</button>
+                <button class="admin-button tiny ghost" type="button" data-linkedin-test data-tooltip="Comprueba la conexi&oacute;n y permisos disponibles sin publicar nada.">Probar conexi&oacute;n</button>
+                <button class="admin-button tiny" type="button" data-linkedin-generate-daily data-tooltip="Crea el borrador diario con texto e imagen para revisarlo.">Generar post diario</button>
               </div>
             </div>
             <div class="admin-linkedin-notice" data-linkedin-notice></div>
@@ -329,8 +329,8 @@
                 <div class="admin-linkedin-card-head">
                   <span>01 &middot; Estado de conexi&oacute;n</span>
                   <div class="admin-row-actions">
-                    <button class="admin-button tiny ghost" type="button" data-linkedin-connect>Conectar LinkedIn</button>
-                    <button class="admin-button tiny ghost" type="button" data-linkedin-disconnect>Desconectar</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-connect data-tooltip="Abre LinkedIn para autorizar la cuenta y la p&aacute;gina.">Conectar LinkedIn</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-disconnect data-tooltip="Desactiva la conexi&oacute;n guardada y vuelve al modo manual.">Desconectar</button>
                   </div>
                 </div>
                 <div class="admin-linkedin-status" data-linkedin-connection></div>
@@ -338,7 +338,7 @@
               <article class="admin-linkedin-card">
                 <div class="admin-linkedin-card-head">
                   <span>02 &middot; Ajustes</span>
-                  <button class="admin-button tiny" type="submit" form="admin-linkedin-settings-form">Guardar ajustes</button>
+                  <button class="admin-button tiny" type="submit" form="admin-linkedin-settings-form" data-tooltip="Guarda horario, modo de contenido y preferencias de publicaci&oacute;n.">Guardar ajustes</button>
                 </div>
                 <form class="admin-linkedin-form" id="admin-linkedin-settings-form" data-linkedin-settings-form>
                   <label><span>Generaci&oacute;n diaria</span><select name="daily_generation_enabled"><option value="true">Activa</option><option value="false">Pausada</option></select></label>
@@ -357,7 +357,7 @@
               <article class="admin-linkedin-card admin-linkedin-queue-card">
                 <div class="admin-linkedin-card-head">
                   <span>03 &middot; Cola de publicaciones</span>
-                  <button class="admin-button tiny ghost" type="button" data-linkedin-create-post>Crear borrador</button>
+                  <button class="admin-button tiny ghost" type="button" data-linkedin-create-post data-tooltip="Crea un post manual vac&iacute;o para escribirlo desde el editor.">Crear borrador</button>
                 </div>
                 <section class="admin-stat-grid compact admin-linkedin-summary" data-linkedin-summary></section>
                 <div class="admin-table-wrap">
@@ -395,17 +395,17 @@
                   <label><span>Estado</span><select name="status"><option value="draft">Draft</option><option value="pending_review">Pendiente de revisi&oacute;n</option><option value="scheduled">Programado</option><option value="published">Publicado</option><option value="manually_published">Publicado manualmente</option><option value="failed">Error</option><option value="cancelled">Cancelado</option></select></label>
                   <label><span>Fuente</span><input name="source_reference" placeholder="manual, daily, template"></label>
                   <div class="admin-linkedin-editor-actions">
-                    <button class="admin-button tiny" type="submit">Guardar borrador</button>
-                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="generate_image">Generar imagen</button>
-                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="regenerate_copy">Regenerar copy</button>
-                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="approve">Aprobar</button>
-                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="schedule">Programar</button>
-                    <button class="admin-button tiny" type="button" data-linkedin-post-action="publish_now">Publicar ahora</button>
-                    <button class="admin-button tiny ghost" type="button" data-linkedin-copy-text>Copiar texto</button>
-                    <button class="admin-button tiny ghost" type="button" data-linkedin-download-image>Descargar imagen</button>
-                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="mark_manually_published">Marcar manual</button>
-                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="retry">Reintentar</button>
-                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="cancel">Cancelar</button>
+                    <button class="admin-button tiny" type="submit" data-tooltip="Guarda los cambios del post seleccionado en la cola.">Guardar borrador</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="generate_image" data-tooltip="Crea una imagen nueva para el post seleccionado.">Generar imagen</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="regenerate_copy" data-tooltip="Reescribe hook, texto, CTA y hashtags con la plantilla actual.">Regenerar copy</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="approve" data-tooltip="Aprueba el post; con fecha lo deja programado y sin fecha pendiente.">Aprobar</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="schedule" data-tooltip="Asigna la fecha indicada o la siguiente hora diaria y lo programa.">Programar</button>
+                    <button class="admin-button tiny" type="button" data-linkedin-post-action="publish_now" data-tooltip="Intenta publicarlo ahora con la API oficial de LinkedIn.">Publicar ahora</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-copy-text data-tooltip="Copia el texto completo para publicarlo manualmente.">Copiar texto</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-download-image data-tooltip="Descarga la imagen del post para subirla a LinkedIn.">Descargar imagen</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="mark_manually_published" data-tooltip="Marca el post como publicado manualmente sin llamar a LinkedIn.">Marcar manual</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="retry" data-tooltip="Quita el error y devuelve el post a pendiente de revisi&oacute;n.">Reintentar</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="cancel" data-tooltip="Cancela el post para que no se publique.">Cancelar</button>
                   </div>
                 </form>
               </article>
