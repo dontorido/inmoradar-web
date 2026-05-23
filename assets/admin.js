@@ -4,7 +4,7 @@ const VIDEO_PROJECT_KEY = "inmoradar_social_video_project";
 const RELEASE_TARGETS = ["web", "extension", "backoffice"];
 const MAX_RELEASE_FILE_BYTES = 3 * 1024 * 1024;
 const INITIAL_ADMIN_PATH = window.location.pathname || "";
-const INITIAL_MARKETING_SUBSECTION = INITIAL_ADMIN_PATH.includes("/backoffice/marketing/viraliza") ? "marketing-viraliza" : "";
+const INITIAL_MARKETING_SUBSECTION = INITIAL_ADMIN_PATH.includes("/backoffice/marketing/viraliza") ? "marketing-viraliza" : INITIAL_ADMIN_PATH.includes("/backoffice/marketing/linkedin") ? "marketing-linkedin" : "";
 const DEFAULT_VIDEO_PROPERTY_DATA = Object.freeze({
   ciudad: "Madrid",
   barrio: "Ventas",
@@ -201,6 +201,16 @@ const state = {
     learning: null,
     warning: ""
   },
+  linkedin: {
+    connection: null,
+    settings: {},
+    posts: [],
+    summary: {},
+    env: {},
+    currentPostId: "",
+    lastPublication: null,
+    manualNotice: ""
+  },
   alerts: []
 };
 
@@ -236,6 +246,21 @@ const els = {
   seoFilter: document.querySelector("[data-seo-filter]"),
   seoGenerate: document.querySelector("[data-seo-generate]"),
   seoPublish: document.querySelector("[data-seo-publish]"),
+  linkedinRefresh: document.querySelector("[data-linkedin-refresh]"),
+  linkedinTest: document.querySelector("[data-linkedin-test]"),
+  linkedinConnect: document.querySelector("[data-linkedin-connect]"),
+  linkedinDisconnect: document.querySelector("[data-linkedin-disconnect]"),
+  linkedinGenerateDaily: document.querySelector("[data-linkedin-generate-daily]"),
+  linkedinCreatePost: document.querySelector("[data-linkedin-create-post]"),
+  linkedinNotice: document.querySelector("[data-linkedin-notice]"),
+  linkedinConnection: document.querySelector("[data-linkedin-connection]"),
+  linkedinSummary: document.querySelector("[data-linkedin-summary]"),
+  linkedinSettingsForm: document.querySelector("[data-linkedin-settings-form]"),
+  linkedinEditorForm: document.querySelector("[data-linkedin-editor-form]"),
+  linkedinRows: document.querySelector("[data-linkedin-post-rows]"),
+  linkedinCopyText: document.querySelector("[data-linkedin-copy-text]"),
+  linkedinDownloadImage: document.querySelector("[data-linkedin-download-image]"),
+
   kpiForm: document.querySelector("[data-kpi-form]"),
   kpiReset: document.querySelector("[data-kpi-reset]"),
   parkingStats: document.querySelector("[data-parking-stats]"),
@@ -336,6 +361,21 @@ function showStatus(message, tone = "neutral") {
   const target = els.app.hidden ? els.status : els.liveStatus;
   target.textContent = message || "";
   target.dataset.tone = tone;
+}
+
+function toLocalDatetimeValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offsetMs = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function fromLocalDatetimeValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString();
 }
 
 function authHeaders() {
@@ -549,11 +589,11 @@ function chip(value, variant = "", kind = "status") {
 
 function statusTone(value) {
   const normalized = String(value || "").toLowerCase();
-  if (["published", "active", "on_trial"].includes(normalized)) return "published";
-  if (["ready_to_publish", "index", "paid"].includes(normalized)) return "ready";
-  if (["cancelled", "expired", "noindex", "unpaid", "payment_failed"].includes(normalized)) return "bad";
-  if (["past_due"].includes(normalized)) return "warn";
-  if (["draft", "needs_review"].includes(normalized)) return "draft";
+  if (["published", "active", "on_trial", "connected", "manually_published"].includes(normalized)) return "published";
+  if (["ready_to_publish", "index", "paid", "scheduled", "pending_review"].includes(normalized)) return "ready";
+  if (["cancelled", "expired", "noindex", "unpaid", "payment_failed", "failed", "error", "disconnected"].includes(normalized)) return "bad";
+  if (["past_due", "publishing"].includes(normalized)) return "warn";
+  if (["draft", "needs_review", "manual"].includes(normalized)) return "draft";
   if (["archived"].includes(normalized)) return "muted";
   return "draft";
 }
@@ -1347,6 +1387,313 @@ function kpiProposalText(field) {
   return `Partir de ${formattedValue}. Es el dato de partida recomendado para medir resultados antes de endurecer o relajar la regla.`;
 }
 
+function linkedInStatusLabel(value) {
+  const map = {
+    disconnected: "No conectado",
+    connected: "Conectado",
+    expired: "Token expirado",
+    error: "Error",
+    draft: "Draft",
+    pending_review: "Pendiente",
+    scheduled: "Programado",
+    publishing: "Publicando",
+    published: "Publicado",
+    manually_published: "Manual",
+    failed: "Error",
+    cancelled: "Cancelado"
+  };
+  return map[String(value || "").toLowerCase()] || value || "-";
+}
+
+function linkedInPostText(post = {}) {
+  const hashtags = Array.isArray(post.hashtags) ? post.hashtags : String(post.hashtags || "").split(/[\s,]+/).filter(Boolean);
+  return [post.hook, post.body, post.cta, hashtags.map((tag) => String(tag).startsWith("#") ? tag : `#${tag}`).join(" ")]
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function renderLinkedIn(payload = {}) {
+  state.linkedin.connection = payload.connection || null;
+  state.linkedin.settings = payload.settings || {};
+  state.linkedin.posts = payload.posts || [];
+  state.linkedin.summary = payload.summary || {};
+  state.linkedin.env = payload.env || {};
+  state.linkedin.lastPublication = payload.last_publication || null;
+  state.linkedin.manualNotice = payload.manual_mode_notice || "";
+  renderLinkedInNotice(payload);
+  renderLinkedInConnection();
+  renderLinkedInSettings();
+  renderLinkedInSummary();
+  renderLinkedInPosts();
+  const selected = state.linkedin.posts.find((post) => post.id === state.linkedin.currentPostId) || state.linkedin.posts[0] || null;
+  fillLinkedInEditor(selected);
+}
+
+function renderLinkedInNotice(payload = {}) {
+  if (!els.linkedinNotice) return;
+  const storage = payload.storage || {};
+  const missing = storage.settings_table_missing || storage.posts_table_missing || storage.connection_table_missing;
+  const messages = [];
+  if (missing) messages.push("Faltan tablas de LinkedIn. Ejecuta database/marketing-linkedin.sql en Supabase.");
+  if (payload.manual_mode_notice) messages.push(payload.manual_mode_notice);
+  if (storage.connection_error && !storage.connection_table_missing) messages.push(storage.connection_error);
+  if (storage.settings_error && !storage.settings_table_missing) messages.push(storage.settings_error);
+  if (storage.posts_error && !storage.posts_table_missing) messages.push(storage.posts_error);
+  els.linkedinNotice.innerHTML = messages.map((message) => `<p>${escapeHtml(message)}</p>`).join("");
+  els.linkedinNotice.hidden = !messages.length;
+}
+
+function renderLinkedInConnection() {
+  if (!els.linkedinConnection) return;
+  const c = state.linkedin.connection || {};
+  const env = state.linkedin.env || {};
+  const hasPage = Boolean(c.organization_name || c.organization_urn || env.organization_urn_configured);
+  els.linkedinConnection.innerHTML = `
+    <div class="admin-linkedin-status-row"><span>Estado</span>${chip(linkedInStatusLabel(c.status || "disconnected"), statusTone(c.status))}</div>
+    <div class="admin-linkedin-status-row"><span>Modo manual</span>${chip(c.manual_available ? "Activo" : "No", c.manual_available ? "published" : "bad")}</div>
+    <div class="admin-linkedin-status-row"><span>Modo autom\u00e1tico</span>${chip(c.automatic_available ? "Disponible" : "No disponible", c.automatic_available ? "published" : "draft")}</div>
+    <div class="admin-linkedin-status-row"><span>P\u00e1gina configurada</span><strong>${escapeHtml(hasPage ? "Si" : "No")}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Organization URN</span><code>${escapeHtml(c.organization_urn || "-")}</code></div>
+    <div class="admin-linkedin-status-row"><span>Token expira</span><strong>${escapeHtml(formatDate(c.token_expires_at))}</strong></div>
+    <div class="admin-linkedin-status-row"><span>\u00daltimo error</span><strong>${escapeHtml(c.last_error || "-")}</strong></div>
+    <div class="admin-linkedin-status-row"><span>\u00daltima publicaci\u00f3n</span><strong>${escapeHtml(formatDate(state.linkedin.lastPublication?.published_at || state.linkedin.lastPublication?.manually_published_at))}</strong></div>
+    <div class="admin-linkedin-status-row"><span>API version</span><strong>${escapeHtml(env.api_version || "-")}</strong></div>
+  `;
+}
+
+function renderLinkedInSettings() {
+  if (!els.linkedinSettingsForm) return;
+  const form = els.linkedinSettingsForm;
+  const settings = state.linkedin.settings || {};
+  const set = (name, value) => {
+    const field = form.elements[name];
+    if (field) field.value = value ?? "";
+  };
+  set("daily_generation_enabled", String(settings.daily_generation_enabled !== false));
+  set("auto_publish_enabled", String(settings.auto_publish_enabled === true));
+  set("approval_required", String(settings.approval_required !== false));
+  set("daily_post_time", settings.daily_post_time || "09:30");
+  set("timezone", settings.timezone || "Europe/Madrid");
+  set("content_mode", settings.content_mode || "mixed");
+  set("default_cta", settings.default_cta || "Analiza antes de contactar: https://inmoradar.app");
+  set("default_hashtags", (settings.default_hashtags || []).map((tag) => `#${String(tag).replace(/^#/, "")}`).join(" "));
+  set("destination_url", settings.destination_url || "https://inmoradar.app");
+}
+
+function renderLinkedInSummary() {
+  if (!els.linkedinSummary) return;
+  const summary = state.linkedin.summary || {};
+  els.linkedinSummary.innerHTML = [
+    stat("Total", summary.total || 0, { id: "linkedin-total", hint: "Posts en cola" }),
+    stat("Pendientes", summary.pending_review || 0, { id: "linkedin-pending", hint: "Requieren revisi\u00f3n" }),
+    stat("Programados", summary.scheduled || 0, { id: "linkedin-scheduled", hint: "Listos para fecha" }),
+    stat("Publicados", (summary.published || 0) + (summary.manually_published || 0), { id: "linkedin-published", hint: "API o manual" }),
+    stat("Errores", summary.failed || 0, { id: "linkedin-failed", hint: "Reintentar o revisar" })
+  ].join("");
+}
+
+function renderLinkedInPosts() {
+  if (!els.linkedinRows) return;
+  const rows = state.linkedin.posts || [];
+  if (!rows.length) {
+    els.linkedinRows.innerHTML = '<tr><td colspan="9">No hay publicaciones de LinkedIn todav\u00eda.</td></tr>';
+    return;
+  }
+  els.linkedinRows.innerHTML = rows.map((post) => {
+    const preview = post.image_url ? `<img class="admin-linkedin-thumb" src="${escapeHtml(post.image_url)}" alt="Preview LinkedIn">` : "-";
+    const mode = post.source_type === "auto" ? "autom\u00e1tico" : "manual";
+    const publishedAt = post.published_at || post.manually_published_at;
+    return `
+      <tr data-linkedin-post-id="${escapeHtml(post.id)}">
+        <td>${escapeHtml(formatDate(post.created_at))}</td>
+        <td>${preview}</td>
+        <td><strong>${escapeHtml(post.hook || post.title || "-")}</strong><div class="admin-subtle">${escapeHtml(post.source_reference || post.source_type || "-")}</div></td>
+        <td>${chip(linkedInStatusLabel(post.status), statusTone(post.status))}</td>
+        <td>${chip(mode, mode === "autom\u00e1tico" ? "ready" : "draft")}</td>
+        <td>${escapeHtml(formatDate(post.scheduled_at))}</td>
+        <td>${escapeHtml(formatDate(publishedAt))}</td>
+        <td><span class="admin-linkedin-error">${escapeHtml(post.error_message || "-")}</span></td>
+        <td>
+          <div class="admin-row-actions">
+            <button class="admin-icon-button" type="button" data-linkedin-row-action="view" data-linkedin-id="${escapeHtml(post.id)}" aria-label="Ver post">V</button>
+            <button class="admin-icon-button" type="button" data-linkedin-row-action="approve" data-linkedin-id="${escapeHtml(post.id)}" aria-label="Aprobar post">A</button>
+            <button class="admin-icon-button" type="button" data-linkedin-row-action="mark_manually_published" data-linkedin-id="${escapeHtml(post.id)}" aria-label="Marcar publicado manualmente">M</button>
+            <button class="admin-icon-button" type="button" data-linkedin-row-action="cancel" data-linkedin-id="${escapeHtml(post.id)}" aria-label="Cancelar post">C</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function fillLinkedInEditor(post) {
+  if (!els.linkedinEditorForm) return;
+  const form = els.linkedinEditorForm;
+  const selected = post || {};
+  state.linkedin.currentPostId = selected.id || "";
+  const set = (name, value) => {
+    const field = form.elements[name];
+    if (field) field.value = value ?? "";
+  };
+  set("id", selected.id || "");
+  set("hook", selected.hook || "");
+  set("body", selected.body || "");
+  set("cta", selected.cta || "");
+  set("hashtags", (selected.hashtags || []).map((tag) => `#${String(tag).replace(/^#/, "")}`).join(" "));
+  set("image_url", selected.image_url || "");
+  set("scheduled_at", toLocalDatetimeValue(selected.scheduled_at));
+  set("status", selected.status || "draft");
+  set("source_reference", selected.source_reference || "");
+}
+
+function currentLinkedInPost() {
+  return (state.linkedin.posts || []).find((post) => post.id === state.linkedin.currentPostId) || null;
+}
+
+function collectLinkedInSettings() {
+  const data = new FormData(els.linkedinSettingsForm);
+  return {
+    daily_generation_enabled: data.get("daily_generation_enabled") === "true",
+    auto_publish_enabled: data.get("auto_publish_enabled") === "true",
+    approval_required: data.get("approval_required") === "true",
+    daily_post_time: String(data.get("daily_post_time") || "09:30"),
+    timezone: String(data.get("timezone") || "Europe/Madrid"),
+    content_mode: String(data.get("content_mode") || "mixed"),
+    default_cta: String(data.get("default_cta") || ""),
+    default_hashtags: String(data.get("default_hashtags") || ""),
+    destination_url: String(data.get("destination_url") || "https://inmoradar.app")
+  };
+}
+
+function collectLinkedInPost() {
+  const data = new FormData(els.linkedinEditorForm);
+  return {
+    id: String(data.get("id") || ""),
+    hook: String(data.get("hook") || ""),
+    body: String(data.get("body") || ""),
+    cta: String(data.get("cta") || ""),
+    hashtags: String(data.get("hashtags") || ""),
+    image_url: String(data.get("image_url") || ""),
+    scheduled_at: fromLocalDatetimeValue(String(data.get("scheduled_at") || "")),
+    status: String(data.get("status") || "draft"),
+    source_reference: String(data.get("source_reference") || ""),
+    source_type: "manual"
+  };
+}
+
+async function loadLinkedIn() {
+  if (!els.linkedinConnection) return;
+  const payload = await api("/api/admin?resource=linkedin");
+  renderLinkedIn(payload);
+}
+
+async function saveLinkedInSettings() {
+  showStatus("Guardando ajustes de LinkedIn...");
+  const payload = await api("/api/admin?resource=linkedin/settings", {
+    method: "POST",
+    body: JSON.stringify({ settings: collectLinkedInSettings() })
+  });
+  state.linkedin.settings = payload.settings || state.linkedin.settings;
+  renderLinkedInSettings();
+  showStatus("Ajustes de LinkedIn guardados.", "good");
+}
+
+async function saveLinkedInPost() {
+  const input = collectLinkedInPost();
+  const method = input.id ? "PUT" : "POST";
+  showStatus(input.id ? "Guardando post de LinkedIn..." : "Creando post de LinkedIn...");
+  const payload = await api("/api/admin?resource=linkedin/posts", {
+    method,
+    body: JSON.stringify(input)
+  });
+  await loadLinkedIn();
+  fillLinkedInEditor(payload.post || currentLinkedInPost());
+  showStatus("Post de LinkedIn guardado.", "good");
+}
+
+async function runLinkedInAction(action, id = state.linkedin.currentPostId) {
+  if (!id && action !== "generate_daily") throw new Error("Selecciona o crea un post de LinkedIn primero.");
+  const current = els.linkedinEditorForm ? collectLinkedInPost() : {};
+  const body = { action, id, scheduled_at: current.scheduled_at };
+  if (action === "generate_daily") body.publishIfAllowed = false;
+  showStatus(`LinkedIn: ${action}...`);
+  const payload = await api("/api/admin?resource=linkedin/posts", {
+    method: "POST",
+    body: JSON.stringify(body)
+  });
+  await loadLinkedIn();
+  const post = payload.post || currentLinkedInPost();
+  if (post) fillLinkedInEditor(post);
+  showStatus(payload.skipped ? `LinkedIn omitido: ${payload.reason}` : "Acci\u00f3n LinkedIn completada.", payload.ok === false ? "bad" : "good");
+}
+
+async function connectLinkedIn() {
+  const payload = await api("/api/admin?resource=linkedin/connect");
+  if (payload.state) sessionStorage.setItem("inmoradar_linkedin_oauth_state", payload.state);
+  if (!payload.url) throw new Error("linkedin_oauth_url_missing");
+  window.location.href = payload.url;
+}
+
+async function disconnectLinkedIn() {
+  if (!window.confirm("\u00bfDesconectar LinkedIn y volver a modo manual?")) return;
+  await api("/api/admin?resource=linkedin/disconnect", { method: "POST", body: JSON.stringify({}) });
+  await loadLinkedIn();
+  showStatus("LinkedIn desconectado. Modo manual activo.", "good");
+}
+
+async function testLinkedInConnection() {
+  const payload = await api("/api/admin?resource=linkedin/test-connection", { method: "POST", body: JSON.stringify({}) });
+  if (payload.connection) state.linkedin.connection = payload.connection;
+  renderLinkedInConnection();
+  showStatus(payload.message || "Conexi\u00f3n de LinkedIn comprobada.", payload.automatic_available ? "good" : "neutral");
+}
+
+async function handleLinkedInOAuthCallbackFromUrl() {
+  const params = new URLSearchParams(window.location.search || "");
+  const code = params.get("code");
+  const stateParam = params.get("state");
+  if (!code || !state.token) return;
+  const expectedState = sessionStorage.getItem("inmoradar_linkedin_oauth_state") || "";
+  if (expectedState && stateParam && expectedState !== stateParam) {
+    showStatus("LinkedIn OAuth: state no coincide. Reintenta la conexi\u00f3n.", "bad");
+    return;
+  }
+  sessionStorage.removeItem("inmoradar_linkedin_oauth_state");
+  showStatus("Conectando LinkedIn...");
+  await api("/api/admin?resource=linkedin/callback", {
+    method: "POST",
+    body: JSON.stringify({ code, state: stateParam })
+  });
+  params.delete("code");
+  params.delete("state");
+  const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash || ""}`;
+  window.history.replaceState({}, document.title, next);
+  await loadLinkedIn();
+  showStatus("LinkedIn conectado.", "good");
+}
+
+function copyLinkedInText() {
+  const formPost = collectLinkedInPost();
+  const post = { ...currentLinkedInPost(), ...formPost };
+  return copyToClipboard(linkedInPostText(post));
+}
+
+function downloadLinkedInImage() {
+  const post = { ...currentLinkedInPost(), ...collectLinkedInPost() };
+  const source = post.image_url || "";
+  if (!source) {
+    showStatus("Este post no tiene imagen todav\u00eda.", "bad");
+    return;
+  }
+  const link = document.createElement("a");
+  link.href = source;
+  link.download = `inmoradar-linkedin-${post.id || Date.now()}.${source.startsWith("data:image/svg") ? "svg" : "png"}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  showStatus("Imagen de LinkedIn descargada.", "good");
+}
 function renderKpis(payload) {
   state.kpis.schema = payload.schema || [];
   state.kpis.settings = payload.settings || {};
@@ -3918,6 +4265,7 @@ async function loadAll() {
       loadExtensionUsage(),
       loadAnalytics(),
       loadSeo(),
+      loadLinkedIn(),
       loadKpis(),
       loadParking(),
       loadReleaseHubs(),
@@ -4120,7 +4468,70 @@ els.seoFilter.addEventListener("submit", async (event) => {
 
 els.seoGenerate.addEventListener("click", () => runSeoGeneration("generate").catch((error) => showStatus(error.message, "bad")));
 els.seoPublish.addEventListener("click", () => runSeoGeneration("publish").catch((error) => showStatus(error.message, "bad")));
-
+if (els.linkedinRefresh) {
+  els.linkedinRefresh.addEventListener("click", () => loadLinkedIn().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.linkedinTest) {
+  els.linkedinTest.addEventListener("click", () => testLinkedInConnection().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.linkedinConnect) {
+  els.linkedinConnect.addEventListener("click", () => connectLinkedIn().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.linkedinDisconnect) {
+  els.linkedinDisconnect.addEventListener("click", () => disconnectLinkedIn().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.linkedinGenerateDaily) {
+  els.linkedinGenerateDaily.addEventListener("click", () => runLinkedInAction("generate_daily", "").catch((error) => showStatus(error.message, "bad")));
+}
+if (els.linkedinCreatePost) {
+  els.linkedinCreatePost.addEventListener("click", () => {
+    state.linkedin.currentPostId = "";
+    fillLinkedInEditor({ status: "draft", hashtags: state.linkedin.settings?.default_hashtags || [] });
+    showStatus("Borrador de LinkedIn preparado. Completa el editor y guarda.", "neutral");
+  });
+}
+if (els.linkedinSettingsForm) {
+  els.linkedinSettingsForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveLinkedInSettings().catch((error) => showStatus(error.message, "bad"));
+  });
+}
+if (els.linkedinEditorForm) {
+  els.linkedinEditorForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveLinkedInPost().catch((error) => showStatus(error.message, "bad"));
+  });
+  els.linkedinEditorForm.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-linkedin-post-action]");
+    if (!button) return;
+    runLinkedInAction(button.dataset.linkedinPostAction).catch((error) => showStatus(error.message, "bad"));
+  });
+}
+if (els.linkedinCopyText) {
+  els.linkedinCopyText.addEventListener("click", () => copyLinkedInText().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.linkedinDownloadImage) {
+  els.linkedinDownloadImage.addEventListener("click", downloadLinkedInImage);
+}
+if (els.linkedinRows) {
+  els.linkedinRows.addEventListener("click", (event) => {
+    const actionButton = event.target.closest("[data-linkedin-row-action]");
+    if (actionButton) {
+      const id = actionButton.dataset.linkedinId;
+      if (actionButton.dataset.linkedinRowAction === "view") {
+        const post = state.linkedin.posts.find((item) => item.id === id);
+        if (post) fillLinkedInEditor(post);
+        return;
+      }
+      runLinkedInAction(actionButton.dataset.linkedinRowAction, id).catch((error) => showStatus(error.message, "bad"));
+      return;
+    }
+    const row = event.target.closest("[data-linkedin-post-id]");
+    if (!row) return;
+    const post = state.linkedin.posts.find((item) => item.id === row.dataset.linkedinPostId);
+    if (post) fillLinkedInEditor(post);
+  });
+}
 els.kpiForm.addEventListener("submit", (event) => {
   event.preventDefault();
   saveKpis(collectKpiValues()).catch((error) => showStatus(error.message, "bad"));
@@ -4419,4 +4830,5 @@ try {
 renderVideoPipeline();
 renderVideoProjects();
 renderVideoReadiness();
+handleLinkedInOAuthCallbackFromUrl().catch((error) => showStatus(error.message, "bad"));
 loadAll();

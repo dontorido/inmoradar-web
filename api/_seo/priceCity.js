@@ -175,30 +175,46 @@ function bentoCell(record, operation) {
     </div>`;
 }
 
-function sidebar({ city, slug, sourceData, updatedLabel }) {
+function metricBadge(label, value, meta = "") {
+  return `<span class="seo-hero-badge"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value || "Sin dato")}</strong>${meta ? `<em>${escapeHtml(meta)}</em>` : ""}</span>`;
+}
+
+function heroBadges({ sale, rent, sourceData, updatedIso }) {
+  return `<div class="seo-meta-row seo-hero-badges" aria-label="Resumen de datos de mercado">
+      ${metricBadge("Venta", sale ? formatPrice(sale, "sale") : "Sin dato", sale ? geoLevelLabel(sale.geo_level) : "Pendiente")}
+      ${metricBadge("Alquiler", rent ? formatPrice(rent, "rent") : "Sin dato", rent ? geoLevelLabel(rent.geo_level) : "Pendiente")}
+      ${metricBadge("Fuente", sourceMetaLabel(sourceData), "Datos agregados")}
+      ${metricBadge("Actualización", updatedIso, "Fecha de revisión")}
+    </div>`;
+}
+
+function primaryCards({ city, slug, sourceData, updatedLabel }) {
   const sale = sourceData.sale;
   const rent = sourceData.rent;
   const saleReference = sale?.price_eur_m2 || "";
-
-  return `<aside class="seo-sidebar" data-testid="page-precio-m2-${escapeHtml(slug)}-sidebar">
-    <nav class="seo-toc" aria-label="En esta página">
-      <p class="seo-sidebar-kicker seo-sidebar-kicker-muted">→ EN ESTA PÁGINA</p>
-      <a href="#datos-disponibles" data-toc-target="datos-disponibles">01 · Datos disponibles</a>
-      <a href="#como-interpretarlo" data-toc-target="como-interpretarlo">02 · Cómo interpretarlo</a>
-      <a href="#esta-caro" data-toc-target="esta-caro">03 · ¿Está caro este anuncio?</a>
-      <a href="#factores" data-toc-target="factores">04 · Factores que justifican diferencias</a>
-      <a href="#como-ayuda" data-toc-target="como-ayuda">05 · Cómo ayuda InmoRadar</a>
-      <a href="#faq" data-toc-target="faq">06 · Preguntas frecuentes</a>
-    </nav>
-
-    <section class="seo-data-card" aria-label="Datos disponibles">
-      <p class="seo-sidebar-kicker">→ DATOS DISPONIBLES</p>
-      <div class="seo-stat-grid">
-        ${bentoCell(sale, "sale")}
-        ${bentoCell(rent, "rent")}
+  return `<section class="seo-primary-cards" aria-label="Resumen y calculadora de ${escapeHtml(city)}">
+    <article class="seo-product-card seo-quick-card">
+      <p class="seo-sidebar-kicker">VISTA RÁPIDA · ${escapeHtml(city.toUpperCase())}</p>
+      <h2>Referencia de mercado para comparar anuncios.</h2>
+      <div class="seo-stat-grid seo-stat-grid-wide">
+        ${bentoCell(sale, "sale") || `<div class="seo-stat-cell"><span class="seo-stat-label">VENTA · €/M²</span><span class="seo-stat-number">—</span><span class="seo-stat-unit">Sin dato</span></div>`}
+        ${bentoCell(rent, "rent") || `<div class="seo-stat-cell"><span class="seo-stat-label">ALQUILER · €/M²/MES</span><span class="seo-stat-number">—</span><span class="seo-stat-unit">Sin dato</span></div>`}
       </div>
+      <div class="seo-data-grid seo-compact-data">
+${dataSummaryRows(sourceData)
+  .map(
+    ([label, value]) => `        <div class="seo-data-label">${escapeHtml(label)}</div>
+        <div class="seo-data-value">${escapeHtml(value)}</div>`
+  )
+  .join("\n")}
+      </div>
+      <p class="seo-card-note">Fuente y periodo se muestran siempre junto a la referencia para evitar leer el dato como precio exacto de una calle.</p>
+    </article>
+
+    <article class="seo-product-card seo-check-card">
+      <p class="seo-sidebar-kicker">COMPRUEBA UN ANUNCIO</p>
+      <h2>Calcula el €/m² y compáralo con ${escapeHtml(city)}.</h2>
       <div class="seo-calculator" data-sale-reference="${escapeHtml(saleReference)}" data-testid="page-precio-m2-${escapeHtml(slug)}-calculator">
-        <p class="seo-sidebar-kicker">→ COMPRUEBA UN ANUNCIO</p>
         <label>
           <span>Precio total (€)</span>
           <input type="number" inputmode="decimal" min="0" step="1000" data-seo-calc-price placeholder="210000">
@@ -213,11 +229,24 @@ function sidebar({ city, slug, sourceData, updatedLabel }) {
           <small data-seo-calc-status>Introduce precio y superficie.</small>
         </div>
       </div>
-      <p class="seo-card-note">Comparación contra la referencia de venta publicada. Solo informativo. No sustituye una tasación profesional.</p>
-    </section>
-  </aside>`;
+      <p class="seo-card-note">Comparación contra la referencia de venta publicada. Solo informativo. No sustituye una tasación profesional. Última revisión: ${escapeHtml(updatedLabel)}.</p>
+    </article>
+  </section>`;
 }
 
+function sidebar({ city, slug }) {
+  return `<aside class="seo-sidebar" data-testid="page-precio-m2-${escapeHtml(slug)}-sidebar">
+    <nav class="seo-toc" aria-label="En esta página">
+      <p class="seo-sidebar-kicker seo-sidebar-kicker-muted">EN ESTA PÁGINA</p>
+      <a href="#datos-disponibles" data-toc-target="datos-disponibles">01 · Datos disponibles</a>
+      <a href="#como-interpretarlo" data-toc-target="como-interpretarlo">02 · Cómo interpretar el €/m²</a>
+      <a href="#esta-caro" data-toc-target="esta-caro">03 · ¿Está caro este anuncio?</a>
+      <a href="#factores" data-toc-target="factores">04 · Factores que justifican diferencias</a>
+      <a href="#como-ayuda" data-toc-target="como-ayuda">05 · Cómo ayuda InmoRadar</a>
+      <a href="#faq" data-toc-target="faq">06 · Preguntas frecuentes</a>
+    </nav>
+  </aside>`;
+}
 function faqHtml(items) {
   return `<section class="seo-section seo-faq" id="faq" data-section-id="faq" aria-labelledby="faq-heading">
     <h2 id="faq-heading">Preguntas frecuentes</h2>
@@ -243,7 +272,7 @@ function usefulLinks() {
       </a>
       <a href="/premium">
         ${icon("arrowUpRight")}
-        <span>Acceso Premium · 1,99€/semana</span>
+        <span>Funciones Premium opcionales</span>
         <small>INMORADAR.APP/PREMIUM</small>
       </a>
     </div>
@@ -252,11 +281,11 @@ function usefulLinks() {
 
 function finalCta(city) {
   return `<section class="seo-final-cta" data-testid="page-precio-m2-${escapeHtml(slugify(city))}-final-cta">
-    <p class="seo-sidebar-kicker">→ EMPIEZA AHORA · 1,99€/SEMANA</p>
+    <p class="seo-sidebar-kicker">→ ANALIZA ANTES DE CONTACTAR</p>
     <h2>Compara el precio €/m² de cada anuncio en ${escapeHtml(city)}.</h2>
-    <p>Dos inmuebles gratis para probarlo. Premium semanal sin permanencia.</p>
+    <p>Instala InmoRadar y empieza a analizar anuncios donde ya buscas.</p>
     <div class="seo-final-actions">
-      <button class="seo-button seo-button-primary" type="button" data-install-button data-install-source="seo_price_city">EMPIEZA A DESCUBRIR INFORMACIÓN RELEVANTE ${icon("arrowUpRight")}</button>
+      <button class="seo-button seo-button-primary" type="button" data-install-button data-install-source="seo_price_city">EMPEZAR GRATIS ${icon("arrowUpRight")}</button>
       <a class="seo-button seo-button-secondary" href="/#analisis">VER QUÉ ANALIZA</a>
     </div>
   </section>`;
@@ -310,22 +339,18 @@ function buildPrecioMetroCuadradoCiudad({ city, province, autonomousCommunity, s
   </nav>
 
   <header class="seo-page-hero" data-city-specific="true">
-    <p class="seo-page-eyebrow">→ PRECIO METRO CUADRADO · ${escapeHtml(city.toUpperCase())}</p>
+    <p class="seo-page-eyebrow">PRECIO M² · ${escapeHtml(city.toUpperCase())}</p>
     <h1>Precio del metro cuadrado en ${escapeHtml(city)}</h1>
     <p class="seo-lead">Referencia orientativa de precio €/m² para ${escapeHtml(
       operationCopy
     )} en ${escapeHtml(city)}. Fuente, fecha del dato y cómo comparar anuncios con InmoRadar antes de contactar.</p>
-    <div class="seo-meta-row">
-      <span>${icon("mapPin")}${escapeHtml(
-        sourceRecords[0] ? geoLevelLabel(sourceRecords[0].geo_level).toUpperCase() : "REFERENCIA PENDIENTE"
-      )}</span>
-      <span>${icon("database")}${escapeHtml(sourceMetaLabel(sourceData).toUpperCase())}</span>
-      <span>${icon("clock")}ACTUALIZADO ${escapeHtml(updatedIso)}</span>
-    </div>
+    ${heroBadges({ sale, rent, sourceData, updatedIso })}
   </header>
 
+  ${primaryCards({ city, slug, sourceData, updatedLabel })}
+
   <div class="seo-reading-grid">
-    ${sidebar({ city, slug, sourceData, updatedLabel })}
+    ${sidebar({ city, slug })}
 
     <div class="seo-content">
       <section class="seo-section" id="datos-disponibles" data-section-id="datos-disponibles" data-city-specific="true">
@@ -381,7 +406,7 @@ function buildPrecioMetroCuadradoCiudad({ city, province, autonomousCommunity, s
             <p class="seo-sidebar-kicker">→ AHORRA TIEMPO</p>
             <h3>Analiza anuncios antes de contactar.</h3>
           </div>
-          <button class="seo-button seo-button-secondary" type="button" data-install-button data-install-source="seo_price_city_inline">EMPIEZA A DESCUBRIR INFORMACIÓN RELEVANTE</button>
+          <button class="seo-button seo-button-secondary" type="button" data-install-button data-install-source="seo_price_city_inline">EMPEZAR GRATIS</button>
         </div>
       </section>
 

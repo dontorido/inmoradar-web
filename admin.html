@@ -187,6 +187,11 @@
                 <strong>Vídeos IA</strong>
                 <small>Storyboard, Runway y biblioteca</small>
               </button>
+              <button class="admin-tab admin-marketing-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-linkedin" data-testid="admin-subsection-marketing-linkedin" aria-pressed="false">
+                <span>05</span>
+                <strong>LinkedIn</strong>
+                <small>Imagen, copy y cola diaria</small>
+              </button>
             </div>
           </div>
           <p class="admin-empty-state" data-admin-subsection-empty="marketing">Selecciona Visión general, SEO y Noticias, Viraliza o Vídeos IA para abrir un área de trabajo.</p>
@@ -219,6 +224,12 @@
                 <strong>Vídeos IA</strong>
                 <p>Generación de guiones, preview, storyboard, composición y clips de Runway cuando esté activo.</p>
                 <button class="admin-button tiny ghost" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-videos">Abrir Vídeos</button>
+              </section>
+              <section>
+                <span>04</span>
+                <strong>LinkedIn</strong>
+                <p>Genera imagen, copy, aprobaci&oacute;n y cola diaria. Publicaci&oacute;n manual siempre disponible; autom&aacute;tica solo con API oficial aprobada.</p>
+                <button class="admin-button tiny ghost" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-linkedin">Abrir LinkedIn</button>
               </section>
             </div>
           </article>
@@ -266,6 +277,110 @@
             </div>
             <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
             <div class="admin-pagination" data-seo-pagination></div>
+          </article>
+        </section>
+
+        <section class="admin-subsection-panel admin-linkedin-panel" data-admin-subsection-panel="marketing-linkedin" hidden>
+          <article class="admin-panel">
+            <div class="admin-panel-head">
+              <div>
+                <span class="admin-kicker muted">Marketing &middot; LinkedIn</span>
+                <h2>LinkedIn</h2>
+                <p class="admin-panel-sub">Genera cada d&iacute;a un post de LinkedIn con imagen y texto. El modo manual funciona siempre; el modo autom&aacute;tico queda bloqueado hasta tener permisos oficiales aprobados.</p>
+              </div>
+              <div class="admin-row-actions">
+                <button class="admin-button tiny ghost" type="button" data-linkedin-refresh>Actualizar</button>
+                <button class="admin-button tiny ghost" type="button" data-linkedin-test>Probar conexi&oacute;n</button>
+                <button class="admin-button tiny" type="button" data-linkedin-generate-daily>Generar post diario</button>
+              </div>
+            </div>
+            <div class="admin-linkedin-notice" data-linkedin-notice></div>
+            <section class="admin-linkedin-grid">
+              <article class="admin-linkedin-card">
+                <div class="admin-linkedin-card-head">
+                  <span>01 &middot; Estado de conexi&oacute;n</span>
+                  <div class="admin-row-actions">
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-connect>Conectar LinkedIn</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-disconnect>Desconectar</button>
+                  </div>
+                </div>
+                <div class="admin-linkedin-status" data-linkedin-connection></div>
+              </article>
+              <article class="admin-linkedin-card">
+                <div class="admin-linkedin-card-head">
+                  <span>02 &middot; Ajustes</span>
+                  <button class="admin-button tiny" type="submit" form="admin-linkedin-settings-form">Guardar ajustes</button>
+                </div>
+                <form class="admin-linkedin-form" id="admin-linkedin-settings-form" data-linkedin-settings-form>
+                  <label><span>Generaci&oacute;n diaria</span><select name="daily_generation_enabled"><option value="true">Activa</option><option value="false">Pausada</option></select></label>
+                  <label><span>Publicaci&oacute;n autom&aacute;tica</span><select name="auto_publish_enabled"><option value="false">Desactivada</option><option value="true">Activada</option></select></label>
+                  <label><span>Aprobaci&oacute;n previa</span><select name="approval_required"><option value="true">Requerida</option><option value="false">No requerida</option></select></label>
+                  <label><span>Hora diaria</span><input name="daily_post_time" type="time" value="09:30"></label>
+                  <label><span>Zona horaria</span><input name="timezone" value="Europe/Madrid"></label>
+                  <label><span>Modo de contenido</span><select name="content_mode"><option value="mixed">Mixto</option><option value="rent_question">&iquest;Lo alquilar&iacute;as?</option><option value="hidden_signals">Lo que el anuncio no te cuenta</option><option value="inmoradar_signal">Se&ntilde;al InmoRadar</option><option value="comparison">Comparativa</option></select></label>
+                  <label class="admin-linkedin-wide"><span>CTA por defecto</span><input name="default_cta" value="Analiza antes de contactar: https://inmoradar.app"></label>
+                  <label><span>Hashtags</span><input name="default_hashtags" value="#InmoRadar #PropTech #Inmobiliario #RealEstate #Vivienda #InversionInmobiliaria"></label>
+                  <label><span>URL destino</span><input name="destination_url" type="url" value="https://inmoradar.app"></label>
+                </form>
+              </article>
+            </section>
+            <section class="admin-linkedin-grid admin-linkedin-grid-editor">
+              <article class="admin-linkedin-card admin-linkedin-queue-card">
+                <div class="admin-linkedin-card-head">
+                  <span>03 &middot; Cola de publicaciones</span>
+                  <button class="admin-button tiny ghost" type="button" data-linkedin-create-post>Crear borrador</button>
+                </div>
+                <section class="admin-stat-grid compact admin-linkedin-summary" data-linkedin-summary></section>
+                <div class="admin-table-wrap">
+                  <table class="admin-table admin-linkedin-table">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Preview</th>
+                        <th>Hook</th>
+                        <th>Estado</th>
+                        <th>Modo</th>
+                        <th>Programado</th>
+                        <th>Publicado</th>
+                        <th>Error</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody data-linkedin-post-rows></tbody>
+                  </table>
+                </div>
+                <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
+              </article>
+              <article class="admin-linkedin-card admin-linkedin-editor-card">
+                <div class="admin-linkedin-card-head">
+                  <span>04 &middot; Editor de post</span>
+                </div>
+                <form class="admin-linkedin-form admin-linkedin-editor" data-linkedin-editor-form>
+                  <input type="hidden" name="id">
+                  <label class="admin-linkedin-wide"><span>Hook</span><input name="hook" placeholder="Lo importante de un anuncio muchas veces est&aacute; fuera del anuncio."></label>
+                  <label class="admin-linkedin-wide"><span>Texto principal</span><textarea name="body" rows="8" placeholder="Cuerpo del post"></textarea></label>
+                  <label class="admin-linkedin-wide"><span>CTA</span><input name="cta" placeholder="Descubre lo que el anuncio no te cuenta: https://inmoradar.app"></label>
+                  <label><span>Hashtags</span><input name="hashtags" placeholder="#InmoRadar #PropTech"></label>
+                  <label><span>Imagen</span><input name="image_url" placeholder="Data URL o URL jpg/png/webp"></label>
+                  <label><span>Fecha programada</span><input name="scheduled_at" type="datetime-local"></label>
+                  <label><span>Estado</span><select name="status"><option value="draft">Draft</option><option value="pending_review">Pendiente de revisi&oacute;n</option><option value="scheduled">Programado</option><option value="published">Publicado</option><option value="manually_published">Publicado manualmente</option><option value="failed">Error</option><option value="cancelled">Cancelado</option></select></label>
+                  <label><span>Fuente</span><input name="source_reference" placeholder="manual, daily, template"></label>
+                  <div class="admin-linkedin-editor-actions">
+                    <button class="admin-button tiny" type="submit">Guardar borrador</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="generate_image">Generar imagen</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="regenerate_copy">Regenerar copy</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="approve">Aprobar</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="schedule">Programar</button>
+                    <button class="admin-button tiny" type="button" data-linkedin-post-action="publish_now">Publicar ahora</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-copy-text>Copiar texto</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-download-image>Descargar imagen</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="mark_manually_published">Marcar manual</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="retry">Reintentar</button>
+                    <button class="admin-button tiny ghost" type="button" data-linkedin-post-action="cancel">Cancelar</button>
+                  </div>
+                </form>
+              </article>
+            </section>
           </article>
         </section>
       </section>
