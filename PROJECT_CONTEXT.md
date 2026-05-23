@@ -137,7 +137,7 @@ Todos pasan por `api/admin.js` y requieren `ADMIN_IMPORT_TOKEN`.
 
 ### Crons
 
-- `POST /api/admin/seo-autogenerate/run`: cron SEO protegido por `CRON_SECRET` o `ADMIN_IMPORT_TOKEN`, reutilizando `api/admin.js` para no crear otra funcion serverless.
+- `POST /api/admin?resource=seo-autogenerate/run`: cron SEO protegido por `CRON_SECRET` o `ADMIN_IMPORT_TOKEN`, reutilizando `api/admin.js` para no crear otra funcion serverless.
 - `POST /api/cron/seo-publish`: cron SEO anterior protegido por `CRON_SECRET` o `ADMIN_IMPORT_TOKEN`, conservado como fallback.
 
 ## 6. Backoffice: archivos y flujo general
@@ -236,8 +236,8 @@ Sitemap:
 
 Autogeneracion SEO:
 
-- Vercel ejecuta `/api/admin/seo-autogenerate/run` cada 6 horas segun `vercel.json`.
-- GitHub Actions llama el mismo endpoint cada 6 horas con `CRON_SECRET`.
+- GitHub Actions llama `/api/admin?resource=seo-autogenerate/run` cada 6 horas con `CRON_SECRET`.
+- Vercel Cron esta desactivado en `vercel.json` para mantener compatibilidad con Vercel Hobby.
 - Alcance fase 1: solo `price_city` (`/precio-metro-cuadrado/[ciudad]/`) y `expensive_listing_city` (`/saber-si-piso-esta-caro/[ciudad]/`).
 - No genera barrios, comparativas, coste oculto, guias largas, paginas sin ciudad ni experimentos.
 - Limites duros en codigo: 1 publicacion por ejecucion, 3 en 24h, 10 en 7 dias, `final_score >= 80`, una pagina por ciudad/tipo, `target_path` nuevo, title/H1/meta description unicos, datos reales con fuente y fecha, y bloqueo por similitud excesiva.

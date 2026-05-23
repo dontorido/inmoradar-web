@@ -355,7 +355,7 @@ Para generar borradores reales en Supabase, usar `mode: "generate"`. Para public
 Autogeneracion SEO controlada:
 
 ```text
-POST /api/admin/seo-autogenerate/run
+POST /api/admin?resource=seo-autogenerate/run
 Authorization: Bearer CRON_SECRET
 ```
 
@@ -385,7 +385,7 @@ GET /api/cron/seo-publish
 Authorization: Bearer CRON_SECRET
 ```
 
-El endpoint anterior queda conservado, pero GitHub Actions y Vercel apuntan a `/api/admin/seo-autogenerate/run`. La politica antigua usaba fecha natural Europe/Madrid: maximo 2 landings programaticas y 2 guias editoriales al dia, con maximo 4 publicaciones totales. Cada ejecucion publicaba como maximo una pieza; si ya hay 2 landings, prioriza guia; si ya hay 2 guias, prioriza landing; si ambas cuotas estan llenas responde `skipped: true`.
+El endpoint anterior queda conservado, pero el cron operativo vive en GitHub Actions y llama a `/api/admin?resource=seo-autogenerate/run`. Vercel Cron queda desactivado para mantener compatibilidad con Vercel Hobby. La politica antigua usaba fecha natural Europe/Madrid: maximo 2 landings programaticas y 2 guias editoriales al dia, con maximo 4 publicaciones totales. Cada ejecucion publicaba como maximo una pieza; si ya hay 2 landings, prioriza guia; si ya hay 2 guias, prioriza landing; si ambas cuotas estan llenas responde `skipped: true`.
 
 El cron usa `seo_cron_runs` para registrar ejecuciones y evitar solapes dentro de la misma hora. Si esa tabla todavia no existe, el cron no se bloquea: sigue publicando con modo degradado y lo indica en la respuesta. No hay SQL nuevo para la politica 2+2: se distingue landing vs guia con `template_type` dentro de `seo_landings`.
 
