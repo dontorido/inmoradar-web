@@ -200,6 +200,7 @@ const state = {
     dailyPlanWarning: ""
   },
   analytics: {
+    days: 7,
     summary: null,
     pages: [],
     learning: null,
@@ -242,6 +243,9 @@ const els = {
   analyticsPages: document.querySelector("[data-analytics-pages]"),
   analyticsLearning: document.querySelector("[data-analytics-learning]"),
   analyticsRefresh: document.querySelector("[data-analytics-refresh]"),
+  analyticsPanels: document.querySelectorAll("[data-analytics-panel]"),
+  analyticsDaySelectors: document.querySelectorAll("[data-analytics-days]"),
+  analyticsRefreshButtons: document.querySelectorAll("[data-analytics-refresh]"),
   premiumRows: document.querySelector("[data-premium-rows]"),
   seoSummary: document.querySelector("[data-seo-summary]"),
   seoRows: document.querySelector("[data-seo-rows]"),
@@ -413,6 +417,18 @@ function formatDate(value) {
   }).format(date);
 }
 
+function formatCompactDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
 function showStatus(message, tone = "neutral") {
   const target = els.app.hidden ? els.status : els.liveStatus;
   target.textContent = message || "";
@@ -529,7 +545,7 @@ function goToAdminAlertTarget(target) {
   }
   if (!value.startsWith("#")) return;
 
-  if (value === "#seo-cron-secret") setAdminSubsection("marketing", "marketing-seo");
+  if (value === "#seo-cron-secret" || value === "#seo-autogeneration") setAdminSubsection("marketing", "marketing-seo");
   if (value === "#operaciones-extension") setAdminSubsection("operaciones", "operaciones-extension");
   if (value === "#ventas-premium") setAdminSection("ventas");
 
@@ -931,19 +947,47 @@ function analyticsSignals(payload = {}) {
   ];
 }
 
-function renderAnalyticsPerformance(payload = {}) {
-  if (!els.analyticsSummary || !els.analyticsPages || !els.analyticsLearning) return;
+function analyticsPanelTargets(panel) {
+  return {
+    summary: panel?.querySelector("[data-analytics-summary]") || els.analyticsSummary,
+    pages: panel?.querySelector("[data-analytics-pages]") || els.analyticsPages,
+    segments: panel?.querySelector("[data-analytics-segments]") || null,
+    learning: panel?.querySelector("[data-analytics-learning]") || els.analyticsLearning
+  };
+}
+
+function analyticsSegmentGroup(title, items = []) {
+  const rows = Array.isArray(items) ? items.filter((item) => item?.label && item.label !== "unknown").slice(0, 5) : [];
+  const content = rows.length
+    ? rows
+        .map(
+          (item) => `
+            <div class="admin-analytics-segment">
+              <strong>${escapeHtml(item.label)}</strong>
+              <span>${escapeHtml(item.count || 0)} eventos - ${escapeHtml(item.install_clicks || 0)} instalacion - ${escapeHtml(item.checkout_created || 0)} checkout</span>
+            </div>
+          `
+        )
+        .join("")
+    : `<p class="admin-empty-state compact">Sin datos suficientes.</p>`;
+  return `
+    <section class="admin-analytics-segment-group">
+      <h4>${escapeHtml(title)}</h4>
+      ${content}
+    </section>
+  `;
+}
+
+function renderAnalyticsPanel(targets, payload, context = {}) {
+  if (!targets.summary || !targets.pages || !targets.learning) return;
   const summary = payload.summary || {};
   const pages = payload.top_pages || payload.pages || [];
   const recommendations = payload.recommendations || [];
   const signals = analyticsSignals(payload);
-  state.analytics.summary = summary;
-  state.analytics.pages = pages;
-  state.analytics.learning = payload;
-  state.analytics.warning = payload.warning || "";
+  const days = Number(payload.window_days || state.analytics.days || 7);
 
-  els.analyticsSummary.innerHTML = [
-    stat("Eventos 7d", summary.total_events || 0, { id: "analytics-events", hint: payload.table_missing ? "Ejecuta database/owned-analytics-events.sql" : "Eventos anonimos propios" }),
+  targets.summary.innerHTML = [
+    stat(`Eventos ${days}d`, summary.total_events || 0, { id: "analytics-events", hint: payload.table_missing ? "Ejecuta database/owned-analytics-events.sql" : "Eventos anonimos propios" }),
     stat("Page views", summary.page_views || 0, { id: "analytics-page-views" }),
     stat("Instalacion", (summary.install_clicks || 0) + (summary.chrome_store_clicks || 0), { id: "analytics-installs", hint: `${formatRate(summary.install_click_rate)} click/view` }),
     stat("Calculadora", `${summary.calculator_used || 0}/${summary.calculator_completed || 0}`, { id: "analytics-calculators", hint: `${formatRate(summary.calculator_completion_rate)} completadas` }),
@@ -956,21 +1000,54 @@ function renderAnalyticsPerformance(payload = {}) {
     const message = payload.table_missing
       ? "Falta la tabla <strong>owned_analytics_events</strong>. Ejecuta <strong>database/owned-analytics-events.sql</strong> en Supabase para activar el ranking."
       : "Analytics propio esta en modo degradado. Revisa Supabase o vuelve a cargar cuando el backend este configurado.";
-    els.analyticsPages.innerHTML = `<p class="admin-empty-state compact">${message}</p>`;
-    els.analyticsLearning.innerHTML = `<p class="admin-empty-state compact">El aprendizaje aparecera cuando existan eventos anonimos de visitas, instalacion y checkout.</p>`;
+    targets.pages.innerHTML = `<p class="admin-empty-state compact">${message}</p>`;
+    targets.learning.innerHTML = `<p class="admin-empty-state compact">El aprendizaje aparecera cuando existan eventos anonimos de visitas, instalacion y checkout.</p>`;
+    if (targets.segments) targets.segments.innerHTML = `<p class="admin-empty-state compact">Sin segmentos por ciudad o template.</p>`;
     return;
   }
 
-  els.analyticsPages.innerHTML = pages.length
-    ? pages.slice(0, 8).map(analyticsRow).join("")
+  targets.pages.innerHTML = pages.length
+    ? pages.slice(0, context.pageLimit || 8).map(analyticsRow).join("")
     : `<p class="admin-empty-state compact">Aun no hay paginas con eventos suficientes.</p>`;
 
-  els.analyticsLearning.innerHTML = recommendations.length || signals.length
+  if (targets.segments) {
+    targets.segments.innerHTML = [
+      analyticsSegmentGroup("Ciudades", payload.top_cities),
+      analyticsSegmentGroup("Templates", payload.top_templates),
+      analyticsSegmentGroup("Temas", payload.top_topics)
+    ].join("");
+  }
+
+  targets.learning.innerHTML = recommendations.length || signals.length
     ? [
         ...recommendations.slice(0, 5).map(analyticsRecommendation),
         ...signals.slice(0, 4).map(analyticsSignal)
       ].join("")
     : `<p class="admin-empty-state compact">Sin recomendaciones todavia. Se generaran al acumular conversiones.</p>`;
+}
+
+function renderAnalyticsPerformance(payload = {}) {
+  const summary = payload.summary || {};
+  const pages = payload.top_pages || payload.pages || [];
+  const days = Number(payload.window_days || state.analytics.days || 7);
+  const panels = els.analyticsPanels?.length ? Array.from(els.analyticsPanels) : [];
+  const targets = panels.length
+    ? panels.map((panel) => analyticsPanelTargets(panel))
+    : [analyticsPanelTargets(null)];
+
+  if (!targets.length || targets.every((target) => !target.summary || !target.pages || !target.learning)) return;
+
+  state.analytics.days = [1, 7, 30, 90].includes(days) ? days : 7;
+  state.analytics.summary = summary;
+  state.analytics.pages = pages;
+  state.analytics.learning = payload;
+  state.analytics.warning = payload.warning || payload.pages_warning || payload.learning_warning || "";
+
+  els.analyticsDaySelectors.forEach((selector) => {
+    selector.value = String(state.analytics.days);
+  });
+
+  targets.forEach((target) => renderAnalyticsPanel(target, payload));
 }
 function renderParkingStats(payload) {
   if (!els.parkingStats) return;
@@ -1343,6 +1420,26 @@ function renderSeoSummary(summary = {}, fallbackRows = []) {
   ].join("");
 }
 
+function ratioLabel(current, limit) {
+  return `${Number(current || 0)} / ${Number(limit || 0)}`;
+}
+
+function seoAutogenBadge(label, tone = "neutral") {
+  return `<span class="admin-seo-autogen-badge is-${escapeHtml(tone)}">${escapeHtml(label)}</span>`;
+}
+
+function seoAutogenCard(label, value, options = {}) {
+  const classes = ["admin-seo-autogen-card"];
+  if (options.overLimit) classes.push("is-over-limit");
+  return `
+    <article class="${classes.join(" ")}">
+      <span>${escapeHtml(label)}</span>
+      <div class="admin-seo-autogen-value">${options.badge ? seoAutogenBadge(value, options.tone) : escapeHtml(value)}</div>
+      ${options.hint ? `<small>${escapeHtml(options.hint)}</small>` : ""}
+    </article>
+  `;
+}
+
 function renderSeoAutogeneration(payload = {}) {
   if (!els.seoAutogenSummary || !els.seoAutogenRuns) return;
   state.seoAutogeneration.status = payload;
@@ -1351,18 +1448,24 @@ function renderSeoAutogeneration(payload = {}) {
   const limits = payload.limits || {};
   const lastRun = payload.last_run || null;
   const lastResult = lastRun?.result_json || {};
-  const enabledLabel = config.enabled ? "Activa" : "Pausada";
-  const dryRunLabel = config.dry_run ? "Dry run" : "Publica";
+  const enabledLabel = config.enabled ? "Activo" : "Inactivo";
+  const dryRunLabel = config.dry_run ? "Dry run" : "Publicacion real";
+  const runCount = Number(limits.published_this_run || 0);
+  const runLimit = Number(limits.max_per_run || 1);
+  const dayCount = Number(limits.published_last_24h || 0);
+  const dayLimit = Number(limits.max_per_day || 3);
+  const weekCount = Number(limits.published_last_7d || 0);
+  const weekLimit = Number(limits.max_per_week || 10);
 
   els.seoAutogenSummary.innerHTML = [
-    stat("Estado", enabledLabel, { id: "seo-autogen-enabled", hint: "SEO_AUTOGENERATION_ENABLED" }),
-    stat("Modo", dryRunLabel, { id: "seo-autogen-dry-run", hint: "SEO_AUTOGENERATION_DRY_RUN" }),
-    stat("Run", `${limits.published_this_run || 0}/${limits.max_per_run || 1}`, { id: "seo-autogen-run-limit", hint: "Maximo por ejecucion" }),
-    stat("24h", `${limits.published_last_24h || 0}/${limits.max_per_day || 3}`, { id: "seo-autogen-day-limit", hint: "Limite ultimas 24h" }),
-    stat("7 dias", `${limits.published_last_7d || 0}/${limits.max_per_week || 10}`, { id: "seo-autogen-week-limit", hint: "Limite semanal" }),
-    stat("Min score", config.min_score || 80, { id: "seo-autogen-min-score", unit: "/100" }),
-    stat("Ultima", lastRun ? formatDate(lastRun.started_at) : "-", { id: "seo-autogen-last-run", hint: lastRun?.status || "Sin ejecuciones" }),
-    stat("Proxima", payload.next_scheduled_at ? formatDate(payload.next_scheduled_at) : "-", { id: "seo-autogen-next-run", hint: config.schedule || "0 */6 * * *" })
+    seoAutogenCard("Estado", enabledLabel, { badge: true, tone: config.enabled ? "good" : "muted", hint: "Kill switch" }),
+    seoAutogenCard("Modo", dryRunLabel, { badge: true, tone: config.dry_run ? "warn" : "good", hint: "Controlado por entorno" }),
+    seoAutogenCard("Run", ratioLabel(runCount, runLimit), { hint: "Publicado / limite", overLimit: runCount > runLimit }),
+    seoAutogenCard("24h", ratioLabel(dayCount, dayLimit), { hint: "Publicado / limite", overLimit: dayCount > dayLimit }),
+    seoAutogenCard("7 dias", ratioLabel(weekCount, weekLimit), { hint: "Publicado / limite", overLimit: weekCount > weekLimit }),
+    seoAutogenCard("Min score", `${Number(config.min_score || 80)} / 100`, { hint: "Umbral de calidad" }),
+    seoAutogenCard("Ultima", lastRun ? formatCompactDate(lastRun.started_at) : "-", { hint: lastRun?.status || "Sin ejecuciones" }),
+    seoAutogenCard("Proxima", payload.next_scheduled_at ? formatCompactDate(payload.next_scheduled_at) : "-", { hint: "Cadencia 6h" })
   ].join("");
 
   if (els.seoAutogenNote) {
@@ -1390,12 +1493,12 @@ function renderSeoAutogeneration(payload = {}) {
       return `
         <tr>
           <td>
-            <strong>${escapeHtml(formatDate(row.started_at))}</strong>
+            <strong>${escapeHtml(formatCompactDate(row.started_at))}</strong>
             <div class="admin-subtle">${escapeHtml(row.run_key || "-")}</div>
           </td>
           <td>${chip(row.status || "unknown", statusTone(row.status))}</td>
           <td>${escapeHtml(counts)}</td>
-          <td>${escapeHtml(detail || row.error_message || "-")}</td>
+          <td><div class="admin-seo-autogen-detail">${escapeHtml(detail || row.error_message || "-")}</div></td>
         </tr>
       `;
     })
@@ -4326,9 +4429,29 @@ async function loadExtensionUsage() {
 }
 
 async function loadAnalytics() {
-  if (!els.analyticsSummary) return;
-  const payload = await api("/api/admin?resource=analytics/summary");
-  renderAnalyticsPerformance(payload);
+  if (!els.analyticsPanels?.length && !els.analyticsSummary) return;
+  const days = [1, 7, 30, 90].includes(Number(state.analytics.days)) ? Number(state.analytics.days) : 7;
+  const summaryParams = new URLSearchParams({ resource: "analytics/summary", days: String(days) });
+  const pagesParams = new URLSearchParams({ resource: "analytics/pages", days: String(days), page_limit: "50" });
+  const learningParams = new URLSearchParams({ resource: "analytics/learning", days: String(days) });
+  const [summaryPayload, pagesPayload, learningPayload] = await Promise.all([
+    api(`/api/admin?${summaryParams.toString()}`),
+    api(`/api/admin?${pagesParams.toString()}`),
+    api(`/api/admin?${learningParams.toString()}`)
+  ]);
+  renderAnalyticsPerformance({
+    ...summaryPayload,
+    pages: pagesPayload.pages || summaryPayload.top_pages || [],
+    top_pages: summaryPayload.top_pages || pagesPayload.pages || [],
+    recommendations: learningPayload.recommendations || summaryPayload.recommendations || [],
+    high_interaction_low_install: learningPayload.high_interaction_low_install || summaryPayload.high_interaction_low_install || [],
+    calculator_install_pages: learningPayload.calculator_install_pages || summaryPayload.calculator_install_pages || [],
+    calculator_low_conversion: learningPayload.calculator_low_conversion || summaryPayload.calculator_low_conversion || [],
+    pages_warning: pagesPayload.warning || "",
+    learning_warning: learningPayload.warning || "",
+    window_days: summaryPayload.window_days || pagesPayload.window_days || learningPayload.window_days || days,
+    window_hours: summaryPayload.window_hours || pagesPayload.window_hours || learningPayload.window_hours || days * 24
+  });
 }
 
 async function loadSeo() {
@@ -4652,9 +4775,21 @@ els.premiumFilter.addEventListener("submit", async (event) => {
   await loadPremium();
 });
 
-if (els.analyticsRefresh) {
-  els.analyticsRefresh.addEventListener("click", () => loadAnalytics().catch((error) => showStatus(error.message, "bad")));
-}
+els.analyticsRefreshButtons.forEach((button) => {
+  button.addEventListener("click", () => loadAnalytics().catch((error) => showStatus(error.message, "bad")));
+});
+
+els.analyticsDaySelectors.forEach((selector) => {
+  selector.value = String(state.analytics.days);
+  selector.addEventListener("change", () => {
+    const nextDays = Number.parseInt(selector.value || "7", 10);
+    state.analytics.days = [1, 7, 30, 90].includes(nextDays) ? nextDays : 7;
+    els.analyticsDaySelectors.forEach((node) => {
+      node.value = String(state.analytics.days);
+    });
+    loadAnalytics().catch((error) => showStatus(error.message, "bad"));
+  });
+});
 
 els.seoFilter.addEventListener("submit", async (event) => {
   event.preventDefault();

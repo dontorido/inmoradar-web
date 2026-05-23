@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+const adminHandler = require("../api/admin");
 const {
   buildOwnedAnalyticsEvent,
   cleanEventName,
@@ -15,6 +16,63 @@ const {
 
 function at(minutes) {
   return new Date(Date.UTC(2026, 4, 23, 10, minutes, 0)).toISOString();
+}
+
+async function withEnv(patch, callback) {
+  const previous = new Map();
+  for (const key of Object.keys(patch)) {
+    previous.set(key, process.env[key]);
+    if (patch[key] === undefined) delete process.env[key];
+    else process.env[key] = patch[key];
+  }
+  try {
+    return await callback();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+function createJsonResponse() {
+  const chunks = [];
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+  return {
+    res,
+    payload() {
+      return JSON.parse(chunks.join("") || "{}");
+    }
+  };
+}
+
+async function callAdminAnalyticsResource(resource, query = "") {
+  return withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: undefined,
+      SUPABASE_SERVICE_ROLE_KEY: undefined
+    },
+    async () => {
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "GET",
+        url: `/api/admin?resource=${resource}${query ? `&${query}` : ""}`,
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" }
+      };
+      await adminHandler(req, res);
+      return { statusCode: res.statusCode, payload: payload() };
+    }
+  );
 }
 
 test("buildOwnedAnalyticsEvent acepta solo eventos permitidos", () => {
@@ -294,4 +352,30 @@ test("summarizePagePerformance maneja paginas sin calculator_used", () => {
   assert.equal(page.sessions_with_calculator, 0);
   assert.equal(page.sessions_with_calculator_then_install, 0);
   assert.equal(page.calculator_to_install_rate, 0);
+});
+
+test("admin analytics summary acepta rangos permitidos de dias", async () => {
+  const oneDay = await callAdminAnalyticsResource("analytics/summary", "days=1");
+  const ninetyDays = await callAdminAnalyticsResource("analytics/summary", "days=90");
+
+  assert.equal(oneDay.statusCode, 200);
+  assert.equal(oneDay.payload.window_days, 1);
+  assert.equal(oneDay.payload.window_hours, 24);
+  assert.equal(ninetyDays.statusCode, 200);
+  assert.equal(ninetyDays.payload.window_days, 90);
+  assert.equal(ninetyDays.payload.window_hours, 2160);
+});
+
+test("admin analytics resources usan 7 dias por defecto si el rango no es valido", async () => {
+  const summary = await callAdminAnalyticsResource("analytics/summary", "days=2");
+  const pages = await callAdminAnalyticsResource("analytics/pages", "days=abc");
+  const learning = await callAdminAnalyticsResource("analytics/learning", "days=365");
+
+  assert.equal(summary.statusCode, 200);
+  assert.equal(summary.payload.window_days, 7);
+  assert.equal(summary.payload.window_hours, 168);
+  assert.equal(pages.statusCode, 200);
+  assert.equal(pages.payload.window_days, 7);
+  assert.equal(learning.statusCode, 200);
+  assert.equal(learning.payload.window_days, 7);
 });

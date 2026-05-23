@@ -1,5 +1,9 @@
 const { assertAdmin, fetchWithTimeout, handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
-const { getSeoAutogenerationStatus, runSeoAutogeneration } = require("./_seo/autogeneration");
+const {
+  buildSeoAutogenerationOperationalAlerts,
+  getSeoAutogenerationStatus,
+  runSeoAutogeneration
+} = require("./_seo/autogeneration");
 const { runSeoLandingGeneration } = require("./_seo/generator");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
 const {
@@ -243,6 +247,21 @@ async function handleAlerts() {
   const encodedSince = encodeURIComponent(since);
   const viralSince = recentSinceIso(168);
   const encodedViralSince = encodeURIComponent(viralSince);
+  try {
+    const seoAutogenerationStatus = await getSeoAutogenerationStatus();
+    alerts.push(...buildSeoAutogenerationOperationalAlerts(seoAutogenerationStatus, { now: generatedAt }));
+  } catch (error) {
+    alerts.push({
+      id: "seo-autogeneration-status-error",
+      severity: "critical",
+      title: "La autogeneracion SEO no responde",
+      message: "No se pudo leer el estado de autogeneracion SEO. Revisa el ultimo run y la configuracion del backend.",
+      action_label: "Ir al evento",
+      action_target: "#seo-autogeneration",
+      dismissible: true,
+      category: "seo"
+    });
+  }
   const [recentSeoResult, recentWaitlistResult, recentRevenueResult, recentPremiumResult, recentViralResult] = await Promise.all([
     safeFetch(
       `seo_landings?select=id,published_at&status=eq.published&index_status=eq.index&published_at=gte.${encodedSince}&order=published_at.desc&limit=1`
@@ -570,22 +589,32 @@ async function handleExtensionUsageSummary() {
   }
 }
 
+const OWNED_ANALYTICS_WINDOW_DAYS = new Set([1, 7, 30, 90]);
+
+function ownedAnalyticsWindowDays(url) {
+  const parsed = Number.parseInt(String(url.searchParams.get("days") || "7"), 10);
+  return OWNED_ANALYTICS_WINDOW_DAYS.has(parsed) ? parsed : 7;
+}
+
 function ownedAnalyticsWindowHours(url) {
-  const days = clampLimit(url.searchParams.get("days"), 7, 90);
-  return days * 24;
+  return ownedAnalyticsWindowDays(url) * 24;
 }
 
 async function loadOwnedAnalyticsEvents(url) {
+  const hours = ownedAnalyticsWindowHours(url);
+  const days = ownedAnalyticsWindowDays(url);
   if (!hasSupabaseConfig()) {
     return {
       ok: false,
       table_missing: false,
       reason: "supabase_not_configured",
+      generated_at: new Date().toISOString(),
+      window_days: days,
+      window_hours: hours,
       events: []
     };
   }
 
-  const hours = ownedAnalyticsWindowHours(url);
   const limit = clampLimit(url.searchParams.get("limit"), 5000, 10000);
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
   const params = new URLSearchParams({
@@ -601,6 +630,7 @@ async function loadOwnedAnalyticsEvents(url) {
       ok: true,
       table_missing: false,
       generated_at: new Date().toISOString(),
+      window_days: days,
       window_hours: hours,
       events: Array.isArray(rows) ? rows : []
     };
@@ -611,6 +641,7 @@ async function loadOwnedAnalyticsEvents(url) {
       reason: "storage_error",
       error: error.message,
       generated_at: new Date().toISOString(),
+      window_days: days,
       window_hours: hours,
       events: []
     };
@@ -645,6 +676,7 @@ async function handleOwnedAnalyticsSummary(req, url) {
       persisted: Boolean(result.ok),
       table_missing: Boolean(result.table_missing),
       warning: result.ok ? "" : result.reason || result.error || "analytics_unavailable",
+      window_days: result.window_days,
       window_hours: result.window_hours,
       summary: summarizeOwnedAnalytics(events),
       top_pages: pages.slice(0, 10),
@@ -671,6 +703,8 @@ async function handleOwnedAnalyticsPages(req, url) {
       persisted: Boolean(result.ok),
       table_missing: Boolean(result.table_missing),
       warning: result.ok ? "" : result.reason || result.error || "analytics_unavailable",
+      window_days: result.window_days,
+      window_hours: result.window_hours,
       pages: pages.slice(0, limit)
     }
   };
@@ -687,6 +721,8 @@ async function handleOwnedAnalyticsLearning(req, url) {
       persisted: Boolean(result.ok),
       table_missing: Boolean(result.table_missing),
       warning: result.ok ? "" : result.reason || result.error || "analytics_unavailable",
+      window_days: result.window_days,
+      window_hours: result.window_hours,
       ...learning
     }
   };
