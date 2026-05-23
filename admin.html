@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#0A140F">
   <link rel="icon" href="/assets/favicon-32.png?v=20260519b" type="image/png" sizes="32x32">
   <link rel="stylesheet" href="/assets/styles.css">
-  <link rel="stylesheet" href="/assets/admin.css">
+  <link rel="stylesheet" href="/assets/admin.css?v=20260523-linkedin-tooltips">
   <link rel="stylesheet" href="/assets/admin-video-busy.css">
 </head>
 <body class="admin-body">
@@ -314,13 +314,14 @@
             <div class="admin-panel-head">
               <div>
                 <span class="admin-kicker muted">Marketing &middot; LinkedIn</span>
-                <h2>LinkedIn</h2>
-                <p class="admin-panel-sub">Genera cada d&iacute;a un post de LinkedIn con imagen y texto. El modo manual funciona siempre; el modo autom&aacute;tico queda bloqueado hasta tener permisos oficiales aprobados.</p>
+                <h2>LinkedIn Autopublisher</h2>
+                <p class="admin-panel-sub">Genera y publica posts cada 2 d&iacute;as en la p&aacute;gina de empresa de InmoRadar. El tipo activo es precio sexy / coste oculto.</p>
               </div>
               <div class="admin-row-actions">
                 <button class="admin-button tiny ghost" type="button" data-linkedin-refresh data-tooltip="Recarga el estado, los ajustes y la cola desde el servidor.">Actualizar</button>
                 <button class="admin-button tiny ghost" type="button" data-linkedin-test data-tooltip="Comprueba la conexi&oacute;n y permisos disponibles sin publicar nada.">Probar conexi&oacute;n</button>
-                <button class="admin-button tiny" type="button" data-linkedin-generate-daily data-tooltip="Crea el borrador diario con texto e imagen para revisarlo.">Generar post diario</button>
+                <button class="admin-button tiny" type="button" data-linkedin-generate-daily data-tooltip="Crea ahora un borrador del tipo activo sin esperar al scheduler.">Generar borrador ahora</button>
+                <button class="admin-button tiny ghost" type="button" data-linkedin-pause data-tooltip="Pausa el autopublisher manteniendo la conexi&oacute;n y los borradores.">Pausar</button>
               </div>
             </div>
             <div class="admin-linkedin-notice" data-linkedin-notice></div>
@@ -341,12 +342,18 @@
                   <button class="admin-button tiny" type="submit" form="admin-linkedin-settings-form" data-tooltip="Guarda horario, modo de contenido y preferencias de publicaci&oacute;n.">Guardar ajustes</button>
                 </div>
                 <form class="admin-linkedin-form" id="admin-linkedin-settings-form" data-linkedin-settings-form>
-                  <label><span>Generaci&oacute;n diaria</span><select name="daily_generation_enabled"><option value="true">Activa</option><option value="false">Pausada</option></select></label>
-                  <label><span>Publicaci&oacute;n autom&aacute;tica</span><select name="auto_publish_enabled"><option value="false">Desactivada</option><option value="true">Activada</option></select></label>
+                  <label class="admin-linkedin-wide"><span>P&aacute;gina destino</span><input name="linkedin_company_url" value="https://www.linkedin.com/company/inmoradar-app/" readonly></label>
+                  <label><span>Organization ID</span><input name="organization_id" placeholder="123456"></label>
+                  <label><span>Organization URN</span><input name="organization_urn" placeholder="urn:li:organization:123456"></label>
+                  <label><span>Generaci&oacute;n</span><select name="daily_generation_enabled"><option value="true">Activa</option><option value="false">Pausada</option></select></label>
+                  <label><span>Autopublisher</span><select name="autopost_enabled"><option value="false">Desactivado</option><option value="true">Activado</option></select></label>
                   <label><span>Aprobaci&oacute;n previa</span><select name="approval_required"><option value="true">Requerida</option><option value="false">No requerida</option></select></label>
                   <label><span>Hora diaria</span><input name="daily_post_time" type="time" value="09:30"></label>
                   <label><span>Zona horaria</span><input name="timezone" value="Europe/Madrid"></label>
-                  <label><span>Modo de contenido</span><select name="content_mode"><option value="mixed">Mixto</option><option value="rent_question">&iquest;Lo alquilar&iacute;as?</option><option value="hidden_signals">Lo que el anuncio no te cuenta</option><option value="inmoradar_signal">Se&ntilde;al InmoRadar</option><option value="comparison">Comparativa</option></select></label>
+                  <label><span>Frecuencia</span><select name="frequency_days"><option value="2">Cada 2 d&iacute;as</option><option value="1">Cada d&iacute;a</option><option value="3">Cada 3 d&iacute;as</option><option value="7">Semanal</option></select></label>
+                  <label><span>Max / d&iacute;a</span><input name="max_posts_per_day" type="number" min="1" max="3" value="1"></label>
+                  <label><span>Tipo activo</span><select name="active_post_type"><option value="precio_sexy_coste_oculto">Precio sexy / coste oculto</option></select></label>
+                  <label><span>Modo de contenido</span><select name="content_mode"><option value="precio_sexy_coste_oculto">Precio sexy / coste oculto</option><option value="mixed">Mixto</option><option value="rent_question">&iquest;Lo alquilar&iacute;as?</option><option value="hidden_signals">Lo que el anuncio no te cuenta</option><option value="inmoradar_signal">Se&ntilde;al InmoRadar</option><option value="comparison">Comparativa</option></select></label>
                   <label class="admin-linkedin-wide"><span>CTA por defecto</span><input name="default_cta" value="Analiza antes de contactar: https://inmoradar.app"></label>
                   <label><span>Hashtags</span><input name="default_hashtags" value="#InmoRadar #PropTech #Inmobiliario #RealEstate #Vivienda #InversionInmobiliaria"></label>
                   <label><span>URL destino</span><input name="destination_url" type="url" value="https://inmoradar.app"></label>
@@ -386,13 +393,17 @@
                 </div>
                 <form class="admin-linkedin-form admin-linkedin-editor" data-linkedin-editor-form>
                   <input type="hidden" name="id">
+                  <label><span>Precio visual</span><input name="price_display" placeholder="895 €/mes"></label>
+                  <label><span>Ciudad</span><input name="city" placeholder="Madrid"></label>
                   <label class="admin-linkedin-wide"><span>Hook</span><input name="hook" placeholder="Lo importante de un anuncio muchas veces est&aacute; fuera del anuncio."></label>
                   <label class="admin-linkedin-wide"><span>Texto principal</span><textarea name="body" rows="8" placeholder="Cuerpo del post"></textarea></label>
+                  <label class="admin-linkedin-wide"><span>Costes ocultos</span><textarea name="hidden_costs" rows="4" placeholder="zona complicada para aparcar&#10;parking cercano muy caro&#10;IBI elevado"></textarea></label>
                   <label class="admin-linkedin-wide"><span>CTA</span><input name="cta" placeholder="Descubre lo que el anuncio no te cuenta: https://inmoradar.app"></label>
                   <label><span>Hashtags</span><input name="hashtags" placeholder="#InmoRadar #PropTech"></label>
                   <label><span>Imagen</span><input name="image_url" placeholder="Data URL o URL jpg/png/webp"></label>
+                  <label class="admin-linkedin-wide"><span>Prompt imagen</span><textarea name="image_prompt" rows="3" placeholder="Vivienda atractiva, overlay con precio y pregunta"></textarea></label>
                   <label><span>Fecha programada</span><input name="scheduled_at" type="datetime-local"></label>
-                  <label><span>Estado</span><select name="status"><option value="draft">Draft</option><option value="pending_review">Pendiente de revisi&oacute;n</option><option value="scheduled">Programado</option><option value="published">Publicado</option><option value="manually_published">Publicado manualmente</option><option value="failed">Error</option><option value="cancelled">Cancelado</option></select></label>
+                  <label><span>Estado</span><select name="status"><option value="draft">Draft</option><option value="image_pending">Imagen pendiente</option><option value="ready">Ready</option><option value="pending_review">Pendiente de revisi&oacute;n</option><option value="scheduled">Programado</option><option value="publishing">Publicando</option><option value="published">Publicado</option><option value="manually_published">Publicado manualmente</option><option value="failed">Error</option><option value="skipped">Omitido</option><option value="needs_connection">Necesita conexi&oacute;n</option><option value="cancelled">Cancelado</option></select></label>
                   <label><span>Fuente</span><input name="source_reference" placeholder="manual, daily, template"></label>
                   <div class="admin-linkedin-editor-actions">
                     <button class="admin-button tiny" type="submit" data-tooltip="Guarda los cambios del post seleccionado en la cola.">Guardar borrador</button>
@@ -1301,6 +1312,6 @@
     </section>
   </main>
 
-  <script src="/assets/admin.js"></script>
+  <script src="/assets/admin.js?v=20260523-linkedin-tooltips"></script>
 </body>
 </html>

@@ -64,6 +64,7 @@ const {
 
 const {
   MANUAL_MODE_NOTICE,
+  LINKEDIN_COMPANY_URL,
   buildAuthorizationUrl,
   buildLinkedInPostText,
   decryptToken,
@@ -72,14 +73,16 @@ const {
   exchangeAuthorizationCode,
   generateLinkedInImage,
   generateLinkedInPost,
-  hasPostForDay,
   linkedinEnvStatus,
+  linkedinConfig,
   nextScheduledAt,
   normalizeHashtags,
+  normalizeHiddenCosts,
   normalizeOrganizationUrn,
   normalizeSettings: normalizeLinkedInSettings,
   publishPost: publishLinkedInPost,
   refreshAccessToken,
+  shouldRunAutopublisher,
   summarizeConnection,
   validatePublishInput
 } = require("../lib/linkedin/services");
@@ -1223,8 +1226,15 @@ function parseJsonMaybe(value, fallback = null) {
 }
 
 function normalizeLinkedInPostRow(row = {}) {
+  const hiddenCosts = normalizeHiddenCosts(parseJsonMaybe(row.hidden_costs, row.hidden_costs || []));
   return {
     ...row,
+    post_type: row.post_type || row.source_reference || "precio_sexy_coste_oculto",
+    headline: row.headline || row.hook || "",
+    copy: row.copy || row.body || "",
+    hidden_costs: hiddenCosts,
+    linkedin_company_url: row.linkedin_company_url || process.env.LINKEDIN_COMPANY_URL || LINKEDIN_COMPANY_URL,
+    organization_urn: normalizeOrganizationUrn(row.organization_urn || process.env.LINKEDIN_ORGANIZATION_URN),
     hashtags: normalizeHashtags(parseJsonMaybe(row.hashtags, row.hashtags || [])),
     linkedin_response: parseJsonMaybe(row.linkedin_response, row.linkedin_response || null),
     text: buildLinkedInPostText({
@@ -1256,10 +1266,14 @@ async function readLinkedInConnectionState() {
 }
 
 async function saveLinkedInConnection(patch = {}) {
+  const config = linkedinConfig(process.env);
+  const organizationUrn = normalizeOrganizationUrn(patch.organization_urn || config.organizationUrn);
   const body = {
     provider: "linkedin",
     ...patch,
-    organization_urn: normalizeOrganizationUrn(patch.organization_urn || process.env.LINKEDIN_ORGANIZATION_URN),
+    linkedin_company_url: patch.linkedin_company_url || config.companyUrl,
+    organization_urn: organizationUrn,
+    organization_id: patch.organization_id || (organizationUrn ? organizationUrn.replace(/^urn:li:organization:/, "") : config.organizationId),
     updated_at: new Date().toISOString()
   };
   const rows = await supabaseFetch("marketing_linkedin_connections?on_conflict=provider", {
@@ -1341,27 +1355,76 @@ function linkedInPostsSummary(posts = []) {
   return {
     total: rows.length,
     draft: counts.draft || 0,
+    image_pending: counts.image_pending || 0,
+    ready: counts.ready || 0,
     pending_review: counts.pending_review || 0,
     scheduled: counts.scheduled || 0,
     published: counts.published || 0,
     manually_published: counts.manually_published || 0,
     failed: counts.failed || 0,
+    skipped: counts.skipped || 0,
+    needs_connection: counts.needs_connection || 0,
     cancelled: counts.cancelled || 0,
-    ready_for_manual: rows.filter((row) => ["draft", "pending_review", "scheduled", "failed"].includes(row.status)).length
+    ready_for_manual: rows.filter((row) => ["draft", "ready", "image_pending", "pending_review", "scheduled", "failed", "needs_connection"].includes(row.status)).length
   };
+}
+
+async function listLinkedInRuns(limit = 5) {
+  try {
+    const rows = await supabaseFetch(`linkedin_autopublisher_runs?select=*&order=started_at.desc&limit=${encodeURIComponent(String(limit))}`);
+    return { runs: Array.isArray(rows) ? rows : [], table_missing: false, error: null };
+  } catch (error) {
+    return { runs: [], table_missing: /linkedin_autopublisher_runs/.test(error.message), error: error.message };
+  }
+}
+
+async function createLinkedInRun(status = "running") {
+  try {
+    const rows = await supabaseFetch("linkedin_autopublisher_runs", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify([{ started_at: new Date().toISOString(), status }])
+    });
+    return Array.isArray(rows) ? rows[0] || null : rows;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function finishLinkedInRun(run, patch = {}) {
+  if (!run?.id) return null;
+  try {
+    const rows = await supabaseFetch(`linkedin_autopublisher_runs?id=eq.${encodeURIComponent(run.id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ finished_at: new Date().toISOString(), ...patch })
+    });
+    return Array.isArray(rows) ? rows[0] || null : rows;
+  } catch (error) {
+    return null;
+  }
 }
 
 async function createLinkedInPost(input = {}, settings = null) {
   const normalizedSettings = settings || (await readLinkedInSettings()).settings;
   const generated = generateLinkedInPost(input, normalizedSettings);
   const body = {
+    post_type: generated.post_type,
     title: generated.title,
+    headline: generated.headline,
+    price_display: generated.price_display,
+    hidden_costs: generated.hidden_costs,
     hook: generated.hook,
+    copy: generated.copy,
     body: generated.body,
     cta: generated.cta,
     hashtags: generated.hashtags,
     image_path: generated.image_path,
     image_url: generated.image_url,
+    image_prompt: generated.image_prompt,
+    linkedin_company_url: generated.linkedin_company_url,
+    organization_urn: generated.organization_urn,
+    city: generated.city,
     source_type: input.source_type || generated.source_type || "auto",
     source_reference: input.source_reference || generated.source_reference || null,
     scheduled_at: input.scheduled_at || generated.scheduled_at || null,
@@ -1414,9 +1477,22 @@ async function loadLinkedInAccessToken(connection) {
 async function publishLinkedInPostById(id) {
   const [post, connection, settingsState] = await Promise.all([readLinkedInPost(id), readLinkedInConnection(), readLinkedInSettings()]);
   const settings = settingsState.settings;
-  validatePublishInput({ post, connection, settings });
-  const { accessToken, connection: freshConnection } = await loadLinkedInAccessToken(connection);
-  const ownerUrn = normalizeOrganizationUrn(freshConnection.organization_urn || process.env.LINKEDIN_ORGANIZATION_URN);
+  try {
+    validatePublishInput({ post, connection, settings });
+  } catch (error) {
+    const message = String(error.message || "linkedin_needs_connection").slice(0, 800);
+    const nextStatus = /connection|organization_urn|token/.test(message) ? "needs_connection" : "skipped";
+    return await patchLinkedInPost(id, { status: nextStatus, error_message: message });
+  }
+  let tokenState;
+  try {
+    tokenState = await loadLinkedInAccessToken(connection);
+  } catch (error) {
+    return await patchLinkedInPost(id, { status: "needs_connection", error_message: String(error.message || "linkedin_access_token_missing").slice(0, 800) });
+  }
+  const { accessToken, connection: freshConnection } = tokenState;
+  const ownerUrn = normalizeOrganizationUrn(post.organization_urn || freshConnection.organization_urn || process.env.LINKEDIN_ORGANIZATION_URN);
+  if (!ownerUrn) return await patchLinkedInPost(id, { status: "needs_connection", error_message: "linkedin_organization_urn_missing" });
   await patchLinkedInPost(id, { status: "publishing", error_message: null });
   try {
     const result = await publishLinkedInPost({ accessToken, post, ownerUrn });
@@ -1425,6 +1501,7 @@ async function publishLinkedInPostById(id) {
       published_at: new Date().toISOString(),
       linkedin_image_urn: result.linkedin_image_urn,
       linkedin_post_urn: result.linkedin_post_urn,
+      linkedin_post_id: result.linkedin_post_urn,
       linkedin_response: result.linkedin_response,
       error_message: null
     });
@@ -1465,84 +1542,94 @@ async function generateDailyLinkedInDraft({ publishIfAllowed = false } = {}) {
   if (recent.error) {
     return { ok: false, skipped: true, reason: "storage_error", error: recent.error };
   }
-  if (hasPostForDay(recent.posts, new Date())) {
-    return { ok: true, skipped: true, reason: "post_already_exists_today", posts: recent.posts.slice(0, 1) };
-  }
   const scheduledAt = nextScheduledAt(settings);
-  const post = await createLinkedInPost({ source_type: "auto", source_reference: "daily", scheduled_at: scheduledAt }, settings);
-  if (publishIfAllowed && settings.auto_publish_enabled && !settings.approval_required) {
+  const post = await createLinkedInPost({
+    post_type: settings.active_post_type || "precio_sexy_coste_oculto",
+    content_mode: settings.active_post_type || "precio_sexy_coste_oculto",
+    source_type: "auto",
+    source_reference: "manual_now",
+    scheduled_at: scheduledAt,
+    status: "ready"
+  }, settings);
+  if (publishIfAllowed && settings.autopost_enabled && !settings.approval_required) {
     const published = await publishLinkedInPostById(post.id);
     return { ok: true, skipped: false, post: published, published: published.status === "published" };
   }
   return { ok: true, skipped: false, post, published: false };
 }
 
-async function listDueLinkedInPosts() {
-  try {
-    const now = encodeURIComponent(new Date().toISOString());
-    const rows = await supabaseFetch(`marketing_linkedin_posts?select=*&status=eq.scheduled&scheduled_at=lte.${now}&order=scheduled_at.asc&limit=5`);
-    return { posts: Array.isArray(rows) ? rows : [], table_missing: false, error: null };
-  } catch (error) {
-    return {
-      posts: [],
-      table_missing: /marketing_linkedin_posts/.test(error.message),
-      error: error.message
-    };
+async function runLinkedInAutopublisherScheduler() {
+  const run = await createLinkedInRun("running");
+  const finish = (patch) => finishLinkedInRun(run, patch).then(() => patch);
+  if (!hasSupabaseConfig()) {
+    return finish({ status: "skipped", skipped_count: 1, generated_count: 0, published_count: 0, error_message: "supabase_not_configured" });
   }
+  const [settingsState, connectionState, recent] = await Promise.all([
+    readLinkedInSettings(),
+    readLinkedInConnectionState(),
+    listLinkedInPosts(new URL("https://admin.local/?limit=100"), 100)
+  ]);
+  if (settingsState.table_missing || recent.table_missing) {
+    return finish({ status: "skipped", skipped_count: 1, generated_count: 0, published_count: 0, error_message: "table_missing" });
+  }
+  if (settingsState.error || recent.error || connectionState.error) {
+    return finish({ status: "failed", skipped_count: 1, generated_count: 0, published_count: 0, error_message: settingsState.error || recent.error || connectionState.error });
+  }
+
+  const settings = settingsState.settings;
+  const decision = shouldRunAutopublisher({ posts: recent.posts, settings, connection: connectionState.connection, now: new Date() });
+  if (!decision.ok) {
+    return finish({ status: "skipped", skipped_count: 1, generated_count: 0, published_count: 0, error_message: decision.reason });
+  }
+
+  const scheduledAt = nextScheduledAt(settings);
+  const post = await createLinkedInPost({
+    post_type: settings.active_post_type || "precio_sexy_coste_oculto",
+    content_mode: settings.active_post_type || "precio_sexy_coste_oculto",
+    source_type: "auto",
+    source_reference: "autopublisher",
+    scheduled_at: scheduledAt,
+    status: "scheduled"
+  }, settings);
+
+  const published = await publishLinkedInPostById(post.id);
+  const ok = published.status === "published";
+  return finish({
+    status: ok ? "published" : published.status || "failed",
+    generated_count: 1,
+    published_count: ok ? 1 : 0,
+    skipped_count: ok ? 0 : 1,
+    error_message: ok ? null : published.error_message || published.status
+  }).then((result) => ({ ...result, post: published }));
 }
 
 async function handleLinkedInDaily(req) {
   if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
-  if (!hasSupabaseConfig()) {
-    return {
-      status: 200,
-      payload: { ok: true, skipped: true, reason: "supabase_not_configured", manual_mode_available: true }
-    };
-  }
-
-  const result = await generateDailyLinkedInDraft({ publishIfAllowed: false });
-  result.publish_results = [];
-
-  if (result.ok === false || result.reason === "table_missing") {
-    return { status: result.ok === false ? 500 : 200, payload: result };
-  }
-
-  const settingsState = await readLinkedInSettings();
-  const settings = settingsState.settings;
-  const automaticEnabled = settings.auto_publish_enabled === true && process.env.LINKEDIN_AUTO_PUBLISH_ENABLED === "true";
-  result.mode = automaticEnabled && !settings.approval_required ? "automatic_ready" : "manual_or_review";
-
-  if (automaticEnabled) {
-    const due = await listDueLinkedInPosts();
-    if (due.table_missing) {
-      result.skipped_publish = true;
-      result.publish_reason = "table_missing";
-      result.pending_sql = "database/marketing-linkedin.sql";
-    } else if (due.error) {
-      result.ok = false;
-      result.skipped_publish = true;
-      result.publish_reason = "storage_error";
-      result.publish_error = due.error;
-    } else {
-      for (const post of due.posts) {
-        result.publish_results.push(await publishLinkedInPostById(post.id));
-      }
+  const result = await runLinkedInAutopublisherScheduler();
+  return {
+    status: result.status === "failed" ? 500 : 200,
+    payload: {
+      ok: result.status !== "failed",
+      skipped: result.status === "skipped",
+      reason: result.error_message || result.status,
+      ...result
     }
-  }
-
-  return { status: result.ok === false ? 500 : 200, payload: result };
+  };
 }
 
 async function handleLinkedInDashboard(url) {
-  const [connectionState, settingsState, postsState] = await Promise.all([
+  const [connectionState, settingsState, postsState, runsState] = await Promise.all([
     readLinkedInConnectionState(),
     readLinkedInSettings(),
-    listLinkedInPosts(url, 10)
+    listLinkedInPosts(url, 10),
+    listLinkedInRuns(5)
   ]);
   const settings = settingsState.settings;
   const connection = connectionState.connection;
   const connectionSummary = summarizeConnection(connection, process.env);
   const lastPublication = postsState.posts.find((post) => post.published_at || post.manually_published_at) || null;
+  const decision = shouldRunAutopublisher({ posts: postsState.posts, settings, connection, now: new Date() });
+  const config = linkedinConfig(process.env);
   return {
     status: 200,
     payload: {
@@ -1550,17 +1637,31 @@ async function handleLinkedInDashboard(url) {
       connection: connectionSummary,
       settings,
       posts: postsState.posts,
+      runs: runsState.runs,
       summary: linkedInPostsSummary(postsState.posts),
       last_publication: lastPublication,
+      next_publication: nextScheduledAt(settings),
+      autopublisher: {
+        company_url: settings.linkedin_company_url || config.companyUrl || LINKEDIN_COMPANY_URL,
+        enabled: settings.autopost_enabled === true && config.autopostEnabled,
+        frequency: settings.frequency || "every_2_days",
+        frequency_days: settings.frequency_days || 2,
+        max_posts_per_day: settings.max_posts_per_day || 1,
+        active_post_type: settings.active_post_type || "precio_sexy_coste_oculto",
+        next_publication: nextScheduledAt(settings),
+        decision
+      },
       env: linkedinEnvStatus(process.env),
       manual_mode_notice: MANUAL_MODE_NOTICE,
       storage: {
         connection_table_missing: connectionState.table_missing,
         settings_table_missing: settingsState.table_missing,
         posts_table_missing: postsState.table_missing,
+        runs_table_missing: runsState.table_missing,
         connection_error: connectionState.error,
         settings_error: settingsState.error,
-        posts_error: postsState.error
+        posts_error: postsState.error,
+        runs_error: runsState.error
       }
     }
   };
@@ -1580,10 +1681,13 @@ async function handleLinkedInCallback(req) {
   const body = await readJsonBody(req);
   if (!body.code) return { status: 400, payload: { ok: false, error: "linkedin_code_required" } };
   const token = await exchangeAuthorizationCode({ code: body.code });
+  const config = linkedinConfig(process.env);
   const connection = await saveLinkedInConnection({
     status: "connected",
-    mode: process.env.LINKEDIN_AUTO_PUBLISH_ENABLED === "true" ? "automatic" : "manual",
-    organization_urn: process.env.LINKEDIN_ORGANIZATION_URN,
+    mode: config.autopostEnabled ? "automatic" : "manual",
+    linkedin_company_url: config.companyUrl,
+    organization_id: config.organizationId,
+    organization_urn: config.organizationUrn,
     access_token_encrypted: encryptToken(token.access_token),
     refresh_token_encrypted: token.refresh_token ? encryptToken(token.refresh_token) : null,
     token_expires_at: token.token_expires_at,
@@ -1655,13 +1759,22 @@ async function handleLinkedInPosts(req, url) {
     const body = await readJsonBody(req);
     if (!body.id) return { status: 400, payload: { ok: false, error: "linkedin_post_id_required" } };
     const patch = {
+      post_type: cleanNullable(body.post_type),
       title: cleanNullable(body.title),
+      headline: cleanNullable(body.headline || body.hook),
+      price_display: cleanNullable(body.price_display),
+      hidden_costs: normalizeHiddenCosts(body.hidden_costs),
       hook: cleanNullable(body.hook),
+      copy: String(body.copy || body.body || "").trim(),
       body: String(body.body || "").trim(),
       cta: cleanNullable(body.cta),
       hashtags: normalizeHashtags(body.hashtags),
       image_url: cleanNullable(body.image_url),
       image_path: cleanNullable(body.image_path),
+      image_prompt: cleanNullable(body.image_prompt),
+      linkedin_company_url: cleanNullable(body.linkedin_company_url),
+      organization_urn: normalizeOrganizationUrn(body.organization_urn || process.env.LINKEDIN_ORGANIZATION_URN),
+      city: cleanNullable(body.city),
       scheduled_at: cleanNullable(body.scheduled_at),
       status: body.status || "draft",
       source_type: body.source_type || "manual",
@@ -1695,15 +1808,25 @@ async function handleLinkedInPostAction(body = {}) {
   }
   if (action === "regenerate_copy") {
     const settings = (await readLinkedInSettings()).settings;
-    const generated = generateLinkedInPost({ content_mode: body.content_mode || settings.content_mode, source_type: "manual" }, settings, new Date(Date.now() + 86400000));
+    const generated = generateLinkedInPost({ post_type: settings.active_post_type, content_mode: body.content_mode || settings.content_mode, source_type: "manual" }, settings, new Date(Date.now() + 86400000));
     const updated = await patchLinkedInPost(id, {
+      post_type: generated.post_type,
       title: generated.title,
+      headline: generated.headline,
+      price_display: generated.price_display,
+      hidden_costs: generated.hidden_costs,
       hook: generated.hook,
+      copy: generated.copy,
       body: generated.body,
       cta: generated.cta,
       hashtags: generated.hashtags,
       image_url: generated.image_url,
+      image_prompt: generated.image_prompt,
+      linkedin_company_url: generated.linkedin_company_url,
+      organization_urn: generated.organization_urn,
+      city: generated.city,
       source_reference: generated.source_reference,
+      status: "ready",
       error_message: null
     });
     return { status: 200, payload: { ok: true, post: updated } };
@@ -1753,6 +1876,7 @@ async function handleLinkedInPostAction(body = {}) {
 async function handleLinkedIn(req, url, resource) {
   if (resource === "linkedin") return handleLinkedInDashboard(url);
   if (resource === "linkedin/daily") return handleLinkedInDaily(req);
+  if (resource === "linkedin/autopublisher/run") return handleLinkedInDaily(req);
   if (resource === "linkedin/connect") return handleLinkedInConnect(req, url);
   if (resource === "linkedin/callback") return handleLinkedInCallback(req);
   if (resource === "linkedin/disconnect") return handleLinkedInDisconnect(req);
@@ -2771,7 +2895,7 @@ async function handleViraliza(req, url) {
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
   const { url, resource } = routeFromRequest(req);
-  if (resource === "linkedin/daily") {
+  if (resource === "linkedin/daily" || resource === "linkedin/autopublisher/run") {
     if (!assertAdminOrCron(req, res)) return;
     try {
       const result = await handleLinkedIn(req, url, resource);

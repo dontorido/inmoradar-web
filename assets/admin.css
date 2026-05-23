@@ -4377,32 +4377,22 @@
   line-height: 1.35;
 }
 
+.admin-linkedin-action-button {
+  width: auto;
+  min-width: 36px;
+  padding: 0 10px;
+}
+
 .admin-linkedin-editor-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.admin-linkedin-panel [data-tooltip] {
-  position: relative;
-}
-
-.admin-linkedin-panel [data-tooltip]::before,
-.admin-linkedin-panel [data-tooltip]::after {
-  position: absolute;
-  left: 50%;
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(-50%, 4px);
-  transition: opacity 140ms ease, transform 140ms ease;
-  z-index: 30;
-}
-
-.admin-linkedin-panel [data-tooltip]::before {
-  content: attr(data-tooltip);
-  bottom: calc(100% + 10px);
-  width: max-content;
-  max-width: min(270px, 76vw);
+.admin-floating-tooltip {
+  position: fixed;
+  z-index: 10000;
+  max-width: min(270px, calc(100vw - 24px));
   border: 1px solid rgba(255, 255, 255, .14);
   border-radius: 8px;
   background: var(--ink);
@@ -4417,21 +4407,11 @@
   text-align: left;
   text-transform: none;
   white-space: normal;
+  pointer-events: none;
 }
 
-.admin-linkedin-panel [data-tooltip]::after {
-  content: "";
-  bottom: calc(100% + 4px);
-  border: 6px solid transparent;
-  border-top-color: var(--ink);
-}
-
-.admin-linkedin-panel [data-tooltip]:hover::before,
-.admin-linkedin-panel [data-tooltip]:hover::after,
-.admin-linkedin-panel [data-tooltip]:focus-visible::before,
-.admin-linkedin-panel [data-tooltip]:focus-visible::after {
-  opacity: 1;
-  transform: translate(-50%, 0);
+.admin-floating-tooltip[hidden] {
+  display: none;
 }
 
 @media (max-width: 1180px) {
