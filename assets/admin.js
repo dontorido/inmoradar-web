@@ -984,14 +984,30 @@ function formatRate(value) {
   return `${number.toFixed(number >= 10 ? 0 : 1)}%`;
 }
 
+function analyticsPageHref(row = {}) {
+  const raw = String(row.page_path || row.page_url || row.page || row.slug || "").trim();
+  if (!raw || raw === "unknown") return "";
+  try {
+    const url = new URL(raw, window.location.origin);
+    if (!["http:", "https:"].includes(url.protocol)) return "";
+    return url.href;
+  } catch (error) {
+    return "";
+  }
+}
+
 function analyticsRow(row = {}) {
   const label = row.page || row.page_path || row.slug || "unknown";
+  const href = analyticsPageHref(row);
   const detail = [row.template_type, row.city, row.topic].filter(Boolean).join(" · ") || row.content_type || "pagina";
   return `
     <article class="admin-analytics-item">
-      <div>
-        <strong>${escapeHtml(label)}</strong>
-        <span>${escapeHtml(detail)}</span>
+      <div class="admin-analytics-item-head">
+        <div>
+          <strong>${escapeHtml(label)}</strong>
+          <span>${escapeHtml(detail)}</span>
+        </div>
+        ${href ? `<a class="admin-button tiny ghost admin-analytics-page-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">Ver p&aacute;gina</a>` : ""}
       </div>
       <dl>
         <div><dt>Visitas</dt><dd>${escapeHtml(row.visits || 0)}</dd></div>
