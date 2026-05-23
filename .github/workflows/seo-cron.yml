@@ -23,7 +23,7 @@ jobs:
             --retry-delay 5 \
             --request POST \
             --header "x-cron-secret: $CRON_SECRET" \
-            "$SITE_URL/api/admin/seo-autogenerate/run"
+            "$SITE_URL/api/admin?resource=seo-autogenerate/run"
 
       - name: Trigger InmoRadar LinkedIn daily draft
         env:

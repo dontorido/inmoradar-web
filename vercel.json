@@ -1,10 +1,4 @@
 {
-  "crons": [
-    {
-      "path": "/api/admin/seo-autogenerate/run",
-      "schedule": "0 */6 * * *"
-    }
-  ],
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
     { "source": "/api/news", "destination": "/api/sitemap?format=news" },
