@@ -784,6 +784,8 @@ function analyticsRow(row = {}) {
       <dl>
         <div><dt>Visitas</dt><dd>${escapeHtml(row.visits || 0)}</dd></div>
         <div><dt>Instalacion</dt><dd>${escapeHtml(formatRate(row.install_rate))}</dd></div>
+        <div><dt>Calc</dt><dd>${escapeHtml(row.calculator_used_count || 0)}/${escapeHtml(row.calculator_completed_count || 0)}</dd></div>
+        <div><dt>Scroll</dt><dd>${escapeHtml(row.scroll_depth_50_count || 0)}/${escapeHtml(row.scroll_depth_90_count || 0)}</dd></div>
         <div><dt>Checkout</dt><dd>${escapeHtml(row.checkout_created_count || 0)}</dd></div>
         <div><dt>Score</dt><dd>${escapeHtml(row.performance_score || 0)}</dd></div>
       </dl>
@@ -802,11 +804,43 @@ function analyticsRecommendation(item = {}) {
   `;
 }
 
+function analyticsSignal(item = {}) {
+  const type = item.type || "signal";
+  const title =
+    type === "calculator_to_install"
+      ? `Calculadora + instalacion en ${item.page || "pagina"}`
+      : type === "calculator_low_conversion"
+        ? `Calculadora con baja conversion en ${item.page || "pagina"}`
+        : `Interaccion alta sin instalacion en ${item.page || "pagina"}`;
+  const detail =
+    item.reason ||
+    (type === "calculator_to_install"
+      ? `${item.calculator_used || 0} usos de calculadora y ${item.install_intent || 0} clicks de instalacion`
+      : "Senal de comportamiento SEO detectada.");
+  return `
+    <article class="admin-learning-item">
+      <span>signal - ${escapeHtml(type)}</span>
+      <strong>${escapeHtml(title)}</strong>
+      <p>${escapeHtml(detail)}</p>
+      ${item.city ? `<small>${escapeHtml(item.city)}</small>` : ""}
+    </article>
+  `;
+}
+
+function analyticsSignals(payload = {}) {
+  return [
+    ...(payload.high_interaction_low_install || []),
+    ...(payload.calculator_install_pages || []),
+    ...(payload.calculator_low_conversion || [])
+  ];
+}
+
 function renderAnalyticsPerformance(payload = {}) {
   if (!els.analyticsSummary || !els.analyticsPages || !els.analyticsLearning) return;
   const summary = payload.summary || {};
   const pages = payload.top_pages || payload.pages || [];
   const recommendations = payload.recommendations || [];
+  const signals = analyticsSignals(payload);
   state.analytics.summary = summary;
   state.analytics.pages = pages;
   state.analytics.learning = payload;
@@ -816,6 +850,8 @@ function renderAnalyticsPerformance(payload = {}) {
     stat("Eventos 7d", summary.total_events || 0, { id: "analytics-events", hint: payload.table_missing ? "Ejecuta database/owned-analytics-events.sql" : "Eventos anonimos propios" }),
     stat("Page views", summary.page_views || 0, { id: "analytics-page-views" }),
     stat("Instalacion", (summary.install_clicks || 0) + (summary.chrome_store_clicks || 0), { id: "analytics-installs", hint: `${formatRate(summary.install_click_rate)} click/view` }),
+    stat("Calculadora", `${summary.calculator_used || 0}/${summary.calculator_completed || 0}`, { id: "analytics-calculators", hint: `${formatRate(summary.calculator_completion_rate)} completadas` }),
+    stat("Scroll", `${summary.scroll_depth_50 || 0}/${summary.scroll_depth_90 || 0}`, { id: "analytics-scroll", hint: "50/90 de profundidad" }),
     stat("Waitlist", summary.waitlist_submit || 0, { id: "analytics-waitlist" }),
     stat("Checkout", summary.checkout_created || 0, { id: "analytics-checkout", hint: `${formatRate(summary.checkout_created_rate)} creado/iniciado` })
   ].join("");
@@ -833,8 +869,11 @@ function renderAnalyticsPerformance(payload = {}) {
     ? pages.slice(0, 8).map(analyticsRow).join("")
     : `<p class="admin-empty-state compact">Aun no hay paginas con eventos suficientes.</p>`;
 
-  els.analyticsLearning.innerHTML = recommendations.length
-    ? recommendations.slice(0, 6).map(analyticsRecommendation).join("")
+  els.analyticsLearning.innerHTML = recommendations.length || signals.length
+    ? [
+        ...recommendations.slice(0, 5).map(analyticsRecommendation),
+        ...signals.slice(0, 4).map(analyticsSignal)
+      ].join("")
     : `<p class="admin-empty-state compact">Sin recomendaciones todavia. Se generaran al acumular conversiones.</p>`;
 }
 function renderParkingStats(payload) {

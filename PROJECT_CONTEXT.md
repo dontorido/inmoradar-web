@@ -327,11 +327,13 @@ Archivos:
 - `admin.html` y `assets/admin.js`: panel Ventas > Funnel y SEO Performance.
 - `tests/owned-analytics.test.js`.
 
-Eventos permitidos: `page_view`, `install_click`, `chrome_store_click`, `waitlist_open`, `waitlist_submit`, `premium_click`, `checkout_start`, `checkout_created`, `checkout_error`, `seo_cta_click`, `guide_cta_click` y `article_cta_click`.
+Eventos permitidos: `page_view`, `install_click`, `chrome_store_click`, `waitlist_open`, `waitlist_submit`, `premium_click`, `checkout_start`, `checkout_created`, `checkout_error`, `seo_cta_click`, `guide_cta_click`, `article_cta_click`, `calculator_used`, `calculator_completed`, `seo_internal_link_click` y `seo_scroll_depth`.
 
-Privacidad: no se guarda IP, email, user agent completo ni datos de pago en `owned_analytics_events`. La metadata elimina claves sensibles y valores con formato email. El tracking es best-effort y no bloquea navegacion ni checkout.
+Privacidad: no se guarda IP, email, user agent completo ni datos de pago en `owned_analytics_events`. La metadata elimina claves sensibles y valores con formato email. En eventos de calculadora no se guardan precio exacto, superficie exacta ni resultado numerico; solo booleanos de uso y bandas anonimas de resultado/diferencia. El tracking es best-effort y no bloquea navegacion ni checkout.
 
-Uso del aprendizaje: el BackOffice detecta paginas, templates, ciudades y temas con mejor tasa de instalacion o checkout, y propone repetir contenidos ganadores o mejorar CTAs de paginas con trafico sin conversion.
+Uso del aprendizaje: el BackOffice detecta paginas, templates, ciudades y temas con mejor tasa de instalacion o checkout, calculadoras usadas/completadas, scroll 50/90, paginas con interaccion alta y baja instalacion, y propone repetir contenidos ganadores o mejorar CTAs de paginas con trafico/interaccion sin conversion.
+
+Atribucion SEO -> extension: `assets/app.js` guarda `seo_origin_session_id` y ultimo origen SEO anonimo en `localStorage`, y adjunta ese origen a clicks de instalacion/Chrome Web Store cuando existe. La extension todavia no queda conectada automaticamente; si en una fase posterior puede leer o recibir ese origen, deberia enviarlo a `/api/extension-usage` como metadata anonima para cruzarlo con `extension_usage_events` sin datos personales, scraping ni fingerprinting.
 
 SQL pendiente tras deploy: ejecutar `database/owned-analytics-events.sql` en Supabase.
 ## 11. Variables de entorno usadas

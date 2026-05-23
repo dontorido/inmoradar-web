@@ -5,6 +5,8 @@ const CONTACT_ENDPOINT = "/api/contact";
 const BROWSER_WAITLIST_ENDPOINT = "/api/waitlist/browser";
 const OWNED_ANALYTICS_ENDPOINT = "/api/analytics/event";
 const OWNED_ANALYTICS_SESSION_KEY = "inmoradar_owned_session_id";
+const SEO_ORIGIN_SESSION_KEY = "seo_origin_session_id";
+const SEO_LAST_ORIGIN_KEY = "inmoradar_seo_last_origin";
 const NEWS_ENDPOINT = "/api/news";
 const CHROME_WEBSTORE_URL = "https://chromewebstore.google.com/detail/inmoradar/mbkjlkagblkmdnjggoggbjiohbjebaab";
 const LANGUAGE_STORAGE_KEY = "inmoradar_language";
@@ -975,6 +977,241 @@ function trackConversionEvent(eventName, props = {}) {
   trackOwnedEvent(eventName, props);
 }
 
+function analyticsToken(value = "", fallback = "unknown", maxLength = 80) {
+  const token = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._:/-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, maxLength);
+  return token || fallback;
+}
+
+function isSeoAnalyticsContext(context = pageContextFromDom()) {
+  const path = context.page_path || location.pathname || "/";
+  return (
+    context.page_type === "seo" ||
+    context.page_type === "article" ||
+    path.startsWith("/precio-") ||
+    path.startsWith("/saber-si-") ||
+    path.startsWith("/guias/") ||
+    path.startsWith("/noticias")
+  );
+}
+
+function seoOriginFromContext(context = pageContextFromDom(), reason = "page_view") {
+  return {
+    seo_origin_session_id: ownedAnalyticsSessionId(),
+    page_path: context.page_path || location.pathname || "/",
+    slug: context.slug || "",
+    template_type: context.template_type || "",
+    city: context.city || "",
+    topic: context.topic || "",
+    source_event: reason,
+    saved_at: new Date().toISOString()
+  };
+}
+
+function rememberSeoOrigin(reason = "page_view") {
+  const context = pageContextFromDom();
+  if (!isSeoAnalyticsContext(context)) return null;
+  const origin = seoOriginFromContext(context, reason);
+  try {
+    localStorage.setItem(SEO_ORIGIN_SESSION_KEY, origin.seo_origin_session_id);
+    localStorage.setItem(SEO_LAST_ORIGIN_KEY, JSON.stringify(origin));
+  } catch (error) {
+    return origin;
+  }
+  return origin;
+}
+
+function readSeoOrigin() {
+  try {
+    const raw = localStorage.getItem(SEO_LAST_ORIGIN_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function seoOriginMetadata(origin = null) {
+  const value = origin || rememberSeoOrigin("conversion_intent") || readSeoOrigin();
+  if (!value) return {};
+  return {
+    seo_origin_session_id: value.seo_origin_session_id || "",
+    seo_origin_page_path: value.page_path || "",
+    seo_origin_slug: value.slug || "",
+    seo_origin_template_type: value.template_type || "",
+    seo_origin_city: value.city || "",
+    seo_origin_source_event: value.source_event || ""
+  };
+}
+
+function calculatorTypeFor(calculator) {
+  const context = pageContextFromDom();
+  return analyticsToken(calculator.dataset.calculatorType || context.template_type || "seo_calculator", "seo_calculator", 80);
+}
+
+function calculatorState(calculator) {
+  const price = calculator.querySelector("[data-seo-calc-price]");
+  const area = calculator.querySelector("[data-seo-calc-area]");
+  const reference = Number(calculator.dataset.saleReference || 0);
+  const total = Number(price?.value || 0);
+  const meters = Number(area?.value || 0);
+  const hasPrice = Number.isFinite(total) && total > 0;
+  const hasArea = Number.isFinite(meters) && meters > 0;
+  const hasResult = hasPrice && hasArea && Number.isFinite(reference) && reference > 0;
+  const diff = hasResult ? ((total / meters - reference) / reference) * 100 : null;
+  let resultBand = "unknown";
+  let diffBand = "unknown";
+
+  if (diff !== null) {
+    if (diff < -10) {
+      resultBand = "below_market";
+      diffBand = "lt_minus_10";
+    } else if (diff <= 10) {
+      resultBand = "in_market";
+      diffBand = "minus_10_to_10";
+    } else {
+      resultBand = "above_market";
+      diffBand = "gt_10";
+    }
+  }
+
+  return {
+    calculator_type: calculatorTypeFor(calculator),
+    has_price: hasPrice,
+    has_area: hasArea,
+    has_result: hasResult,
+    result_band: resultBand,
+    diff_band: diffBand
+  };
+}
+
+function initSeoCalculatorAnalytics(root = document) {
+  const calculators = root.querySelectorAll("[data-sale-reference]");
+  calculators.forEach((calculator) => {
+    if (calculator.dataset.analyticsBound === "true") return;
+    const inputs = calculator.querySelectorAll("[data-seo-calc-price], [data-seo-calc-area]");
+    const handleInput = () => {
+      const state = calculatorState(calculator);
+      const context = pageContextFromDom();
+      if (calculator.dataset.calculatorUsedTracked !== "true" && (state.has_price || state.has_area)) {
+        trackOwnedEvent("calculator_used", {
+          metadata: {
+            calculator_type: state.calculator_type,
+            page_path: context.page_path,
+            template_type: context.template_type,
+            slug: context.slug,
+            city: context.city,
+            has_price: state.has_price,
+            has_area: state.has_area
+          }
+        });
+        calculator.dataset.calculatorUsedTracked = "true";
+      }
+
+      if (calculator.dataset.calculatorCompletedTracked !== "true" && state.has_result) {
+        trackOwnedEvent("calculator_completed", {
+          metadata: {
+            result_band: state.result_band,
+            diff_band: state.diff_band
+          }
+        });
+        calculator.dataset.calculatorCompletedTracked = "true";
+      }
+    };
+    inputs.forEach((input) => input.addEventListener("input", handleInput));
+    calculator.dataset.analyticsBound = "true";
+  });
+}
+
+function relevantInternalPath(path = "") {
+  return (
+    path.startsWith("/precio-") ||
+    path.startsWith("/saber-si-") ||
+    path.startsWith("/guias/") ||
+    path.startsWith("/noticias") ||
+    path === "/" ||
+    path === "/que-analiza" ||
+    path === "/datos" ||
+    path === "/premium"
+  );
+}
+
+function linkContextFor(anchor) {
+  const explicit = anchor.dataset.analyticsContext || anchor.dataset.installSource || anchor.dataset.testid || "";
+  if (explicit) return analyticsToken(explicit, "seo_link", 80);
+  const section = anchor.closest("[data-section-id], section[id], article[data-template], nav, footer, header");
+  const sectionId = section?.dataset?.sectionId || section?.id || section?.dataset?.template || section?.className || "";
+  return analyticsToken(sectionId, "seo_content", 80);
+}
+
+function initSeoInternalLinkAnalytics() {
+  const context = pageContextFromDom();
+  if (!isSeoAnalyticsContext(context)) return;
+  document.addEventListener(
+    "click",
+    (event) => {
+      const anchor = event.target.closest?.("a[href]");
+      if (!anchor) return;
+      let target;
+      try {
+        target = new URL(anchor.getAttribute("href"), location.href);
+      } catch (error) {
+        return;
+      }
+      if (target.origin !== location.origin) return;
+      const targetPath = target.pathname || "/";
+      if (!relevantInternalPath(targetPath)) return;
+      if (targetPath === location.pathname && target.hash) return;
+      trackOwnedEvent("seo_internal_link_click", {
+        metadata: {
+          target_path: targetPath,
+          link_context: linkContextFor(anchor)
+        }
+      });
+    },
+    { capture: true }
+  );
+}
+
+function initSeoScrollDepthAnalytics() {
+  const context = pageContextFromDom();
+  if (!isSeoAnalyticsContext(context)) return;
+  const tracked = new Set();
+  let ticking = false;
+  const checkDepth = () => {
+    ticking = false;
+    const doc = document.documentElement;
+    const body = document.body;
+    const height = Math.max(doc.scrollHeight, body?.scrollHeight || 0, doc.clientHeight);
+    const seen = window.scrollY + window.innerHeight;
+    const percent = height ? (seen / height) * 100 : 0;
+    [50, 90].forEach((depth) => {
+      if (percent >= depth && !tracked.has(depth)) {
+        tracked.add(depth);
+        trackOwnedEvent("seo_scroll_depth", { metadata: { depth } });
+      }
+    });
+  };
+  const schedule = () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(checkDepth);
+  };
+  window.addEventListener("scroll", schedule, { passive: true });
+  window.addEventListener("resize", schedule, { passive: true });
+  setTimeout(schedule, 250);
+}
+
+function initSeoInteractionAnalytics() {
+  rememberSeoOrigin("page_view");
+  initSeoCalculatorAnalytics(document);
+  initSeoInternalLinkAnalytics();
+  initSeoScrollDepthAnalytics();
+}
+
 function isInstallableBrowser(browserId) {
   return BROWSER_LAUNCH_WAITLIST[browserId]?.status === "available";
 }
@@ -984,6 +1221,7 @@ function installUrlForBrowser(browserId) {
 }
 
 function openChromeWebStore({ browser = "chrome", source = "web", label = "" } = {}) {
+  const origin = rememberSeoOrigin("chrome_store_click");
   launchWaitlistAnalytics("extension_install_click", {
     browser,
     source,
@@ -993,7 +1231,7 @@ function openChromeWebStore({ browser = "chrome", source = "web", label = "" } =
   trackOwnedEvent("chrome_store_click", {
     browser,
     source,
-    metadata: { label, store: "chrome_web_store" }
+    metadata: { label, store: "chrome_web_store", ...seoOriginMetadata(origin) }
   });
   const url = installUrlForBrowser(browser);
   const link = document.createElement("a");
@@ -1313,8 +1551,9 @@ function handleUniversalInstallClick(event, element) {
   const source = element.dataset.installSource || ctaSourceFromElement(element);
   const label = normalizedText(element.textContent || "");
   const browser = element.dataset.installBrowser || detectLaunchBrowser();
+  const origin = rememberSeoOrigin("install_click");
   launchWaitlistAnalytics("launch_waitlist_cta_click", { source, label, browser });
-  trackOwnedEvent(installCtaEventName(source), { browser, source, metadata: { label } });
+  trackOwnedEvent(installCtaEventName(source), { browser, source, metadata: { label, ...seoOriginMetadata(origin) } });
   if (isInstallableBrowser(browser)) {
     openChromeWebStore({ browser, source, label });
     return;
@@ -1552,6 +1791,7 @@ function init() {
   initInstallButtons();
   initLaunchWaitlist();
   initCheckout();
+  initSeoInteractionAnalytics();
   trackOwnedEvent("page_view");
 }
 

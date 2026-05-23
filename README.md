@@ -197,8 +197,18 @@ Eventos permitidos:
 ```text
 page_view, install_click, chrome_store_click, waitlist_open, waitlist_submit,
 premium_click, checkout_start, checkout_created, checkout_error,
-seo_cta_click, guide_cta_click, article_cta_click
+seo_cta_click, guide_cta_click, article_cta_click,
+calculator_used, calculator_completed, seo_internal_link_click, seo_scroll_depth
 ```
+
+Los eventos interactivos SEO no guardan precio exacto, superficie exacta ni resultado numerico de calculadora. Solo guardan bandas anonimas como `below_market`, `in_market`, `above_market` y profundidad de scroll 50/90.
+
+Preparacion de atribucion SEO -> extension:
+
+- la web guarda `seo_origin_session_id` y ultimo origen SEO anonimo en `localStorage`;
+- los clicks de instalacion/Chrome Web Store adjuntan ese origen anonimo si existe;
+- la extension puede enviar en el futuro ese origen al endpoint existente `/api/extension-usage` como metadata anonima, sin scraping, fingerprinting, IP ni emails;
+- mientras la extension no envie ese dato, el cruce queda limitado a eventos web por URL y a metricas agregadas de uso de extension.
 
 Recursos admin protegidos:
 
