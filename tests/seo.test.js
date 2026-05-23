@@ -29,6 +29,9 @@ test("price_city genera una landing de alta calidad cuando hay datos reales, fue
   assert.ok(landing.word_count >= 700);
   assert.ok(quality.score >= 75);
   assert.match(landing.body_html, /referencia municipal/);
+  assert.match(landing.body_html, /data-sale-reference/);
+  assert.match(landing.body_html, /data-seo-calc-price/);
+  assert.match(landing.body_html, /data-seo-calc-area/);
   assert.doesNotMatch(landing.body_html, /precio exacto de calle/i);
 });
 

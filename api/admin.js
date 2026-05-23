@@ -590,7 +590,7 @@ function analyticsGroup(rows, key, limit = 8) {
     const label = String(row[key] || "unknown");
     if (!acc[label]) acc[label] = { label, count: 0, install_clicks: 0, checkout_created: 0 };
     acc[label].count += 1;
-    if (row.event_name === "install_click" || row.event_name === "chrome_store_click") acc[label].install_clicks += 1;
+    if (["install_click", "chrome_store_click", "seo_cta_click", "guide_cta_click", "article_cta_click"].includes(row.event_name)) acc[label].install_clicks += 1;
     if (row.event_name === "checkout_created") acc[label].checkout_created += 1;
     return acc;
   }, {});
@@ -604,6 +604,7 @@ async function handleOwnedAnalyticsSummary(req, url) {
   const result = await loadOwnedAnalyticsEvents(url);
   const events = result.events || [];
   const pages = summarizePagePerformance(events);
+  const learning = buildOwnedAnalyticsLearning(events);
   return {
     status: 200,
     payload: {
@@ -618,7 +619,10 @@ async function handleOwnedAnalyticsSummary(req, url) {
       top_cities: analyticsGroup(events, "city"),
       top_templates: analyticsGroup(events, "template_type"),
       top_topics: analyticsGroup(events, "topic"),
-      recommendations: buildOwnedAnalyticsLearning(events).recommendations
+      high_interaction_low_install: learning.high_interaction_low_install,
+      calculator_install_pages: learning.calculator_install_pages,
+      calculator_low_conversion: learning.calculator_low_conversion,
+      recommendations: learning.recommendations
     }
   };
 }
