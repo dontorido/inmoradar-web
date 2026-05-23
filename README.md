@@ -359,7 +359,7 @@ POST /api/admin?resource=seo-autogenerate/run
 Authorization: Bearer CRON_SECRET
 ```
 
-El mismo recurso acepta ejecucion manual desde el BackOffice con `ADMIN_IMPORT_TOKEN`. El parametro `dry_run` solo se respeta para admin. En produccion puede salir con `SEO_AUTOGENERATION_ENABLED=true` y `SEO_AUTOGENERATION_DRY_RUN=false`, pero el codigo mantiene limites duros: maximo 1 publicacion por ejecucion, 3 en 24h, 10 en 7 dias, solo `price_city` y `expensive_listing_city`, sin barrios ni guias largas, sin duplicar `target_path` ni ciudad/tipo y sin publicar si `final_score < 80` o faltan datos/fuente/fecha. Las ejecuciones se registran en `seo_cron_runs` con `job_name=seo-autogeneration` y detalle de `published`, `draft`, `skipped` y `reason`.
+El mismo recurso acepta ejecucion manual desde el BackOffice con `ADMIN_IMPORT_TOKEN`. El parametro `dry_run` solo se respeta para admin. En produccion puede salir con `SEO_AUTOGENERATION_ENABLED=true` y `SEO_AUTOGENERATION_DRY_RUN=false`, pero el codigo mantiene limites duros: maximo 1 publicacion por ejecucion, 3 en 24h y 10 en 7 dias por defecto, configurable con `SEO_AUTOGENERATION_MAX_PER_WEEK` hasta 40, solo `price_city` y `expensive_listing_city`, sin barrios ni guias largas, sin duplicar `target_path` ni ciudad/tipo y sin publicar si `final_score < 80` o faltan datos/fuente/fecha. Las ejecuciones se registran en `seo_cron_runs` con `job_name=seo-autogeneration` y detalle de `published`, `draft`, `skipped` y `reason`.
 
 Config minima:
 

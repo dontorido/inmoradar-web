@@ -451,7 +451,7 @@ test("seo autogeneration usa la misma logica para cron y manual", async () => {
   assert.equal(admin.results[0].target_path, cron.results[0].target_path);
 });
 
-test("seo autogeneration mantiene limites por defecto aunque env pida mas", () => {
+test("seo autogeneration mantiene limites seguros aunque env pida mas", () => {
   const config = buildSeoAutogenerationConfig({
     SEO_AUTOGENERATION_ENABLED: "true",
     SEO_AUTOGENERATION_DRY_RUN: "false",
@@ -465,7 +465,7 @@ test("seo autogeneration mantiene limites por defecto aunque env pida mas", () =
   assert.equal(config.dry_run, false);
   assert.equal(config.max_per_run, 1);
   assert.equal(config.max_per_day, 3);
-  assert.equal(config.max_per_week, 10);
+  assert.equal(config.max_per_week, 40);
   assert.equal(config.min_score, 80);
 });
 
