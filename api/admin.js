@@ -1029,11 +1029,30 @@ function seoDraftReviewSafetyFlags() {
   };
 }
 
+function seoReadyDraftPublishFlags(indexed = false) {
+  return {
+    published: true,
+    indexed: Boolean(indexed),
+    touched_sitemap: false
+  };
+}
+
+function hasExplicitPublishConfirmation(body = {}) {
+  return body.confirm === true || body.confirm_publish === true || String(body.confirmation || "").toLowerCase() === "publish_ready_draft";
+}
+
 function seoDraftReviewSafetyError(landing = {}) {
   const status = String(landing.status || "").toLowerCase();
   const indexStatus = String(landing.index_status || "").toLowerCase();
   if (!SEO_DRAFT_REVIEW_STATUSES.has(status)) return "not_reviewable_draft_status";
   if (indexStatus === "index") return "draft_already_indexable";
+  if (landing.published_at) return "draft_already_published";
+  return "";
+}
+
+function seoReadyDraftPublishSafetyError(landing = {}) {
+  const status = String(landing.status || "").toLowerCase();
+  if (status !== "ready_to_publish") return "not_ready_to_publish";
   if (landing.published_at) return "draft_already_published";
   return "";
 }
@@ -1131,6 +1150,57 @@ function buildSeoDraftEditPatch(landing = {}, body = {}) {
   };
 }
 
+function buildSeoReadyDraftPublishPatch(landing = {}, body = {}, now = new Date().toISOString()) {
+  const recalculation = recalculateSeoQualityGatePatch(landing);
+  const sourceData = recalculation.patch.source_data_json || {};
+  const gateSummary = summarizeSeoQualityGateForAdmin({
+    ...landing,
+    status: "published",
+    index_status: recalculation.qualityGate.can_index ? "index" : "noindex",
+    quality_score: recalculation.quality.score,
+    word_count: recalculation.quality.word_count,
+    source_data_json: sourceData
+  });
+  const audit = {
+    published_action_at: now,
+    published_by: String(body.published_by || body.updated_by || "backoffice").slice(0, 120),
+    published_from_state: String(landing.status || ""),
+    previous_status: String(landing.status || ""),
+    previous_index_status: String(landing.index_status || ""),
+    previous_published_at: landing.published_at || null,
+    confirm: true,
+    quality_score_at_publish: recalculation.quality.score,
+    quality_gate_at_publish: recalculation.qualityGate,
+    seo_keyword_backlog_id: sourceData.seo_keyword_backlog_id || sourceData.keyword_backlog?.id || null
+  };
+  const nextSourceData = {
+    ...sourceData,
+    quality: recalculation.quality,
+    quality_gate: recalculation.qualityGate,
+    quality_gate_summary: {
+      quality_gate_status: gateSummary.quality_gate_status,
+      failed_checks: gateSummary.failed_checks,
+      exclusion_reason: gateSummary.exclusion_reason,
+      sitemap_status: gateSummary.sitemap_status
+    },
+    quality_gate_snapshot: recalculation.qualityGate,
+    manual_publish_audit: audit
+  };
+  return {
+    ...recalculation,
+    gateSummary,
+    audit,
+    patch: {
+      status: "published",
+      index_status: recalculation.qualityGate.can_index ? "index" : "noindex",
+      published_at: now,
+      quality_score: recalculation.quality.score,
+      word_count: recalculation.quality.word_count,
+      source_data_json: nextSourceData
+    }
+  };
+}
+
 function recalculateSeoQualityGatePatch(landing = {}) {
   const sourceData = seoSourceDataFromLanding(landing);
   const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: sourceData.faq || landing.source_data_json?.faq || [] });
@@ -1171,13 +1241,16 @@ function recalculateSeoQualityGatePatch(landing = {}) {
 
 async function handleSeoLandingAction(body) {
   const action = String(body.action || "").trim();
+  if ((Array.isArray(body.ids) && body.ids.length) || (Array.isArray(body.slugs) && body.slugs.length)) {
+    return { status: 400, payload: { ok: false, error: "batch_publish_not_allowed", ...seoDraftReviewSafetyFlags() } };
+  }
   const slug = normalizeSlug(body.slug);
   const landingId = Number.parseInt(String(body.id || body.landing_id || ""), 10);
   const hasLandingId = Number.isFinite(landingId) && landingId > 0;
-  if (!["publish", "noindex", "archive", "regenerate", "recalculate_quality_gate", "update_draft", "approve_draft_for_publish", "mark_draft_reviewed"].includes(action)) {
+  if (!["publish", "publish_ready_draft", "noindex", "archive", "regenerate", "recalculate_quality_gate", "update_draft", "approve_draft_for_publish", "mark_draft_reviewed"].includes(action)) {
     return { status: 400, payload: { ok: false, error: "invalid_action" } };
   }
-  const allowIdLookup = ["recalculate_quality_gate", "update_draft", "approve_draft_for_publish", "mark_draft_reviewed"].includes(action);
+  const allowIdLookup = ["publish_ready_draft", "recalculate_quality_gate", "update_draft", "approve_draft_for_publish", "mark_draft_reviewed"].includes(action);
   if (!slug && !(allowIdLookup && hasLandingId)) {
     return { status: 400, payload: { ok: false, error: "slug_required" } };
   }
@@ -1187,33 +1260,16 @@ async function handleSeoLandingAction(body) {
   const saveLanding = slug ? patchLanding : (unusedSlug, patch) => patchLandingById(landingId, patch);
 
   if (action === "publish") {
-    const score = Number(landing.quality_score) || 0;
-    const qualityGate = evaluateSeoQualityGate({
-      landing,
-      sourceData: seoSourceDataFromLanding(landing),
-      minScore: SEO_INDEX_MIN_SCORE
-    });
-    if (score < SEO_INDEX_MIN_SCORE || !qualityGate.can_publish) {
-      return {
-        status: 409,
-        payload: {
-          ok: false,
-          error: "quality_gate_failed",
-          message: `Quality gate failed. Minimum score is ${SEO_INDEX_MIN_SCORE}.`,
-          quality_gate: qualityGate
-        }
-      };
-    }
-    const updated = await patchLanding(slug, {
-      status: "published",
-      index_status: qualityGate.can_index ? "index" : "noindex",
-      source_data_json: {
-        ...(landing.source_data_json || {}),
-        quality_gate: qualityGate
-      },
-      published_at: landing.published_at || new Date().toISOString()
-    });
-    return { status: 200, payload: { ok: true, action, landing: updated } };
+    return {
+      status: 400,
+      payload: {
+        ok: false,
+        error: "use_publish_ready_draft",
+        message: "Manual SEO publishing requires action=publish_ready_draft, status=ready_to_publish and confirm=true.",
+        landing: decorateSeoLandingForAdmin(landing),
+        ...seoDraftReviewSafetyFlags()
+      }
+    };
   }
 
   if (action === "noindex") {
@@ -1224,6 +1280,73 @@ async function handleSeoLandingAction(body) {
   if (action === "archive") {
     const updated = await patchLanding(slug, { status: "archived", index_status: "noindex" });
     return { status: 200, payload: { ok: true, action, landing: updated } };
+  }
+
+  if (action === "publish_ready_draft") {
+    if (!hasExplicitPublishConfirmation(body)) {
+      return {
+        status: 400,
+        payload: {
+          ok: false,
+          error: "publish_confirmation_required",
+          message: "Set confirm=true to publish a ready SEO draft.",
+          landing: decorateSeoLandingForAdmin(landing),
+          ...seoDraftReviewSafetyFlags()
+        }
+      };
+    }
+    const safetyError = seoReadyDraftPublishSafetyError(landing);
+    if (safetyError) {
+      return {
+        status: 409,
+        payload: {
+          ok: false,
+          error: safetyError,
+          landing: decorateSeoLandingForAdmin(landing),
+          ...seoDraftReviewSafetyFlags()
+        }
+      };
+    }
+    const publishPatch = buildSeoReadyDraftPublishPatch(landing, body);
+    if (!publishPatch.qualityGate.can_publish || !publishPatch.qualityGate.can_index || publishPatch.quality.score < SEO_INDEX_MIN_SCORE) {
+      return {
+        status: 409,
+        payload: {
+          ok: false,
+          error: "quality_gate_failed",
+          message: `Quality gate failed. Minimum score is ${SEO_INDEX_MIN_SCORE}.`,
+          landing: decorateSeoLandingForAdmin({ ...landing, ...publishPatch.patch, status: landing.status, index_status: landing.index_status, published_at: landing.published_at }),
+          quality_gate: publishPatch.qualityGate,
+          quality_gate_summary: publishPatch.gateSummary,
+          ...seoDraftReviewSafetyFlags()
+        }
+      };
+    }
+    const updated = await saveLanding(slug, publishPatch.patch);
+    const decorated = decorateSeoLandingForAdmin(updated || { ...landing, ...publishPatch.patch });
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        action,
+        landing: decorated,
+        quality_gate: publishPatch.qualityGate,
+        quality_gate_summary: publishPatch.gateSummary,
+        audit: publishPatch.audit,
+        changed_fields: [
+          "status",
+          "index_status",
+          "published_at",
+          "quality_score",
+          "word_count",
+          "source_data_json.manual_publish_audit",
+          "source_data_json.quality_gate_snapshot"
+        ],
+        untouched_fields: ["body_html", "canonical_url", "sitemap", "public_routes"],
+        lastmod_source: "published_at",
+        ...seoReadyDraftPublishFlags(decorated.index_status === "index")
+      }
+    };
   }
 
   if (action === "update_draft") {

@@ -1756,9 +1756,21 @@ function seoDraftOriginLabel(row = {}) {
 }
 
 function canApproveSeoDraft(row = {}) {
+  const status = String(row.status || "").toLowerCase();
   return (
     isSeoDraftReviewStatus(row.status) &&
+    status !== "ready_to_publish" &&
+    status !== "approved_for_publish" &&
     String(row.index_status || "").toLowerCase() !== "index" &&
+    !row.published_at &&
+    row.quality_gate_status === "passed" &&
+    Number(row.quality_score || 0) >= 80
+  );
+}
+
+function canPublishReadySeoDraft(row = {}) {
+  return (
+    String(row.status || "").toLowerCase() === "ready_to_publish" &&
     !row.published_at &&
     row.quality_gate_status === "passed" &&
     Number(row.quality_score || 0) >= 80
@@ -1811,7 +1823,11 @@ function renderSeo(payload) {
                   ? `<button class="admin-button tiny ghost" type="button" data-seo-approve-draft="${escapeHtml(row.slug)}">Aprobar</button>`
                   : ""
               }
-              <button class="admin-icon-button" type="button" data-seo-action="publish" data-slug="${escapeHtml(row.slug)}" aria-label="Publicar landing">P</button>
+              ${
+                canPublishReadySeoDraft(row)
+                  ? `<button class="admin-button tiny" type="button" data-seo-publish-ready-draft="${escapeHtml(row.slug)}">Publicar</button>`
+                  : ""
+              }
               <button class="admin-icon-button" type="button" data-seo-action="noindex" data-slug="${escapeHtml(row.slug)}" aria-label="Marcar noindex">N</button>
             </div>
           </td>
@@ -5559,6 +5575,31 @@ async function approveSeoDraftForPublish(slug) {
   );
 }
 
+async function publishReadySeoDraft(slug) {
+  const targetSlug = slug || state.seo.currentDraftSlug;
+  if (!targetSlug) throw new Error("Selecciona una landing ready_to_publish.");
+  const landing = seoLandingBySlug(targetSlug);
+  const score = landing?.quality_score || 0;
+  const confirmed = window.confirm(
+    `Esto publicara la landing "${targetSlug}" y podra hacerla indexable si supera el quality gate.\n\nScore actual: ${score}. Esta accion no es batch y no toca sitemap directamente.\n\n¿Confirmas la publicacion manual?`
+  );
+  if (!confirmed) return;
+  showStatus(`Publicando landing SEO confirmada · ${targetSlug}`);
+  const result = await api("/api/admin?resource=seo/landings", {
+    method: "POST",
+    body: JSON.stringify({ action: "publish_ready_draft", slug: targetSlug, confirm: true })
+  });
+  await loadSeo();
+  if (result.landing) {
+    state.seo.currentDraftSlug = "";
+    if (els.seoDraftEditor) els.seoDraftEditor.hidden = true;
+  }
+  showStatus(
+    `Landing publicada manualmente: ${result.landing?.slug || targetSlug} · ${result.landing?.index_status || "index"} · sitemap automatico por consulta.`,
+    "good"
+  );
+}
+
 async function loadKpis() {
   const payload = await api("/api/admin?resource=kpis/settings");
   renderKpis(payload);
@@ -6352,6 +6393,11 @@ els.seoRows.addEventListener("click", (event) => {
   const approveDraftButton = event.target.closest("[data-seo-approve-draft]");
   if (approveDraftButton) {
     approveSeoDraftForPublish(approveDraftButton.dataset.seoApproveDraft).catch((error) => showStatus(error.message, "bad"));
+    return;
+  }
+  const publishReadyDraftButton = event.target.closest("[data-seo-publish-ready-draft]");
+  if (publishReadyDraftButton) {
+    publishReadySeoDraft(publishReadyDraftButton.dataset.seoPublishReadyDraft).catch((error) => showStatus(error.message, "bad"));
     return;
   }
   const button = event.target.closest("[data-seo-action]");

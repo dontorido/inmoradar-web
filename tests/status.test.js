@@ -319,6 +319,18 @@ test("backoffice SEO permite revisar drafts sin publicar ni indexar", () => {
   assert.match(adminJs, /no publica, no indexa y no toca sitemap/);
 });
 
+test("backoffice SEO publica manualmente solo drafts ready con confirmacion", () => {
+  const root = path.join(__dirname, "..");
+  const adminJs = fs.readFileSync(path.join(root, "assets", "admin.js"), "utf8");
+
+  assert.match(adminJs, /publish_ready_draft/);
+  assert.match(adminJs, /data-seo-publish-ready-draft/);
+  assert.match(adminJs, /publishReadySeoDraft/);
+  assert.match(adminJs, /confirm: true/);
+  assert.match(adminJs, /podra hacerla indexable si supera el quality gate/);
+  assert.doesNotMatch(adminJs, /data-seo-action="publish"/);
+});
+
 test("status UI usa nombres legibles y no muestra campos tecnicos", () => {
   const root = path.join(__dirname, "..");
   const publicHtml = fs.readFileSync(path.join(root, "status.html"), "utf8");

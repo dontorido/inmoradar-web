@@ -59,6 +59,56 @@ function supabaseJson(payload) {
   };
 }
 
+async function buildReadySeoDraftFixture(overrides = {}) {
+  const opportunity = {
+    keyword: "precio metro cuadrado Logrono",
+    city: "Logrono",
+    province: "La Rioja",
+    autonomous_community: "La Rioja",
+    template_type: "price_city"
+  };
+  const sourceData = await buildPriceCitySourceData(opportunity);
+  const landing = buildPriceCityLanding(opportunity, sourceData);
+  const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: landing.faq });
+  return {
+    landing,
+    sourceData,
+    storedLanding: {
+      id: 200,
+      opportunity_id: null,
+      slug: landing.slug,
+      title: landing.title,
+      meta_title: landing.meta_title,
+      meta_description: landing.meta_description,
+      h1: landing.h1,
+      body_html: landing.body_html,
+      city: landing.city,
+      province: landing.province,
+      autonomous_community: landing.autonomous_community,
+      template_type: landing.template_type,
+      status: "ready_to_publish",
+      index_status: "noindex",
+      quality_score: quality.score,
+      word_count: quality.word_count,
+      canonical_url: landing.canonical_url,
+      published_at: null,
+      last_generated_at: "2026-05-24T09:00:00.000Z",
+      created_at: "2026-05-24T09:00:00.000Z",
+      updated_at: "2026-05-24T09:00:00.000Z",
+      source_data_json: {
+        generated_by: "seo_keyword_backlog_approved_brief",
+        seo_keyword_backlog_id: "45",
+        keyword_backlog: { id: "45", keyword: "precio metro cuadrado Logrono" },
+        sources: sourceData.sources,
+        records: sourceData.records,
+        faq: landing.faq,
+        hasRealData: sourceData.hasRealData
+      },
+      ...overrides
+    }
+  };
+}
+
 test("price_city genera una landing de alta calidad cuando hay datos reales, fuente y fecha", async () => {
   const opportunity = {
     keyword: "precio metro cuadrado Logroño",
@@ -977,6 +1027,321 @@ test("admin SEO aprueba draft para publicacion futura sin publicar ni indexar", 
       assert.equal(patchBody.source_data_json.editorial_review.last_review_action, "approved_for_publish");
       assert.equal(patchBody.source_data_json.quality_gate.can_publish, true);
       assert.equal(seenUrls.some((requestUrl) => requestUrl.includes("sitemap")), false);
+    }
+  );
+});
+
+test("admin SEO no publica ready draft sin confirmacion explicita", async () => {
+  const { storedLanding } = await buildReadySeoDraftFixture({ id: 201 });
+  const previousFetch = global.fetch;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        assert.notEqual(options.method, "PATCH");
+        if (String(url).includes("/rest/v1/seo_landings?slug=eq.")) return supabaseJson([storedLanding]);
+        throw new Error(`Unexpected fetch ${String(url)}`);
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "publish_ready_draft", slug: storedLanding.slug }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 400);
+      assert.equal(body.error, "publish_confirmation_required");
+      assert.equal(body.published, false);
+      assert.equal(body.indexed, false);
+      assert.equal(body.touched_sitemap, false);
+    }
+  );
+});
+
+test("admin SEO no publica si el draft no esta ready_to_publish", async () => {
+  const { storedLanding } = await buildReadySeoDraftFixture({ id: 202, status: "needs_review" });
+  const previousFetch = global.fetch;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        assert.notEqual(options.method, "PATCH");
+        if (String(url).includes("/rest/v1/seo_landings?slug=eq.")) return supabaseJson([storedLanding]);
+        throw new Error(`Unexpected fetch ${String(url)}`);
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "publish_ready_draft", slug: storedLanding.slug, confirm: true }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 409);
+      assert.equal(body.error, "not_ready_to_publish");
+      assert.equal(body.published, false);
+      assert.equal(body.touched_sitemap, false);
+    }
+  );
+});
+
+test("admin SEO no publica ready draft si el ultimo quality_gate falla", async () => {
+  const fixture = await buildReadySeoDraftFixture({ id: 203 });
+  const storedLanding = {
+    ...fixture.storedLanding,
+    body_html: fixture.storedLanding.body_html.replace(/data-install-button/g, "data-install-disabled")
+  };
+  const previousFetch = global.fetch;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        assert.notEqual(options.method, "PATCH");
+        if (String(url).includes("/rest/v1/seo_landings?slug=eq.")) return supabaseJson([storedLanding]);
+        throw new Error(`Unexpected fetch ${String(url)}`);
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "publish_ready_draft", slug: storedLanding.slug, confirm: true }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 409);
+      assert.equal(body.error, "quality_gate_failed");
+      assert.equal(body.published, false);
+      assert.equal(body.indexed, false);
+      assert.equal(body.touched_sitemap, false);
+      assert.equal(body.quality_gate.can_publish, false);
+      assert.equal(body.quality_gate.reasons.includes("measurable_cta"), true);
+    }
+  );
+});
+
+test("admin SEO no publica ready draft si el score recalculado queda por debajo de 80", async () => {
+  const fixture = await buildReadySeoDraftFixture({ id: 205 });
+  const storedLanding = {
+    ...fixture.storedLanding,
+    body_html: `
+      <article>
+        <h1>${fixture.storedLanding.h1}</h1>
+        <p>Fuente: prueba editorial. Fecha del dato: 2026-05-24.</p>
+        <p>Referencia orientativa; no es una tasacion y no garantiza el precio real.</p>
+        <button data-install-button data-install-source="seo_test">Instalar InmoRadar</button>
+        <a href="/">Inicio</a>
+        <a href="/analizar-anuncio-inmobiliario/">Analizar anuncio</a>
+      </article>`
+  };
+  const previousFetch = global.fetch;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        assert.notEqual(options.method, "PATCH");
+        if (String(url).includes("/rest/v1/seo_landings?slug=eq.")) return supabaseJson([storedLanding]);
+        throw new Error(`Unexpected fetch ${String(url)}`);
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "publish_ready_draft", slug: storedLanding.slug, confirm: true }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 409);
+      assert.equal(body.error, "quality_gate_failed");
+      assert.ok(body.quality_gate.quality_score < SEO_INDEX_MIN_SCORE);
+      assert.equal(body.published, false);
+      assert.equal(body.touched_sitemap, false);
+    }
+  );
+});
+
+test("admin SEO publica ready draft con auditoria y sin tocar sitemap directamente", async () => {
+  const { storedLanding } = await buildReadySeoDraftFixture({ id: 206 });
+  const previousFetch = global.fetch;
+  const seenUrls = [];
+  let patchBody = null;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        const requestUrl = String(url);
+        seenUrls.push(requestUrl);
+        if (options.method === "PATCH" && requestUrl.includes("/rest/v1/seo_landings?slug=eq.")) {
+          patchBody = JSON.parse(options.body);
+          return supabaseJson([{ ...storedLanding, ...patchBody }]);
+        }
+        if (requestUrl.includes("/rest/v1/seo_landings?slug=eq.")) return supabaseJson([storedLanding]);
+        throw new Error(`Unexpected fetch ${requestUrl}`);
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "publish_ready_draft", slug: storedLanding.slug, confirm: true, published_by: "editorial-test" }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 200);
+      assert.equal(body.action, "publish_ready_draft");
+      assert.equal(body.published, true);
+      assert.equal(body.indexed, true);
+      assert.equal(body.touched_sitemap, false);
+      assert.equal(body.landing.status, "published");
+      assert.equal(body.landing.index_status, "index");
+      assert.ok(body.landing.published_at);
+      assert.equal(patchBody.status, "published");
+      assert.equal(patchBody.index_status, "index");
+      assert.ok(patchBody.published_at);
+      assert.equal(patchBody.source_data_json.manual_publish_audit.published_from_state, "ready_to_publish");
+      assert.equal(patchBody.source_data_json.manual_publish_audit.previous_status, "ready_to_publish");
+      assert.equal(patchBody.source_data_json.manual_publish_audit.confirm, true);
+      assert.equal(patchBody.source_data_json.manual_publish_audit.published_by, "editorial-test");
+      assert.equal(patchBody.source_data_json.manual_publish_audit.seo_keyword_backlog_id, "45");
+      assert.ok(patchBody.source_data_json.manual_publish_audit.quality_score_at_publish >= SEO_INDEX_MIN_SCORE);
+      assert.equal(patchBody.source_data_json.manual_publish_audit.quality_gate_at_publish.can_publish, true);
+      assert.equal(patchBody.source_data_json.quality_gate_snapshot.can_index, true);
+      assert.equal(body.lastmod_source, "published_at");
+      assert.equal(seenUrls.some((requestUrl) => requestUrl.includes("sitemap")), false);
+    }
+  );
+});
+
+test("admin SEO no permite publicar ready drafts en batch", async () => {
+  const previousFetch = global.fetch;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async () => {
+        throw new Error("Batch publish should not fetch Supabase");
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "publish_ready_draft", ids: [1, 2], confirm: true }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 400);
+      assert.equal(body.error, "batch_publish_not_allowed");
+      assert.equal(body.published, false);
+      assert.equal(body.touched_sitemap, false);
+    }
+  );
+});
+
+test("admin SEO bloquea la accion publish legacy para publicacion manual", async () => {
+  const { storedLanding } = await buildReadySeoDraftFixture({ id: 207 });
+  const previousFetch = global.fetch;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        assert.notEqual(options.method, "PATCH");
+        if (String(url).includes("/rest/v1/seo_landings?slug=eq.")) return supabaseJson([storedLanding]);
+        throw new Error(`Unexpected fetch ${String(url)}`);
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "publish", slug: storedLanding.slug, confirm: true }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 400);
+      assert.equal(body.error, "use_publish_ready_draft");
+      assert.equal(body.published, false);
+      assert.equal(body.touched_sitemap, false);
     }
   );
 });

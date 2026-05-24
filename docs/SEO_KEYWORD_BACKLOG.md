@@ -243,7 +243,7 @@ Al crear un borrador desde un brief aprobado, el sistema ejecuta el quality gate
 7. Revisar score, checks fallidos, copy, fuentes, CTA e independencia.
 8. Editar el draft y recalcular quality gate.
 9. Marcarlo como `ready_to_publish` solo si pasa el gate.
-10. Solo en una accion separada y posterior, decidir si se publica manualmente.
+10. Publicar manualmente con `publish_ready_draft`, `confirm=true` y ultimo quality gate aprobado.
 
 ## Acciones que NO hace
 
@@ -258,17 +258,19 @@ La accion `create_draft_from_approved_brief` si crea un registro en `seo_landing
 
 Las acciones `update_draft` y `approve_draft_for_publish` operan sobre `seo_landings`, pero tambien devuelven `published=false`, `indexed=false` y `touched_sitemap=false`.
 
+La accion `publish_ready_draft` es la unica accion de este flujo que publica. Solo acepta una landing individual en `ready_to_publish`, exige `confirm=true`, recalcula el quality gate justo antes de publicar y guarda auditoria en `source_data_json.manual_publish_audit`. No hace batch y devuelve `touched_sitemap=false`.
+
 ## Limitaciones
 
 - El fallback a seeds es solo operativo/desarrollo; no sustituye la persistencia editorial.
 - No hay batch de importacion en esta rama.
 - La dificultad es manual y orientativa.
 - Una oportunidad `approved` permite crear borrador, pero no implica publicacion.
-- Un draft `ready_to_publish` esta aprobado editorialmente para una accion futura, pero sigue sin publicar ni indexar.
+- Un draft `ready_to_publish` esta aprobado editorialmente para una accion futura, pero sigue sin publicar ni indexar hasta `publish_ready_draft`.
 - El id del backlog se guarda en `source_data_json`; `seo_landings.opportunity_id` se mantiene para la tabla historica `seo_landing_opportunities`.
 
 ## Siguiente rama recomendada
 
-Crear una rama pequena para publicar manualmente desde `ready_to_publish` con confirmacion explicita, ultimo bloqueo de quality gate y registro de auditoria.
+Crear una rama pequena para auditar historico de publicaciones SEO manuales en una tabla dedicada, si el equipo necesita trazabilidad consultable fuera de `source_data_json`.
 
 Ver tambien: `docs/SEO_DRAFT_REVIEW_WORKFLOW.md`.
