@@ -290,6 +290,8 @@ const els = {
   seoPublish: document.querySelector("[data-seo-publish]"),
   seoReadyAutoDryRun: document.querySelector("[data-seo-ready-auto-dry-run]"),
   seoReadyAutoPublish: document.querySelector("[data-seo-ready-auto-publish]"),
+  seoAutonomousDryRun: document.querySelector("[data-seo-autonomous-dry-run]"),
+  seoAutonomousRun: document.querySelector("[data-seo-autonomous-run]"),
   seoAutogenSummary: document.querySelector("[data-seo-autogen-summary]"),
   seoAutogenRuns: document.querySelector("[data-seo-autogen-runs]"),
   seoAutogenRun: document.querySelector("[data-seo-autogen-run]"),
@@ -5635,6 +5637,47 @@ async function autoPublishReadySeoDrafts(dryRun = true) {
   );
 }
 
+async function runSeoAutonomousCycle(dryRun = true) {
+  if (!dryRun) {
+    const confirmed = window.confirm(
+      "Esto ejecutara el ciclo SEO autonomo: generar briefs, crear drafts, autoaprobar solo candidatos excelentes y autopublicar de forma limitada si los kill switches del servidor estan activos.\n\nNo genera batches ilimitados y no toca sitemap directamente.\n\nConfirmas la ejecucion real?"
+    );
+    if (!confirmed) return;
+  }
+  showStatus(dryRun ? "Probando ciclo SEO autonomo..." : "Ejecutando ciclo SEO autonomo...");
+  const payload = await api("/api/admin?resource=seo/automation", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "run_autonomous_cycle",
+      dry_run: dryRun,
+      confirm: !dryRun,
+      confirmation: dryRun ? "dry_run" : "run_autonomous_cycle",
+      brief_limit: 5,
+      draft_limit: 3,
+      approval_limit: 3,
+      publish_limit: 1
+    })
+  });
+  await loadSeoKeywordBacklog();
+  await loadSeo();
+  const summary = payload.summary || {};
+  const phases = payload.phases || {};
+  const briefCount = Number(phases.auto_generate_briefs?.changed_count || 0);
+  const draftCount = Number(phases.auto_create_drafts?.changed_count || 0);
+  const approvalCount = Number(phases.auto_approve_high_quality_drafts?.changed_count || 0);
+  const published = Number(summary.published_count || 0);
+  const wouldPublish = Number(summary.would_publish_count || 0);
+  const skipped = Number(summary.skipped_count || 0);
+  const failed = Number(summary.failed_count || 0);
+  const publishError = phases.auto_publish_ready_drafts?.error || "";
+  showStatus(
+    dryRun
+      ? `Dry-run ciclo SEO: briefs ${briefCount}, drafts ${draftCount}, autoaprobaciones ${approvalCount}, publicaria ${wouldPublish}, omitidas ${skipped}, fallidas ${failed}${publishError ? ` - ${publishError}` : ""}`
+      : `Ciclo SEO ejecutado: briefs ${briefCount}, drafts ${draftCount}, autoaprobaciones ${approvalCount}, publicadas ${published}, omitidas ${skipped}, fallidas ${failed}${publishError ? ` - ${publishError}` : ""}`,
+    failed ? "neutral" : briefCount || draftCount || approvalCount || published || wouldPublish ? "good" : "neutral"
+  );
+}
+
 async function loadKpis() {
   const payload = await api("/api/admin?resource=kpis/settings");
   renderKpis(payload);
@@ -6013,6 +6056,12 @@ if (els.seoReadyAutoDryRun) {
 }
 if (els.seoReadyAutoPublish) {
   els.seoReadyAutoPublish.addEventListener("click", () => autoPublishReadySeoDrafts(false).catch((error) => showStatus(error.message, "bad")));
+}
+if (els.seoAutonomousDryRun) {
+  els.seoAutonomousDryRun.addEventListener("click", () => runSeoAutonomousCycle(true).catch((error) => showStatus(error.message, "bad")));
+}
+if (els.seoAutonomousRun) {
+  els.seoAutonomousRun.addEventListener("click", () => runSeoAutonomousCycle(false).catch((error) => showStatus(error.message, "bad")));
 }
 if (els.seoAutogenRun) {
   els.seoAutogenRun.addEventListener("click", () => runSeoAutogeneration(false).catch((error) => showStatus(error.message, "bad")));

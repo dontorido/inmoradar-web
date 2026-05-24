@@ -245,6 +245,8 @@ Al crear un borrador desde un brief aprobado, el sistema ejecuta el quality gate
 9. Marcarlo como `ready_to_publish` solo si pasa el gate.
 10. Publicar manualmente con `publish_ready_draft`, `confirm=true` y ultimo quality gate aprobado.
 
+El flujo autonomo `run_autonomous_cycle` puede ejecutar los pasos operativos repetitivos con limites: generar briefs desde `idea`, crear drafts desde `brief_ready`, autoaprobar solo drafts excelentes y autopublicar de forma limitada. Mantiene `dry_run=true` por defecto y no publica sin los kill switches activos.
+
 ## Acciones que NO hace
 
 - No publica landings.
@@ -261,6 +263,8 @@ Las acciones `update_draft` y `approve_draft_for_publish` operan sobre `seo_land
 La accion `publish_ready_draft` es la unica accion de este flujo que publica. Solo acepta una landing individual en `ready_to_publish`, exige `confirm=true`, recalcula el quality gate justo antes de publicar y guarda auditoria en `source_data_json.manual_publish_audit`. No hace batch y devuelve `touched_sitemap=false`.
 
 La accion `auto_publish_ready_drafts` puede automatizar ese ultimo paso para un numero pequeno de landings ya aprobadas editorialmente. Funciona en `dry_run` por defecto, exige kill switch y confirmacion para ejecucion real, y guarda auditoria en `source_data_json.auto_publish_audit`. Ver `docs/SEO_AUTO_PUBLISH.md`.
+
+La accion `run_autonomous_cycle` coordina briefs, drafts, autoaprobacion y autopublicacion limitada. No publica si falta quality gate, si el score es bajo, si el riesgo es alto o si los kill switches estan apagados. Ver `docs/SEO_AUTONOMOUS_PIPELINE.md`.
 
 ## Limitaciones
 

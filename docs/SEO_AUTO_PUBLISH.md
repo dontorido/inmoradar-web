@@ -4,6 +4,8 @@
 
 La autopublicacion SEO solo automatiza el ultimo paso de landings que ya han pasado revision editorial y estan en `ready_to_publish`. No crea oportunidades, no genera briefs, no crea landings nuevas y no sustituye el quality gate.
 
+El pipeline autonomo `run_autonomous_cycle` reutiliza esta misma accion como ultima fase. La publicacion real sigue dependiendo de `SEO_READY_DRAFT_AUTO_PUBLISH_ENABLED=true`; si esta apagado, el ciclo puede avanzar fases previas pero no publica.
+
 ## Accion admin
 
 Endpoint:

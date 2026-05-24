@@ -344,6 +344,22 @@ test("backoffice SEO expone autopublicacion ready con dry-run y confirmacion", (
   assert.match(adminJs, /confirmation: dryRun \? "dry_run" : "auto_publish_ready_drafts"/);
 });
 
+test("backoffice SEO expone ciclo autonomo con dry-run y confirmacion", () => {
+  const root = path.join(__dirname, "..");
+  const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
+  const adminJs = fs.readFileSync(path.join(root, "assets", "admin.js"), "utf8");
+  const adminApi = fs.readFileSync(path.join(root, "api", "admin.js"), "utf8");
+
+  assert.match(adminHtml, /data-seo-autonomous-dry-run/);
+  assert.match(adminHtml, /data-seo-autonomous-run/);
+  assert.match(adminJs, /runSeoAutonomousCycle/);
+  assert.match(adminJs, /resource=seo\/automation/);
+  assert.match(adminJs, /run_autonomous_cycle/);
+  assert.match(adminJs, /confirmation: dryRun \? "dry_run" : "run_autonomous_cycle"/);
+  assert.match(adminApi, /SEO_AUTONOMOUS_PIPELINE_ENABLED/);
+  assert.match(adminApi, /SEO_AUTONOMOUS_PIPELINE_AUTO_APPROVE_MIN_SCORE = 90/);
+});
+
 test("status UI usa nombres legibles y no muestra campos tecnicos", () => {
   const root = path.join(__dirname, "..");
   const publicHtml = fs.readFileSync(path.join(root, "status.html"), "utf8");

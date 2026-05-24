@@ -9,6 +9,7 @@ const { SEO_INDEX_MIN_SCORE, calculateSeoLandingQuality, evaluateSeoQualityGate 
 const { runSeoLandingGeneration } = require("../api/_seo/generator");
 const { buildSeoDailyPolicySnapshot, selectNextSeoContentType } = require("../api/_seo/publishingPolicy");
 const { getSeedPublishedLanding } = require("../api/_seo/seedPublished");
+const { SEO_KEYWORD_BACKLOG_SEEDS, buildSeoKeywordBrief } = require("../lib/seo/keywordBacklog");
 const adminHandler = require("../api/admin");
 const sitemapHandler = require("../api/sitemap");
 const seoPageHandler = require("../api/seo-page");
@@ -1662,6 +1663,300 @@ test("admin SEO auto_publish_ready_drafts no permite ids en lote", async () => {
       assert.equal(res.statusCode, 400);
       assert.equal(body.error, "batch_publish_not_allowed");
       assert.equal(body.published, false);
+    }
+  );
+});
+
+test("admin SEO autonomous pipeline exige confirmacion para ejecucion real", async () => {
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      SEO_AUTONOMOUS_PIPELINE_ENABLED: "true"
+    },
+    async () => {
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/automation",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "run_autonomous_cycle", dry_run: false }
+      };
+
+      await adminHandler(req, res);
+
+      const body = payload();
+      assert.equal(res.statusCode, 400);
+      assert.equal(body.error, "autonomous_pipeline_confirmation_required");
+      assert.equal(body.touched_sitemap, false);
+    }
+  );
+});
+
+test("admin SEO autonomous pipeline respeta kill switch principal", async () => {
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      SEO_AUTONOMOUS_PIPELINE_ENABLED: "false"
+    },
+    async () => {
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/automation",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "run_autonomous_cycle", dry_run: false, confirm: true, confirmation: "run_autonomous_cycle" }
+      };
+
+      await adminHandler(req, res);
+
+      const body = payload();
+      assert.equal(res.statusCode, 403);
+      assert.equal(body.error, "autonomous_pipeline_disabled");
+      assert.equal(body.touched_sitemap, false);
+    }
+  );
+});
+
+test("admin SEO autonomous pipeline dry-run no persiste y devuelve razones", async () => {
+  const idea = { ...SEO_KEYWORD_BACKLOG_SEEDS[3], id: 301, status: "idea", risk_level: "baja" };
+  const highRisk = { ...SEO_KEYWORD_BACKLOG_SEEDS[9], id: 302, status: "idea", risk_level: "alta" };
+  const briefReady = {
+    ...SEO_KEYWORD_BACKLOG_SEEDS[7],
+    id: 303,
+    status: "brief_ready",
+    brief_json: buildSeoKeywordBrief({ ...SEO_KEYWORD_BACKLOG_SEEDS[7], id: 303 })
+  };
+  const approvalBase = await buildReadySeoDraftFixture({ id: 304 });
+  const approvalDraft = {
+    ...approvalBase.storedLanding,
+    status: "needs_review",
+    slug: "autonomous-approval-dry-run",
+    canonical_url: "https://inmoradar.app/autonomous-approval-dry-run/"
+  };
+  const readyBase = await buildReadySeoDraftFixture({ id: 305 });
+  const readyDraft = {
+    ...readyBase.storedLanding,
+    slug: "autonomous-ready-dry-run",
+    canonical_url: "https://inmoradar.app/autonomous-ready-dry-run/"
+  };
+  const previousFetch = global.fetch;
+  let writes = 0;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      SEO_AUTONOMOUS_PIPELINE_ENABLED: undefined,
+      SEO_READY_DRAFT_AUTO_PUBLISH_ENABLED: undefined
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        const requestUrl = String(url);
+        if (["PATCH", "POST", "DELETE"].includes(String(options.method || "GET").toUpperCase())) writes += 1;
+        if (requestUrl.includes("seo_keyword_backlog") && requestUrl.includes("status=eq.idea")) return supabaseJson([highRisk, idea]);
+        if (requestUrl.includes("seo_keyword_backlog") && requestUrl.includes("status=eq.brief_ready")) return supabaseJson([briefReady]);
+        if (requestUrl.includes("/rest/v1/seo_landings?slug=eq.")) return supabaseJson([]);
+        if (requestUrl.includes("seo_landings") && requestUrl.includes("status=in.")) return supabaseJson([approvalDraft]);
+        if (requestUrl.includes("status=eq.published") && requestUrl.includes("published_at=gte.")) return supabaseJson([]);
+        if (requestUrl.includes("status=eq.ready_to_publish")) return supabaseJson([readyDraft]);
+        throw new Error(`Unexpected fetch ${requestUrl}`);
+      };
+
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/automation",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "run_autonomous_cycle" }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 200);
+      assert.equal(body.dry_run, true);
+      assert.equal(body.phases.auto_generate_briefs.changed_count, 1);
+      assert.equal(body.phases.auto_generate_briefs.items.some((item) => item.reason === "risk_level_high"), true);
+      assert.equal(body.phases.auto_create_drafts.changed_count, 1);
+      assert.equal(body.phases.auto_approve_high_quality_drafts.changed_count, 1);
+      assert.equal(body.summary.would_publish_count, 1);
+      assert.equal(body.touched_sitemap, false);
+      assert.equal(writes, 0);
+    }
+  );
+});
+
+test("admin SEO autonomous pipeline real crea, autoaprueba y autopublica con auditoria limitada", async () => {
+  const idea = { ...SEO_KEYWORD_BACKLOG_SEEDS[3], id: 401, status: "idea", risk_level: "baja" };
+  const briefReady = {
+    ...SEO_KEYWORD_BACKLOG_SEEDS[7],
+    id: 402,
+    status: "brief_ready",
+    brief_json: buildSeoKeywordBrief({ ...SEO_KEYWORD_BACKLOG_SEEDS[7], id: 402 })
+  };
+  const approvalBase = await buildReadySeoDraftFixture({ id: 403 });
+  const approvalDraft = {
+    ...approvalBase.storedLanding,
+    status: "needs_review",
+    slug: "autonomous-approval-real",
+    canonical_url: "https://inmoradar.app/autonomous-approval-real/"
+  };
+  const publishBase = await buildReadySeoDraftFixture({ id: 404 });
+  const publishDraft = {
+    ...publishBase.storedLanding,
+    slug: "autonomous-publish-real",
+    canonical_url: "https://inmoradar.app/autonomous-publish-real/"
+  };
+  const previousFetch = global.fetch;
+  const keywordPatches = [];
+  const landingPosts = [];
+  const landingPatches = [];
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      SEO_AUTONOMOUS_PIPELINE_ENABLED: "true",
+      SEO_READY_DRAFT_AUTO_PUBLISH_ENABLED: "true",
+      SEO_READY_DRAFT_AUTO_PUBLISH_MAX_PER_DAY: "5"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        const requestUrl = String(url);
+        const method = String(options.method || "GET").toUpperCase();
+        if (requestUrl.includes("seo_keyword_backlog") && requestUrl.includes("status=eq.idea")) return supabaseJson([idea]);
+        if (requestUrl.includes("seo_keyword_backlog") && requestUrl.includes("status=eq.brief_ready")) return supabaseJson([briefReady]);
+        if (method === "PATCH" && requestUrl.includes("seo_keyword_backlog?id=eq.")) {
+          const patchBody = JSON.parse(options.body);
+          keywordPatches.push(patchBody);
+          const source = requestUrl.includes("401") ? idea : briefReady;
+          return supabaseJson([{ ...source, ...patchBody }]);
+        }
+        if (method === "POST" && requestUrl.endsWith("/rest/v1/seo_landings")) {
+          const postBody = JSON.parse(options.body);
+          landingPosts.push(postBody);
+          return supabaseJson([{ ...postBody, id: 500 }]);
+        }
+        if (requestUrl.includes("/rest/v1/seo_landings?slug=eq.")) {
+          if (method === "PATCH") {
+            const patchBody = JSON.parse(options.body);
+            landingPatches.push(patchBody);
+            const original = patchBody.status === "published" ? publishDraft : approvalDraft;
+            return supabaseJson([{ ...original, ...patchBody }]);
+          }
+          return supabaseJson([]);
+        }
+        if (requestUrl.includes("seo_landings") && requestUrl.includes("status=in.")) return supabaseJson([approvalDraft]);
+        if (requestUrl.includes("status=eq.published") && requestUrl.includes("published_at=gte.")) return supabaseJson([]);
+        if (requestUrl.includes("status=eq.ready_to_publish")) return supabaseJson([publishDraft]);
+        throw new Error(`Unexpected fetch ${requestUrl}`);
+      };
+
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/automation",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: {
+          action: "run_autonomous_cycle",
+          dry_run: false,
+          confirm: true,
+          confirmation: "run_autonomous_cycle",
+          brief_limit: 5,
+          draft_limit: 3,
+          approval_limit: 3,
+          publish_limit: 1
+        }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 200);
+      assert.equal(body.dry_run, false);
+      assert.equal(body.phases.auto_generate_briefs.changed_count, 1);
+      assert.equal(body.phases.auto_create_drafts.changed_count, 1);
+      assert.equal(body.phases.auto_approve_high_quality_drafts.changed_count, 1);
+      assert.equal(body.summary.published_count, 1);
+      assert.equal(body.touched_sitemap, false);
+      assert.equal(keywordPatches.some((patch) => patch.status === "brief_ready" && patch.brief_json), true);
+      assert.equal(keywordPatches.some((patch) => patch.status === "draft"), true);
+      assert.equal(landingPosts.length, 1);
+      assert.equal(landingPosts[0].published_at, null);
+      assert.equal(landingPosts[0].index_status, "noindex");
+      assert.equal(landingPosts[0].source_data_json.autonomous_pipeline.source, "run_autonomous_cycle");
+      assert.equal(landingPatches.some((patch) => patch.status === "ready_to_publish" && patch.source_data_json.auto_approval_audit), true);
+      assert.equal(landingPatches.some((patch) => patch.status === "published" && patch.source_data_json.auto_publish_audit), true);
+      assert.equal(landingPatches.some((patch) => patch.source_data_json.quality_gate_snapshot?.can_index === true), true);
+    }
+  );
+});
+
+test("admin SEO autonomous pipeline no autoaprueba score menor de 90", async () => {
+  const lowBase = await buildReadySeoDraftFixture({ id: 405 });
+  const lowDraft = {
+    ...lowBase.storedLanding,
+    status: "needs_review",
+    slug: "autonomous-low-score",
+    canonical_url: "https://inmoradar.app/autonomous-low-score/",
+    body_html:
+      "<article><h1>Low score</h1><p>Fuente: test. Fecha del dato: 2026-05-24.</p><p>Referencia orientativa, no es una tasacion y no garantiza el precio real.</p><button data-install-button data-install-source=\"seo_test\">Instalar InmoRadar</button><a href=\"/\">Inicio</a><a href=\"/analizar-anuncio-inmobiliario/\">Analizar anuncio</a></article>"
+  };
+  const previousFetch = global.fetch;
+  let patchCount = 0;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        const requestUrl = String(url);
+        if (options.method === "PATCH") patchCount += 1;
+        if (requestUrl.includes("seo_keyword_backlog") && requestUrl.includes("status=eq.idea")) return supabaseJson([]);
+        if (requestUrl.includes("seo_keyword_backlog") && requestUrl.includes("status=eq.brief_ready")) return supabaseJson([]);
+        if (requestUrl.includes("seo_landings") && requestUrl.includes("status=in.")) return supabaseJson([lowDraft]);
+        if (requestUrl.includes("status=eq.published") && requestUrl.includes("published_at=gte.")) return supabaseJson([]);
+        if (requestUrl.includes("status=eq.ready_to_publish")) return supabaseJson([]);
+        throw new Error(`Unexpected fetch ${requestUrl}`);
+      };
+
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/automation",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "run_autonomous_cycle" }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 200);
+      assert.equal(body.phases.auto_approve_high_quality_drafts.items[0].reason, "quality_score_below_90");
+      assert.equal(body.phases.auto_approve_high_quality_drafts.changed_count, 0);
+      assert.equal(patchCount, 0);
+      assert.equal(body.touched_sitemap, false);
     }
   );
 });

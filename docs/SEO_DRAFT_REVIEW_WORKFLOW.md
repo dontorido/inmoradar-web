@@ -137,6 +137,12 @@ Cada publicacion real guarda `source_data_json.auto_publish_audit` y `source_dat
 
 Ver tambien: `docs/SEO_AUTO_PUBLISH.md`.
 
+### Ciclo SEO autonomo
+
+La accion `run_autonomous_cycle` coordina briefs, drafts, autoaprobacion fuerte y autopublicacion limitada. No elimina el flujo de revision: solo autoaprueba drafts excelentes con `quality_score >= 90`, gate completo y sin riesgo alto.
+
+Ver tambien: `docs/SEO_AUTONOMOUS_PIPELINE.md`.
+
 ## Garantias
 
 Estas acciones NO hacen:
