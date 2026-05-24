@@ -157,6 +157,62 @@ Resumen humano que se conserva para lectura manual.
   assert.equal(alerts.some((alert) => alert.id === "nightly-maintenance-risk-domains" && alert.message.includes("seo")), true);
 });
 
+test("nightly maintenance structured risk_domains overrides text risk inference", () => {
+  const report = `
+# Informe nocturno
+
+El texto humano menciona SEO, sitemap, robots y canonical para contexto historico.
+
+\`\`\`json
+{
+  "schema": "inmoradar.nightly_maintenance.v1",
+  "generated_at": "2026-05-24T00:00:00.000Z",
+  "repo_clean": true,
+  "tests_passed": true,
+  "requires_human_decision": false,
+  "risk_domains": [],
+  "status": "success",
+  "summary": "Maintenance completed successfully."
+}
+\`\`\`
+`;
+  const status = parseNightlyMaintenanceReport(report);
+  const alerts = buildNightlyMaintenanceAlerts(status, { now: NOW });
+
+  assert.deepEqual(status.risks, []);
+  assert.equal(alerts.some((alert) => alert.id === "nightly-maintenance-risk-domains"), false);
+  assert.deepEqual(
+    alerts.map((alert) => [alert.id, alert.severity]),
+    [["nightly-maintenance-completed", "success"]]
+  );
+});
+
+test("nightly maintenance structured risk_domains creates risk alerts without text hints", () => {
+  const report = `
+# Informe nocturno
+
+Informe humano sin menciones de dominios de riesgo.
+
+\`\`\`json
+{
+  "schema": "inmoradar.nightly_maintenance.v1",
+  "generated_at": "2026-05-24T00:00:00.000Z",
+  "repo_clean": true,
+  "tests_passed": true,
+  "requires_human_decision": false,
+  "risk_domains": ["seo", "robots"],
+  "status": "warning",
+  "summary": "Maintenance completed with risk warnings."
+}
+\`\`\`
+`;
+  const status = parseNightlyMaintenanceReport(report);
+  const alerts = buildNightlyMaintenanceAlerts(status, { now: NOW });
+
+  assert.deepEqual(status.risks, ["seo", "robots"]);
+  assert.equal(alerts.some((alert) => alert.id === "nightly-maintenance-risk-domains" && alert.message.includes("seo")), true);
+});
+
 test("nightly maintenance loader stays quiet when no report exists", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inmoradar-nightly-alerts-empty-"));
 
