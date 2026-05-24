@@ -174,6 +174,7 @@ const state = {
   parking: {
     lastProbe: null
   },
+  serviceStatus: null,
   releases: {
     web: [],
     extension: [],
@@ -323,6 +324,9 @@ const els = {
   parkingRefresh: document.querySelector("[data-parking-refresh]"),
   parkingProbeForm: document.querySelector("[data-parking-probe-form]"),
   parkingResult: document.querySelector("[data-parking-result]"),
+  serviceStatusSummary: document.querySelector("[data-service-status-summary]"),
+  serviceStatusList: document.querySelector("[data-service-status-list]"),
+  serviceStatusRefresh: document.querySelector("[data-service-status-refresh]"),
   releaseForms: document.querySelectorAll("[data-release-form]"),
   releaseRows: document.querySelectorAll("[data-release-rows]"),
   releaseConnectors: document.querySelectorAll("[data-release-connectors]"),
@@ -823,6 +827,10 @@ function chip(value, variant = "", kind = "status") {
 
 function statusTone(value) {
   const normalized = String(value || "").toLowerCase();
+  if (["operational"].includes(normalized)) return "published";
+  if (["degraded"].includes(normalized)) return "warn";
+  if (["down"].includes(normalized)) return "bad";
+  if (["unknown"].includes(normalized)) return "draft";
   if (["published", "active", "on_trial", "connected", "manually_published"].includes(normalized)) return "published";
   if (["ready", "ready_to_publish", "index", "paid", "scheduled", "pending_review"].includes(normalized)) return "ready";
   if (["cancelled", "expired", "needs_reauth", "needs_connection", "noindex", "unpaid", "payment_failed", "failed", "error", "disconnected"].includes(normalized)) return "bad";
@@ -856,6 +864,74 @@ function stat(label, value, options = {}) {
       </div>
     </div>
   `;
+}
+
+function serviceStatusLabel(value) {
+  const normalized = String(value || "unknown").toLowerCase();
+  return {
+    operational: "Operativo",
+    degraded: "Degradado",
+    down: "Caido",
+    unknown: "Sin verificar"
+  }[normalized] || normalized;
+}
+
+function serviceDisplayName(service = {}) {
+  return service.name || {
+    public_web: "Web publica",
+    api: "API",
+    sitemap: "Sitemap",
+    internal_data: "Datos internos",
+    extension_version: "Versionado de extension",
+    status_endpoint: "Status endpoint"
+  }[service.id] || "Servicio";
+}
+
+function renderServiceStatus(payload = {}) {
+  if (!els.serviceStatusSummary || !els.serviceStatusList) return;
+  const services = Array.isArray(payload.services) ? payload.services : [];
+  const global = payload.status || "unknown";
+  const operationalCount = services.filter((service) => service.status === "operational").length;
+  const attentionCount = services.filter((service) => service.status !== "operational").length;
+  state.serviceStatus = payload;
+
+  els.serviceStatusSummary.innerHTML = [
+    stat("Estado global", serviceStatusLabel(global), {
+      id: "service-status-global",
+      hint: payload.updated_at ? formatDate(payload.updated_at) : "Sin fecha"
+    }),
+    stat("Operativos", `${operationalCount}/${services.length || 0}`, {
+      id: "service-status-operational"
+    }),
+    stat("Con atencion", attentionCount, {
+      id: "service-status-attention",
+      hint: "Degradados, caidos o sin verificar"
+    })
+  ].join("");
+
+  if (!services.length) {
+    els.serviceStatusList.innerHTML = `<p class="admin-empty-state compact">No hay servicios publicados por /api/status.</p>`;
+    return;
+  }
+
+  els.serviceStatusList.innerHTML = services
+    .map((service) => {
+      const serviceState = String(service.status || "unknown").toLowerCase();
+      const latency = Number.isFinite(service.latency_ms) ? `${service.latency_ms} ms` : "sin latencia";
+      return `
+        <article class="admin-service-status-item" data-state="${escapeHtml(serviceState)}">
+          <div>
+            <strong>${escapeHtml(serviceDisplayName(service))}</strong>
+            <p>${escapeHtml(service.message || "Estado no disponible.")}</p>
+          </div>
+          <div>
+            ${chip(serviceStatusLabel(serviceState), statusTone(serviceState))}
+            <small>${escapeHtml(latency)}</small>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
 }
 
 function getPath(source, path) {
@@ -5055,6 +5131,30 @@ async function loadReleaseHubs() {
   await Promise.all(RELEASE_TARGETS.map((target) => loadReleaseArtifacts(target)));
 }
 
+async function loadServiceStatus() {
+  if (!els.serviceStatusSummary && !els.serviceStatusList) return;
+  try {
+    const response = await fetch("/api/status", { headers: { accept: "application/json" } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.status) throw new Error("status_unavailable");
+    renderServiceStatus(payload);
+  } catch (error) {
+    renderServiceStatus({
+      status: "degraded",
+      updated_at: new Date().toISOString(),
+      services: [
+        {
+          id: "status_endpoint",
+          name: "Status endpoint",
+          status: "degraded",
+          message: "No se pudo leer /api/status.",
+          latency_ms: null
+        }
+      ]
+    });
+  }
+}
+
 async function loadRunwayConfig() {
   if (!els.videoRunwayPanel) return;
   try {
@@ -5135,6 +5235,7 @@ async function loadAll() {
       loadMeta(),
       loadKpis(),
       loadParking(),
+      loadServiceStatus(),
       loadReleaseHubs(),
       loadViraliza(),
       loadRunwayConfig(),
@@ -5523,6 +5624,10 @@ if (els.parkingProbeForm) {
     event.preventDefault();
     runParkingProbe(els.parkingProbeForm).catch((error) => showStatus(error.message, "bad"));
   });
+}
+
+if (els.serviceStatusRefresh) {
+  els.serviceStatusRefresh.addEventListener("click", () => loadServiceStatus().catch((error) => showStatus(error.message, "bad")));
 }
 
 els.releaseForms.forEach((form) => {

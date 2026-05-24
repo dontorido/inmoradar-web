@@ -577,14 +577,36 @@
               <p class="admin-panel-sub">Aquí centralizamos tareas que antes acababan en archivos locales: pruebas de Parking, versiones de la web, paquetes de extensión y cambios del propio backoffice.</p>
             </div>
             <div class="admin-subsection-menu" aria-label="Procesos de operaciones">
+              <button class="admin-tab" type="button" data-admin-subsection-group="operaciones" data-admin-subsection-button="operaciones-status" data-testid="admin-subsection-operaciones-status" aria-pressed="false">Estado</button>
               <button class="admin-tab" type="button" data-admin-subsection-group="operaciones" data-admin-subsection-button="operaciones-parking" data-testid="admin-subsection-operaciones-parking" aria-pressed="false">Parking</button>
               <button class="admin-tab" type="button" data-admin-subsection-group="operaciones" data-admin-subsection-button="operaciones-web" data-testid="admin-subsection-operaciones-web" aria-pressed="false">Web</button>
               <button class="admin-tab" type="button" data-admin-subsection-group="operaciones" data-admin-subsection-button="operaciones-extension" data-testid="admin-subsection-operaciones-extension" aria-pressed="false">Extensión</button>
               <button class="admin-tab" type="button" data-admin-subsection-group="operaciones" data-admin-subsection-button="operaciones-backoffice" data-testid="admin-subsection-operaciones-backoffice" aria-pressed="false">Backoffice</button>
             </div>
           </div>
-          <p class="admin-empty-state" data-admin-subsection-empty="operaciones">Selecciona Parking para probar datos, Web para preparar despliegues, Extensión para guardar builds por navegador o Backoffice para auditar cambios internos.</p>
+          <p class="admin-empty-state" data-admin-subsection-empty="operaciones">Selecciona Estado para revisar servicios, Parking para probar datos, Web para preparar despliegues, Extensión para guardar builds por navegador o Backoffice para auditar cambios internos.</p>
         </article>
+      </section>
+
+      <section class="admin-subsection-panel" data-admin-subsection-panel="operaciones-status" hidden>
+        <section class="admin-panel admin-service-status-panel">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Estado publico</span>
+              <h2>Servicios</h2>
+              <p class="admin-panel-sub">Resumen seguro del endpoint publico de estado, sin errores internos ni detalles privados.</p>
+            </div>
+            <div class="admin-view-toolbar">
+              <a class="admin-button tiny ghost" href="/status/" target="_blank" rel="noopener noreferrer">Abrir status page</a>
+              <button class="admin-button tiny" type="button" data-service-status-refresh>Actualizar estado</button>
+            </div>
+          </div>
+          <section class="admin-stat-grid compact admin-service-status-summary" data-service-status-summary></section>
+          <div class="admin-service-status-list" data-service-status-list>
+            <p class="admin-empty-state compact">Carga el backoffice o pulsa actualizar para leer /api/status.</p>
+          </div>
+          <p class="admin-kpi-note">Pendiente: conectar degradaciones repetidas al sistema de alertas del backoffice cuando se definan umbrales de aviso.</p>
+        </section>
       </section>
 
       <section class="admin-subsection-panel" data-admin-subsection-panel="operaciones-parking" hidden>

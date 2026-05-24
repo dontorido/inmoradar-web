@@ -3453,6 +3453,70 @@
   letter-spacing: 0;
 }
 
+.admin-service-status-summary {
+  margin-top: 18px;
+}
+
+.admin-service-status-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.admin-service-status-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid rgba(10, 20, 15, .1);
+  border-left: 6px solid #a3a3a3;
+  border-radius: var(--admin-radius-sm);
+  background: #fff;
+  padding: 16px;
+}
+
+.admin-service-status-item[data-state="operational"] { border-left-color: #16a34a; }
+.admin-service-status-item[data-state="degraded"] { border-left-color: #d97706; }
+.admin-service-status-item[data-state="down"] { border-left-color: #dc2626; }
+.admin-service-status-item[data-state="unknown"] { border-left-color: #71717a; }
+
+.admin-service-status-item strong {
+  display: block;
+  color: var(--admin-dark);
+  font-size: 15px;
+}
+
+.admin-service-status-item p {
+  margin: 6px 0 0;
+  color: rgba(10, 20, 15, .62);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-service-status-item > div:last-child {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.admin-service-status-item small {
+  color: rgba(10, 20, 15, .5);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+@media (max-width: 720px) {
+  .admin-service-status-item {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-service-status-item > div:last-child {
+    justify-items: start;
+  }
+}
+
 .admin-analytics-item,
 .admin-learning-item {
   border: 1px solid rgba(10, 20, 15, .1);
