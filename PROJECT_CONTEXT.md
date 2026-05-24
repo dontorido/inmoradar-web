@@ -158,7 +158,7 @@ Flujo:
 4. `api/admin.js` valida `ADMIN_IMPORT_TOKEN` via `assertAdmin`.
 5. Cada recurso lee o escribe en Supabase o llama a servicios internos.
 
-Alertas de mantenimiento nocturno: `api/admin.js?resource=alerts` reutiliza `lib/operations/nightlyMaintenanceAlerts.js` para leer, si existe, `NIGHTLY_MAINTENANCE_REPORT.md` o `NIGHTLY_REFACTOR_REPORT.md` en la raiz del repo desplegado/local. El helper no crea tablas ni endpoints; convierte el informe en alertas `nightly_maintenance` cuando la automatizacion se detiene por repo sucio, cambios paralelos en archivos sensibles, tests fallidos, rama no subida, informe ausente marcado en el estado o decision humana requerida. El formato recomendado para nuevos informes es un bloque fenced `json` con `schema=inmoradar.nightly_maintenance.v1`; el lector conserva compatibilidad con informes antiguos basados en texto.
+Alertas de mantenimiento nocturno: `api/admin.js?resource=alerts` reutiliza `lib/operations/nightlyMaintenanceAlerts.js` para leer, si existe, `NIGHTLY_MAINTENANCE_REPORT.md` o `NIGHTLY_REFACTOR_REPORT.md` en la raiz del repo desplegado/local. El helper no crea tablas ni endpoints; convierte el informe en alertas `nightly_maintenance` cuando la automatizacion se detiene por repo sucio, cambios paralelos en archivos sensibles, tests fallidos, rama no subida, informe ausente marcado en el estado o decision humana requerida.
 
 
 Viraliza con cuentas reales:
