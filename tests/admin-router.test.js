@@ -91,7 +91,7 @@ function supabaseMockFetch(url) {
   return jsonResponse([]);
 }
 
-async function callAdmin(resource, { method = "GET", env = {}, fetchImpl = supabaseMockFetch } = {}) {
+async function callAdmin(resource, { method = "GET", query = "", env = {}, fetchImpl = supabaseMockFetch } = {}) {
   const previousFetch = global.fetch;
   return withEnv(
     {
@@ -107,7 +107,7 @@ async function callAdmin(resource, { method = "GET", env = {}, fetchImpl = supab
         const { res, payload } = createJsonResponse();
         const req = {
           method,
-          url: `/api/admin?resource=${encodeURIComponent(resource)}`,
+          url: `/api/admin?resource=${encodeURIComponent(resource)}${query ? `&${query.replace(/^&/, "")}` : ""}`,
           headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" }
         };
         await adminHandler(req, res);
@@ -202,6 +202,57 @@ test("admin read-only router preserves extension usage payload shape", async () 
   assert.equal(Array.isArray(result.payload.by_browser), true);
 });
 
+test("admin read-only router preserves analytics summary payload shape without Supabase", async () => {
+  const result = await callAdmin("analytics/summary", {
+    env: {
+      SUPABASE_URL: undefined,
+      SUPABASE_SERVICE_ROLE_KEY: undefined
+    }
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.persisted, false);
+  assert.equal(result.payload.warning, "supabase_not_configured");
+  assert.equal(result.payload.summary.total_events, 0);
+  assert.equal(Array.isArray(result.payload.top_pages), true);
+  assert.equal(Array.isArray(result.payload.recommendations), true);
+});
+
+test("admin read-only router preserves analytics pages payload shape without Supabase", async () => {
+  const result = await callAdmin("analytics/pages", {
+    query: "page_limit=25",
+    env: {
+      SUPABASE_URL: undefined,
+      SUPABASE_SERVICE_ROLE_KEY: undefined
+    }
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.persisted, false);
+  assert.equal(result.payload.warning, "supabase_not_configured");
+  assert.equal(result.payload.window_days, 7);
+  assert.equal(Array.isArray(result.payload.pages), true);
+});
+
+test("admin read-only router preserves analytics learning payload shape without Supabase", async () => {
+  const result = await callAdmin("analytics/learning", {
+    env: {
+      SUPABASE_URL: undefined,
+      SUPABASE_SERVICE_ROLE_KEY: undefined
+    }
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.persisted, false);
+  assert.equal(result.payload.warning, "supabase_not_configured");
+  assert.equal(result.payload.summary.total_events, 0);
+  assert.equal(Array.isArray(result.payload.recommendations), true);
+  assert.equal(result.payload.recommendations[0].action, "collect_more_data");
+});
+
 test("admin read-only router preserves parking summary payload shape", async () => {
   const result = await callAdmin("parking/summary");
 
@@ -229,6 +280,19 @@ test("admin read-only router preserves method handling around Supabase gate", as
   assert.equal(summaryPostWithoutSupabase.payload.error, "supabase_not_configured");
 });
 
+test("admin analytics router preserves method handling before Supabase gate", async () => {
+  const summaryPostWithoutSupabase = await callAdmin("analytics/summary", {
+    method: "POST",
+    env: {
+      SUPABASE_URL: undefined,
+      SUPABASE_SERVICE_ROLE_KEY: undefined
+    }
+  });
+
+  assert.equal(summaryPostWithoutSupabase.statusCode, 405);
+  assert.deepEqual(summaryPostWithoutSupabase.payload, { ok: false, error: "method_not_allowed" });
+});
+
 test("admin legacy resources still fall back after read-only router", async () => {
   const result = await callAdmin("kpis/settings");
 
@@ -236,6 +300,18 @@ test("admin legacy resources still fall back after read-only router", async () =
   assert.equal(result.payload.ok, true);
   assert.equal(result.payload.schema_version, 1);
   assert.ok(Array.isArray(result.payload.schema));
+});
+
+test("admin analytics routes not registered in router still fall back to legacy flow", async () => {
+  const result = await callAdmin("analytics/events", {
+    env: {
+      SUPABASE_URL: undefined,
+      SUPABASE_SERVICE_ROLE_KEY: undefined
+    }
+  });
+
+  assert.equal(result.statusCode, 500);
+  assert.equal(result.payload.error, "supabase_not_configured");
 });
 
 test("admin read-only router keeps Supabase errors sanitized", async () => {
@@ -252,4 +328,21 @@ test("admin read-only router keeps Supabase errors sanitized", async () => {
   assert.doesNotMatch(payloadText, /abc123|sb_secret_live/);
   assert.match(payloadText, /access_token=\[redacted\]/);
   assert.match(payloadText, /\[redacted-secret\]/);
+});
+
+test("admin analytics router keeps Supabase errors sanitized", async () => {
+  const result = await callAdmin("analytics/summary", {
+    fetchImpl: async () => ({
+      ok: false,
+      status: 500,
+      text: async () => "backend leaked access_token=abc123 and sb_secret_live_abcdef"
+    })
+  });
+
+  const payloadText = JSON.stringify(result.payload);
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.persisted, false);
+  assert.equal(result.payload.warning, "storage_error");
+  assert.doesNotMatch(payloadText, /abc123|sb_secret_live/);
 });

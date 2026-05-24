@@ -390,3 +390,71 @@ Recursos write que deberian esperar:
 - Evitar cambios de textos, labels o UI.
 - Antes de mover un handler a otro archivo, crear tests que cubran su payload actual.
 - Dejar fallback legacy hasta que el router cubra la mayoria de recursos.
+
+## 14. Fase realizada - Router admin analytics read-only
+
+Estado: realizada en `feature/admin-router-analytics-readonly`.
+
+Se amplio `api/_admin/router.js` desde el registro declarativo usado por `api/admin.js`, sin mover auth ni cambiar la fachada publica. Los handlers analytics siguen dentro de `api/admin.js` para evitar una extraccion amplia de helpers compartidos.
+
+Recursos migrados:
+
+- `analytics/summary`
+- `analytics/pages`
+- `analytics/learning`
+
+Estrategia aplicada:
+
+- Los tres recursos viven en el grupo pre-Supabase porque su comportamiento historico ya maneja `supabase_not_configured` como warning y payload vacio.
+- El router conserva `GET` como unico metodo permitido y devuelve el mismo `405 { ok:false, error:"method_not_allowed" }` para otros metodos.
+- Recursos analytics no registrados continuan en fallback legacy.
+- No se cambiaron queries, limites, ventanas temporales, metricas ni payloads.
+
+Tests anadidos o reforzados:
+
+- Payload shape de `analytics/summary` sin Supabase.
+- Payload shape de `analytics/pages` sin Supabase.
+- Payload shape de `analytics/learning` sin Supabase.
+- Metodo no permitido antes del gate global de Supabase.
+- Fallback legacy para rutas analytics no registradas.
+- Error Supabase saneado en ruta analytics migrada.
+
+Verificacion:
+
+- `node --test tests/admin-router.test.js`: 16 pass, 0 fail.
+- `node --test tests/owned-analytics.test.js`: 16 pass, 0 fail.
+- `node --test tests/*.test.js`: 255 pass, 0 fail.
+- `git diff --check`: OK; solo avisos CRLF de Git en Windows.
+
+## 15. Siguiente fase recomendada
+
+Siguiente lote seguro:
+
+- SEO read-only dentro del admin, por ejemplo listados o vistas de estado que no generen, publiquen ni muten landings.
+- Settings read-only si el recurso separa claramente lectura de escritura.
+
+Orden recomendado:
+
+1. Analytics read-only.
+2. SEO read-only.
+3. Settings read-only.
+4. Operaciones read-only.
+5. Write handlers de bajo riesgo.
+6. Write handlers con side effects.
+7. Integraciones externas.
+
+Criterios para pasar a recursos write:
+
+- Payload actual cubierto por tests.
+- Metodo no permitido cubierto por tests.
+- Body invalido cubierto por tests.
+- Auth y errores saneados cubiertos por tests.
+- Sin llamadas reales a servicios externos.
+- Kill switch preservado cuando exista.
+- Fallback legacy disponible hasta completar el lote.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-router-analytics-readonly. Sin deploy, sin cambios visuales y sin tocar produccion. Migrar al router declarativo un lote pequeno de SEO read-only del admin, manteniendo auth, URLs, query params, payloads y codigos. No mover handlers a ficheros nuevos salvo que sea trivial y testeado. No tocar generacion SEO, publicaciones, sitemap ni recursos write. Anadir tests de payload, metodo no permitido, fallback legacy y errores saneados. Ejecutar node --test tests/*.test.js y git diff --check.
+```

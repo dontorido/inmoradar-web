@@ -629,3 +629,79 @@ Verificacion de esta evolucion:
 - `node --check api/admin.js`: OK.
 - `node --check api/_admin/router.js`: OK.
 - `node --test tests/admin-router.test.js tests/extension-usage.test.js tests/status.test.js tests/security-sanitization.test.js`: 34 pass, 0 fail.
+
+## Evolucion posterior: router declarativo analytics read-only
+
+Fecha: 2026-05-24
+Rama: `feature/admin-router-analytics-readonly`
+
+Se amplio el router declarativo interno de `api/admin.js` para cubrir el lote read-only de analytics owned. La fachada publica sigue siendo `api/admin.js`: auth, CORS, catch general, saneado de errores y fallback legacy no se movieron.
+
+Recursos migrados:
+
+- `analytics/summary`: `GET`, pre-gate global de Supabase, conserva ventanas por `days`, `from`, `to`, resumen, top pages, agrupaciones y recomendaciones.
+- `analytics/pages`: `GET`, pre-gate global de Supabase, conserva `page_limit`, ventanas, warning y lista de paginas.
+- `analytics/learning`: `GET`, pre-gate global de Supabase, conserva summary, pages, recomendaciones y bloques de aprendizaje.
+
+Que no se extrajo:
+
+- Los handlers `handleOwnedAnalyticsSummary`, `handleOwnedAnalyticsPages` y `handleOwnedAnalyticsLearning` siguen en `api/admin.js`. Extraerlos ahora obligaba a mover tambien helpers de ventana temporal, carga de eventos, agrupaciones y dependencias de learning, lo que hacia crecer el riesgo de la fase.
+- No se creo `api/_admin/handlers/analytics.js` todavia por prudencia. El paso realizado reduce dispatch manual sin cambiar fronteras internas sensibles.
+- No se tocaron consultas, limites, interpretacion de metricas ni labels del backoffice.
+
+Por que analytics era una zona adecuada:
+
+- Son recursos read-only y no disparan integraciones externas.
+- Ya tenian comportamiento controlado sin Supabase configurado.
+- Tenian tests previos de ventanas, rangos, defaults y aprendizaje.
+- Aportan valor operativo al backoffice y reducen otra zona relevante del monolito sin entrar aun en escritura.
+
+Riesgos mitigados:
+
+- `analytics/summary`, `analytics/pages` y `analytics/learning` ya no dependen de ramas manuales `if (resource === ...)` en el flujo principal.
+- Los metodos no soportados de los tres recursos quedan resueltos por el router antes del gate global de Supabase, conservando el `405` anterior.
+- Recursos analytics no registrados siguen cayendo al flujo legacy.
+- Los errores de Supabase siguen saneados antes de llegar al payload.
+
+Riesgos pendientes:
+
+- `api/admin.js` todavia contiene los handlers analytics y muchos helpers compartidos.
+- El router no declara permisos por recurso; la autorizacion sigue siendo centralizada.
+- Recursos write y side-effect siguen en legacy.
+- Aun no existe un contrato comun para handlers extraidos por modulo.
+
+Como continuar con recursos write:
+
+1. Completar antes otro lote read-only, preferentemente SEO read-only o settings read-only.
+2. Crear fixtures de payload antes de mover cualquier handler con escritura.
+3. Exigir tests de metodo, body invalido, auth, error saneado y no exposicion de secretos.
+4. Mantener kill switches y no ejecutar integraciones externas reales.
+5. Mover write handlers solo cuando el coste de fallback legacy sea bajo y reversible.
+
+Endpoints todavia legacy principales:
+
+- `premium/subscriptions`
+- `seo/landings`
+- `seo/generate-landings`
+- `seo-autogenerate/run`
+- `linkedin/*`
+- `meta/*`
+- `kpis/settings`
+- `operations/releases`
+- `operations/chrome`
+- `social-video/*`
+- `viraliza/*`
+
+Verificacion de esta evolucion:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/router.js`: OK con Node bundled.
+- `node --check assets/admin.js`: OK con Node bundled.
+- `node --check api/sitemap.js`: OK con Node bundled.
+- `node --check api/seo-page.js`: OK con Node bundled.
+- `node --check scripts/serve-static.js`: OK con Node bundled.
+- `api/_admin/handlers/analytics.js`: no existe; no se creo en esta fase.
+- `node --test tests/admin-router.test.js`: 16 pass, 0 fail.
+- `node --test tests/owned-analytics.test.js`: 16 pass, 0 fail.
+- `node --test tests/*.test.js`: 255 pass, 0 fail.
+- `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.

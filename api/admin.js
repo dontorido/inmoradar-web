@@ -3907,6 +3907,21 @@ const ADMIN_PRE_SUPABASE_READ_ONLY_ROUTES = createAdminRouter([
     resource: "alerts",
     method: "GET",
     handler: () => handleAlerts()
+  },
+  {
+    resource: "analytics/summary",
+    method: "GET",
+    handler: ({ req, url }) => handleOwnedAnalyticsSummary(req, url)
+  },
+  {
+    resource: "analytics/pages",
+    method: "GET",
+    handler: ({ req, url }) => handleOwnedAnalyticsPages(req, url)
+  },
+  {
+    resource: "analytics/learning",
+    method: "GET",
+    handler: ({ req, url }) => handleOwnedAnalyticsLearning(req, url)
   }
 ]);
 
@@ -3965,18 +3980,6 @@ module.exports = async function handler(req, res) {
     const preSupabaseReadOnly = await dispatchAdminRoute(ADMIN_PRE_SUPABASE_READ_ONLY_ROUTES, { req, url, resource });
     if (preSupabaseReadOnly) {
       return json(res, preSupabaseReadOnly.status, preSupabaseReadOnly.payload);
-    }
-    if (resource === "analytics/summary") {
-      const result = await handleOwnedAnalyticsSummary(req, url);
-      return json(res, result.status, result.payload);
-    }
-    if (resource === "analytics/pages") {
-      const result = await handleOwnedAnalyticsPages(req, url);
-      return json(res, result.status, result.payload);
-    }
-    if (resource === "analytics/learning") {
-      const result = await handleOwnedAnalyticsLearning(req, url);
-      return json(res, result.status, result.payload);
     }
     if (!hasSupabaseConfig()) {
       return json(res, 500, { ok: false, error: "supabase_not_configured" });
