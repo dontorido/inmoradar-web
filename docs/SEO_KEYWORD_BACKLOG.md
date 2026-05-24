@@ -4,7 +4,7 @@
 
 El backlog SEO es una capa previa a la generacion de landings. Sirve para registrar oportunidades, priorizarlas y convertirlas en briefs revisables antes de crear contenido.
 
-Ahora puede persistirse en Supabase mediante la tabla `seo_keyword_backlog`. No genera paginas, no publica landings, no cambia sitemap y no evita el quality gate. Su funcion es ayudar a decidir que merece pasar a produccion editorial.
+Ahora puede persistirse en Supabase mediante la tabla `seo_keyword_backlog`. Tambien permite convertir una oportunidad `approved` con `brief_json` en un borrador SEO revisable. Esa conversion no publica, no indexa y no toca sitemap.
 
 ## Modelo de backlog
 
@@ -165,6 +165,31 @@ Acciones de escritura:
 
 Estas acciones guardan solo datos editoriales del backlog. Todas responden con banderas explicitas `generated_landing=false`, `published=false`, `indexed=false` y `touched_sitemap=false`.
 
+Crear un borrador desde un brief aprobado:
+
+```json
+{ "action": "create_draft_from_approved_brief", "id": 45 }
+```
+
+Requisitos:
+
+- la oportunidad debe tener `status=approved`;
+- debe existir `brief_json` valido;
+- `suggested_landing` no debe existir ya como `seo_landings.slug`;
+- Supabase debe estar configurado.
+
+Respuesta esperada si crea draft:
+
+- `generated_landing=true`;
+- `published=false`;
+- `indexed=false`;
+- `touched_sitemap=false`;
+- `landing.status=draft` o `needs_review`;
+- `landing.index_status=noindex`;
+- `landing.published_at=null`;
+- `source_data_json.seo_keyword_backlog_id` con el id del backlog;
+- `source_data_json.quality`, `source_data_json.quality_gate` y `source_data_json.quality_gate_summary`.
+
 ## BackOffice
 
 La seccion SEO muestra una tabla "Oportunidades y briefs" con:
@@ -177,9 +202,12 @@ La seccion SEO muestra una tabla "Oportunidades y briefs" con:
 - edicion minima de prioridad y estado;
 - boton "Ver brief";
 - boton "Guardar brief";
+- boton "Crear borrador" solo en oportunidades `approved`;
 - acciones "Aprobar" y "Rechazar".
 
-Crear o editar una oportunidad persiste el backlog si Supabase esta disponible. Ver un brief no crea contenido ni modifica datos. Guardar un brief persiste `brief_json`, pero no crea landings, no publica y no toca sitemap.
+Crear o editar una oportunidad persiste el backlog si Supabase esta disponible. Ver un brief no crea contenido ni modifica datos. Guardar un brief persiste `brief_json`.
+
+Crear borrador si escribe en `seo_landings`, pero siempre como borrador revisable: `index_status=noindex`, `published_at=null`, sin cambios de sitemap. Si el quality gate falla, queda en `draft`; si pasa, queda en `needs_review`.
 
 ## Controles de calidad
 
@@ -192,6 +220,8 @@ Antes de convertir un brief en landing:
 - Confirmar bloque de independencia: sin afiliacion oficial con portales inmobiliarios.
 - Confirmar que no es una pagina thin ni una plantilla que solo cambia ciudad.
 
+Al crear un borrador desde un brief aprobado, el sistema ejecuta el quality gate con las reglas actuales. El resultado se guarda en `source_data_json` y se muestra en BackOffice para revisar score, checks fallidos y motivos antes de cualquier publicacion manual posterior.
+
 ## Flujo editorial
 
 1. Crear oportunidad manual o revisar seed/fallback.
@@ -199,24 +229,29 @@ Antes de convertir un brief en landing:
 3. Generar brief para revision.
 4. Guardar brief cuando tenga sentido editorial.
 5. Marcar como `approved` o `rejected`.
-6. Pasar las aprobadas a una futura rama de generacion controlada de landing.
+6. Crear borrador desde una oportunidad `approved`.
+7. Revisar score, checks fallidos, copy, fuentes, CTA e independencia.
+8. Solo en una accion separada y posterior, decidir si se publica manualmente.
 
 ## Acciones que NO hace
 
-- No genera landings.
 - No publica landings.
-- No cambia `seo_landings`.
 - No cambia sitemap.
-- No cambia canonical, robots ni quality gate.
-- No indexa contenido.
+- No indexa landings.
+- No cambia robots ni rutas publicas.
+- No salta el quality gate.
+- No genera contenido masivo.
+
+La accion `create_draft_from_approved_brief` si crea un registro en `seo_landings`, pero siempre como `noindex`, no publicado y sin `published_at`.
 
 ## Limitaciones
 
 - El fallback a seeds es solo operativo/desarrollo; no sustituye la persistencia editorial.
 - No hay batch de importacion en esta rama.
 - La dificultad es manual y orientativa.
-- Una oportunidad `approved` solo indica decision editorial; no implica publicacion.
+- Una oportunidad `approved` permite crear borrador, pero no implica publicacion.
+- El id del backlog se guarda en `source_data_json`; `seo_landings.opportunity_id` se mantiene para la tabla historica `seo_landing_opportunities`.
 
 ## Siguiente rama recomendada
 
-Crear una rama pequena para convertir oportunidades aprobadas en drafts SEO controlados, manteniendo dry-run, quality gate y revision manual antes de publicar.
+Crear una rama pequena para revisar/editar el contenido del draft desde BackOffice antes de permitir cualquier publicacion manual.

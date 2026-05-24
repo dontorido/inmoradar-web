@@ -1881,6 +1881,11 @@ function renderSeoKeywordBacklog(payload = {}) {
               <button class="admin-button tiny ghost" type="button" data-seo-keyword-update="${escapeHtml(item.id)}">Guardar</button>
               <button class="admin-button tiny ghost" type="button" data-seo-keyword-brief="${escapeHtml(item.id)}">Ver brief</button>
               <button class="admin-button tiny ghost" type="button" data-seo-keyword-save-brief="${escapeHtml(item.id)}">Guardar brief</button>
+              ${
+                item.status === "approved"
+                  ? `<button class="admin-button tiny ghost" type="button" data-seo-keyword-create-draft="${escapeHtml(item.id)}">Crear borrador</button>`
+                  : ""
+              }
               <button class="admin-button tiny ghost" type="button" data-seo-keyword-change-status="${escapeHtml(item.id)}" data-status="approved">Aprobar</button>
               <button class="admin-button tiny ghost" type="button" data-seo-keyword-change-status="${escapeHtml(item.id)}" data-status="rejected">Rechazar</button>
             </div>
@@ -1912,6 +1917,24 @@ function renderSeoKeywordBrief(brief = {}) {
     <ul>${list(brief.h2_structure)}</ul>
     <p><b>Para pasar quality gate:</b></p>
     <ul>${list(brief.quality_gate_requirements)}</ul>
+  `;
+}
+
+function renderSeoKeywordDraftResult(payload = {}) {
+  if (!els.seoKeywordBriefPreview) return;
+  const landing = payload.landing || {};
+  const failed = Array.isArray(landing.failed_checks) ? landing.failed_checks : [];
+  els.seoKeywordBriefPreview.innerHTML = `
+    <strong>Borrador SEO creado</strong>
+    <p><b>Slug:</b> ${escapeHtml(landing.slug || "-")}</p>
+    <p><b>Estado:</b> ${escapeHtml(landing.status || "-")} · <b>Index:</b> ${escapeHtml(landing.index_status || "-")} · <b>Score:</b> ${escapeHtml(landing.quality_score || 0)}</p>
+    <p><b>Quality gate:</b> ${escapeHtml(seoGateLabel(landing.quality_gate_status || payload.quality_gate_summary?.quality_gate_status || "not_calculated"))}</p>
+    <p><b>Publicacion:</b> no publicado · <b>Sitemap:</b> no tocado</p>
+    ${
+      failed.length
+        ? `<p><b>Checks fallidos:</b></p><ul>${failed.map((check) => `<li>${escapeHtml(seoGateReasonLabel(check.id) || check.id)}</li>`).join("")}</ul>`
+        : "<p>Sin checks bloqueantes. Queda pendiente de revision manual antes de publicar.</p>"
+    }
   `;
 }
 
@@ -5397,6 +5420,21 @@ async function changeSeoKeywordStatus(id, nextStatus) {
   showStatus(`Oportunidad marcada como ${nextStatus}.`, "good");
 }
 
+async function createSeoDraftFromApprovedBrief(id) {
+  showStatus("Creando borrador SEO desde brief aprobado...");
+  const payload = await api("/api/admin?resource=seo/keyword-backlog", {
+    method: "POST",
+    body: JSON.stringify({ action: "create_draft_from_approved_brief", id })
+  });
+  await Promise.allSettled([loadSeoKeywordBacklog(), loadSeo()]);
+  renderSeoKeywordDraftResult(payload);
+  const landing = payload.landing || {};
+  showStatus(
+    `Borrador SEO creado: ${landing.slug || "landing"} · score ${landing.quality_score || 0} · noindex`,
+    landing.quality_gate_status === "failed" ? "neutral" : "good"
+  );
+}
+
 async function loadKpis() {
   const payload = await api("/api/admin?resource=kpis/settings");
   renderKpis(payload);
@@ -6225,6 +6263,11 @@ if (els.seoKeywordRows) {
     const saveBriefButton = event.target.closest("[data-seo-keyword-save-brief]");
     if (saveBriefButton) {
       saveSeoKeywordBrief(saveBriefButton.dataset.seoKeywordSaveBrief).catch((error) => showStatus(error.message, "bad"));
+      return;
+    }
+    const createDraftButton = event.target.closest("[data-seo-keyword-create-draft]");
+    if (createDraftButton) {
+      createSeoDraftFromApprovedBrief(createDraftButton.dataset.seoKeywordCreateDraft).catch((error) => showStatus(error.message, "bad"));
       return;
     }
     const statusButton = event.target.closest("[data-seo-keyword-change-status]");

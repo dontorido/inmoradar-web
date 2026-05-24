@@ -299,6 +299,8 @@ test("backoffice SEO muestra backlog de keywords y briefs sin publicar", () => {
   assert.match(adminJs, /create_opportunity/);
   assert.match(adminJs, /save_brief/);
   assert.match(adminJs, /change_status/);
+  assert.match(adminJs, /create_draft_from_approved_brief/);
+  assert.match(adminJs, /data-seo-keyword-create-draft/);
   assert.match(adminJs, /resource=seo\/keyword-backlog/);
 });
 

@@ -494,3 +494,218 @@ test("seo keyword backlog escrituras fallan seguro sin Supabase configurado", as
     }
   );
 });
+
+test("seo keyword backlog no crea draft si la oportunidad no esta approved", async () => {
+  const previousFetch = global.fetch;
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        assert.notEqual(options.method, "POST");
+        if (String(url).includes("/rest/v1/seo_keyword_backlog?")) {
+          return supabaseJson([{ ...SEO_KEYWORD_BACKLOG_SEEDS[0], id: 45, status: "brief_ready", brief_json: buildSeoKeywordBrief(SEO_KEYWORD_BACKLOG_SEEDS[0]) }]);
+        }
+        throw new Error(`Unexpected fetch ${String(url)}`);
+      };
+      try {
+        const { res, body } = await callAdmin({
+          method: "POST",
+          body: { action: "create_draft_from_approved_brief", id: 45 }
+        });
+
+        assert.equal(res.statusCode, 409);
+        assert.equal(body.error, "keyword_not_approved");
+        assert.equal(body.generated_landing, false);
+        assert.equal(body.touched_sitemap, false);
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+});
+
+test("seo keyword backlog no crea draft sin brief_json", async () => {
+  const previousFetch = global.fetch;
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        assert.notEqual(options.method, "POST");
+        if (String(url).includes("/rest/v1/seo_keyword_backlog?")) {
+          return supabaseJson([{ ...SEO_KEYWORD_BACKLOG_SEEDS[0], id: 45, status: "approved", brief_json: null }]);
+        }
+        throw new Error(`Unexpected fetch ${String(url)}`);
+      };
+      try {
+        const { res, body } = await callAdmin({
+          method: "POST",
+          body: { action: "create_draft_from_approved_brief", id: 45 }
+        });
+
+        assert.equal(res.statusCode, 409);
+        assert.equal(body.error, "brief_required");
+        assert.equal(body.generated_landing, false);
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+});
+
+test("seo keyword backlog crea draft aprobado con noindex, quality gate y sin sitemap", async () => {
+  const previousFetch = global.fetch;
+  const seed = {
+    ...SEO_KEYWORD_BACKLOG_SEEDS.find((item) => item.id === "seo_kw_003"),
+    id: 45,
+    status: "approved",
+    suggested_landing: "/analizar-anuncio-inmobiliario/",
+    brief_json: null
+  };
+  seed.brief_json = buildSeoKeywordBrief(seed);
+  let landingInsert = null;
+  let keywordPatch = null;
+  const seenUrls = [];
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        const requestUrl = String(url);
+        seenUrls.push(requestUrl);
+        if ((options.method || "GET") === "GET" && requestUrl.includes("/rest/v1/seo_keyword_backlog?")) {
+          return supabaseJson([seed]);
+        }
+        if ((options.method || "GET") === "GET" && requestUrl.includes("/rest/v1/seo_landings?slug=eq.")) {
+          return supabaseJson([]);
+        }
+        if (options.method === "POST" && requestUrl.endsWith("/rest/v1/seo_landings")) {
+          landingInsert = JSON.parse(options.body);
+          return supabaseJson([{ id: 900, ...landingInsert }]);
+        }
+        if (options.method === "PATCH" && requestUrl.includes("/rest/v1/seo_keyword_backlog?id=eq.45")) {
+          keywordPatch = JSON.parse(options.body);
+          return supabaseJson([{ ...seed, ...keywordPatch }]);
+        }
+        throw new Error(`Unexpected fetch ${requestUrl}`);
+      };
+      try {
+        const { res, body } = await callAdmin({
+          method: "POST",
+          body: { action: "create_draft_from_approved_brief", id: 45 }
+        });
+
+        assert.equal(res.statusCode, 201);
+        assert.equal(body.generated_landing, true);
+        assert.equal(body.published, false);
+        assert.equal(body.indexed, false);
+        assert.equal(body.touched_sitemap, false);
+        assert.equal(body.landing.status, "needs_review");
+        assert.equal(body.landing.index_status, "noindex");
+        assert.equal(body.landing.published_at, null);
+        assert.equal(body.landing.quality_gate_status, "passed");
+        assert.ok(body.landing.quality_score >= 80);
+        assert.equal(landingInsert.status, "needs_review");
+        assert.equal(landingInsert.index_status, "noindex");
+        assert.equal(landingInsert.published_at, null);
+        assert.equal(landingInsert.source_data_json.seo_keyword_backlog_id, "45");
+        assert.equal(landingInsert.source_data_json.quality_gate.can_index, true);
+        assert.match(landingInsert.body_html, /data-install-button/);
+        assert.match(landingInsert.body_html, /data-install-source="seo_keyword_backlog"/);
+        assert.match(landingInsert.body_html, /referencia orientativa/i);
+        assert.match(landingInsert.body_html, /no es una tasacion/i);
+        assert.match(landingInsert.body_html, /herramienta independiente/i);
+        assert.doesNotMatch(landingInsert.body_html, /afiliacion oficial con Idealista/i);
+        assert.equal(keywordPatch.status, "draft");
+        assert.equal(seenUrls.some((requestUrl) => requestUrl.includes("sitemap")), false);
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+});
+
+test("seo keyword backlog evita duplicar draft si ya existe la landing sugerida", async () => {
+  const previousFetch = global.fetch;
+  const seed = {
+    ...SEO_KEYWORD_BACKLOG_SEEDS[2],
+    id: 45,
+    status: "approved",
+    brief_json: buildSeoKeywordBrief({ ...SEO_KEYWORD_BACKLOG_SEEDS[2], id: 45 })
+  };
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        const requestUrl = String(url);
+        if (options.method === "POST") throw new Error("POST should not run for duplicate drafts");
+        if ((options.method || "GET") === "GET" && requestUrl.includes("/rest/v1/seo_keyword_backlog?")) {
+          return supabaseJson([seed]);
+        }
+        if ((options.method || "GET") === "GET" && requestUrl.includes("/rest/v1/seo_landings?slug=eq.")) {
+          return supabaseJson([
+            {
+              id: 900,
+              slug: "analizar-anuncio-inmobiliario",
+              status: "draft",
+              index_status: "noindex",
+              quality_score: 80,
+              source_data_json: {}
+            }
+          ]);
+        }
+        throw new Error(`Unexpected fetch ${requestUrl}`);
+      };
+      try {
+        const { res, body } = await callAdmin({
+          method: "POST",
+          body: { action: "create_draft_from_approved_brief", id: 45 }
+        });
+
+        assert.equal(res.statusCode, 409);
+        assert.equal(body.error, "seo_draft_already_exists");
+        assert.equal(body.reason, "suggested_landing_exists");
+        assert.equal(body.generated_landing, false);
+        assert.equal(body.touched_sitemap, false);
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+});
+
+test("seo keyword backlog create_draft falla seguro sin Supabase", async () => {
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: undefined,
+      SUPABASE_SERVICE_ROLE_KEY: undefined
+    },
+    async () => {
+      const { res, body } = await callAdmin({
+        method: "POST",
+        body: { action: "create_draft_from_approved_brief", id: 45 }
+      });
+
+      assert.equal(res.statusCode, 503);
+      assert.equal(body.error, "seo_keyword_backlog_storage_unavailable");
+      assert.equal(body.generated_landing, false);
+      assert.equal(body.published, false);
+      assert.equal(body.touched_sitemap, false);
+    }
+  );
+});

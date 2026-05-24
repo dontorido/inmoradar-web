@@ -31,6 +31,7 @@ const {
 } = require("../lib/social-video/runway");
 const { summarizeExtensionUsage } = require("../lib/extension-usage/metrics");
 const { SEO_INDEX_MIN_SCORE, calculateSeoLandingQuality, evaluateSeoQualityGate } = require("./_seo/quality");
+const { canonicalForSlug, countWords, escapeHtml, slugify } = require("./_seo/text");
 const { buildRevenueEventFromLemonPayload, summarizeMonthlyRevenue } = require("../lib/sales/revenue");
 const {
   normalizeReleaseArtifactInput,
@@ -1514,6 +1515,253 @@ function seoKeywordBacklogNoPublishFlags() {
   };
 }
 
+function seoKeywordDraftSlug(item = {}) {
+  return normalizeSlug(item.suggested_landing) || `guias/${slugify(item.keyword || "seo-draft")}`;
+}
+
+function seoKeywordDraftFaq(brief = {}) {
+  const questions = Array.isArray(brief.suggested_faq) ? brief.suggested_faq.filter(Boolean) : [];
+  const fallback = [
+    "InmoRadar da una tasacion exacta?",
+    "Que datos conviene revisar antes de contactar?",
+    "Como debo interpretar esta guia?",
+    "La herramienta pertenece a algun portal inmobiliario?"
+  ];
+  return [...questions, ...fallback].slice(0, 5).map((question) => ({
+    question: String(question),
+    answer:
+      "Usalo como una referencia orientativa para preparar mejores preguntas. Antes de decidir, valida datos del anuncio, visita, documentacion y asesoramiento profesional cuando proceda."
+  }));
+}
+
+function seoKeywordDraftList(items = []) {
+  return items
+    .filter(Boolean)
+    .slice(0, 8)
+    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .join("");
+}
+
+function seoKeywordDraftFaqHtml(items = []) {
+  return `<section class="seo-section seo-faq" id="faq" data-guide-specific="true">
+    <h2>Preguntas frecuentes</h2>
+${items
+  .map(
+    (item) => `    <details>
+      <summary>${escapeHtml(item.question)}</summary>
+      <p>${escapeHtml(item.answer)}</p>
+    </details>`
+  )
+  .join("\n")}
+  </section>`;
+}
+
+function seoKeywordDraftBody({ item, brief, faqItems, dateLabel }) {
+  const h2 = Array.isArray(brief.h2_structure) && brief.h2_structure.length ? brief.h2_structure : ["Que revisar antes de contactar"];
+  const risks = Array.isArray(brief.risks) ? brief.risks : [];
+  const sources = Array.isArray(brief.required_sources) ? brief.required_sources : [];
+  const links = Array.isArray(brief.recommended_internal_links) && brief.recommended_internal_links.length
+    ? brief.recommended_internal_links
+    : ["/", "/analizar-anuncio-inmobiliario/", "/noticias"];
+  const cityText = item.city ? ` en ${item.city}` : "";
+  const targetUser = brief.target_user || "Usuario que busca vivienda en Espana y quiere revisar un anuncio antes de contactar.";
+  const cta = brief.cta || item.recommended_cta || "Analiza anuncios antes de contactar";
+
+  return `<article class="seo-reading" data-template="editorial_guide" data-draft-source="seo_keyword_backlog">
+    <nav class="seo-breadcrumb" aria-label="Breadcrumb"><a href="/">INMORADAR</a><span>/</span><a href="/noticias">GUIAS</a><span>/</span><strong>BORRADOR SEO</strong></nav>
+    <header class="seo-page-hero" data-guide-specific="true">
+      <p class="seo-page-eyebrow">GUIA INMORADAR - BORRADOR EDITORIAL</p>
+      <h1>${escapeHtml(brief.suggested_h1 || item.keyword)}</h1>
+      <p class="seo-lead">${escapeHtml(targetUser)} Esta pagina nace de una oportunidad SEO aprobada y queda como borrador revisable antes de publicar.</p>
+      <div class="seo-meta-row"><span>LECTURA: 5-7 MIN</span><span>ACTUALIZADA: ${escapeHtml(dateLabel)}</span></div>
+    </header>
+
+    <div class="seo-reading-grid">
+      <aside class="seo-sidebar">
+        <section class="seo-data-card">
+          <p class="seo-sidebar-kicker">REVISION EDITORIAL</p>
+          <ul>
+            <li>Comprobar que el titulo responde a la busqueda.</li>
+            <li>Validar fuentes antes de publicar.</li>
+            <li>Confirmar que el CTA mide clic o intencion, no instalacion real.</li>
+            <li>Mantener noindex hasta aprobacion manual.</li>
+          </ul>
+          <p class="seo-card-note">Este borrador no se publica ni entra en sitemap por crearse desde el backlog.</p>
+        </section>
+      </aside>
+
+      <div class="seo-content">
+        <section class="seo-section" id="intencion" data-guide-specific="true">
+          <h2>${escapeHtml(h2[0] || "Que quiere resolver esta busqueda")}</h2>
+          <p>La busqueda <strong>${escapeHtml(item.keyword)}</strong>${escapeHtml(cityText)} suele aparecer cuando una persona ya esta comparando viviendas y necesita un criterio previo antes de escribir, llamar o pedir una visita. La respuesta no deberia prometer una tasacion exacta ni una conclusion definitiva, sino una forma ordenada de leer el anuncio: precio, metros, zona, transporte, gastos, estado probable y dudas que conviene aclarar.</p>
+          <p>El objetivo de este contenido es que el usuario entienda rapido que InmoRadar ayuda a analizar pisos antes de contactar. No sustituye una visita ni el criterio profesional, pero si reduce la improvisacion inicial. Una buena landing debe convertir una duda amplia en una secuencia concreta de comprobaciones utiles.</p>
+        </section>
+
+        <section class="seo-section" id="estructura" data-guide-specific="true">
+          <h2>${escapeHtml(h2[1] || "Estructura recomendada")}</h2>
+          <p>La pagina debe empezar con la duda principal y aterrizarla en acciones. Primero se explica que el precio visible no cuenta todo. Despues se separan datos del anuncio, senales del entorno y costes que no siempre aparecen en la ficha. Por ultimo, se muestra como InmoRadar sirve como filtro previo para decidir si merece la pena contactar.</p>
+          <ul>${seoKeywordDraftList(h2)}</ul>
+          <p>Esta estructura evita contenido thin porque obliga a desarrollar ejemplos, preguntas y limites. Tambien evita una plantilla que solo cambia ciudad: cada seccion debe contener informacion especifica sobre la intencion y, si aplica, sobre la ciudad o provincia indicada en el backlog.</p>
+        </section>
+
+        <section class="seo-section" id="criterios" data-guide-specific="true">
+          <h2>Que debe comprobar el usuario</h2>
+          <p>Antes de contactar por un anuncio conviene revisar el precio por metro cuadrado, la superficie usada para calcularlo, la diferencia frente a referencias agregadas, la entrada estimada, la cuota orientativa, la comunicacion con transporte, el ruido potencial, la dificultad de aparcamiento, los gastos de comunidad y cualquier indicio de reforma. Ninguna senal por separado decide si una vivienda encaja, pero juntas ayudan a priorizar.</p>
+          <p>Tambien hay que mirar lo que falta. Si el anuncio no aclara metros utiles, comunidad, IBI, estado de instalaciones, orientacion, ascensor o disponibilidad de garaje, la mejor accion no es asumir: es preparar preguntas. InmoRadar debe presentarse como una capa de lectura prudente que ayuda a ordenar esas preguntas sin convertir una estimacion en verdad absoluta.</p>
+        </section>
+
+        <section class="seo-section" id="prudencia" data-guide-specific="true">
+          <h2>Limites y prudencia</h2>
+          <p>${escapeHtml(
+            brief.prudence_block ||
+              "Los datos deben presentarse como referencia orientativa. No es una tasacion, no garantiza el precio real ni sustituye una revision profesional."
+          )}</p>
+          <p>Una referencia orientativa sirve para detectar si un anuncio merece mas analisis, pero no para cerrar una decision. El coste final de vivir ahi depende de financiacion, impuestos, comunidad, obras, movilidad, estado real de la vivienda y negociacion. Por eso la pagina debe invitar a contrastar datos antes de actuar.</p>
+          <p>InmoRadar es una herramienta independiente de portales inmobiliarios y de anunciantes. El texto no debe sugerir integracion oficial, colaboracion comercial ni acceso privilegiado a datos de terceros. Su valor esta en ordenar senales disponibles y ayudar al usuario a preguntar mejor.</p>
+        </section>
+
+        <section class="seo-section" id="riesgos" data-guide-specific="true">
+          <h2>Riesgos editoriales a revisar</h2>
+          <ul>${seoKeywordDraftList(risks)}</ul>
+          <p>Si faltan fuentes, ejemplos propios o especificidad, el borrador debe quedarse en revision. La futura pagina solo deberia avanzar cuando aporte algo mas que una respuesta generica: checklist accionable, FAQ util, enlaces internos, fuentes necesarias y un CTA coherente.</p>
+        </section>
+
+        <section class="seo-section" id="fuentes" data-guide-specific="true">
+          <h2>Datos y fuentes necesarias</h2>
+          <ul>${seoKeywordDraftList(sources)}</ul>
+          <p><strong>Fuente:</strong> brief editorial InmoRadar y metodologia propia de revision de anuncios. <strong>Fecha del dato:</strong> ${escapeHtml(
+            dateLabel
+          )}. Antes de publicar, cualquier dato local debe contrastarse con fuente visible y fecha.</p>
+        </section>
+
+        <section class="seo-section" id="cta" data-guide-specific="true">
+          <h2>Analiza anuncios antes de contactar</h2>
+          <p>${escapeHtml(cta)}. InmoRadar ayuda a transformar el anuncio en una lectura practica: resumen, precio por metro cuadrado, senales de riesgo, comparacion y preguntas utiles.</p>
+          <div class="seo-final-actions">
+            <button class="seo-button seo-button-primary" type="button" data-install-button data-install-source="seo_keyword_backlog">EMPEZAR GRATIS</button>
+            ${links
+              .slice(0, 3)
+              .map((href) => `<a class="seo-button seo-button-secondary" href="${escapeHtml(href)}">${escapeHtml(href === "/" ? "VER INMORADAR" : "ENLACE INTERNO")}</a>`)
+              .join("")}
+          </div>
+        </section>
+        ${seoKeywordDraftFaqHtml(faqItems)}
+      </div>
+    </div>
+  </article>`;
+}
+
+function buildSeoDraftFromApprovedBrief(item = {}, now = new Date().toISOString()) {
+  const normalized = normalizeBacklogItem(item);
+  const briefValidation = validateBriefJson(normalized.brief_json);
+  if (!briefValidation.ok) return { ok: false, error: "brief_required", status: 409 };
+  const brief = briefValidation.brief;
+  const slug = seoKeywordDraftSlug(normalized);
+  const date = new Date(now);
+  const dateLabel = Number.isNaN(date.getTime()) ? String(now).slice(0, 10) : date.toISOString().slice(0, 10);
+  const faqItems = seoKeywordDraftFaq(brief);
+  const landing = {
+    slug,
+    title: String(brief.suggested_h1 || normalized.keyword).slice(0, 180),
+    meta_title: String(brief.suggested_meta_title || `${brief.suggested_h1 || normalized.keyword} | InmoRadar`).slice(0, 180),
+    meta_description: String(
+      brief.suggested_meta_description ||
+        `Guia prudente para ${normalized.keyword}: que revisar, que datos hacen falta y como usar InmoRadar antes de contactar.`
+    ).slice(0, 260),
+    h1: String(brief.suggested_h1 || normalized.keyword).slice(0, 180),
+    body_html: "",
+    city: normalized.city || "Espana",
+    province: normalized.province || "",
+    autonomous_community: "",
+    template_type: "editorial_guide",
+    canonical_url: canonicalForSlug(slug),
+    faq: faqItems
+  };
+  landing.body_html = seoKeywordDraftBody({ item: normalized, brief, faqItems, dateLabel });
+  landing.word_count = countWords(landing.body_html);
+  const source = {
+    operation: "editorial",
+    source: "inmoradar_editorial_brief",
+    source_url: canonicalForSlug("metodologia"),
+    period_label: dateLabel,
+    period_date: dateLabel,
+    geo_level: normalized.city ? "municipality" : "country"
+  };
+  const sourceData = {
+    generated_by: "seo_keyword_backlog_approved_brief",
+    template_type: "editorial_guide",
+    seo_keyword_backlog_id: String(normalized.id),
+    keyword_backlog: {
+      id: String(normalized.id),
+      keyword: normalized.keyword,
+      intent: normalized.intent,
+      page_type: normalized.page_type,
+      suggested_landing: normalized.suggested_landing
+    },
+    hasRealData: true,
+    hasProvincialOnly: false,
+    records: [source],
+    sources: [source],
+    faq: faqItems,
+    brief_json: brief
+  };
+  const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: faqItems });
+  const qualityGate = evaluateSeoQualityGate({
+    landing,
+    sourceData: { ...sourceData, faq: faqItems },
+    quality,
+    minScore: SEO_INDEX_MIN_SCORE
+  });
+  const status = qualityGate.can_publish ? "needs_review" : "draft";
+  const sourceDataWithGate = {
+    ...sourceData,
+    quality,
+    quality_gate: qualityGate
+  };
+  const gateSummary = summarizeSeoQualityGateForAdmin({
+    ...landing,
+    status,
+    index_status: "noindex",
+    quality_score: quality.score,
+    word_count: quality.word_count,
+    source_data_json: sourceDataWithGate
+  });
+  sourceDataWithGate.quality_gate_summary = {
+    quality_gate_status: gateSummary.quality_gate_status,
+    failed_checks: gateSummary.failed_checks,
+    exclusion_reason: gateSummary.exclusion_reason,
+    sitemap_status: gateSummary.sitemap_status
+  };
+  return {
+    ok: true,
+    brief,
+    quality,
+    qualityGate,
+    gateSummary,
+    record: {
+      opportunity_id: null,
+      slug: landing.slug,
+      title: landing.title,
+      meta_title: landing.meta_title,
+      meta_description: landing.meta_description,
+      h1: landing.h1,
+      body_html: landing.body_html,
+      city: landing.city,
+      province: landing.province,
+      autonomous_community: landing.autonomous_community,
+      template_type: landing.template_type,
+      canonical_url: landing.canonical_url,
+      index_status: "noindex",
+      status,
+      quality_score: quality.score,
+      word_count: quality.word_count,
+      source_data_json: sourceDataWithGate,
+      published_at: null,
+      last_generated_at: now
+    }
+  };
+}
+
 function seoKeywordStorageUnavailable(error) {
   return {
     status: 503,
@@ -1721,6 +1969,93 @@ async function saveSeoKeywordBrief(body = {}) {
   }
 }
 
+async function createSeoDraftFromApprovedBrief(body = {}) {
+  if (!hasSupabaseConfig()) return seoKeywordStorageUnavailable();
+  const id = String(body.id || body.keyword_id || "").trim();
+  if (!id) return { status: 400, payload: { ok: false, error: "keyword_id_required", ...seoKeywordBacklogNoPublishFlags() } };
+  try {
+    const current = await fetchSeoKeywordBacklogItemById(id);
+    if (!current) return { status: 404, payload: { ok: false, error: "keyword_not_found", ...seoKeywordBacklogNoPublishFlags() } };
+    const item = normalizeBacklogItem(current);
+    if (item.status !== "approved") {
+      return {
+        status: 409,
+        payload: {
+          ok: false,
+          error: "keyword_not_approved",
+          required_status: "approved",
+          current_status: item.status,
+          ...seoKeywordBacklogNoPublishFlags()
+        }
+      };
+    }
+    const draft = buildSeoDraftFromApprovedBrief(current, new Date().toISOString());
+    if (!draft.ok) {
+      return {
+        status: draft.status || 409,
+        payload: {
+          ok: false,
+          error: draft.error || "brief_required",
+          ...seoKeywordBacklogNoPublishFlags()
+        }
+      };
+    }
+    const existing = await fetchLanding(draft.record.slug);
+    if (existing) {
+      return {
+        status: 409,
+        payload: {
+          ok: false,
+          error: "seo_draft_already_exists",
+          reason: "suggested_landing_exists",
+          existing_landing: decorateSeoLandingForAdmin(existing),
+          ...seoKeywordBacklogNoPublishFlags()
+        }
+      };
+    }
+    const rows = await supabaseFetch("seo_landings", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(draft.record)
+    });
+    const saved = Array.isArray(rows) ? rows[0] || draft.record : draft.record;
+    let updatedKeyword = null;
+    try {
+      const keywordRows = await supabaseFetch(`seo_keyword_backlog?id=eq.${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({
+          status: "draft",
+          updated_by: String(body.updated_by || "backoffice").slice(0, 120),
+          updated_at: new Date().toISOString()
+        })
+      });
+      updatedKeyword = Array.isArray(keywordRows) ? keywordRows[0] || null : null;
+    } catch (error) {
+      updatedKeyword = null;
+    }
+    return {
+      status: 201,
+      payload: {
+        ok: true,
+        action: "create_draft_from_approved_brief",
+        generated_landing: true,
+        published: false,
+        indexed: false,
+        touched_sitemap: false,
+        landing: decorateSeoLandingForAdmin(saved),
+        keyword: normalizeBacklogItem(updatedKeyword || { ...current, status: "draft" }),
+        quality_gate: draft.qualityGate,
+        quality_gate_summary: draft.gateSummary,
+        changed_fields: ["seo_landings.draft", "seo_keyword_backlog.status"],
+        untouched_fields: ["published_at", "sitemap", "public_routes"]
+      }
+    };
+  } catch (error) {
+    return seoKeywordStorageUnavailable(error);
+  }
+}
+
 async function handleSeoKeywordBacklog(req, url) {
   const limit = clampLimit(url.searchParams.get("limit"), 15, 50);
   const status = String(url.searchParams.get("status") || "all").trim();
@@ -1753,6 +2088,7 @@ async function handleSeoKeywordBacklog(req, url) {
   if (action === "generate_brief") return generateSeoKeywordBrief(body, url);
   if (action === "save_brief") return saveSeoKeywordBrief(body);
   if (action === "change_status") return changeSeoKeywordStatus(body);
+  if (action === "create_draft_from_approved_brief") return createSeoDraftFromApprovedBrief(body);
   return { status: 400, payload: { ok: false, error: "invalid_action", ...seoKeywordBacklogNoPublishFlags() } };
 }
 
