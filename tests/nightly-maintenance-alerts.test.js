@@ -107,6 +107,56 @@ test("nightly maintenance loader reads structured status from report comment", (
   assert.equal(alerts.some((alert) => alert.id === "nightly-maintenance-sensitive-parallel-changes"), true);
 });
 
+test("nightly maintenance loader reads v1 schema from a regular json fence", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inmoradar-nightly-alerts-v1-"));
+  const reportPath = path.join(dir, "NIGHTLY_REFACTOR_REPORT.md");
+  fs.writeFileSync(
+    reportPath,
+    `# Informe nocturno
+
+Resumen humano que se conserva para lectura manual.
+
+\`\`\`json
+{
+  "schema": "inmoradar.nightly_maintenance.v1",
+  "generated_at": "2026-05-24T00:00:00.000Z",
+  "branch": "refactor/public-api-services",
+  "repo_clean": false,
+  "sensitive_files_changed": [
+    "admin.html",
+    "assets/admin.css",
+    "assets/admin.js"
+  ],
+  "tests_passed": false,
+  "failed_tests": [
+    "node --test tests/*.test.js"
+  ],
+  "branch_pushed": true,
+  "requires_human_decision": true,
+  "human_decision_reason": "Repo dirty with parallel changes in sensitive backoffice files",
+  "risk_domains": [
+    "seo",
+    "sitemap",
+    "robots",
+    "canonical"
+  ],
+  "status": "blocked",
+  "summary": "Maintenance stopped before touching code because the repository was not clean."
+}
+\`\`\`
+`,
+    "utf8"
+  );
+
+  const alerts = loadNightlyMaintenanceAlerts({ rootDir: dir, now: NOW });
+
+  assert.equal(alerts.some((alert) => alert.id === "nightly-maintenance-sensitive-parallel-changes" && alert.message.includes("assets/admin.css")), true);
+  assert.equal(alerts.some((alert) => alert.id === "nightly-maintenance-repo-dirty" && alert.created_at === "2026-05-24T00:00:00.000Z"), true);
+  assert.equal(alerts.some((alert) => alert.id === "nightly-maintenance-tests-failed" && alert.message.includes("node --test tests/*.test.js")), true);
+  assert.equal(alerts.some((alert) => alert.id === "nightly-maintenance-human-decision-required" && alert.message.includes("Repo dirty")), true);
+  assert.equal(alerts.some((alert) => alert.id === "nightly-maintenance-risk-domains" && alert.message.includes("seo")), true);
+});
+
 test("nightly maintenance loader stays quiet when no report exists", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inmoradar-nightly-alerts-empty-"));
 
