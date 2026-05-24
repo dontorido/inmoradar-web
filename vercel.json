@@ -61,6 +61,8 @@
     { "source": "/noticias/:slug", "destination": "/article.html?slug=:slug" },
     { "source": "/faq", "destination": "/faq.html" },
     { "source": "/contacto", "destination": "/contacto.html" },
+    { "source": "/status", "destination": "/status.html" },
+    { "source": "/status/", "destination": "/status.html" },
     { "source": "/privacidad", "destination": "/privacidad.html" },
     { "source": "/terminos", "destination": "/terminos.html" },
     { "source": "/success", "destination": "/success.html" },

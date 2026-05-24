@@ -27,6 +27,8 @@
 /noticias/:slug /article.html?slug=:slug 200
 /faq /faq.html 200
 /contacto /contacto.html 200
+/status /status.html 200
+/status/ /status.html 200
 /privacidad /privacidad.html 200
 /terminos /terminos.html 200
 /success /success.html 200

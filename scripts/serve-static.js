@@ -48,6 +48,8 @@ const rewrites = {
   "/noticias": "/noticias.html",
   "/faq": "/faq.html",
   "/contacto": "/contacto.html",
+  "/status": "/status.html",
+  "/status/": "/status.html",
   "/privacidad": "/privacidad.html",
   "/terminos": "/terminos.html",
   "/success": "/success.html",
