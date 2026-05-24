@@ -93,8 +93,28 @@
               <p class="admin-panel-sub">Usuarios activos, sesiones, navegadores, países y tiempo de uso medidos con eventos anónimos de la extensión.</p>
             </div>
           </div>
+          <div class="admin-view-toolbar admin-extension-toolbar" data-extension-filters>
+            <div class="admin-extension-presets" aria-label="Rangos rapidos">
+              <button class="admin-button tiny ghost" type="button" data-extension-preset="24h">24h</button>
+              <button class="admin-button tiny ghost" type="button" data-extension-preset="7d">7d</button>
+              <button class="admin-button tiny ghost" type="button" data-extension-preset="30d">30d</button>
+              <button class="admin-button tiny ghost" type="button" data-extension-preset="month">Mes actual</button>
+              <button class="admin-button tiny ghost" type="button" data-extension-preset="all">Todo</button>
+            </div>
+            <label class="admin-range-control">
+              <span>Desde</span>
+              <input type="date" data-extension-from>
+            </label>
+            <label class="admin-range-control">
+              <span>Hasta</span>
+              <input type="date" data-extension-to>
+            </label>
+            <button class="admin-button tiny ghost" type="button" data-extension-refresh>Actualizar extension</button>
+          </div>
+          <p class="admin-extension-range-feedback" data-extension-range-feedback></p>
           <section class="admin-stat-grid compact" data-extension-stats></section>
           <div class="admin-extension-breakdown" data-extension-breakdown></div>
+          <div class="admin-extension-timeseries" data-extension-timeseries></div>
         </article>
 
         <article class="admin-panel">

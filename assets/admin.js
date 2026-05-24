@@ -5,6 +5,9 @@ const RELEASE_TARGETS = ["web", "extension", "backoffice"];
 const MAX_RELEASE_FILE_BYTES = 3 * 1024 * 1024;
 const ANALYTICS_DEFAULT_DAYS = 7;
 const ANALYTICS_MAX_RANGE_DAYS = 90;
+const EXTENSION_USAGE_DEFAULT_PRESET = "30d";
+const EXTENSION_USAGE_TIMEZONE = "Europe/Madrid";
+const EXTENSION_USAGE_PRESETS = new Set(["24h", "7d", "30d", "month", "all", "custom"]);
 const INITIAL_ADMIN_PATH = window.location.pathname || "";
 const INITIAL_MARKETING_SUBSECTION = INITIAL_ADMIN_PATH.includes("/backoffice/marketing/viraliza")
   ? "marketing-viraliza"
@@ -148,6 +151,7 @@ const VIDEO_TOPIC_PROPERTY_DATA = Object.freeze({
 });
 
 const INITIAL_ANALYTICS_RANGE = defaultAnalyticsDateRange();
+const INITIAL_EXTENSION_USAGE_RANGE = defaultExtensionUsageRange();
 
 const state = {
   token: sessionStorage.getItem(TOKEN_KEY) || "",
@@ -219,6 +223,12 @@ const state = {
     learning: null,
     warning: ""
   },
+  extensionUsage: {
+    preset: INITIAL_EXTENSION_USAGE_RANGE.preset,
+    fromDate: INITIAL_EXTENSION_USAGE_RANGE.from,
+    toDate: INITIAL_EXTENSION_USAGE_RANGE.to,
+    timezone: EXTENSION_USAGE_TIMEZONE
+  },
   linkedin: {
     connection: null,
     settings: {},
@@ -263,6 +273,12 @@ const els = {
   revenueChart: document.querySelector("[data-revenue-chart]"),
   extensionStats: document.querySelector("[data-extension-stats]"),
   extensionBreakdown: document.querySelector("[data-extension-breakdown]"),
+  extensionTimeseries: document.querySelector("[data-extension-timeseries]"),
+  extensionFrom: document.querySelector("[data-extension-from]"),
+  extensionTo: document.querySelector("[data-extension-to]"),
+  extensionRefresh: document.querySelector("[data-extension-refresh]"),
+  extensionPresetButtons: document.querySelectorAll("[data-extension-preset]"),
+  extensionRangeFeedback: document.querySelector("[data-extension-range-feedback]"),
   analyticsSummary: document.querySelector("[data-analytics-summary]"),
   analyticsPages: document.querySelector("[data-analytics-pages]"),
   analyticsLearning: document.querySelector("[data-analytics-learning]"),
@@ -417,7 +433,9 @@ function tooltipAttrs(message) {
 let adminTooltipEl = null;
 
 function tooltipTargetFromEvent(event) {
-  return event.target instanceof Element ? event.target.closest(".admin-linkedin-panel [data-tooltip], .admin-seo-performance-panel [data-tooltip]") : null;
+  return event.target instanceof Element
+    ? event.target.closest(".admin-linkedin-panel [data-tooltip], .admin-seo-performance-panel [data-tooltip], .admin-extension-panel [data-tooltip]")
+    : null;
 }
 
 function ensureAdminTooltip() {
@@ -534,6 +552,57 @@ function defaultAnalyticsDateRange() {
   };
 }
 
+function extensionPresetDateRange(preset = EXTENSION_USAGE_DEFAULT_PRESET) {
+  const normalized = EXTENSION_USAGE_PRESETS.has(preset) ? preset : EXTENSION_USAGE_DEFAULT_PRESET;
+  const to = new Date();
+  if (normalized === "all") {
+    return { preset: "all", from: "", to: "" };
+  }
+  if (normalized === "24h") {
+    return { preset: "24h", from: toLocalDateValue(addLocalDays(to, -1)), to: toLocalDateValue(to) };
+  }
+  if (normalized === "7d") {
+    return { preset: "7d", from: toLocalDateValue(addLocalDays(to, -6)), to: toLocalDateValue(to) };
+  }
+  if (normalized === "month") {
+    const from = new Date(to.getFullYear(), to.getMonth(), 1);
+    return { preset: "month", from: toLocalDateValue(from), to: toLocalDateValue(to) };
+  }
+  return { preset: "30d", from: toLocalDateValue(addLocalDays(to, -29)), to: toLocalDateValue(to) };
+}
+
+function normalizeExtensionPreset(value) {
+  const preset = String(value || "").trim().toLowerCase();
+  return EXTENSION_USAGE_PRESETS.has(preset) ? preset : EXTENSION_USAGE_DEFAULT_PRESET;
+}
+
+function defaultExtensionUsageRange() {
+  const params = new URLSearchParams(window.location.search || "");
+  const preset = normalizeExtensionPreset(params.get("extension_preset") || params.get("extPreset") || EXTENSION_USAGE_DEFAULT_PRESET);
+  const from = params.get("extension_from") || params.get("extFrom") || "";
+  const to = params.get("extension_to") || params.get("extTo") || "";
+  if (preset === "all") return { preset, from: "", to: "" };
+  if (from || to) {
+    const normalized = normalizeExtensionDateRange(from, to);
+    return { ...normalized, preset: preset === EXTENSION_USAGE_DEFAULT_PRESET ? "custom" : preset };
+  }
+  return extensionPresetDateRange(preset);
+}
+
+function normalizeExtensionDateRange(fromValue, toValue) {
+  let from = parseLocalDateValue(fromValue);
+  let to = parseLocalDateValue(toValue);
+  if (!from && !to) return extensionPresetDateRange(EXTENSION_USAGE_DEFAULT_PRESET);
+  if (!from) from = to;
+  if (!to) to = from;
+  if (from > to) [from, to] = [to, from];
+  return {
+    preset: "custom",
+    from: toLocalDateValue(from),
+    to: toLocalDateValue(to)
+  };
+}
+
 function normalizeAnalyticsDateRange(fromValue, toValue) {
   const defaults = defaultAnalyticsDateRange();
   let from = parseLocalDateValue(fromValue) || parseLocalDateValue(defaults.from);
@@ -577,6 +646,92 @@ function readAnalyticsDateInputs() {
   state.analytics.toDate = range.to;
   syncAnalyticsDateInputs();
   return range;
+}
+
+function syncExtensionUsageInputs() {
+  if (els.extensionFrom) {
+    els.extensionFrom.value = state.extensionUsage.fromDate || "";
+    els.extensionFrom.disabled = state.extensionUsage.preset === "all";
+  }
+  if (els.extensionTo) {
+    els.extensionTo.value = state.extensionUsage.toDate || "";
+    els.extensionTo.disabled = state.extensionUsage.preset === "all";
+  }
+  els.extensionPresetButtons?.forEach((button) => {
+    const active = button.dataset.extensionPreset === state.extensionUsage.preset;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
+
+function setExtensionRangeFeedback(message = "", tone = "neutral") {
+  if (!els.extensionRangeFeedback) return;
+  els.extensionRangeFeedback.textContent = message;
+  els.extensionRangeFeedback.dataset.tone = tone;
+  els.extensionRangeFeedback.hidden = !message;
+}
+
+function syncExtensionUsageQueryString() {
+  const params = new URLSearchParams(window.location.search || "");
+  params.set("extension_preset", state.extensionUsage.preset || EXTENSION_USAGE_DEFAULT_PRESET);
+  if (state.extensionUsage.preset === "all") {
+    params.delete("extension_from");
+    params.delete("extension_to");
+  } else {
+    params.set("extension_from", state.extensionUsage.fromDate || "");
+    params.set("extension_to", state.extensionUsage.toDate || "");
+  }
+  const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash || ""}`;
+  window.history.replaceState({}, document.title, next);
+}
+
+function readExtensionUsageInputs() {
+  const fromValue = els.extensionFrom?.value || state.extensionUsage.fromDate;
+  const toValue = els.extensionTo?.value || state.extensionUsage.toDate;
+  const preset = state.extensionUsage.preset || EXTENSION_USAGE_DEFAULT_PRESET;
+  if (preset === "all") {
+    state.extensionUsage.fromDate = "";
+    state.extensionUsage.toDate = "";
+    syncExtensionUsageInputs();
+    syncExtensionUsageQueryString();
+    setExtensionRangeFeedback("Rango: todo el historico disponible.", "neutral");
+    return { valid: true, preset: "all", from: "", to: "" };
+  }
+
+  const from = parseLocalDateValue(fromValue);
+  const to = parseLocalDateValue(toValue);
+  if (!from || !to) {
+    setExtensionRangeFeedback("Selecciona Desde y Hasta para filtrar la extension.", "bad");
+    return { valid: false, preset, from: fromValue, to: toValue };
+  }
+  if (from > to) {
+    setExtensionRangeFeedback("El rango no es valido: Desde debe ser anterior o igual a Hasta.", "bad");
+    return { valid: false, preset, from: fromValue, to: toValue };
+  }
+
+  const normalized = normalizeExtensionDateRange(fromValue, toValue);
+  state.extensionUsage.fromDate = normalized.from;
+  state.extensionUsage.toDate = normalized.to;
+  syncExtensionUsageInputs();
+  syncExtensionUsageQueryString();
+  setExtensionRangeFeedback(
+    `Rango: ${formatDateOnly(normalized.from)} - ${formatDateOnly(normalized.to)} · ${EXTENSION_USAGE_TIMEZONE}.`,
+    "neutral"
+  );
+  return { valid: true, preset, from: normalized.from, to: normalized.to };
+}
+
+function extensionUsageParams(range) {
+  const params = new URLSearchParams({
+    resource: "extension/usage",
+    timezone: state.extensionUsage.timezone || EXTENSION_USAGE_TIMEZONE
+  });
+  if (range.preset && range.preset !== "custom") params.set("preset", range.preset);
+  if (range.from && range.to && range.preset !== "all") {
+    params.set("from", range.from);
+    params.set("to", range.to);
+  }
+  return params;
 }
 
 function formatDateOnly(value) {
@@ -1067,6 +1222,11 @@ function formatDuration(seconds) {
   return `${Math.max(1, minutes)} min`;
 }
 
+function formatDurationOrEmpty(seconds, emptyText = "Sin datos suficientes") {
+  const total = Number(seconds || 0);
+  return total > 0 ? formatDuration(total) : emptyText;
+}
+
 function renderUsageList(title, rows) {
   const items = (rows || []).slice(0, 6);
   const total = items.reduce((sum, item) => sum + Number(item.count || 0), 0) || 1;
@@ -1093,44 +1253,185 @@ function renderUsageList(title, rows) {
   `;
 }
 
+const extensionKpiTooltips = Object.freeze({
+  users: "Instalaciones o usuarios anonimos distintos por identificador estable hasheado. Provisional hasta que la extension envie anonymous_install_id. No usa IP ni user-agent.",
+  newUsers: "Usuarios cuyo primer evento conocido cae en el rango seleccionado. Se compara con actividad anterior cuando la base lo permite.",
+  returningUsers: "Usuarios con actividad en mas de un dia o mas de una sesion dentro del rango.",
+  sessions: "Sesiones por session_id; si falta, se agrupan eventos del mismo usuario por ventanas de actividad.",
+  events: "Eventos anonimos recibidos desde la extension en el rango. No equivale a usuarios.",
+  analyses: "Eventos de analisis efectivo, como analysis_completed o page_analyzed.",
+  time: "Duracion medida con active_seconds/duration_seconds o estimada por gaps entre eventos, con caps para evitar inflar uso.",
+  activation: "Usuarios del rango que realizaron al menos un analisis real."
+});
+
+function renderExtensionTimeseries(rows = []) {
+  if (!els.extensionTimeseries) return;
+  const items = rows.slice(-31);
+  if (!items.length) {
+    els.extensionTimeseries.innerHTML = `<p class="admin-empty-state compact">Sin evolucion diaria para este rango.</p>`;
+    return;
+  }
+  const maxValue = Math.max(
+    1,
+    ...items.map((row) => Math.max(Number(row.unique_users || 0), Number(row.sessions || 0), Number(row.completed_analyses || 0)))
+  );
+  const chart = items
+    .map((row) => {
+      const usersPct = Math.max(3, Math.round((Number(row.unique_users || 0) / maxValue) * 100));
+      const sessionsPct = Math.max(3, Math.round((Number(row.sessions || 0) / maxValue) * 100));
+      const analysesPct = Math.max(3, Math.round((Number(row.completed_analyses || 0) / maxValue) * 100));
+      return `
+        <div class="admin-extension-day" title="${escapeHtml(row.date)} · usuarios ${escapeHtml(row.unique_users || 0)} · sesiones ${escapeHtml(row.sessions || 0)} · analisis ${escapeHtml(row.completed_analyses || 0)}">
+          <i style="--users:${usersPct}%;--sessions:${sessionsPct}%;--analyses:${analysesPct}%"></i>
+          <span>${escapeHtml(String(row.date || "").slice(5))}</span>
+        </div>
+      `;
+    })
+    .join("");
+  const tableRows = items
+    .map(
+      (row) => `
+        <tr>
+          <td>${escapeHtml(row.date || "-")}</td>
+          <td>${escapeHtml(row.unique_users || 0)}</td>
+          <td>${escapeHtml(row.new_users || 0)}</td>
+          <td>${escapeHtml(row.returning_users || 0)}</td>
+          <td>${escapeHtml(row.sessions || 0)}</td>
+          <td>${escapeHtml(row.completed_analyses || 0)}</td>
+          <td>${escapeHtml(row.events || 0)}</td>
+          <td>${escapeHtml(formatDurationOrEmpty(row.avg_session_seconds, "-"))}</td>
+        </tr>
+      `
+    )
+    .join("");
+
+  els.extensionTimeseries.innerHTML = `
+    <section class="admin-extension-trend">
+      <div class="admin-extension-trend-head">
+        <span>Evolucion diaria</span>
+        <p><i data-key="users"></i>Usuarios <i data-key="sessions"></i>Sesiones <i data-key="analyses"></i>Analisis</p>
+      </div>
+      <div class="admin-extension-chart">${chart}</div>
+      <div class="admin-table-wrap">
+        <table class="admin-table admin-extension-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Usuarios</th>
+              <th>Nuevos</th>
+              <th>Recurrentes</th>
+              <th>Sesiones</th>
+              <th>Analisis</th>
+              <th>Eventos</th>
+              <th>Media sesion</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
 function renderExtensionUsage(payload) {
   if (!els.extensionStats || !els.extensionBreakdown) return;
+  const kpis = payload?.kpis || {};
+  const breakdowns = payload?.breakdowns || {};
+  if (payload?.result_limited) {
+    setExtensionRangeFeedback(`Rango cargado con limite de ${payload.event_limit || 10000} eventos. Acota fechas para auditoria completa.`, "bad");
+  }
   if (!payload?.ok && payload?.table_missing) {
     els.extensionStats.innerHTML = [
-      stat("Usuarios 30d", 0, { id: "extension-users", hint: "Ejecuta database/extension-usage-events.sql" }),
-      stat("Activos 7d", 0, { id: "extension-active-7d" }),
-      stat("Sesiones 30d", 0, { id: "extension-sessions" }),
-      stat("Tiempo uso", "0 min", { id: "extension-usage-time" })
+      stat("Usuarios reales", 0, { id: "extension-users", hint: "Ejecuta database/extension-usage-events.sql" }),
+      stat("Nuevos usuarios", 0, { id: "extension-new-users" }),
+      stat("Sesiones", 0, { id: "extension-sessions" }),
+      stat("Tiempo estimado uso", "Sin datos suficientes", { id: "extension-usage-time" })
     ].join("");
     els.extensionBreakdown.innerHTML = `<p class="admin-empty-state compact">Falta la tabla <strong>extension_usage_events</strong>. Cuando exista y la extensión envíe eventos, aquí aparecerán navegador, país, versión y eventos.</p>`;
+    renderExtensionTimeseries([]);
     return;
   }
 
+  const usageQuality = kpis.usage_data_quality || "none";
+  const timeHint = usageQuality === "measured"
+    ? "Basado en active_seconds/duration_seconds enviados por la extension"
+    : usageQuality === "none"
+      ? "Sin sesiones en el rango"
+      : "Dato estimado: faltan eventos de actividad continua o cierres de sesion";
+  const avgSessionValue = kpis.usage_has_insufficient_data && !Number(kpis.avg_session_seconds || 0)
+    ? "Sin datos suficientes"
+    : formatDurationOrEmpty(kpis.avg_session_seconds);
+  const totalUsageValue = kpis.usage_has_insufficient_data && !Number(kpis.total_usage_seconds_estimated || 0)
+    ? "Sin datos suficientes"
+    : formatDurationOrEmpty(kpis.total_usage_seconds_estimated);
+
   els.extensionStats.innerHTML = [
-    stat("Usuarios 30d", payload.unique_users_30d || 0, {
+    stat("Usuarios reales", kpis.unique_users ?? payload.unique_users_30d ?? 0, {
       id: "extension-users",
-      hint: "Personas anónimas distintas usando la extensión"
+      hint: "Distintos anonymous_install_id/anonymous_id hasheados",
+      tooltip: extensionKpiTooltips.users
     }),
-    stat("Activos 7d", payload.active_users_7d || 0, {
+    stat("Nuevos usuarios", kpis.new_users || 0, {
+      id: "extension-new-users",
+      hint: "Primer evento conocido en el rango",
+      tooltip: extensionKpiTooltips.newUsers
+    }),
+    stat("Usuarios recurrentes", kpis.returning_users || 0, {
+      id: "extension-returning-users",
+      hint: "Mas de un dia o sesion",
+      tooltip: extensionKpiTooltips.returningUsers
+    }),
+    stat("Activos 24h", kpis.active_users_24h ?? payload.active_users_24h ?? 0, {
+      id: "extension-active-24h",
+      hint: "Dentro del rango seleccionado"
+    }),
+    stat("Activos 7d", kpis.active_users_7d ?? payload.active_users_7d ?? 0, {
       id: "extension-active-7d",
-      hint: `${payload.active_users_24h || 0} activos en 24h`
+      hint: "Ventana final de 7 dias"
     }),
-    stat("Sesiones 30d", payload.sessions_30d || 0, {
+    stat("Activos 30d", kpis.active_users_30d ?? payload.unique_users_30d ?? 0, {
+      id: "extension-active-30d",
+      hint: "Ventana final de 30 dias"
+    }),
+    stat("Sesiones", kpis.sessions ?? payload.sessions_30d ?? 0, {
       id: "extension-sessions",
-      hint: `${payload.total_events || 0} eventos registrados`
+      hint: `${kpis.sessions_per_user || 0} por usuario`,
+      tooltip: extensionKpiTooltips.sessions
     }),
-    stat("Tiempo uso", formatDuration(payload.active_seconds_30d), {
+    stat("Eventos", kpis.events ?? payload.total_events ?? 0, {
+      id: "extension-events",
+      hint: `${kpis.events_per_user || 0} por usuario`,
+      tooltip: extensionKpiTooltips.events
+    }),
+    stat("Analisis realizados", kpis.completed_analyses || 0, {
+      id: "extension-analyses",
+      hint: "analysis_completed/page_analyzed",
+      tooltip: extensionKpiTooltips.analyses
+    }),
+    stat("Tiempo medio sesion", avgSessionValue, {
+      id: "extension-session-time",
+      hint: timeHint,
+      tooltip: extensionKpiTooltips.time
+    }),
+    stat("Tiempo estimado uso", totalUsageValue, {
       id: "extension-usage-time",
-      hint: `Media sesión ${formatDuration(payload.average_session_seconds)}`
+      hint: `${formatDurationOrEmpty(kpis.avg_user_seconds_estimated, "-")} por usuario activo`,
+      tooltip: extensionKpiTooltips.time
+    }),
+    stat("Activacion", `${Number(kpis.activation_rate || 0).toFixed(Number(kpis.activation_rate || 0) >= 10 ? 0 : 1)}%`, {
+      id: "extension-activation",
+      hint: `${kpis.activation_users || 0} usuarios con analisis`,
+      tooltip: extensionKpiTooltips.activation
     })
   ].join("");
 
   els.extensionBreakdown.innerHTML = [
-    renderUsageList("Navegador", payload.by_browser),
-    renderUsageList("País", payload.by_country),
-    renderUsageList("Version", payload.by_extension_version),
-    renderUsageList("Evento", payload.by_event_name)
+    renderUsageList("Navegador", breakdowns.browsers || payload.by_browser),
+    renderUsageList("Pais", breakdowns.countries || payload.by_country),
+    renderUsageList("Version", breakdowns.versions || payload.by_extension_version),
+    renderUsageList("Evento", breakdowns.events || payload.by_event_name)
   ].join("");
+  renderExtensionTimeseries(payload.timeseries || []);
 }
 
 function formatRate(value) {
@@ -5077,7 +5378,10 @@ async function loadPremium() {
 
 async function loadExtensionUsage() {
   if (!els.extensionStats) return;
-  const payload = await api("/api/admin?resource=extension/usage");
+  const range = readExtensionUsageInputs();
+  if (!range.valid) return;
+  const params = extensionUsageParams(range);
+  const payload = await api(`/api/admin?${params.toString()}`);
   renderExtensionUsage(payload);
 }
 
@@ -5454,6 +5758,29 @@ els.premiumFilter.addEventListener("submit", async (event) => {
   state.premium.provider = String(form.get("provider") || "").trim();
   state.premium.eventName = String(form.get("event_name") || "").trim();
   await loadPremium();
+});
+
+syncExtensionUsageInputs();
+els.extensionPresetButtons?.forEach((button) => {
+  button.addEventListener("click", () => {
+    const preset = normalizeExtensionPreset(button.dataset.extensionPreset);
+    const range = extensionPresetDateRange(preset);
+    state.extensionUsage.preset = range.preset;
+    state.extensionUsage.fromDate = range.from;
+    state.extensionUsage.toDate = range.to;
+    syncExtensionUsageInputs();
+    loadExtensionUsage().catch((error) => showStatus(error.message, "bad"));
+  });
+});
+if (els.extensionRefresh) {
+  els.extensionRefresh.addEventListener("click", () => loadExtensionUsage().catch((error) => showStatus(error.message, "bad")));
+}
+[els.extensionFrom, els.extensionTo].filter(Boolean).forEach((input) => {
+  input.addEventListener("change", () => {
+    state.extensionUsage.preset = "custom";
+    readExtensionUsageInputs();
+    loadExtensionUsage().catch((error) => showStatus(error.message, "bad"));
+  });
 });
 
 els.analyticsRefreshButtons.forEach((button) => {
