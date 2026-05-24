@@ -26,6 +26,7 @@ El helper global convierte `data-help-key` en `data-tooltip`, `title` y `aria-de
 3. Si es un KPI, usa un `id` estable en `stat()` y anade su definicion a `KPI_HELP_TEXTS`.
 4. Si es un badge/estado nuevo, anade su definicion a `STATUS_HELP_TEXTS`.
 5. Si es una accion peligrosa, explica que hace, que no hace, y que condiciones la bloquean.
+6. Si es un selector importante, no necesita siempre una clave propia: el helper genera una ayuda contextual segun el formulario. Usa `data-help-key` cuando la explicacion deba ser mas precisa.
 
 ## KPIs principales
 
@@ -46,7 +47,7 @@ El helper global convierte `data-help-key` en `data-tooltip`, `title` y `aria-de
 - Index status: marca interna `index`/`noindex`; no confirma indexacion real por buscadores.
 - Sitemap included: URL incluida por reglas dinamicas del sitemap.
 - Sitemap excluded: URL excluida por calidad, robots, canonical, estado o gate.
-- Simulacion interna/API: capacidad tecnica para probar sin publicar; no se muestra como accion principal del BackOffice si genera confusion.
+- Autopublish dry-run: simulacion visible del flujo de publicacion. No publica, no cambia indexacion y no toca sitemap.
 - Autopublish real: publica solo con kill switches, confirmacion, limites y gates correctos.
 
 ## KPIs ambiguos
@@ -70,7 +71,7 @@ Ejemplos de redaccion:
 - Crear draft: crea un borrador no publicado y no indexado.
 - Aprobar para publicacion: marca el draft como listo, pero no publica.
 - Publicar: publica solo tras confirmacion y ultimo gate.
-- Simulacion interna/API: permite probar flujos sin publicar; no debe presentarse como boton principal si genera confusion.
+- Dry-run ciclo SEO: simula el ciclo automatico sin publicar ni persistir publicaciones reales.
 - Ejecutar ciclo SEO automatico: ejecuta el ciclo con limites, kill switches y gates.
 - Autopublicar ready: publica de forma limitada solo paginas `ready_to_publish`.
 - Guardar brief: guarda el brief editorial, no publica.
@@ -83,3 +84,7 @@ Ejemplos de redaccion:
 - Mantener textos breves: una o dos frases.
 - En movil, el tooltip se muestra al toque durante unos segundos.
 - No usar tooltips para ocultar condiciones criticas que deban estar visibles siempre.
+
+## QA visual
+
+La auditoria visual de cobertura vive en `docs/BACKOFFICE_TOOLTIPS_QA.md`. Al revisar una nueva seccion, toma al menos una captura con tooltip abierto y confirma que el texto dice que mide o hace la accion y que no mide o no hace.

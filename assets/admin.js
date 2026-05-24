@@ -521,6 +521,7 @@ const HELP_TEXTS = Object.freeze({
   "viraliza-save-result": "Registra el resultado manual de una accion. No atribuye instalaciones reales si no hay evidencia.",
   "viraliza-learning-refresh": "Actualiza aprendizajes desde resultados manuales guardados.",
   "viraliza-context-comments": "Genera propuestas de comentario desde contexto pegado. Deben revisarse antes de publicar.",
+  "video-generate": "Genera storyboard, escenas, copy y prompts. No lanza Runway, no gasta creditos y no publica en redes.",
   "video-runway-estimate": "Estima coste de Runway. No gasta creditos ni lanza render.",
   "video-runway-render": "Lanza el clip en Runway solo si hay estimacion y confirmacion de coste.",
   "video-runway-poll": "Consulta el estado del job Runway. No lanza renders nuevos.",
@@ -692,6 +693,7 @@ const ACTION_HELP_BY_DATASET = Object.freeze({
   viralizaDailyPlanRefresh: "viraliza-daily-plan-refresh",
   viralizaImport: "viraliza-import",
   viralizaLearningRefresh: "viraliza-learning-refresh",
+  videoForm: "video-generate",
   videoRunwayEstimate: "video-runway-estimate",
   videoRunwayRender: "video-runway-render",
   videoRunwayPoll: "video-runway-poll",
@@ -753,6 +755,55 @@ function tooltipForStat(label, options = {}) {
   );
 }
 
+function labelTextForControl(element) {
+  const label = element.closest("label");
+  const text = label?.querySelector("span")?.textContent || element.getAttribute("aria-label") || element.name || "selector";
+  return String(text).replace(/\s+/g, " ").trim();
+}
+
+function selectorHelpForElement(element) {
+  if (!element.matches("select, input[type='date'], input[type='search']")) return "";
+  const label = labelTextForControl(element);
+  const cleanLabel = label ? label.toLowerCase() : "este campo";
+  if (element.closest("[data-premium-filter]")) {
+    return `Filtra Premium por ${cleanLabel}. No modifica suscripciones ni eventos de pago.`;
+  }
+  if (element.closest("[data-seo-filter]")) {
+    return "Filtra landings por estado editorial o de indexacion. No recalcula ni publica.";
+  }
+  if (element.closest("[data-seo-keyword-create-form]")) {
+    return `Define ${cleanLabel} de la oportunidad editorial. No crea landings ni publica hasta pulsar Crear oportunidad.`;
+  }
+  if (element.closest("[data-linkedin-settings-form]")) {
+    return `Configura ${cleanLabel} del autopublisher LinkedIn. No publica ni guarda hasta pulsar Guardar ajustes.`;
+  }
+  if (element.closest("[data-linkedin-editor-form]")) {
+    return `Ajusta ${cleanLabel} del post en cola. No publica hasta una accion explicita de publicacion.`;
+  }
+  if (element.closest("[data-meta-settings-form], [data-meta-page-form]")) {
+    return `Configura ${cleanLabel} de Meta. No publica ni conecta cuentas hasta la accion correspondiente.`;
+  }
+  if (element.closest("[data-meta-editor-form]")) {
+    return `Ajusta ${cleanLabel} del post Meta. No publica hasta pulsar Publicar ahora.`;
+  }
+  if (element.closest("[data-parking-probe-form]")) {
+    return `Define ${cleanLabel} de la prueba Parking. No guarda ni recalcula otras direcciones.`;
+  }
+  if (element.closest("[data-release-form]")) {
+    return `Selecciona ${cleanLabel} del registro de version. Guardar no despliega ni envia a tiendas.`;
+  }
+  if (element.closest("[data-viraliza-creator-form], [data-viraliza-result-form], [data-viraliza-context-form]")) {
+    return `Define ${cleanLabel} para Viraliza. Es una accion manual; no publica ni contacta cuentas por si sola.`;
+  }
+  if (element.closest("[data-video-form]")) {
+    return `Ajusta ${cleanLabel} del brief de video. No genera storyboard hasta pulsar Generar storyboard.`;
+  }
+  if (element.closest("[data-video-runway-panel]")) {
+    return `Ajusta ${cleanLabel} de Runway. No lanza render sin estimacion y confirmacion.`;
+  }
+  return `Selector ${label}: cambia el valor del formulario. No ejecuta acciones hasta guardar o aplicar.`;
+}
+
 function actionHelpForElement(element) {
   const data = element?.dataset || {};
   if (data.tooltip) return data.tooltip;
@@ -784,8 +835,16 @@ function actionHelpForElement(element) {
   if (data.metaRowAction === "publish_now") return helpText("meta-publish-now");
   if (data.metaRowAction === "skip") return helpText("meta-skip");
   if (data.viralizaRecord) return "Registra esta accion manual en Viraliza. No publica en redes ni atribuye conversiones por si sola.";
+  if (data.viralizaPlanAction) return "Marca una accion del plan diario de Viraliza como realizada manualmente. No comenta, sigue ni envia mensajes por ti.";
+  if (data.viralizaResultFill) return "Rellena el formulario de resultado con esta accion. No guarda hasta confirmar el formulario.";
+  if (data.viralizaCreateVideoFromHook) return "Crea un brief de video desde este hook. No genera clip ni publica en redes.";
+  if (data.viralizaSavedBrief) return "Convierte el video guardado en una idea de contenido. No copia ni publica el video original.";
+  if (data.videoScene) return "Selecciona una escena del storyboard para revisarla. No modifica ni exporta el video.";
+  if (data.videoProjectId) return "Abre este proyecto de video guardado en el editor local. No publica ni lanza renders.";
   if (data.copyText) return "Copia este texto al portapapeles. No publica ni guarda cambios.";
   if (data.openUrl) return "Abre el enlace externo para revision manual. No registra resultado automaticamente.";
+  const selectorHelp = selectorHelpForElement(element);
+  if (selectorHelp) return selectorHelp;
   const normalizedText = normalizeHelpKey(element.textContent);
   return {
     filtrar: "Aplica los filtros visibles a esta tabla. No modifica datos.",
@@ -817,7 +876,7 @@ function tooltipTargetFromEvent(event) {
   if (!(event.target instanceof Element)) return null;
   const explicit = event.target.closest("[data-tooltip], [data-help-key]");
   if (explicit && ensureTooltipForTarget(explicit)) return explicit;
-  const implicit = event.target.closest("button, a.admin-button, .admin-chip, .admin-stat, .admin-seo-autogen-card");
+  const implicit = event.target.closest("button, a.admin-button, select, input[type='date'], input[type='search'], .admin-chip, .admin-stat, .admin-seo-autogen-card");
   if (implicit && ensureTooltipForTarget(implicit)) return implicit;
   return null;
 }

@@ -279,16 +279,20 @@ test("backoffice documenta tooltips para KPIs, estados y acciones criticas", () 
   assert.match(adminHtml, /data-help-key="seo-ready-auto-publish"/);
   assert.match(adminHtml, /data-help-key="seo-autonomous-run"/);
   assert.match(adminHtml, /data-help-key="meta-publish-now"/);
+  assert.match(adminHtml, /data-help-key="video-generate"/);
   assert.match(adminHtml, /data-help-key="video-runway-render"/);
   assert.match(adminJs, /const HELP_TEXTS = Object\.freeze/);
   assert.match(adminJs, /const KPI_HELP_TEXTS = Object\.freeze/);
   assert.match(adminJs, /const STATUS_HELP_TEXTS = Object\.freeze/);
+  assert.match(adminJs, /function selectorHelpForElement/);
+  assert.match(adminJs, /data\.viralizaPlanAction/);
   assert.match(adminJs, /aria-describedby="admin-floating-tooltip"/);
   assert.match(adminJs, /Clics hacia Chrome Web Store\. No confirma instalacion/);
   assert.match(adminJs, /Recalcula calidad y quality gate de una landing\. No publica/);
   assert.match(docs, /Ratio Chrome Store -> primer analisis/);
   assert.match(docs, /No llamar instalacion a un clic a Chrome Store/);
-  assert.match(docs, /Simulacion interna\/API: permite probar flujos sin publicar/);
+  assert.match(docs, /Autopublish dry-run: simulacion visible/);
+  assert.match(docs, /docs\/BACKOFFICE_TOOLTIPS_QA\.md/);
 });
 
 test("backoffice SEO muestra quality gate y motivos sin inspeccionar JSON", () => {
