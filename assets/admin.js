@@ -292,13 +292,16 @@ const els = {
   seoFilter: document.querySelector("[data-seo-filter]"),
   seoGenerate: document.querySelector("[data-seo-generate]"),
   seoPublish: document.querySelector("[data-seo-publish]"),
+  seoReadyAutoDryRun: document.querySelector("[data-seo-ready-auto-dry-run]"),
   seoReadyAutoPublish: document.querySelector("[data-seo-ready-auto-publish]"),
+  seoAutonomousDryRun: document.querySelectorAll("[data-seo-autonomous-dry-run]"),
   seoAutonomousRun: document.querySelectorAll("[data-seo-autonomous-run]"),
   seoAutonomousSummary: document.querySelector("[data-seo-autonomous-summary]"),
   seoAutonomousRuns: document.querySelector("[data-seo-autonomous-runs]"),
   seoAutogenSummary: document.querySelector("[data-seo-autogen-summary]"),
   seoAutogenRuns: document.querySelector("[data-seo-autogen-runs]"),
   seoAutogenRun: document.querySelector("[data-seo-autogen-run]"),
+  seoAutogenDryRun: document.querySelector("[data-seo-autogen-dry-run]"),
   seoAutogenNote: document.querySelector("[data-seo-autogen-note]"),
   seoKeywordSummary: document.querySelector("[data-seo-keyword-summary]"),
   seoKeywordRows: document.querySelector("[data-seo-keyword-rows]"),
@@ -437,7 +440,9 @@ const HELP_TEXTS = Object.freeze({
   "premium-filter": "Filtra la tabla de Premium por texto, estado, proveedor o evento. No modifica suscripciones.",
   "seo-generate": "Genera un draft SEO nuevo si hay una oportunidad elegible. No publica, no indexa y no toca sitemap.",
   "seo-publish": "Publica una landing SEO elegible del flujo legacy. Usar con cautela; los drafts ready usan el flujo protegido.",
+  "seo-ready-auto-dry-run": "Simula la autopublicacion de drafts ready_to_publish. No publica nada ni cambia indexacion.",
   "seo-ready-auto-publish": "Autopublica de forma limitada solo drafts ready_to_publish con confirmacion, kill switch y ultimo quality gate pasado.",
+  "seo-autonomous-dry-run": "Simula el ciclo SEO autonomo completo. Puede calcular que haria, pero no persiste publicaciones reales.",
   "seo-autonomous-run": "Ejecuta el ciclo SEO autonomo con limites, kill switches, confirmacion y gates. Puede crear, aprobar o publicar segun reglas.",
   "seo-filter": "Filtra landings por estado editorial o de indexacion. No recalcula ni publica.",
   "seo-edit-draft": "Abre el draft en el editor. Editar no publica ni indexa por si solo.",
@@ -455,6 +460,7 @@ const HELP_TEXTS = Object.freeze({
   "seo-keyword-create-draft": "Crea un borrador SEO no publicado y no indexado desde una oportunidad aprobada.",
   "seo-keyword-approve": "Aprueba la oportunidad editorial. No crea ni publica paginas por si sola.",
   "seo-keyword-reject": "Rechaza la oportunidad editorial. No borra landings existentes.",
+  "seo-autogen-dry-run": "Simula la autogeneracion SEO con los limites actuales. No crea, aprueba ni publica contenido.",
   "seo-autogen-run": "Ejecuta la autogeneracion SEO ahora con score minimo, limites y registro de omitidos.",
   "analytics-refresh": "Actualiza el funnel con la ventana seleccionada. No cambia eventos ni atribuciones.",
   "analytics-date": "Acota la ventana temporal del funnel. Los ratios son agregados de esa ventana.",
@@ -646,7 +652,9 @@ const ACTION_HELP_BY_DATASET = Object.freeze({
   adminLogout: "admin-logout",
   seoGenerate: "seo-generate",
   seoPublish: "seo-publish",
+  seoReadyAutoDryRun: "seo-ready-auto-dry-run",
   seoReadyAutoPublish: "seo-ready-auto-publish",
+  seoAutonomousDryRun: "seo-autonomous-dry-run",
   seoAutonomousRun: "seo-autonomous-run",
   seoDraftSave: "seo-draft-save",
   seoKeywordRefresh: "seo-keyword-refresh",
@@ -654,6 +662,7 @@ const ACTION_HELP_BY_DATASET = Object.freeze({
   seoKeywordBrief: "seo-keyword-brief",
   seoKeywordSaveBrief: "seo-keyword-save-brief",
   seoKeywordCreateDraft: "seo-keyword-create-draft",
+  seoAutogenDryRun: "seo-autogen-dry-run",
   seoAutogenRun: "seo-autogen-run",
   analyticsRefresh: "analytics-refresh",
   kpiReset: "kpi-reset",
@@ -6515,14 +6524,23 @@ els.seoFilter.addEventListener("submit", async (event) => {
 
 els.seoGenerate.addEventListener("click", () => runSeoGeneration("generate").catch((error) => showStatus(error.message, "bad")));
 els.seoPublish.addEventListener("click", () => runSeoGeneration("publish").catch((error) => showStatus(error.message, "bad")));
+if (els.seoReadyAutoDryRun) {
+  els.seoReadyAutoDryRun.addEventListener("click", () => autoPublishReadySeoDrafts(true).catch((error) => showStatus(error.message, "bad")));
+}
 if (els.seoReadyAutoPublish) {
   els.seoReadyAutoPublish.addEventListener("click", () => autoPublishReadySeoDrafts(false).catch((error) => showStatus(error.message, "bad")));
 }
+els.seoAutonomousDryRun.forEach((button) => {
+  button.addEventListener("click", () => runSeoAutonomousCycle(true).catch((error) => showStatus(error.message, "bad")));
+});
 els.seoAutonomousRun.forEach((button) => {
   button.addEventListener("click", () => runSeoAutonomousCycle(false).catch((error) => showStatus(error.message, "bad")));
 });
 if (els.seoAutogenRun) {
   els.seoAutogenRun.addEventListener("click", () => runSeoAutogeneration(false).catch((error) => showStatus(error.message, "bad")));
+}
+if (els.seoAutogenDryRun) {
+  els.seoAutogenDryRun.addEventListener("click", () => runSeoAutogeneration(true).catch((error) => showStatus(error.message, "bad")));
 }
 if (els.linkedinRefresh) {
   els.linkedinRefresh.addEventListener("click", () => loadLinkedIn().catch((error) => showStatus(error.message, "bad")));

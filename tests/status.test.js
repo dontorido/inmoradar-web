@@ -352,18 +352,18 @@ test("backoffice SEO publica manualmente solo drafts ready con confirmacion", ()
   assert.doesNotMatch(adminJs, /data-seo-action="publish"/);
 });
 
-test("backoffice SEO expone autopublicacion ready con confirmacion", () => {
+test("backoffice SEO expone autopublicacion ready con dry-run y confirmacion", () => {
   const root = path.join(__dirname, "..");
   const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
   const adminJs = fs.readFileSync(path.join(root, "assets", "admin.js"), "utf8");
 
-  assert.doesNotMatch(adminHtml, /data-seo-ready-auto-dry-run/);
+  assert.match(adminHtml, /data-seo-ready-auto-dry-run/);
   assert.match(adminHtml, /data-seo-ready-auto-publish/);
   assert.match(adminJs, /auto_publish_ready_drafts/);
   assert.match(adminJs, /autoPublishReadySeoDrafts/);
   assert.match(adminJs, /dry_run: dryRun/);
   assert.match(adminJs, /confirmation: dryRun \? "dry_run" : "auto_publish_ready_drafts"/);
-  assert.doesNotMatch(adminJs, /seoReadyAutoDryRun/);
+  assert.match(adminJs, /seoReadyAutoDryRun/);
 });
 
 test("backoffice SEO expone ciclo autonomo con confirmacion y log", () => {
@@ -372,8 +372,8 @@ test("backoffice SEO expone ciclo autonomo con confirmacion y log", () => {
   const adminJs = fs.readFileSync(path.join(root, "assets", "admin.js"), "utf8");
   const adminApi = fs.readFileSync(path.join(root, "api", "admin.js"), "utf8");
 
-  assert.doesNotMatch(adminHtml, /data-seo-autonomous-dry-run/);
-  assert.doesNotMatch(adminHtml, /data-seo-autogen-dry-run/);
+  assert.match(adminHtml, /data-seo-autonomous-dry-run/);
+  assert.match(adminHtml, /data-seo-autogen-dry-run/);
   assert.match(adminHtml, /data-seo-autonomous-run/);
   assert.match(adminHtml, /data-seo-autonomous-runs/);
   assert.match(adminHtml, /data-seo-autonomous-summary/);
@@ -382,7 +382,7 @@ test("backoffice SEO expone ciclo autonomo con confirmacion y log", () => {
   assert.match(adminJs, /resource=seo\/automation/);
   assert.match(adminJs, /run_autonomous_cycle/);
   assert.match(adminJs, /confirmation: dryRun \? "dry_run" : "run_autonomous_cycle"/);
-  assert.doesNotMatch(adminJs, /seoAutonomousDryRun/);
+  assert.match(adminJs, /seoAutonomousDryRun/);
   assert.match(adminApi, /SEO_AUTONOMOUS_PIPELINE_ENABLED/);
   assert.match(adminApi, /SEO_AUTONOMOUS_PIPELINE_AUTO_APPROVE_MIN_SCORE = 90/);
   assert.match(adminApi, /seo_autonomous_pipeline_runs/);
