@@ -640,6 +640,28 @@ function visibleAdminAlerts(alerts = []) {
   return alerts.filter((alert) => alert?.id && !isAdminAlertDismissed(alert));
 }
 
+function adminAlertSourceLabel(alert) {
+  const source = String(alert?.origin || alert?.category || "system");
+  const labels = {
+    nightly_maintenance: "Mantenimiento nocturno",
+    nightly_audit: "Auditoria nocturna",
+    seo: "SEO",
+    sales: "Ventas",
+    system: "Sistema",
+    viraliza: "Viraliza",
+    waitlist: "Waitlist"
+  };
+  return labels[source] || source;
+}
+
+function adminAlertMeta(alert, severity) {
+  const parts = [adminAlertSourceLabel(alert), severity];
+  const createdAt = alert?.created_at || alert?.generated_at || alert?.timestamp;
+  if (createdAt) parts.push(formatCompactDate(createdAt));
+  if (alert?.read === false) parts.push("no leido");
+  return parts.filter(Boolean).join(" · ");
+}
+
 function renderAdminAlerts(alerts = []) {
   state.alerts = Array.isArray(alerts) ? alerts : [];
   if (!els.alerts) return;
@@ -663,7 +685,7 @@ function renderAdminAlerts(alerts = []) {
       return `
         <article class="admin-alert admin-alert--${escapeHtml(severity)}" data-admin-alert-id="${escapeHtml(alert.id)}">
           <div class="admin-alert-copy">
-            <span>${escapeHtml(alert.category || "system")} · ${escapeHtml(severity)}</span>
+            <span>${escapeHtml(adminAlertMeta(alert, severity))}</span>
             <strong>${escapeHtml(alert.title || "Aviso operativo")}</strong>
             <p>${escapeHtml(alert.message || "Revisa este evento del BackOffice.")}</p>
           </div>

@@ -4565,8 +4565,19 @@
   background: #d63d14;
 }
 
+.admin-alert--error,
+.admin-alert--critical {
+  background: #b42318;
+  box-shadow: 0 14px 34px rgba(180, 35, 24, .2);
+}
+
 .admin-alert--info {
   background: #151515;
+}
+
+.admin-alert--success {
+  background: #087443;
+  box-shadow: 0 14px 34px rgba(8, 116, 67, .18);
 }
 
 .admin-alert-copy {

@@ -109,7 +109,7 @@ Rutas limpias definidas en `vercel.json` y `scripts/serve-static.js`: `/`, `/que
 Todos pasan por `api/admin.js` y requieren `ADMIN_IMPORT_TOKEN`.
 
 - `GET /api/admin?resource=summary`: resumen general de Premium, SEO, KPIs, integraciones, ingresos y extension.
-- `GET /api/admin?resource=alerts`: alertas operativas del BackOffice; diagnostica `CRON_SECRET`, Supabase, publicaciones SEO recientes, leads de waitlist y actividad Premium sin crear otra serverless function.
+- `GET /api/admin?resource=alerts`: alertas operativas del BackOffice; diagnostica `CRON_SECRET`, Supabase, publicaciones SEO recientes, leads de waitlist, actividad Premium y avisos report-driven de mantenimiento nocturno sin crear otra serverless function.
 - `GET /api/admin?resource=premium/subscriptions`: listado filtrable de suscripciones.
 - `GET /api/admin?resource=extension/usage`: resumen de uso de extension.
 - `GET /api/admin?resource=analytics/summary`: resumen de funnel propio: visitas, clicks de instalacion, waitlist, checkout y recomendaciones.
@@ -157,6 +157,8 @@ Flujo:
 3. `assets/admin.js` guarda el token localmente y llama a `/api/admin?resource=...`.
 4. `api/admin.js` valida `ADMIN_IMPORT_TOKEN` via `assertAdmin`.
 5. Cada recurso lee o escribe en Supabase o llama a servicios internos.
+
+Alertas de mantenimiento nocturno: `api/admin.js?resource=alerts` reutiliza `lib/operations/nightlyMaintenanceAlerts.js` para leer, si existe, `NIGHTLY_MAINTENANCE_REPORT.md` o `NIGHTLY_REFACTOR_REPORT.md` en la raiz del repo desplegado/local. El helper no crea tablas ni endpoints; convierte el informe en alertas `nightly_maintenance` cuando la automatizacion se detiene por repo sucio, cambios paralelos en archivos sensibles, tests fallidos, rama no subida, informe ausente marcado en el estado o decision humana requerida.
 
 
 Viraliza con cuentas reales:

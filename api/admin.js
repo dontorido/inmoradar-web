@@ -36,6 +36,7 @@ const {
   normalizeReleaseTarget,
   releaseConnectors
 } = require("../lib/operations/releases");
+const { loadNightlyMaintenanceAlerts } = require("../lib/operations/nightlyMaintenanceAlerts");
 const {
   chromeWebStoreConfig,
   decodeInlineArtifactPayload,
@@ -230,7 +231,7 @@ function safeFetchFailed(result) {
 }
 
 function sortAlerts(alerts) {
-  const rank = { critical: 0, warning: 1, info: 2 };
+  const rank = { critical: 0, error: 0, warning: 1, info: 2, success: 3 };
   return alerts.sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9));
 }
 
@@ -241,6 +242,8 @@ function recentSinceIso(hours = 24) {
 async function handleAlerts() {
   const alerts = [];
   const generatedAt = new Date().toISOString();
+
+  alerts.push(...loadNightlyMaintenanceAlerts({ now: generatedAt }));
 
   if (!process.env.CRON_SECRET) {
     alerts.push({
