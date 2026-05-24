@@ -284,6 +284,40 @@
               </div>
             </div>
             <div class="admin-stat-grid compact admin-seo-summary" data-seo-keyword-summary aria-live="polite"></div>
+            <form class="admin-linkedin-form" data-seo-keyword-create-form>
+              <label class="admin-linkedin-wide"><span>Keyword</span><input name="keyword" placeholder="analizar piso antes de comprar en Valencia" required></label>
+              <label><span>Intencion</span><select name="intent">
+                <option value="analizar_anuncio_inmobiliario">analizar anuncio</option>
+                <option value="saber_si_piso_esta_caro">saber si esta caro</option>
+                <option value="precio_metro_cuadrado_vivienda">precio m2</option>
+                <option value="analizar_piso_antes_de_comprar">analizar antes de comprar</option>
+                <option value="comparar_pisos_online">comparar pisos</option>
+                <option value="negociar_precio_vivienda">negociar precio</option>
+                <option value="preguntas_antes_de_contactar">preguntas antes de contactar</option>
+                <option value="extension_chrome_inmobiliaria">extension Chrome</option>
+              </select></label>
+              <label><span>Tipo</span><select name="page_type">
+                <option value="editorial_guide">Guia editorial</option>
+                <option value="expensive_listing_city">Piso caro ciudad</option>
+                <option value="price_city">Precio ciudad</option>
+                <option value="chrome_extension_landing">Extension Chrome</option>
+                <option value="comparison_guide">Comparativa</option>
+              </select></label>
+              <label><span>Ciudad</span><input name="city" placeholder="Valencia"></label>
+              <label><span>Provincia</span><input name="province" placeholder="Valencia"></label>
+              <label><span>Prioridad</span><input name="priority" type="number" min="0" max="100" value="50"></label>
+              <label><span>Estado</span><select name="status">
+                <option value="idea">idea</option>
+                <option value="brief_ready">brief_ready</option>
+                <option value="draft">draft</option>
+                <option value="quality_review">quality_review</option>
+                <option value="approved">approved</option>
+                <option value="rejected">rejected</option>
+              </select></label>
+              <label><span>Riesgo</span><select name="risk_level"><option value="baja">baja</option><option value="media" selected>media</option><option value="alta">alta</option></select></label>
+              <label class="admin-linkedin-wide"><span>Landing sugerida</span><input name="suggested_landing" placeholder="/guias/analizar-piso-valencia/"></label>
+              <button class="admin-button tiny" type="submit">Crear oportunidad</button>
+            </form>
             <div class="admin-table-wrap">
               <table class="admin-table" data-testid="seo-keyword-backlog-table">
                 <thead>
@@ -293,7 +327,7 @@
                     <th>Tipo</th>
                     <th>Prioridad</th>
                     <th>Estado</th>
-                    <th>Brief</th>
+                    <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody data-seo-keyword-rows></tbody>

@@ -291,10 +291,14 @@ test("backoffice SEO muestra backlog de keywords y briefs sin publicar", () => {
   const adminJs = fs.readFileSync(path.join(root, "assets", "admin.js"), "utf8");
 
   assert.match(adminHtml, /SEO Keyword Backlog/);
+  assert.match(adminHtml, /data-seo-keyword-create-form/);
   assert.match(adminHtml, /data-seo-keyword-rows/);
   assert.match(adminHtml, /data-seo-keyword-brief-preview/);
   assert.match(adminJs, /loadSeoKeywordBacklog/);
   assert.match(adminJs, /renderSeoKeywordBrief/);
+  assert.match(adminJs, /create_opportunity/);
+  assert.match(adminJs, /save_brief/);
+  assert.match(adminJs, /change_status/);
   assert.match(adminJs, /resource=seo\/keyword-backlog/);
 });
 

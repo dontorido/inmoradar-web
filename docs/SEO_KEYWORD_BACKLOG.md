@@ -4,7 +4,7 @@
 
 El backlog SEO es una capa previa a la generacion de landings. Sirve para registrar oportunidades, priorizarlas y convertirlas en briefs revisables antes de crear contenido.
 
-No genera paginas, no publica landings, no cambia sitemap y no evita el quality gate. Su funcion es ayudar a decidir que merece pasar a produccion editorial.
+Ahora puede persistirse en Supabase mediante la tabla `seo_keyword_backlog`. No genera paginas, no publica landings, no cambia sitemap y no evita el quality gate. Su funcion es ayudar a decidir que merece pasar a produccion editorial.
 
 ## Modelo de backlog
 
@@ -23,9 +23,33 @@ Campos definidos:
 - `recommended_cta`
 - `risk_level`
 - `risk_notes`
+- `brief_json`
 - `created_at`
 - `updated_at`
-- `brief_json` opcional si existe almacenamiento persistente
+- `notes`
+- `created_by`
+- `updated_by`
+
+## Persistencia Supabase
+
+Schema:
+
+`database/seo-keyword-backlog.sql`
+
+Tabla:
+
+`seo_keyword_backlog`
+
+Controles:
+
+- `status` limitado a `idea`, `brief_ready`, `draft`, `quality_review`, `approved`, `rejected`, `published`.
+- `intent` y `page_type` limitados a los valores editoriales soportados.
+- `priority` limitada a 0-100.
+- `manual_difficulty` y `risk_level` limitados a `baja`, `media`, `alta`.
+- Dedupe por `lower(keyword)` + `suggested_landing`.
+- `updated_at` se refresca con trigger.
+
+Si Supabase no esta configurado, o la tabla falla, el GET vuelve a los seeds controlados. Las acciones de escritura devuelven error seguro y no modifican nada.
 
 Estados:
 
@@ -121,6 +145,26 @@ Generar un brief concreto:
 
 El endpoint responde con `generated_landing=false` y `published=false`.
 
+Acciones de escritura:
+
+```json
+{ "action": "create_opportunity", "opportunity": { "keyword": "analizar piso antes de comprar en Valencia" } }
+```
+
+```json
+{ "action": "update_opportunity", "id": 45, "patch": { "priority": 90, "status": "quality_review" } }
+```
+
+```json
+{ "action": "save_brief", "id": 45, "brief": { "...": "..." } }
+```
+
+```json
+{ "action": "change_status", "id": 45, "status": "approved" }
+```
+
+Estas acciones guardan solo datos editoriales del backlog. Todas responden con banderas explicitas `generated_landing=false`, `published=false`, `indexed=false` y `touched_sitemap=false`.
+
 ## BackOffice
 
 La seccion SEO muestra una tabla "Oportunidades y briefs" con:
@@ -130,9 +174,12 @@ La seccion SEO muestra una tabla "Oportunidades y briefs" con:
 - tipo;
 - prioridad;
 - estado/riesgo;
-- boton "Ver brief".
+- edicion minima de prioridad y estado;
+- boton "Ver brief";
+- boton "Guardar brief";
+- acciones "Aprobar" y "Rechazar".
 
-Ver un brief no crea contenido ni modifica datos. Solo renderiza la propuesta editorial para revision.
+Crear o editar una oportunidad persiste el backlog si Supabase esta disponible. Ver un brief no crea contenido ni modifica datos. Guardar un brief persiste `brief_json`, pero no crea landings, no publica y no toca sitemap.
 
 ## Controles de calidad
 
@@ -145,15 +192,31 @@ Antes de convertir un brief en landing:
 - Confirmar bloque de independencia: sin afiliacion oficial con portales inmobiliarios.
 - Confirmar que no es una pagina thin ni una plantilla que solo cambia ciudad.
 
+## Flujo editorial
+
+1. Crear oportunidad manual o revisar seed/fallback.
+2. Ajustar prioridad, dificultad, riesgo y landing sugerida.
+3. Generar brief para revision.
+4. Guardar brief cuando tenga sentido editorial.
+5. Marcar como `approved` o `rejected`.
+6. Pasar las aprobadas a una futura rama de generacion controlada de landing.
+
+## Acciones que NO hace
+
+- No genera landings.
+- No publica landings.
+- No cambia `seo_landings`.
+- No cambia sitemap.
+- No cambia canonical, robots ni quality gate.
+- No indexa contenido.
+
 ## Limitaciones
 
-- No hay escritura persistente del backlog si no existe tabla `seo_keyword_backlog`.
-- No hay generacion automatica de landings desde brief.
-- No hay batch ni publicacion desde esta rama.
+- El fallback a seeds es solo operativo/desarrollo; no sustituye la persistencia editorial.
+- No hay batch de importacion en esta rama.
 - La dificultad es manual y orientativa.
+- Una oportunidad `approved` solo indica decision editorial; no implica publicacion.
 
 ## Siguiente rama recomendada
 
-Crear una rama para persistir cambios editoriales del backlog en Supabase si se decide crear la tabla `seo_keyword_backlog`:
-
-`codex/seo-keyword-backlog-persistence`
+Crear una rama pequena para convertir oportunidades aprobadas en drafts SEO controlados, manteniendo dry-run, quality gate y revision manual antes de publicar.

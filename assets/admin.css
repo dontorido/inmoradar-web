@@ -453,6 +453,20 @@
   gap: 6px;
 }
 
+.admin-inline-input,
+.admin-inline-select {
+  display: block;
+  width: 100%;
+  max-width: 132px;
+  margin-top: 6px;
+  padding: 7px 9px;
+  border: 1px solid #d7d7d7;
+  border-radius: 6px;
+  background: #fff;
+  color: #111;
+  font-size: 12px;
+}
+
 .admin-kpi-note,
 .admin-kpi-meta,
 .admin-kpi-alert {

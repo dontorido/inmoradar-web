@@ -74,7 +74,13 @@ const {
   SEO_KEYWORD_STATUSES,
   buildSeoKeywordBacklog,
   buildSeoKeywordBrief,
-  findBacklogItem
+  findBacklogItem,
+  normalizeBacklogItem,
+  normalizeKeyword,
+  seoKeywordBacklogInsertRow,
+  seoKeywordBacklogPatchRow,
+  validateBriefJson,
+  validateSeoKeywordOpportunity
 } = require("../lib/seo/keywordBacklog");
 
 const {
@@ -1474,7 +1480,7 @@ function buildSeoLandingsSummary(rows = [], opportunities = [], activeStatus = "
 }
 
 const SEO_KEYWORD_BACKLOG_SELECT =
-  "id,keyword,intent,page_type,city,province,priority,manual_difficulty,status,suggested_landing,recommended_cta,risk_level,risk_notes,created_at,updated_at,brief_json";
+  "id,keyword,intent,page_type,city,province,priority,manual_difficulty,status,suggested_landing,recommended_cta,risk_level,risk_notes,notes,created_by,updated_by,created_at,updated_at,brief_json";
 
 async function fetchSeoKeywordBacklogRows({ limit = 15, status = "all", intent = "all" } = {}) {
   if (!hasSupabaseConfig()) {
@@ -1497,6 +1503,222 @@ async function fetchSeoKeywordBacklogRows({ limit = 15, status = "all", intent =
     rows: SEO_KEYWORD_BACKLOG_SEEDS,
     storage_warning: safeFetchFailed(result) ? result.error : ""
   };
+}
+
+function seoKeywordBacklogNoPublishFlags() {
+  return {
+    generated_landing: false,
+    published: false,
+    indexed: false,
+    touched_sitemap: false
+  };
+}
+
+function seoKeywordStorageUnavailable(error) {
+  return {
+    status: 503,
+    payload: {
+      ok: false,
+      error: "seo_keyword_backlog_storage_unavailable",
+      message: error?.message || "Supabase no esta configurado para escritura del backlog SEO.",
+      ...seoKeywordBacklogNoPublishFlags()
+    }
+  };
+}
+
+function seoKeywordValidationError(errors = []) {
+  return {
+    status: 400,
+    payload: {
+      ok: false,
+      error: "invalid_seo_keyword_opportunity",
+      errors,
+      ...seoKeywordBacklogNoPublishFlags()
+    }
+  };
+}
+
+function isSeoKeywordDuplicateError(error) {
+  return /duplicate|unique|23505|seo_keyword_backlog_unique/i.test(String(error?.message || error || ""));
+}
+
+async function fetchSeoKeywordBacklogItemById(id) {
+  const cleanId = String(id || "").trim();
+  if (!cleanId) return null;
+  const rows = await supabaseFetch(
+    `seo_keyword_backlog?select=${SEO_KEYWORD_BACKLOG_SELECT}&id=eq.${encodeURIComponent(cleanId)}&limit=1`
+  );
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function findSeoKeywordDuplicate(row, excludeId = "") {
+  const params = new URLSearchParams({
+    select: "id,keyword,suggested_landing",
+    suggested_landing: `eq.${row.suggested_landing}`,
+    limit: "100"
+  });
+  const rows = await supabaseFetch(`seo_keyword_backlog?${params.toString()}`);
+  const normalizedKeyword = normalizeKeyword(row.keyword);
+  const excluded = String(excludeId || "");
+  return (Array.isArray(rows) ? rows : []).find(
+    (candidate) =>
+      String(candidate.id || "") !== excluded &&
+      normalizeKeyword(candidate.keyword) === normalizedKeyword &&
+      String(candidate.suggested_landing || "") === String(row.suggested_landing || "")
+  ) || null;
+}
+
+async function createSeoKeywordOpportunity(body = {}) {
+  if (!hasSupabaseConfig()) return seoKeywordStorageUnavailable();
+  const input = body.opportunity && typeof body.opportunity === "object" ? body.opportunity : body;
+  const validation = seoKeywordBacklogInsertRow(input);
+  if (!validation.ok) return seoKeywordValidationError(validation.errors);
+  try {
+    const duplicate = await findSeoKeywordDuplicate(validation.row);
+    if (duplicate) {
+      return {
+        status: 409,
+        payload: {
+          ok: false,
+          error: "seo_keyword_backlog_duplicate",
+          duplicate_id: duplicate.id,
+          ...seoKeywordBacklogNoPublishFlags()
+        }
+      };
+    }
+    const rows = await supabaseFetch("seo_keyword_backlog", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(validation.row)
+    });
+    const keyword = normalizeBacklogItem(Array.isArray(rows) ? rows[0] || validation.row : validation.row);
+    return {
+      status: 201,
+      payload: {
+        ok: true,
+        action: "create_opportunity",
+        persisted: true,
+        keyword,
+        ...seoKeywordBacklogNoPublishFlags()
+      }
+    };
+  } catch (error) {
+    if (isSeoKeywordDuplicateError(error)) {
+      return { status: 409, payload: { ok: false, error: "seo_keyword_backlog_duplicate", ...seoKeywordBacklogNoPublishFlags() } };
+    }
+    return seoKeywordStorageUnavailable(error);
+  }
+}
+
+async function updateSeoKeywordOpportunity(body = {}) {
+  if (!hasSupabaseConfig()) return seoKeywordStorageUnavailable();
+  const id = String(body.id || body.keyword_id || "").trim();
+  if (!id) return { status: 400, payload: { ok: false, error: "keyword_id_required", ...seoKeywordBacklogNoPublishFlags() } };
+  const patchInput = body.patch && typeof body.patch === "object" ? body.patch : body;
+  const validation = seoKeywordBacklogPatchRow(patchInput);
+  if (!validation.ok) return seoKeywordValidationError(validation.errors);
+  const patch = validation.row;
+  delete patch.id;
+  delete patch.keyword_id;
+  try {
+    const current = await fetchSeoKeywordBacklogItemById(id);
+    if (!current) return { status: 404, payload: { ok: false, error: "keyword_not_found", ...seoKeywordBacklogNoPublishFlags() } };
+    const mergedValidation = validateSeoKeywordOpportunity({ ...current, ...patch }, { partial: false });
+    if (!mergedValidation.ok) return seoKeywordValidationError(mergedValidation.errors);
+    const duplicate = await findSeoKeywordDuplicate(mergedValidation.row, id);
+    if (duplicate) {
+      return {
+        status: 409,
+        payload: {
+          ok: false,
+          error: "seo_keyword_backlog_duplicate",
+          duplicate_id: duplicate.id,
+          ...seoKeywordBacklogNoPublishFlags()
+        }
+      };
+    }
+    const rows = await supabaseFetch(`seo_keyword_backlog?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(patch)
+    });
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        action: "update_opportunity",
+        persisted: true,
+        keyword: normalizeBacklogItem(Array.isArray(rows) ? rows[0] || { ...current, ...patch } : { ...current, ...patch }),
+        ...seoKeywordBacklogNoPublishFlags()
+      }
+    };
+  } catch (error) {
+    if (isSeoKeywordDuplicateError(error)) {
+      return { status: 409, payload: { ok: false, error: "seo_keyword_backlog_duplicate", ...seoKeywordBacklogNoPublishFlags() } };
+    }
+    return seoKeywordStorageUnavailable(error);
+  }
+}
+
+async function changeSeoKeywordStatus(body = {}) {
+  return updateSeoKeywordOpportunity({ id: body.id || body.keyword_id, patch: { status: body.status, updated_by: body.updated_by } });
+}
+
+async function generateSeoKeywordBrief(body = {}, url) {
+  const limit = clampLimit(url.searchParams.get("limit"), 50, 50);
+  const storage = await fetchSeoKeywordBacklogRows({ limit, status: "all", intent: "all" });
+  const item = findBacklogItem(storage.rows, body) || findBacklogItem(SEO_KEYWORD_BACKLOG_SEEDS, body);
+  if (!item) return { status: 404, payload: { ok: false, error: "keyword_not_found", ...seoKeywordBacklogNoPublishFlags() } };
+  const brief = item.brief_json || buildSeoKeywordBrief(item);
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      action: "generate_brief",
+      source: storage.source,
+      persisted: false,
+      keyword: item,
+      brief,
+      ...seoKeywordBacklogNoPublishFlags()
+    }
+  };
+}
+
+async function saveSeoKeywordBrief(body = {}) {
+  if (!hasSupabaseConfig()) return seoKeywordStorageUnavailable();
+  const id = String(body.id || body.keyword_id || "").trim();
+  if (!id) return { status: 400, payload: { ok: false, error: "keyword_id_required", ...seoKeywordBacklogNoPublishFlags() } };
+  try {
+    const current = await fetchSeoKeywordBacklogItemById(id);
+    if (!current) return { status: 404, payload: { ok: false, error: "keyword_not_found", ...seoKeywordBacklogNoPublishFlags() } };
+    const generatedBrief = buildSeoKeywordBrief(current);
+    const briefInput = body.brief_json || body.brief || generatedBrief;
+    const validation = validateBriefJson(briefInput);
+    if (!validation.ok) return seoKeywordValidationError(validation.errors);
+    const patch = {
+      brief_json: validation.brief,
+      updated_by: String(body.updated_by || "backoffice").slice(0, 120),
+      updated_at: new Date().toISOString()
+    };
+    const rows = await supabaseFetch(`seo_keyword_backlog?id=eq.${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(patch)
+    });
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        action: "save_brief",
+        persisted: true,
+        keyword: normalizeBacklogItem(Array.isArray(rows) ? rows[0] || { ...current, ...patch } : { ...current, ...patch }),
+        brief: validation.brief,
+        ...seoKeywordBacklogNoPublishFlags()
+      }
+    };
+  } catch (error) {
+    return seoKeywordStorageUnavailable(error);
+  }
 }
 
 async function handleSeoKeywordBacklog(req, url) {
@@ -1526,25 +1748,12 @@ async function handleSeoKeywordBacklog(req, url) {
 
   const body = await readJsonBody(req);
   const action = String(body.action || "").trim();
-  if (action !== "generate_brief") return { status: 400, payload: { ok: false, error: "invalid_action" } };
-
-  const storage = await fetchSeoKeywordBacklogRows({ limit: 50, status: "all", intent: "all" });
-  const item = findBacklogItem(storage.rows, body) || findBacklogItem(SEO_KEYWORD_BACKLOG_SEEDS, body);
-  if (!item) return { status: 404, payload: { ok: false, error: "keyword_not_found" } };
-  const brief = item.brief_json || buildSeoKeywordBrief(item);
-  return {
-    status: 200,
-    payload: {
-      ok: true,
-      action,
-      source: storage.source,
-      persisted: false,
-      generated_landing: false,
-      published: false,
-      keyword: item,
-      brief
-    }
-  };
+  if (action === "create_opportunity") return createSeoKeywordOpportunity(body);
+  if (action === "update_opportunity") return updateSeoKeywordOpportunity(body);
+  if (action === "generate_brief") return generateSeoKeywordBrief(body, url);
+  if (action === "save_brief") return saveSeoKeywordBrief(body);
+  if (action === "change_status") return changeSeoKeywordStatus(body);
+  return { status: 400, payload: { ok: false, error: "invalid_action", ...seoKeywordBacklogNoPublishFlags() } };
 }
 
 async function handleSeoGenerate(req) {

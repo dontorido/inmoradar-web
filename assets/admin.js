@@ -173,7 +173,8 @@ const state = {
   },
   seoKeywordBacklog: {
     keywords: [],
-    briefsById: new Map()
+    briefsById: new Map(),
+    currentBriefId: ""
   },
   parking: {
     lastProbe: null
@@ -292,6 +293,7 @@ const els = {
   seoKeywordRows: document.querySelector("[data-seo-keyword-rows]"),
   seoKeywordBriefPreview: document.querySelector("[data-seo-keyword-brief-preview]"),
   seoKeywordRefresh: document.querySelector("[data-seo-keyword-refresh]"),
+  seoKeywordCreateForm: document.querySelector("[data-seo-keyword-create-form]"),
   linkedinRefresh: document.querySelector("[data-linkedin-refresh]"),
   linkedinTest: document.querySelector("[data-linkedin-test]"),
   linkedinConnect: document.querySelector("[data-linkedin-connect]"),
@@ -1819,6 +1821,18 @@ function seoKeywordIntentLabel(value) {
   return String(value || "").replace(/_/g, " ");
 }
 
+const SEO_KEYWORD_STATUS_OPTIONS = ["idea", "brief_ready", "draft", "quality_review", "approved", "rejected", "published"];
+
+function selectOptions(values = [], selected = "") {
+  return values
+    .map((value) => `<option value="${escapeHtml(value)}"${String(value) === String(selected) ? " selected" : ""}>${escapeHtml(value)}</option>`)
+    .join("");
+}
+
+function seoKeywordById(id) {
+  return state.seoKeywordBacklog.keywords.find((item) => String(item.id) === String(id)) || null;
+}
+
 function renderSeoKeywordSummary(summary = {}) {
   if (!els.seoKeywordSummary) return;
   els.seoKeywordSummary.innerHTML = [
@@ -1847,16 +1861,29 @@ function renderSeoKeywordBacklog(payload = {}) {
           <td>
             <strong>${escapeHtml(item.keyword || "-")}</strong>
             <div class="admin-subtle">${escapeHtml(item.suggested_landing || "-")}</div>
+            <div class="admin-subtle">${escapeHtml(item.notes || "")}</div>
           </td>
           <td>${escapeHtml(seoKeywordIntentLabel(item.intent))}</td>
           <td>${chip(item.page_type || "-", "draft")}</td>
-          <td>${chip(Number(item.priority || 0).toFixed(0), scoreTone(item.priority), "score")}</td>
+          <td>
+            ${chip(Number(item.priority || 0).toFixed(0), scoreTone(item.priority), "score")}
+            <input class="admin-inline-input" type="number" min="0" max="100" value="${escapeHtml(item.priority || 0)}" data-seo-keyword-priority-input="${escapeHtml(item.id)}" aria-label="Prioridad SEO">
+          </td>
           <td>
             ${chip(item.status || "idea", statusTone(item.status))}
             <div class="admin-subtle">${escapeHtml(item.risk_level || "-")} riesgo</div>
+            <select class="admin-inline-select" data-seo-keyword-status-input="${escapeHtml(item.id)}" aria-label="Estado SEO keyword">
+              ${selectOptions(SEO_KEYWORD_STATUS_OPTIONS, item.status || "idea")}
+            </select>
           </td>
           <td>
-            <button class="admin-button tiny ghost" type="button" data-seo-keyword-brief="${escapeHtml(item.id)}">Ver brief</button>
+            <div class="admin-row-actions">
+              <button class="admin-button tiny ghost" type="button" data-seo-keyword-update="${escapeHtml(item.id)}">Guardar</button>
+              <button class="admin-button tiny ghost" type="button" data-seo-keyword-brief="${escapeHtml(item.id)}">Ver brief</button>
+              <button class="admin-button tiny ghost" type="button" data-seo-keyword-save-brief="${escapeHtml(item.id)}">Guardar brief</button>
+              <button class="admin-button tiny ghost" type="button" data-seo-keyword-change-status="${escapeHtml(item.id)}" data-status="approved">Aprobar</button>
+              <button class="admin-button tiny ghost" type="button" data-seo-keyword-change-status="${escapeHtml(item.id)}" data-status="rejected">Rechazar</button>
+            </div>
           </td>
         </tr>
       `
@@ -1873,6 +1900,7 @@ function renderSeoKeywordBrief(brief = {}) {
   const list = (items = []) => items.slice(0, 8).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   els.seoKeywordBriefPreview.innerHTML = `
     <strong>${escapeHtml(brief.keyword)}</strong>
+    <div class="admin-subtle">Keyword ID: ${escapeHtml(brief.keyword_id || "")}</div>
     <p>${escapeHtml(brief.target_user || "")}</p>
     <p><b>H1:</b> ${escapeHtml(brief.suggested_h1 || "")}</p>
     <p><b>Meta title:</b> ${escapeHtml(brief.suggested_meta_title || "")}</p>
@@ -5283,6 +5311,92 @@ async function loadSeoKeywordBacklog() {
   renderSeoKeywordBacklog(payload);
 }
 
+function seoKeywordFormPayload(form) {
+  const data = new FormData(form);
+  return {
+    keyword: String(data.get("keyword") || "").trim(),
+    intent: String(data.get("intent") || "analizar_anuncio_inmobiliario"),
+    page_type: String(data.get("page_type") || "editorial_guide"),
+    city: String(data.get("city") || "").trim(),
+    province: String(data.get("province") || "").trim(),
+    priority: Number(data.get("priority") || 50),
+    status: String(data.get("status") || "idea"),
+    risk_level: String(data.get("risk_level") || "media"),
+    suggested_landing: String(data.get("suggested_landing") || "").trim()
+  };
+}
+
+async function createSeoKeywordOpportunity(form) {
+  showStatus("Creando oportunidad SEO...");
+  await api("/api/admin?resource=seo/keyword-backlog", {
+    method: "POST",
+    body: JSON.stringify({ action: "create_opportunity", opportunity: seoKeywordFormPayload(form) })
+  });
+  form.reset();
+  await loadSeoKeywordBacklog();
+  showStatus("Oportunidad SEO guardada en backlog.", "good");
+}
+
+async function updateSeoKeywordOpportunity(id) {
+  const priorityInput = [...(els.seoKeywordRows?.querySelectorAll("[data-seo-keyword-priority-input]") || [])].find(
+    (input) => String(input.dataset.seoKeywordPriorityInput) === String(id)
+  );
+  const statusInput = [...(els.seoKeywordRows?.querySelectorAll("[data-seo-keyword-status-input]") || [])].find(
+    (input) => String(input.dataset.seoKeywordStatusInput) === String(id)
+  );
+  showStatus("Actualizando oportunidad SEO...");
+  await api("/api/admin?resource=seo/keyword-backlog", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "update_opportunity",
+      id,
+      patch: {
+        priority: Number(priorityInput?.value || 50),
+        status: String(statusInput?.value || "idea")
+      }
+    })
+  });
+  await loadSeoKeywordBacklog();
+  showStatus("Oportunidad SEO actualizada.", "good");
+}
+
+async function generateSeoKeywordBriefPreview(id) {
+  const cached = state.seoKeywordBacklog.briefsById.get(id);
+  state.seoKeywordBacklog.currentBriefId = id;
+  if (cached) {
+    renderSeoKeywordBrief(cached);
+    return cached;
+  }
+  const payload = await api("/api/admin?resource=seo/keyword-backlog", {
+    method: "POST",
+    body: JSON.stringify({ action: "generate_brief", id })
+  });
+  if (payload.brief) state.seoKeywordBacklog.briefsById.set(id, payload.brief);
+  renderSeoKeywordBrief(payload.brief || {});
+  return payload.brief || null;
+}
+
+async function saveSeoKeywordBrief(id) {
+  showStatus("Guardando brief editorial...");
+  const brief = state.seoKeywordBacklog.briefsById.get(id) || (await generateSeoKeywordBriefPreview(id));
+  await api("/api/admin?resource=seo/keyword-backlog", {
+    method: "POST",
+    body: JSON.stringify({ action: "save_brief", id, brief })
+  });
+  await loadSeoKeywordBacklog();
+  showStatus("Brief guardado. No se ha generado ni publicado ninguna landing.", "good");
+}
+
+async function changeSeoKeywordStatus(id, nextStatus) {
+  showStatus(`Cambiando estado a ${nextStatus}...`);
+  await api("/api/admin?resource=seo/keyword-backlog", {
+    method: "POST",
+    body: JSON.stringify({ action: "change_status", id, status: nextStatus })
+  });
+  await loadSeoKeywordBacklog();
+  showStatus(`Oportunidad marcada como ${nextStatus}.`, "good");
+}
+
 async function loadKpis() {
   const payload = await api("/api/admin?resource=kpis/settings");
   renderKpis(payload);
@@ -6094,22 +6208,36 @@ if (els.seoKeywordRefresh) {
   els.seoKeywordRefresh.addEventListener("click", () => loadSeoKeywordBacklog().catch((error) => showStatus(error.message, "bad")));
 }
 
+if (els.seoKeywordCreateForm) {
+  els.seoKeywordCreateForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    createSeoKeywordOpportunity(els.seoKeywordCreateForm).catch((error) => showStatus(error.message, "bad"));
+  });
+}
+
 if (els.seoKeywordRows) {
   els.seoKeywordRows.addEventListener("click", (event) => {
+    const updateButton = event.target.closest("[data-seo-keyword-update]");
+    if (updateButton) {
+      updateSeoKeywordOpportunity(updateButton.dataset.seoKeywordUpdate).catch((error) => showStatus(error.message, "bad"));
+      return;
+    }
+    const saveBriefButton = event.target.closest("[data-seo-keyword-save-brief]");
+    if (saveBriefButton) {
+      saveSeoKeywordBrief(saveBriefButton.dataset.seoKeywordSaveBrief).catch((error) => showStatus(error.message, "bad"));
+      return;
+    }
+    const statusButton = event.target.closest("[data-seo-keyword-change-status]");
+    if (statusButton) {
+      changeSeoKeywordStatus(statusButton.dataset.seoKeywordChangeStatus, statusButton.dataset.status).catch((error) =>
+        showStatus(error.message, "bad")
+      );
+      return;
+    }
     const button = event.target.closest("[data-seo-keyword-brief]");
     if (!button) return;
     const id = button.dataset.seoKeywordBrief;
-    const cached = state.seoKeywordBacklog.briefsById.get(id);
-    if (cached) {
-      renderSeoKeywordBrief(cached);
-      return;
-    }
-    api("/api/admin?resource=seo/keyword-backlog", {
-      method: "POST",
-      body: JSON.stringify({ action: "generate_brief", id })
-    })
-      .then((payload) => renderSeoKeywordBrief(payload.brief))
-      .catch((error) => showStatus(error.message, "bad"));
+    generateSeoKeywordBriefPreview(id).catch((error) => showStatus(error.message, "bad"));
   });
 }
 
