@@ -46,7 +46,8 @@ Nota pre-merge: mientras la extension no envie de forma garantizada un `anonymou
 
 ## Despliegue y validacion
 
-- 2026-05-24: validacion post-deploy iniciada contra `https://www.inmoradar.app/admin`. Produccion todavia no sirve esta version del backoffice: el HTML y los assets publicados no contienen `data-extension-preset`, `data-extension-from`, `data-extension-to` ni `data-extension-timeseries`. La validacion completa de presets, KPIs reales y serie diaria queda pendiente de redeploy/cache purge de esta rama.
+- 2026-05-24: desplegado en produccion con el commit `e499e97`. Validado contra `https://www.inmoradar.app/admin` que el HTML publicado contiene `data-extension-preset`, `data-extension-from`, `data-extension-to` y `data-extension-timeseries`; los assets publicados contienen la logica de `extension_preset`, KPIs nuevos y estilos de la serie diaria. La validacion autenticada de datos reales queda pendiente de disponer de `ADMIN_IMPORT_TOKEN` en el entorno de validacion.
+- 2026-05-24: no se pudo comparar contra Supabase ni confirmar indices aplicados desde este entorno porque no estaban disponibles `SUPABASE_URL` ni `SUPABASE_SERVICE_ROLE_KEY`. Aplicar `database/extension-usage-events.sql` en Supabase antes de auditar rangos grandes.
 - Limitacion pendiente: la extension aun debe enviar un `anonymous_install_id` estable generado y persistido en storage local. Hasta entonces, "Usuarios reales" sigue siendo provisional y se calcula con `anonymous_id_hash` usando el mejor alias disponible.
 
 ## Eventos sugeridos
