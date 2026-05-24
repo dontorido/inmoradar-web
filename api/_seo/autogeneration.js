@@ -1,7 +1,7 @@
 const { hasSupabaseConfig, supabaseFetch } = require("../_utils");
 const { buildPriceCitySourceData } = require("./marketSources");
 const { buildPriceCityLanding } = require("./priceCity");
-const { calculateSeoLandingQuality } = require("./quality");
+const { calculateSeoLandingQuality, evaluateSeoQualityGate } = require("./quality");
 const { normalizeText, stripHtml } = require("./text");
 const { buildExpensiveListingCityLanding } = require("../../lib/seo/cityGuideTemplates");
 
@@ -464,7 +464,7 @@ function buildLandingForOpportunity(opportunity, sourceData) {
   throw new Error(`Unsupported template_type: ${opportunity.template_type}`);
 }
 
-function buildLandingRecord({ opportunity, landing, sourceData, quality, score, status, now }) {
+function buildLandingRecord({ opportunity, landing, sourceData, quality, qualityGate, score, status, now }) {
   const publishedAt = status === "published" ? now : null;
   return {
     opportunity_id: opportunity.id || null,
@@ -479,7 +479,7 @@ function buildLandingRecord({ opportunity, landing, sourceData, quality, score, 
     autonomous_community: landing.autonomous_community,
     template_type: landing.template_type,
     canonical_url: landing.canonical_url,
-    index_status: status === "published" ? "index" : "noindex",
+    index_status: status === "published" && qualityGate?.can_index ? "index" : "noindex",
     status,
     quality_score: score.final_score,
     word_count: quality.word_count,
@@ -489,6 +489,7 @@ function buildLandingRecord({ opportunity, landing, sourceData, quality, score, 
       sources: sourceData.sources || [],
       score,
       quality,
+      quality_gate: qualityGate,
       faq: landing.faq || [],
       lookup_error: sourceData.lookup_error || null
     },
@@ -497,7 +498,7 @@ function buildLandingRecord({ opportunity, landing, sourceData, quality, score, 
   };
 }
 
-function resultFor({ opportunity, landing, status, reason, score, quality, sourceData, saved, targetPath }) {
+function resultFor({ opportunity, landing, status, reason, score, quality, qualityGate, sourceData, saved, targetPath }) {
   return {
     page_type: opportunity?.template_type || null,
     city: opportunity?.city || null,
@@ -511,6 +512,8 @@ function resultFor({ opportunity, landing, status, reason, score, quality, sourc
     seo_opportunity_score: score?.seo_opportunity_score ?? null,
     conversion_potential_score: score?.conversion_potential_score ?? null,
     sources_count: Array.isArray(sourceData?.sources) ? sourceData.sources.length : 0,
+    quality_gate_passed: qualityGate?.passed ?? null,
+    quality_gate_reasons: qualityGate?.reasons || [],
     saved: Boolean(saved)
   };
 }
@@ -647,10 +650,17 @@ async function runSeoAutogeneration(options = {}) {
         }
 
         const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: landing.faq });
+        const qualityGate = evaluateSeoQualityGate({
+          landing,
+          sourceData: { ...sourceData, faq: landing.faq },
+          quality,
+          uniqueness,
+          minScore: config.min_score
+        });
         const score = scoreAutogenerationCandidate({ opportunity, quality, uniqueness, sourceData });
-        if (score.final_score >= config.min_score) {
+        if (score.final_score >= config.min_score && qualityGate.can_publish) {
           const status = config.dry_run ? "would_publish" : "published";
-          const record = buildLandingRecord({ opportunity, landing, sourceData, quality, score, status: "published", now });
+          const record = buildLandingRecord({ opportunity, landing, sourceData, quality, qualityGate, score, status: "published", now });
           let saved = null;
           if (!config.dry_run) {
             saved = await storage.saveLanding(record);
@@ -665,7 +675,7 @@ async function runSeoAutogeneration(options = {}) {
           }
           publishSlotCount += 1;
           publishedCount += config.dry_run ? 0 : 1;
-          results.push(resultFor({ opportunity, landing, status, reason: null, score, quality, sourceData, saved, targetPath }));
+          results.push(resultFor({ opportunity, landing, status, reason: null, score, quality, qualityGate, sourceData, saved, targetPath }));
           if (publishSlotCount >= config.max_per_run) continue;
           continue;
         }
@@ -674,19 +684,21 @@ async function runSeoAutogeneration(options = {}) {
           const shouldDraft = !config.dry_run && draftCount < MAX_DRAFTS_PER_RUN;
           let saved = null;
           if (shouldDraft) {
-            const record = buildLandingRecord({ opportunity, landing, sourceData, quality, score, status: "draft", now });
+            const record = buildLandingRecord({ opportunity, landing, sourceData, quality, qualityGate, score, status: "draft", now });
             saved = await storage.saveLanding(record);
             draftCount += 1;
             existingAndSaved.push(record);
           }
+          const gateReason = qualityGate.can_publish ? null : "quality_gate_failed";
           results.push(
             resultFor({
               opportunity,
               landing,
               status: config.dry_run ? "would_skip" : shouldDraft ? "draft" : "skipped",
-              reason: shouldDraft ? "score_below_publish_threshold_drafted" : "score_below_publish_threshold",
+              reason: gateReason || (shouldDraft ? "score_below_publish_threshold_drafted" : "score_below_publish_threshold"),
               score,
               quality,
+              qualityGate,
               sourceData,
               saved,
               targetPath
@@ -703,6 +715,7 @@ async function runSeoAutogeneration(options = {}) {
             reason: "score_below_draft_threshold",
             score,
             quality,
+            qualityGate,
             sourceData,
             targetPath
           })

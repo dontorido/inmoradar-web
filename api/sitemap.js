@@ -1,5 +1,6 @@
 const { hasSupabaseConfig, supabaseFetch } = require("./_utils");
 const { getSeedPublishedLanding } = require("./_seo/seedPublished");
+const { SEO_INDEX_MIN_SCORE } = require("./_seo/quality");
 const { escapeHtml, siteUrl } = require("./_seo/text");
 
 const STATIC_PATHS = [
@@ -20,17 +21,19 @@ async function fetchPublishedLandings() {
   const seed = await getSeedPublishedLanding("precio-metro-cuadrado/logrono");
   if (!hasSupabaseConfig()) return seed ? [seed] : [];
   const params = new URLSearchParams({
-    select: "slug,title,meta_description,city,template_type,quality_score,updated_at,published_at,last_generated_at",
+    select: "slug,title,meta_description,city,template_type,quality_score,updated_at,published_at,last_generated_at,source_data_json",
     index_status: "eq.index",
     status: "eq.published",
-    quality_score: "gte.75",
+    quality_score: `gte.${SEO_INDEX_MIN_SCORE}`,
     order: "published_at.desc",
     limit: "500"
   });
   let landings = [];
   try {
     const rows = await supabaseFetch(`seo_landings?${params.toString()}`);
-    landings = Array.isArray(rows) ? rows : [];
+    landings = Array.isArray(rows)
+      ? rows.filter((landing) => landing?.source_data_json?.quality_gate?.can_index !== false)
+      : [];
   } catch (error) {
     console.warn("[sitemap] Supabase landing lookup failed, using seed fallback", error.message);
   }

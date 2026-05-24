@@ -1,5 +1,8 @@
 const { countWords, normalizeText } = require("./text");
 
+const SEO_INDEX_MIN_SCORE = 80;
+const SEO_AUTOPUBLISH_MIN_SCORE = 80;
+
 function hasSourceAndDate(sourceData) {
   return Boolean(
     sourceData?.records?.length &&
@@ -23,6 +26,11 @@ function containsUsefulFaq(landing, sourceData) {
 
 function hasClearCta(bodyHtml) {
   return /Instalar InmoRadar|Analiza anuncios antes de contactar|INSTALAR INMORADAR/i.test(String(bodyHtml || ""));
+}
+
+function hasMeasurableInstallCta(bodyHtml) {
+  const html = String(bodyHtml || "");
+  return /data-install-button/i.test(html) && /data-install-source="seo[_a-z0-9-]*"/i.test(html);
 }
 
 function internalLinkCount(bodyHtml) {
@@ -54,6 +62,75 @@ function hasOverGenericClaims(landing) {
   const absoluteClaims = /(garantizado|sin duda|valor real exacto|siempre es|siempre será|es el precio exacto|precio exacto de calle)/i.test(body);
   if (landing?.template_type === "editorial_guide") return requiredBlocks < 3 || absoluteClaims;
   return cityMentions < 5 || requiredBlocks < 3 || absoluteClaims;
+}
+
+function hasCanonicalUrl(landing) {
+  const slug = String(landing?.slug || "").replace(/^\/+|\/+$/g, "");
+  const canonical = String(landing?.canonical_url || "").trim();
+  if (!slug || !canonical) return false;
+  return /^https:\/\/(www\.)?inmoradar\.app\//i.test(canonical) && canonical.endsWith(`/${slug}/`);
+}
+
+function hasPrudenceBlock(landing) {
+  const body = normalizeText(landing?.body_html);
+  return (
+    /referencia orientativa|referencias orientativas|dato agregado|senal agregada|señal agregada/.test(body) &&
+    /no constituye una tasacion|no sustituye una tasacion|no es una tasacion|no garantiza|no describe una calle concreta/.test(body)
+  );
+}
+
+function hasThirdPartyAffiliationRisk(landing) {
+  const text = normalizeText(`${landing?.title || ""} ${landing?.meta_title || ""} ${landing?.meta_description || ""} ${landing?.body_html || ""}`);
+  return /(idealista|fotocasa|habitaclia)[a-z0-9\s]{0,32}(oficial|afiliad|partner|colaboracion oficial)|oficial[a-z0-9\s]{0,32}(idealista|fotocasa|habitaclia)/.test(text);
+}
+
+function addGateCheck(checks, id, ok, message, severity = "blocker") {
+  checks.push({ id, ok: Boolean(ok), severity, message });
+}
+
+function evaluateSeoQualityGate({ landing, sourceData = {}, quality = null, uniqueness = { ok: true }, minScore = SEO_AUTOPUBLISH_MIN_SCORE } = {}) {
+  const computedQuality = quality || calculateSeoLandingQuality(landing, sourceData);
+  const wordCount = Number(computedQuality.word_count) || countWords(landing?.body_html);
+  const templateType = String(landing?.template_type || "");
+  const isEditorialGuide = templateType === "editorial_guide";
+  const checks = [];
+  const sourceVisible = hasSourceAndDate(sourceData) && /Fuente:|Fecha del dato:/i.test(String(landing?.body_html || ""));
+  const specificBlockCount = isEditorialGuide ? guideSpecificBlockCount(landing?.body_html) : citySpecificBlockCount(landing?.body_html);
+
+  addGateCheck(checks, "quality_score_minimum", computedQuality.score >= minScore, `Quality score ${computedQuality.score} por debajo del minimo ${minScore}.`);
+  addGateCheck(checks, "content_minimum", wordCount >= 700, "La landing debe tener al menos 700 palabras utiles.");
+  addGateCheck(checks, "required_meta", Boolean(landing?.title && landing?.meta_title && landing?.meta_description && landing?.h1), "Faltan title, meta title, meta description o H1.");
+  addGateCheck(
+    checks,
+    "meta_unique",
+    isEditorialGuide ? normalizeText(landing?.meta_description).length >= 80 : metaLooksUnique(landing) && !sourceData.duplicateMeta,
+    "Title, H1 y meta description deben ser especificos y no duplicados."
+  );
+  addGateCheck(checks, "canonical_valid", hasCanonicalUrl(landing), "Canonical ausente o no alineado con el slug.");
+  addGateCheck(checks, "measurable_cta", hasMeasurableInstallCta(landing?.body_html), "Debe existir CTA SEO medible con data-install-button y data-install-source.");
+  addGateCheck(checks, "internal_links", internalLinkCount(landing?.body_html) >= 2, "Debe incluir al menos dos enlaces internos utiles.");
+  addGateCheck(checks, "faq_useful", containsUsefulFaq(landing, sourceData), "Debe incluir FAQ util.");
+  addGateCheck(checks, "specific_content", specificBlockCount >= 3 && !hasOverGenericClaims(landing), "Debe incluir contenido especifico y evitar afirmaciones genericas o absolutas.");
+  addGateCheck(checks, "prudence_block", hasPrudenceBlock(landing), "Debe incluir bloque de prudencia: referencia orientativa/no tasacion exacta.");
+  addGateCheck(checks, "third_party_independence", !hasThirdPartyAffiliationRisk(landing), "No debe sugerir afiliacion oficial con portales inmobiliarios.");
+  addGateCheck(checks, "not_street_exact", !hasMunicipalitySoldAsStreet(landing, sourceData), "No puede vender un dato municipal como dato exacto de calle.");
+  addGateCheck(checks, "source_quality", isEditorialGuide || (sourceData.hasRealData && !sourceData.hasProvincialOnly && sourceVisible), "Debe tener fuente real visible, fecha y nivel suficiente.");
+  addGateCheck(checks, "uniqueness", uniqueness?.ok !== false, `Duplicidad o similitud excesiva: ${uniqueness?.reason || "unknown"}.`);
+
+  const failed = checks.filter((check) => !check.ok);
+  const blockingReasons = failed.filter((check) => check.severity === "blocker").map((check) => check.id);
+  const canPublish = blockingReasons.length === 0;
+  return {
+    passed: canPublish,
+    can_publish: canPublish,
+    can_index: canPublish && computedQuality.score >= SEO_INDEX_MIN_SCORE,
+    min_score: minScore,
+    index_min_score: SEO_INDEX_MIN_SCORE,
+    quality_score: computedQuality.score,
+    word_count: wordCount,
+    reasons: blockingReasons,
+    checks
+  };
 }
 
 function calculateSeoLandingQuality(landing, sourceData = {}) {
@@ -133,5 +210,8 @@ function calculateSeoLandingQuality(landing, sourceData = {}) {
 }
 
 module.exports = {
-  calculateSeoLandingQuality
+  SEO_AUTOPUBLISH_MIN_SCORE,
+  SEO_INDEX_MIN_SCORE,
+  calculateSeoLandingQuality,
+  evaluateSeoQualityGate
 };

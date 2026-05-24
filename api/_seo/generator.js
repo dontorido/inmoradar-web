@@ -9,7 +9,7 @@ const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../.
 const { buildPriceCitySourceData } = require("./marketSources");
 const { buildSeoDailyPolicySnapshot, seoContentTypeForTemplate } = require("./publishingPolicy");
 const { buildPriceCityLanding } = require("./priceCity");
-const { calculateSeoLandingQuality } = require("./quality");
+const { calculateSeoLandingQuality, evaluateSeoQualityGate } = require("./quality");
 
 const LANDING_TEMPLATE_TYPES = ["price_city", "rent_city", "expensive_listing_city"];
 const EDITORIAL_TEMPLATE_TYPES = ["editorial_guide"];
@@ -346,9 +346,10 @@ async function countPublishedToday(now) {
   return snapshot.published_total_today;
 }
 
-function canPublishNow({ mode, autoPublish, quality, publishedToday, publishedThisRun, dailyPublishLimit, maxPublishesPerRun }) {
+function canPublishNow({ mode, autoPublish, quality, qualityGate, publishedToday, publishedThisRun, dailyPublishLimit, maxPublishesPerRun }) {
   if (mode !== "publish" || !autoPublish) return false;
   if (quality.score < 85) return false;
+  if (!qualityGate?.can_publish) return false;
   if (publishedThisRun >= maxPublishesPerRun) return false;
   if (dailyPublishLimit !== null && publishedToday >= dailyPublishLimit) return false;
   return true;
@@ -389,7 +390,7 @@ function buildLandingForOpportunity(opportunity, sourceData) {
   throw new Error(`Unsupported template_type: ${opportunity.template_type}`);
 }
 
-function buildLandingRecord({ opportunity, landing, sourceData, quality, status, indexStatus, now, publishedAt }) {
+function buildLandingRecord({ opportunity, landing, sourceData, quality, qualityGate, status, indexStatus, now, publishedAt }) {
   return {
     opportunity_id: opportunity.id || null,
     slug: landing.slug,
@@ -412,6 +413,7 @@ function buildLandingRecord({ opportunity, landing, sourceData, quality, status,
       template_type: landing.template_type,
       sources: sourceData.sources,
       quality,
+      quality_gate: qualityGate,
       faq: landing.faq,
       lookup_error: sourceData.lookup_error || null
     },
@@ -421,6 +423,7 @@ function buildLandingRecord({ opportunity, landing, sourceData, quality, status,
 }
 
 function resultSummary(record, sourceData, quality, saved) {
+  const qualityGate = record.source_data_json?.quality_gate || {};
   return {
     slug: record.slug,
     title: record.title,
@@ -433,6 +436,8 @@ function resultSummary(record, sourceData, quality, saved) {
     data_available: sourceData.hasRealData,
     sources: sourceData.sources,
     penalties: quality.penalties,
+    quality_gate_passed: qualityGate.passed ?? null,
+    quality_gate_reasons: qualityGate.reasons || [],
     saved: Boolean(saved)
   };
 }
@@ -449,23 +454,26 @@ async function generateOne({ opportunity, mode, autoPublish, publishedToday, pub
       : templateSourceData(await buildPriceCitySourceData(opportunity), opportunity.template_type);
   const landing = buildLandingForOpportunity(opportunity, sourceData);
   const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: landing.faq });
+  const qualityGate = evaluateSeoQualityGate({ landing, sourceData: { ...sourceData, faq: landing.faq }, quality, minScore: 85 });
   const canAutoPublish = canPublishNow({
     mode,
     autoPublish,
     quality,
+    qualityGate,
     publishedToday,
     publishedThisRun,
     dailyPublishLimit,
     maxPublishesPerRun
   });
   const status = landingStatus(quality.score, canAutoPublish);
-  const indexStatus = status === "published" && quality.score >= 75 ? "index" : "noindex";
+  const indexStatus = status === "published" && qualityGate.can_index ? "index" : "noindex";
   const publishedAt = canAutoPublish ? now : null;
   const record = buildLandingRecord({
     opportunity,
     landing,
     sourceData,
     quality,
+    qualityGate,
     status,
     indexStatus,
     now,

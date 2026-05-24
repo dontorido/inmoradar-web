@@ -234,6 +234,8 @@ test("seo autogeneration publica una pagina elegible con score suficiente", asyn
   assert.equal(storage.saved.length, 1);
   assert.equal(storage.saved[0].status, "published");
   assert.equal(storage.saved[0].index_status, "index");
+  assert.equal(storage.saved[0].source_data_json.quality_gate.can_index, true);
+  assert.equal(result.results[0].quality_gate_passed, true);
   assert.equal(result.results[0].target_path, "/precio-metro-cuadrado/sevilla/");
   assert.ok(result.results[0].final_score >= 80);
 });

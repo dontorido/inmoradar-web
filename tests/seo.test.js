@@ -5,7 +5,7 @@ const path = require("node:path");
 
 const { buildPriceCitySourceData } = require("../api/_seo/marketSources");
 const { buildPriceCityLanding } = require("../api/_seo/priceCity");
-const { calculateSeoLandingQuality } = require("../api/_seo/quality");
+const { SEO_INDEX_MIN_SCORE, calculateSeoLandingQuality, evaluateSeoQualityGate } = require("../api/_seo/quality");
 const { runSeoLandingGeneration } = require("../api/_seo/generator");
 const { buildSeoDailyPolicySnapshot, selectNextSeoContentType } = require("../api/_seo/publishingPolicy");
 const { getSeedPublishedLanding } = require("../api/_seo/seedPublished");
@@ -33,6 +33,36 @@ test("price_city genera una landing de alta calidad cuando hay datos reales, fue
   assert.match(landing.body_html, /data-seo-calc-price/);
   assert.match(landing.body_html, /data-seo-calc-area/);
   assert.doesNotMatch(landing.body_html, /precio exacto de calle/i);
+});
+
+test("quality gate exige CTA medible, canonical, prudencia y fuente visible", async () => {
+  const opportunity = {
+    keyword: "precio metro cuadrado Logrono",
+    city: "Logrono",
+    province: "La Rioja",
+    autonomous_community: "La Rioja",
+    template_type: "price_city"
+  };
+  const sourceData = await buildPriceCitySourceData(opportunity);
+  const landing = buildPriceCityLanding(opportunity, sourceData);
+  const gate = evaluateSeoQualityGate({ landing, sourceData: { ...sourceData, faq: landing.faq } });
+  const withoutTrackedCta = evaluateSeoQualityGate({
+    landing: {
+      ...landing,
+      body_html: landing.body_html.replace(/data-install-button/g, "data-install-disabled")
+    },
+    sourceData: { ...sourceData, faq: landing.faq }
+  });
+  const badCanonical = evaluateSeoQualityGate({
+    landing: { ...landing, canonical_url: "https://example.com/precio-metro-cuadrado/logrono/" },
+    sourceData: { ...sourceData, faq: landing.faq }
+  });
+
+  assert.equal(gate.can_publish, true);
+  assert.equal(gate.can_index, true);
+  assert.equal(withoutTrackedCta.can_publish, false);
+  assert.equal(withoutTrackedCta.reasons.includes("measurable_cta"), true);
+  assert.equal(badCanonical.reasons.includes("canonical_valid"), true);
 });
 
 test("price_city queda por debajo de publicación si no hay fuente real", async () => {
@@ -160,6 +190,30 @@ test("las landings publicas cargan analitica solo tras consentimiento", () => {
   assert.doesNotMatch(html, /googletagmanager\.com\/gtm\.js/);
   assert.doesNotMatch(html, /googletagmanager\.com\/ns\.html/);
   assert.match(html, /\/api\/og\/price-city/);
+});
+
+test("render publico deja noindex si score o quality gate no permiten indexar", () => {
+  const base = {
+    slug: "precio-metro-cuadrado/test",
+    title: "Precio del metro cuadrado en Test",
+    meta_title: "Precio m² en Test",
+    meta_description: "Referencia de precio por metro cuadrado en Test.",
+    body_html: "<main><h1>Precio del metro cuadrado en Test</h1></main>",
+    canonical_url: "https://inmoradar.app/precio-metro-cuadrado/test/",
+    index_status: "index",
+    status: "published",
+    source_data_json: { faq: [] }
+  };
+
+  const lowScore = renderLandingHtml({ ...base, quality_score: SEO_INDEX_MIN_SCORE - 1 });
+  const gateBlocked = renderLandingHtml({
+    ...base,
+    quality_score: SEO_INDEX_MIN_SCORE,
+    source_data_json: { quality_gate: { can_index: false, reasons: ["measurable_cta"] } }
+  });
+
+  assert.match(lowScore, /noindex,follow/);
+  assert.match(gateBlocked, /noindex,follow/);
 });
 
 test("las landings publicas usan header y footer globales sin Premium en cabecera", () => {
@@ -332,7 +386,7 @@ test("sitemap consulta solo landings publicadas indexables y con quality_score s
   const params = new URL(requestedUrl).searchParams;
   assert.equal(params.get("status"), "eq.published");
   assert.equal(params.get("index_status"), "eq.index");
-  assert.equal(params.get("quality_score"), "gte.75");
+  assert.equal(params.get("quality_score"), `gte.${SEO_INDEX_MIN_SCORE}`);
 });
 
 test("la home tiene seccion Noticias con enlaces a publicaciones", () => {

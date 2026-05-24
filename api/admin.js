@@ -30,6 +30,7 @@ const {
   runwaySettings
 } = require("../lib/social-video/runway");
 const { summarizeExtensionUsage } = require("../lib/extension-usage/metrics");
+const { SEO_INDEX_MIN_SCORE, evaluateSeoQualityGate } = require("./_seo/quality");
 const { buildRevenueEventFromLemonPayload, summarizeMonthlyRevenue } = require("../lib/sales/revenue");
 const {
   normalizeReleaseArtifactInput,
@@ -118,7 +119,7 @@ const {
   withUtm
 } = require("../lib/meta/services");
 const LANDING_SELECT =
-  "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at";
+  "id,opportunity_id,slug,title,meta_title,meta_description,h1,body_html,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at,source_data_json";
 
 function requestHeader(req, name) {
   const headers = req.headers || {};
@@ -892,6 +893,21 @@ function opportunityFromLanding(landing) {
   };
 }
 
+function seoSourceDataFromLanding(landing = {}) {
+  const saved = landing.source_data_json && typeof landing.source_data_json === "object" ? landing.source_data_json : {};
+  const sources = Array.isArray(saved.sources) ? saved.sources : [];
+  const records = sources.filter((source) => source?.source && source?.source_url);
+  const hasProvincialOnly =
+    records.length > 0 && records.every((record) => ["province", "autonomous_community", "country"].includes(record.geo_level));
+  return {
+    ...saved,
+    records,
+    sources,
+    hasRealData: Boolean(saved.hasRealData || records.length),
+    hasProvincialOnly
+  };
+}
+
 async function handleSeoLandingAction(body) {
   const action = String(body.action || "").trim();
   const slug = normalizeSlug(body.slug);
@@ -905,15 +921,29 @@ async function handleSeoLandingAction(body) {
 
   if (action === "publish") {
     const score = Number(landing.quality_score) || 0;
-    if (score < 75) {
+    const qualityGate = evaluateSeoQualityGate({
+      landing,
+      sourceData: seoSourceDataFromLanding(landing),
+      minScore: SEO_INDEX_MIN_SCORE
+    });
+    if (score < SEO_INDEX_MIN_SCORE || !qualityGate.can_publish) {
       return {
         status: 409,
-        payload: { ok: false, error: "quality_too_low", message: "Quality score must be at least 75." }
+        payload: {
+          ok: false,
+          error: "quality_gate_failed",
+          message: `Quality gate failed. Minimum score is ${SEO_INDEX_MIN_SCORE}.`,
+          quality_gate: qualityGate
+        }
       };
     }
     const updated = await patchLanding(slug, {
       status: "published",
-      index_status: "index",
+      index_status: qualityGate.can_index ? "index" : "noindex",
+      source_data_json: {
+        ...(landing.source_data_json || {}),
+        quality_gate: qualityGate
+      },
       published_at: landing.published_at || new Date().toISOString()
     });
     return { status: 200, payload: { ok: true, action, landing: updated } };

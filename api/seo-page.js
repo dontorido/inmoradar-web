@@ -2,6 +2,7 @@ const { hasSupabaseConfig, supabaseFetch } = require("./_utils");
 const { googleTagManagerHead, googleTagManagerNoscript } = require("./_seo/analytics");
 const { getSeedPublishedLanding } = require("./_seo/seedPublished");
 const { buildPrecioMetroCuadradoCiudad } = require("./_seo/priceCity");
+const { SEO_INDEX_MIN_SCORE } = require("./_seo/quality");
 const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../lib/seo/cityGuideTemplates");
 const { escapeHtml, siteUrl, stripHtml } = require("./_seo/text");
 
@@ -344,7 +345,9 @@ function normalizeLandingBodyHtml(bodyHtml = "") {
 }
 function renderLandingHtml(landing) {
   const qualityScore = Number(landing.quality_score) || 0;
-  const robots = landing.index_status === "index" && landing.status === "published" && qualityScore >= 75 ? "index,follow" : "noindex,follow";
+  const qualityGate = landing?.source_data_json?.quality_gate || null;
+  const gateAllowsIndex = !qualityGate || qualityGate.can_index !== false;
+  const robots = landing.index_status === "index" && landing.status === "published" && qualityScore >= SEO_INDEX_MIN_SCORE && gateAllowsIndex ? "index,follow" : "noindex,follow";
   const canonical = landing.canonical_url || `${siteUrl()}/${landing.slug}/`;
   const dynamicLanding = buildDynamicCityGuideLanding(landing);
   const renderedLanding = dynamicLanding
