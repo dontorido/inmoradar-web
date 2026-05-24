@@ -1019,6 +1019,118 @@ function decorateSeoLandingForAdmin(landing = {}) {
   };
 }
 
+const SEO_DRAFT_REVIEW_STATUSES = new Set(["draft", "needs_review", "quality_review", "ready_to_publish", "approved_for_publish"]);
+
+function seoDraftReviewSafetyFlags() {
+  return {
+    published: false,
+    indexed: false,
+    touched_sitemap: false
+  };
+}
+
+function seoDraftReviewSafetyError(landing = {}) {
+  const status = String(landing.status || "").toLowerCase();
+  const indexStatus = String(landing.index_status || "").toLowerCase();
+  if (!SEO_DRAFT_REVIEW_STATUSES.has(status)) return "not_reviewable_draft_status";
+  if (indexStatus === "index") return "draft_already_indexable";
+  if (landing.published_at) return "draft_already_published";
+  return "";
+}
+
+function sanitizeDraftText(value, maxLength) {
+  if (value === undefined || value === null) return undefined;
+  return String(value).trim().slice(0, maxLength);
+}
+
+function sanitizeDraftHtml(value) {
+  if (value === undefined || value === null) return undefined;
+  return String(value)
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*')/gi, "")
+    .slice(0, 120000)
+    .trim();
+}
+
+function sanitizeDraftFaqItems(value) {
+  if (!Array.isArray(value)) return undefined;
+  return value
+    .map((item) => {
+      if (typeof item === "string") return { question: item.trim().slice(0, 240), answer: "" };
+      if (!item || typeof item !== "object") return null;
+      return {
+        question: String(item.question || item.q || "").trim().slice(0, 240),
+        answer: String(item.answer || item.a || "").trim().slice(0, 800)
+      };
+    })
+    .filter((item) => item && item.question)
+    .slice(0, 12);
+}
+
+function sanitizeDraftInternalLinks(value) {
+  if (!Array.isArray(value)) return undefined;
+  return value
+    .map((item) => String(item || "").trim().split(/[?#]/)[0])
+    .filter((href) => href.startsWith("/") && !href.startsWith("//") && href.length <= 160)
+    .slice(0, 12);
+}
+
+function buildSeoDraftEditPatch(landing = {}, body = {}) {
+  const input = body.patch && typeof body.patch === "object" ? body.patch : body;
+  const editable = {};
+  const title = sanitizeDraftText(input.title, 180);
+  const h1 = sanitizeDraftText(input.h1, 180);
+  const metaTitle = sanitizeDraftText(input.meta_title, 180);
+  const metaDescription = sanitizeDraftText(input.meta_description, 260);
+  const bodyHtml = sanitizeDraftHtml(input.body_html ?? input.body);
+  if (title !== undefined) editable.title = title;
+  if (h1 !== undefined) editable.h1 = h1;
+  if (metaTitle !== undefined) editable.meta_title = metaTitle;
+  if (metaDescription !== undefined) editable.meta_description = metaDescription;
+  if (bodyHtml !== undefined) editable.body_html = bodyHtml;
+
+  const sourceData = {
+    ...(landing.source_data_json && typeof landing.source_data_json === "object" ? landing.source_data_json : {})
+  };
+  const faq = sanitizeDraftFaqItems(input.faq);
+  const internalLinks = sanitizeDraftInternalLinks(input.internal_links);
+  const recommendedCta = sanitizeDraftText(input.recommended_cta || input.cta, 260);
+  const editorialNotes = sanitizeDraftText(input.editorial_notes || input.notes, 2000);
+  if (faq !== undefined) sourceData.faq = faq;
+  if (internalLinks !== undefined) sourceData.internal_links = internalLinks;
+  if (recommendedCta !== undefined) sourceData.recommended_cta = recommendedCta;
+  sourceData.editorial_review = {
+    ...(sourceData.editorial_review && typeof sourceData.editorial_review === "object" ? sourceData.editorial_review : {}),
+    last_review_action: "draft_edit",
+    updated_at: new Date().toISOString(),
+    updated_by: String(body.updated_by || "backoffice").slice(0, 120)
+  };
+  if (editorialNotes !== undefined) sourceData.editorial_review.notes = editorialNotes;
+
+  const nextLanding = {
+    ...landing,
+    ...editable,
+    status: landing.status,
+    index_status: "noindex",
+    published_at: null,
+    source_data_json: sourceData
+  };
+  const recalculation = recalculateSeoQualityGatePatch(nextLanding);
+  const nextStatus = recalculation.qualityGate.can_publish ? "needs_review" : "draft";
+  return {
+    ...recalculation,
+    patch: {
+      ...editable,
+      status: nextStatus,
+      index_status: "noindex",
+      published_at: null,
+      quality_score: recalculation.quality.score,
+      word_count: recalculation.quality.word_count,
+      source_data_json: recalculation.patch.source_data_json
+    }
+  };
+}
+
 function recalculateSeoQualityGatePatch(landing = {}) {
   const sourceData = seoSourceDataFromLanding(landing);
   const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: sourceData.faq || landing.source_data_json?.faq || [] });
@@ -1062,15 +1174,17 @@ async function handleSeoLandingAction(body) {
   const slug = normalizeSlug(body.slug);
   const landingId = Number.parseInt(String(body.id || body.landing_id || ""), 10);
   const hasLandingId = Number.isFinite(landingId) && landingId > 0;
-  if (!["publish", "noindex", "archive", "regenerate", "recalculate_quality_gate"].includes(action)) {
+  if (!["publish", "noindex", "archive", "regenerate", "recalculate_quality_gate", "update_draft", "approve_draft_for_publish", "mark_draft_reviewed"].includes(action)) {
     return { status: 400, payload: { ok: false, error: "invalid_action" } };
   }
-  if (!slug && !(action === "recalculate_quality_gate" && hasLandingId)) {
+  const allowIdLookup = ["recalculate_quality_gate", "update_draft", "approve_draft_for_publish", "mark_draft_reviewed"].includes(action);
+  if (!slug && !(allowIdLookup && hasLandingId)) {
     return { status: 400, payload: { ok: false, error: "slug_required" } };
   }
 
   const landing = slug ? await fetchLanding(slug) : await fetchLandingById(landingId);
   if (!landing) return { status: 404, payload: { ok: false, error: "landing_not_found" } };
+  const saveLanding = slug ? patchLanding : (unusedSlug, patch) => patchLandingById(landingId, patch);
 
   if (action === "publish") {
     const score = Number(landing.quality_score) || 0;
@@ -1112,8 +1226,120 @@ async function handleSeoLandingAction(body) {
     return { status: 200, payload: { ok: true, action, landing: updated } };
   }
 
+  if (action === "update_draft") {
+    const safetyError = seoDraftReviewSafetyError(landing);
+    if (safetyError) {
+      return {
+        status: 409,
+        payload: {
+          ok: false,
+          error: safetyError,
+          landing: decorateSeoLandingForAdmin(landing),
+          ...seoDraftReviewSafetyFlags()
+        }
+      };
+    }
+    const before = {
+      status: landing.status,
+      index_status: landing.index_status,
+      published_at: landing.published_at,
+      canonical_url: landing.canonical_url,
+      quality_score: landing.quality_score
+    };
+    const recalculation = buildSeoDraftEditPatch(landing, body);
+    const updated = await saveLanding(slug, recalculation.patch);
+    const decorated = decorateSeoLandingForAdmin(updated || { ...landing, ...recalculation.patch });
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        action,
+        landing: decorated,
+        quality_gate: recalculation.qualityGate,
+        quality_gate_summary: recalculation.gateSummary,
+        changed_fields: [
+          "title",
+          "h1",
+          "meta_title",
+          "meta_description",
+          "body_html",
+          "quality_score",
+          "word_count",
+          "source_data_json.quality",
+          "source_data_json.quality_gate",
+          "source_data_json.quality_gate_summary"
+        ],
+        untouched_fields: ["canonical_url", "sitemap", "public_routes"],
+        before,
+        ...seoDraftReviewSafetyFlags()
+      }
+    };
+  }
+
+  if (action === "approve_draft_for_publish" || action === "mark_draft_reviewed") {
+    const safetyError = seoDraftReviewSafetyError(landing);
+    if (safetyError) {
+      return {
+        status: 409,
+        payload: {
+          ok: false,
+          error: safetyError,
+          landing: decorateSeoLandingForAdmin(landing),
+          ...seoDraftReviewSafetyFlags()
+        }
+      };
+    }
+    const recalculation = recalculateSeoQualityGatePatch(landing);
+    if (!recalculation.qualityGate.can_publish || recalculation.quality.score < SEO_INDEX_MIN_SCORE) {
+      return {
+        status: 409,
+        payload: {
+          ok: false,
+          error: "quality_gate_failed",
+          message: `Quality gate failed. Minimum score is ${SEO_INDEX_MIN_SCORE}.`,
+          landing: decorateSeoLandingForAdmin({ ...landing, ...recalculation.patch }),
+          quality_gate: recalculation.qualityGate,
+          quality_gate_summary: recalculation.gateSummary,
+          ...seoDraftReviewSafetyFlags()
+        }
+      };
+    }
+    const sourceData = {
+      ...recalculation.patch.source_data_json,
+      editorial_review: {
+        ...(recalculation.patch.source_data_json.editorial_review &&
+        typeof recalculation.patch.source_data_json.editorial_review === "object"
+          ? recalculation.patch.source_data_json.editorial_review
+          : {}),
+        last_review_action: "approved_for_publish",
+        approved_at: new Date().toISOString(),
+        approved_by: String(body.updated_by || "backoffice").slice(0, 120)
+      }
+    };
+    const updated = await saveLanding(slug, {
+      status: "ready_to_publish",
+      index_status: "noindex",
+      published_at: null,
+      quality_score: recalculation.quality.score,
+      word_count: recalculation.quality.word_count,
+      source_data_json: sourceData
+    });
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        action,
+        landing: decorateSeoLandingForAdmin(updated || { ...landing, status: "ready_to_publish", index_status: "noindex", published_at: null, source_data_json: sourceData }),
+        quality_gate: recalculation.qualityGate,
+        quality_gate_summary: recalculation.gateSummary,
+        changed_fields: ["status", "quality_score", "word_count", "source_data_json.editorial_review", "source_data_json.quality_gate"],
+        untouched_fields: ["body_html", "canonical_url", "sitemap", "public_routes"],
+        ...seoDraftReviewSafetyFlags()
+      }
+    };
+  }
+
   if (action === "recalculate_quality_gate") {
-    const saveLanding = slug ? patchLanding : (unusedSlug, patch) => patchLandingById(landingId, patch);
     const before = {
       status: landing.status,
       index_status: landing.index_status,

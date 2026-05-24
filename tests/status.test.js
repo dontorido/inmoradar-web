@@ -304,6 +304,21 @@ test("backoffice SEO muestra backlog de keywords y briefs sin publicar", () => {
   assert.match(adminJs, /resource=seo\/keyword-backlog/);
 });
 
+test("backoffice SEO permite revisar drafts sin publicar ni indexar", () => {
+  const root = path.join(__dirname, "..");
+  const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
+  const adminJs = fs.readFileSync(path.join(root, "assets", "admin.js"), "utf8");
+
+  assert.match(adminHtml, /data-seo-draft-editor/);
+  assert.match(adminHtml, /Guardar y recalcular gate/);
+  assert.match(adminHtml, /Aprobar para publicaci/);
+  assert.match(adminJs, /update_draft/);
+  assert.match(adminJs, /approve_draft_for_publish/);
+  assert.match(adminJs, /data-seo-edit-draft/);
+  assert.match(adminJs, /data-seo-approve-draft/);
+  assert.match(adminJs, /no publica, no indexa y no toca sitemap/);
+});
+
 test("status UI usa nombres legibles y no muestra campos tecnicos", () => {
   const root = path.join(__dirname, "..");
   const publicHtml = fs.readFileSync(path.join(root, "status.html"), "utf8");

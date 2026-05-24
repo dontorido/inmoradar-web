@@ -165,7 +165,9 @@ const state = {
     page: 1,
     pageSize: 10,
     hasNextPage: false,
-    hasPreviousPage: false
+    hasPreviousPage: false,
+    landings: [],
+    currentDraftSlug: ""
   },
   seoAutogeneration: {
     status: null,
@@ -280,6 +282,8 @@ const els = {
   seoSummary: document.querySelector("[data-seo-summary]"),
   seoRows: document.querySelector("[data-seo-rows]"),
   seoPagination: document.querySelector("[data-seo-pagination]"),
+  seoDraftEditor: document.querySelector("[data-seo-draft-editor]"),
+  seoDraftEditorStatus: document.querySelector("[data-seo-draft-editor-status]"),
   premiumFilter: document.querySelector("[data-premium-filter]"),
   seoFilter: document.querySelector("[data-seo-filter]"),
   seoGenerate: document.querySelector("[data-seo-generate]"),
@@ -1737,8 +1741,33 @@ function renderPremium(rows) {
     .join("");
 }
 
+function isSeoDraftReviewStatus(value) {
+  return ["draft", "needs_review", "quality_review", "ready_to_publish", "approved_for_publish"].includes(
+    String(value || "").toLowerCase()
+  );
+}
+
+function seoDraftOriginLabel(row = {}) {
+  const source = row.source_data_json || {};
+  const backlogId = source.seo_keyword_backlog_id || source.keyword_backlog?.id || "";
+  if (backlogId) return `Backlog #${backlogId}`;
+  if (source.generated_by === "seo_keyword_backlog_approved_brief") return "Backlog SEO";
+  return "";
+}
+
+function canApproveSeoDraft(row = {}) {
+  return (
+    isSeoDraftReviewStatus(row.status) &&
+    String(row.index_status || "").toLowerCase() !== "index" &&
+    !row.published_at &&
+    row.quality_gate_status === "passed" &&
+    Number(row.quality_score || 0) >= 80
+  );
+}
+
 function renderSeo(payload) {
   const rows = payload.landings || [];
+  state.seo.landings = rows;
   state.seo.page = Number(payload.page || state.seo.page || 1);
   state.seo.pageSize = Number(payload.page_size || state.seo.pageSize || 10);
   state.seo.hasNextPage = Boolean(payload.has_next_page);
@@ -1759,6 +1788,7 @@ function renderSeo(payload) {
           <td>
             <a href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(row.title || row.slug)}</a>
             <div class="admin-subtle">${escapeHtml(row.slug)} · ${escapeHtml(row.word_count || 0)} palabras</div>
+            ${seoDraftOriginLabel(row) ? `<div class="admin-subtle">${escapeHtml(seoDraftOriginLabel(row))}</div>` : ""}
           </td>
           <td>${escapeHtml(row.city || "-")}</td>
           <td>${chip(Number(row.quality_score || 0).toFixed(0), scoreTone(row.quality_score), "score")}</td>
@@ -1769,8 +1799,18 @@ function renderSeo(payload) {
           </td>
           <td>
             <div class="admin-row-actions">
+              ${
+                isSeoDraftReviewStatus(row.status)
+                  ? `<button class="admin-button tiny ghost" type="button" data-seo-edit-draft="${escapeHtml(row.slug)}">Editar</button>`
+                  : ""
+              }
               <button class="admin-icon-button" type="button" data-seo-action="regenerate" data-slug="${escapeHtml(row.slug)}" aria-label="Regenerar landing">R</button>
               <button class="admin-icon-button" type="button" data-seo-action="recalculate_quality_gate" data-slug="${escapeHtml(row.slug)}" aria-label="Recalcular quality gate" title="Recalcular gate">Q</button>
+              ${
+                canApproveSeoDraft(row)
+                  ? `<button class="admin-button tiny ghost" type="button" data-seo-approve-draft="${escapeHtml(row.slug)}">Aprobar</button>`
+                  : ""
+              }
               <button class="admin-icon-button" type="button" data-seo-action="publish" data-slug="${escapeHtml(row.slug)}" aria-label="Publicar landing">P</button>
               <button class="admin-icon-button" type="button" data-seo-action="noindex" data-slug="${escapeHtml(row.slug)}" aria-label="Marcar noindex">N</button>
             </div>
@@ -5435,6 +5475,90 @@ async function createSeoDraftFromApprovedBrief(id) {
   );
 }
 
+function seoLandingBySlug(slug) {
+  return state.seo.landings.find((row) => String(row.slug) === String(slug)) || null;
+}
+
+function renderSeoDraftEditorStatus(landing = {}) {
+  if (!els.seoDraftEditorStatus) return;
+  const approveButton = els.seoDraftEditor?.querySelector('[data-seo-draft-action="approve"]');
+  if (approveButton) approveButton.disabled = !canApproveSeoDraft(landing);
+  const failed = Array.isArray(landing.failed_checks) ? landing.failed_checks : [];
+  const failedLabel = failed.length ? ` · Falla: ${failed.map((check) => seoGateReasonLabel(check.id || check)).join(", ")}` : "";
+  els.seoDraftEditorStatus.textContent = `Draft ${landing.slug || "-"} · ${landing.status || "-"} · ${landing.index_status || "-"} · score ${
+    landing.quality_score || 0
+  } · ${seoGateLabel(landing.quality_gate_status || "not_calculated")}${failedLabel}. Aprobar para publicación no publica, no indexa y no toca sitemap.`;
+}
+
+function fillSeoDraftEditor(slug) {
+  const landing = seoLandingBySlug(slug);
+  if (!landing || !els.seoDraftEditor) return;
+  state.seo.currentDraftSlug = landing.slug;
+  els.seoDraftEditor.hidden = false;
+  els.seoDraftEditor.elements.slug.value = landing.slug || "";
+  els.seoDraftEditor.elements.h1.value = landing.h1 || "";
+  els.seoDraftEditor.elements.meta_title.value = landing.meta_title || "";
+  els.seoDraftEditor.elements.meta_description.value = landing.meta_description || "";
+  els.seoDraftEditor.elements.body_html.value = landing.body_html || "";
+  els.seoDraftEditor.elements.editorial_notes.value = landing.source_data_json?.editorial_review?.notes || "";
+  renderSeoDraftEditorStatus(landing);
+  showStatus(`Editando draft SEO: ${landing.slug}`, "neutral");
+}
+
+function seoDraftEditorPayload(form) {
+  const data = new FormData(form);
+  return {
+    slug: String(data.get("slug") || "").trim(),
+    patch: {
+      h1: String(data.get("h1") || "").trim(),
+      meta_title: String(data.get("meta_title") || "").trim(),
+      meta_description: String(data.get("meta_description") || "").trim(),
+      body_html: String(data.get("body_html") || "").trim(),
+      editorial_notes: String(data.get("editorial_notes") || "").trim()
+    }
+  };
+}
+
+async function updateSeoDraftFromEditor(form) {
+  const payload = seoDraftEditorPayload(form);
+  if (!payload.slug) throw new Error("Selecciona un draft SEO.");
+  showStatus(`Guardando draft SEO · ${payload.slug}`);
+  const result = await api("/api/admin?resource=seo/landings", {
+    method: "POST",
+    body: JSON.stringify({ action: "update_draft", ...payload })
+  });
+  await loadSeo();
+  if (result.landing) {
+    fillSeoDraftEditor(result.landing.slug);
+    renderSeoDraftEditorStatus(result.landing);
+  }
+  showStatus(
+    `Draft actualizado: ${result.landing?.slug || payload.slug} · ${seoGateLabel(result.landing?.quality_gate_status)} · score ${
+      result.landing?.quality_score || 0
+    } · noindex`,
+    result.landing?.quality_gate_status === "failed" ? "neutral" : "good"
+  );
+}
+
+async function approveSeoDraftForPublish(slug) {
+  const targetSlug = slug || state.seo.currentDraftSlug;
+  if (!targetSlug) throw new Error("Selecciona un draft SEO.");
+  showStatus(`Aprobando para publicación futura · ${targetSlug}`);
+  const result = await api("/api/admin?resource=seo/landings", {
+    method: "POST",
+    body: JSON.stringify({ action: "approve_draft_for_publish", slug: targetSlug })
+  });
+  await loadSeo();
+  if (result.landing) {
+    fillSeoDraftEditor(result.landing.slug);
+    renderSeoDraftEditorStatus(result.landing);
+  }
+  showStatus(
+    `Draft aprobado para publicación futura: ${result.landing?.slug || targetSlug} · sigue noindex y sin publicar.`,
+    "good"
+  );
+}
+
 async function loadKpis() {
   const payload = await api("/api/admin?resource=kpis/settings");
   renderKpis(payload);
@@ -6220,6 +6344,16 @@ if (els.app) {
 }
 
 els.seoRows.addEventListener("click", (event) => {
+  const editDraftButton = event.target.closest("[data-seo-edit-draft]");
+  if (editDraftButton) {
+    fillSeoDraftEditor(editDraftButton.dataset.seoEditDraft);
+    return;
+  }
+  const approveDraftButton = event.target.closest("[data-seo-approve-draft]");
+  if (approveDraftButton) {
+    approveSeoDraftForPublish(approveDraftButton.dataset.seoApproveDraft).catch((error) => showStatus(error.message, "bad"));
+    return;
+  }
   const button = event.target.closest("[data-seo-action]");
   if (!button) return;
   const action = button.dataset.seoAction;
@@ -6230,6 +6364,25 @@ els.seoRows.addEventListener("click", (event) => {
   }
   runSeoRowAction(action, slug).catch((error) => showStatus(error.message, "bad"));
 });
+
+if (els.seoDraftEditor) {
+  els.seoDraftEditor.addEventListener("submit", (event) => {
+    event.preventDefault();
+    updateSeoDraftFromEditor(els.seoDraftEditor).catch((error) => showStatus(error.message, "bad"));
+  });
+  els.seoDraftEditor.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-seo-draft-action]");
+    if (!button) return;
+    const slug = els.seoDraftEditor.elements.slug.value;
+    if (button.dataset.seoDraftAction === "approve") {
+      approveSeoDraftForPublish(slug).catch((error) => showStatus(error.message, "bad"));
+      return;
+    }
+    if (button.dataset.seoDraftAction === "recalculate") {
+      runSeoGateRecalculation(slug).catch((error) => showStatus(error.message, "bad"));
+    }
+  });
+}
 
 if (els.seoPagination) {
   els.seoPagination.addEventListener("click", (event) => {

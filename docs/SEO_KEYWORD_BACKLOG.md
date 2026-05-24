@@ -4,7 +4,7 @@
 
 El backlog SEO es una capa previa a la generacion de landings. Sirve para registrar oportunidades, priorizarlas y convertirlas en briefs revisables antes de crear contenido.
 
-Ahora puede persistirse en Supabase mediante la tabla `seo_keyword_backlog`. Tambien permite convertir una oportunidad `approved` con `brief_json` en un borrador SEO revisable. Esa conversion no publica, no indexa y no toca sitemap.
+Ahora puede persistirse en Supabase mediante la tabla `seo_keyword_backlog`. Tambien permite convertir una oportunidad `approved` con `brief_json` en un borrador SEO revisable y editar ese draft antes de una futura publicacion manual. Esa conversion y revision no publican, no indexan y no tocan sitemap.
 
 ## Modelo de backlog
 
@@ -209,6 +209,16 @@ Crear o editar una oportunidad persiste el backlog si Supabase esta disponible. 
 
 Crear borrador si escribe en `seo_landings`, pero siempre como borrador revisable: `index_status=noindex`, `published_at=null`, sin cambios de sitemap. Si el quality gate falla, queda en `draft`; si pasa, queda en `needs_review`.
 
+Los drafts SEO pendientes pueden editarse desde el BackOffice con el formulario de revision:
+
+- H1;
+- meta title;
+- meta description;
+- contenido HTML;
+- notas editoriales.
+
+Guardar el draft recalcula `word_count`, `quality_score`, `source_data_json.quality`, `source_data_json.quality_gate` y `source_data_json.quality_gate_summary`. Aprobar para publicacion futura solo se permite si el quality gate pasa y `quality_score >= 80`; deja el registro en `ready_to_publish`, pero mantiene `index_status=noindex` y `published_at=null`.
+
 ## Controles de calidad
 
 Antes de convertir un brief en landing:
@@ -231,7 +241,9 @@ Al crear un borrador desde un brief aprobado, el sistema ejecuta el quality gate
 5. Marcar como `approved` o `rejected`.
 6. Crear borrador desde una oportunidad `approved`.
 7. Revisar score, checks fallidos, copy, fuentes, CTA e independencia.
-8. Solo en una accion separada y posterior, decidir si se publica manualmente.
+8. Editar el draft y recalcular quality gate.
+9. Marcarlo como `ready_to_publish` solo si pasa el gate.
+10. Solo en una accion separada y posterior, decidir si se publica manualmente.
 
 ## Acciones que NO hace
 
@@ -244,14 +256,19 @@ Al crear un borrador desde un brief aprobado, el sistema ejecuta el quality gate
 
 La accion `create_draft_from_approved_brief` si crea un registro en `seo_landings`, pero siempre como `noindex`, no publicado y sin `published_at`.
 
+Las acciones `update_draft` y `approve_draft_for_publish` operan sobre `seo_landings`, pero tambien devuelven `published=false`, `indexed=false` y `touched_sitemap=false`.
+
 ## Limitaciones
 
 - El fallback a seeds es solo operativo/desarrollo; no sustituye la persistencia editorial.
 - No hay batch de importacion en esta rama.
 - La dificultad es manual y orientativa.
 - Una oportunidad `approved` permite crear borrador, pero no implica publicacion.
+- Un draft `ready_to_publish` esta aprobado editorialmente para una accion futura, pero sigue sin publicar ni indexar.
 - El id del backlog se guarda en `source_data_json`; `seo_landings.opportunity_id` se mantiene para la tabla historica `seo_landing_opportunities`.
 
 ## Siguiente rama recomendada
 
-Crear una rama pequena para revisar/editar el contenido del draft desde BackOffice antes de permitir cualquier publicacion manual.
+Crear una rama pequena para publicar manualmente desde `ready_to_publish` con confirmacion explicita, ultimo bloqueo de quality gate y registro de auditoria.
+
+Ver tambien: `docs/SEO_DRAFT_REVIEW_WORKFLOW.md`.

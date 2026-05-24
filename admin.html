@@ -269,6 +269,20 @@
                 <tbody data-seo-rows></tbody>
               </table>
             </div>
+            <form class="admin-linkedin-form" data-seo-draft-editor hidden>
+              <input type="hidden" name="slug">
+              <label class="admin-linkedin-wide"><span>H1</span><input name="h1" placeholder="H1 del draft"></label>
+              <label class="admin-linkedin-wide"><span>Meta title</span><input name="meta_title" placeholder="Meta title"></label>
+              <label class="admin-linkedin-wide"><span>Meta description</span><input name="meta_description" placeholder="Meta description"></label>
+              <label class="admin-linkedin-wide"><span>Contenido HTML</span><textarea name="body_html" rows="8" placeholder="HTML editorial del draft"></textarea></label>
+              <label class="admin-linkedin-wide"><span>Notas editoriales</span><textarea name="editorial_notes" rows="3" placeholder="Cambios realizados, dudas o revisiones pendientes"></textarea></label>
+              <p class="admin-table-hint" data-seo-draft-editor-status>Editar un draft recalcula el quality gate, pero no publica, no indexa y no toca sitemap.</p>
+              <div class="admin-row-actions">
+                <button class="admin-button tiny" type="submit" data-seo-draft-save>Guardar y recalcular gate</button>
+                <button class="admin-button tiny ghost" type="button" data-seo-draft-action="recalculate">Recalcular gate</button>
+                <button class="admin-button tiny ghost" type="button" data-seo-draft-action="approve">Aprobar para publicaci&oacute;n futura</button>
+              </div>
+            </form>
             <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
             <div class="admin-pagination" data-seo-pagination></div>
           </article>
