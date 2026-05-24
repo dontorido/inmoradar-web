@@ -54,7 +54,13 @@ test("extension usage normalizes browser, country and hashes identifiers", () =>
       extension_version: "1.0.10",
       platform: "Windows",
       duration_seconds: 120,
-      active_seconds: 95
+      active_seconds: 95,
+      timestamp: "2026-05-24T10:00:00.000Z",
+      portal: "Idealista",
+      page_domain: "www.idealista.com",
+      metadata: {
+        locale: "es-ES"
+      }
     },
     {
       "user-agent": "Mozilla/5.0 Chrome/124.0.0.0 Safari/537.36",
@@ -71,6 +77,13 @@ test("extension usage normalizes browser, country and hashes identifiers", () =>
   assert.equal(event.active_seconds, 95);
   assert.equal(event.anonymous_id_hash.length, 48);
   assert.notEqual(event.anonymous_id_hash, "install-123");
+  assert.deepEqual(event.metadata, {
+    manifest_version: null,
+    locale: "es-ES",
+    event_timestamp: "2026-05-24T10:00:00.000Z",
+    portal: "idealista",
+    page_domain: "www.idealista.com"
+  });
 });
 
 test("extension usage parses common browser user agents", () => {

@@ -29,11 +29,14 @@ Payload recomendado:
   "event_name": "heartbeat",
   "anonymous_install_id": "uuid-generado-en-extension-storage",
   "session_id": "uuid-de-sesion",
+  "timestamp": "2026-05-24T10:00:00.000Z",
   "extension_version": "1.0.10",
   "browser_name": "chrome",
   "browser_version": "124",
   "platform": "windows",
   "country": "ES",
+  "portal": "idealista",
+  "page_domain": "idealista.com",
   "duration_seconds": 60,
   "active_seconds": 42,
   "locale": "es-ES"
@@ -42,25 +45,25 @@ Payload recomendado:
 
 `anonymous_install_id`, `anonymous_id`, `anonymous_user_id`, `install_id`, `user_id` y `client_id` se aceptan como aliases y se guardan hasheados en `anonymous_id_hash`. `session_id` se guarda hasheado en `session_id_hash`. No se almacenan emails ni URLs completas.
 
-Nota pre-merge: mientras la extension no envie de forma garantizada un `anonymous_install_id` estable generado y guardado en storage local, el KPI "Usuarios reales" debe leerse como usuarios anonimos unicos por el mejor identificador disponible. El backend ya prioriza `anonymous_install_id`, pero el dato sigue siendo provisional hasta actualizar la extension.
+Desde la instrumentacion `extension-anonymous-install-id-and-session-events`, la extension genera `anonymous_install_id` aleatorio en `chrome.storage.local` y lo reutiliza en todos los eventos. Para usuarios de versiones anteriores, el backend mantiene fallback a aliases historicos hasta que la build instrumentada este publicada en todos los canales.
 
 ## Despliegue y validacion
 
 - 2026-05-24: desplegado en produccion con el commit `e499e97`. Validado contra `https://www.inmoradar.app/admin` que el HTML publicado contiene `data-extension-preset`, `data-extension-from`, `data-extension-to` y `data-extension-timeseries`; los assets publicados contienen la logica de `extension_preset`, KPIs nuevos y estilos de la serie diaria. La validacion autenticada de datos reales queda pendiente de disponer de `ADMIN_IMPORT_TOKEN` en el entorno de validacion.
 - 2026-05-24: no se pudo comparar contra Supabase ni confirmar indices aplicados desde este entorno porque no estaban disponibles `SUPABASE_URL` ni `SUPABASE_SERVICE_ROLE_KEY`. Aplicar `database/extension-usage-events.sql` en Supabase antes de auditar rangos grandes.
-- Limitacion pendiente: la extension aun debe enviar un `anonymous_install_id` estable generado y persistido en storage local. Hasta entonces, "Usuarios reales" sigue siendo provisional y se calcula con `anonymous_id_hash` usando el mejor alias disponible.
+- Limitacion pendiente: publicar la build instrumentada en los canales de extension. Hasta que todos los usuarios actualicen, "Usuarios reales" puede mezclar `anonymous_install_id` nuevo con aliases historicos hasheados.
 
 ## Eventos sugeridos
 
 - `extension_installed`: instalacion real detectada por la extension instalada.
 - `extension_opened`: apertura de la extension o panel.
-- `session_started`: arranque de sesion.
-- `heartbeat`: cada 60 segundos mientras la extension esta activa.
+- `session_started`: arranque de sesion anonima nueva, emitido automaticamente cuando pasan mas de 30 minutos sin actividad.
+- `heartbeat`: cada 60 segundos mientras el popup/panel de la extension permanece activo.
 - `listing_detected` o `page_detected`: anuncio detectado.
 - `analysis_started`: inicio de analisis.
 - `analysis_completed` o `page_analyzed`: analisis real completado.
 - `analysis_error`: error de analisis.
-- `session_ended`: cierre o inactividad detectada.
+- `session_ended`: cierre, ocultacion o descarga del popup cuando el navegador permite emitirlo.
 
 No llamar "instalaciones" a clics o intenciones. Si solo existe un evento, usar "eventos de instalacion" o "instalaciones detectadas".
 
@@ -112,6 +115,45 @@ Limites aplicados:
 - Maximo absoluto por sesion: 12 horas.
 
 Si solo hay eventos aislados y no hay heartbeat/duracion, el BackOffice muestra `Sin datos suficientes` en vez de `0 min`.
+
+## Instrumentacion extension
+
+La extension v2.0.1 instrumentada envia eventos desde `src/shared/usageAnalytics.js` y conserva compatibilidad con los campos antiguos:
+
+- Identificador real anonimo: `anonymous_install_id`, generado aleatoriamente y persistido en `chrome.storage.local` bajo `inmoradar:analytics:anonymousInstallId`.
+- Compatibilidad: el mismo valor se sigue enviando como `anonymous_user_id` y `anonymous_id` para no romper ingestas antiguas.
+- Sesion: `session_id`, generado aleatoriamente y mantenido durante 30 minutos de actividad; si expira, el siguiente evento abre una sesion nueva y emite `session_started`.
+- Timestamp: cada payload incluye `timestamp` y `occurred_at`; Supabase sigue usando `created_at` como hora de ingesta.
+- Portal/dominio: solo se envia `portal` normalizado (`idealista`, `fotocasa`, `habitaclia`, `pisos`) y `page_domain`; nunca URL completa.
+- Duracion: `heartbeat` envia `active_seconds: 60`; `session_ended` ayuda a cerrar sesiones cuando el popup se oculta o descarga.
+
+Ejemplo anonimizado:
+
+```json
+{
+  "event_name": "analysis_completed",
+  "timestamp": "2026-05-24T10:00:00.000Z",
+  "occurred_at": "2026-05-24T10:00:00.000Z",
+  "anonymous_install_id": "install-550e8400-e29b-41d4-a716-446655440000",
+  "anonymous_user_id": "install-550e8400-e29b-41d4-a716-446655440000",
+  "anonymous_id": "install-550e8400-e29b-41d4-a716-446655440000",
+  "session_id": "session-bf2d6c9a-1c2e-4ef7-9ed5-b2dbf58a7712",
+  "extension_version": "2.0.1",
+  "browser_name": "chrome",
+  "browser_version": "124.0.0.0",
+  "platform": "Win32",
+  "portal": "idealista",
+  "page_domain": "idealista.com",
+  "duration_seconds": 0,
+  "active_seconds": 0,
+  "metadata": {
+    "portal": "idealista",
+    "page_domain": "idealista.com",
+    "operation_type": "sale",
+    "has_market_reference": "true"
+  }
+}
+```
 
 ## Respuesta resumida
 
