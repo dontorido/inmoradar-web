@@ -1,4 +1,5 @@
 const { assertAdmin, fetchWithTimeout, handleCors, hasSupabaseConfig, json, readRawBody, sanitizeErrorMessage, supabaseFetch } = require("./_utils");
+const { createAdminRouter, dispatchAdminRoute } = require("./_admin/router");
 const {
   buildSeoAutogenerationOperationalAlerts,
   getSeoAutogenerationStatus,
@@ -3901,6 +3902,32 @@ async function handleViraliza(req, url) {
   return { status: 400, payload: { ok: false, error: "viraliza_unknown_action" } };
 }
 
+const ADMIN_PRE_SUPABASE_READ_ONLY_ROUTES = createAdminRouter([
+  {
+    resource: "alerts",
+    method: "GET",
+    handler: () => handleAlerts()
+  }
+]);
+
+const ADMIN_SUPABASE_READ_ONLY_ROUTES = createAdminRouter([
+  {
+    resource: "summary",
+    method: "GET",
+    handler: () => handleSummary()
+  },
+  {
+    resource: "extension/usage",
+    method: "GET",
+    handler: ({ url }) => handleExtensionUsageSummary(url)
+  },
+  {
+    resource: "parking/summary",
+    method: "GET",
+    handler: () => handleParkingSummary()
+  }
+]);
+
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
   const { url, resource } = routeFromRequest(req);
@@ -3935,9 +3962,9 @@ module.exports = async function handler(req, res) {
   if (!assertAdmin(req, res)) return;
 
   try {
-    if (resource === "alerts") {
-      if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
-      return json(res, 200, await handleAlerts());
+    const preSupabaseReadOnly = await dispatchAdminRoute(ADMIN_PRE_SUPABASE_READ_ONLY_ROUTES, { req, url, resource });
+    if (preSupabaseReadOnly) {
+      return json(res, preSupabaseReadOnly.status, preSupabaseReadOnly.payload);
     }
     if (resource === "analytics/summary") {
       const result = await handleOwnedAnalyticsSummary(req, url);
@@ -3954,17 +3981,13 @@ module.exports = async function handler(req, res) {
     if (!hasSupabaseConfig()) {
       return json(res, 500, { ok: false, error: "supabase_not_configured" });
     }
-    if (resource === "summary") {
-      if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
-      return json(res, 200, await handleSummary());
+    const supabaseReadOnly = await dispatchAdminRoute(ADMIN_SUPABASE_READ_ONLY_ROUTES, { req, url, resource });
+    if (supabaseReadOnly) {
+      return json(res, supabaseReadOnly.status, supabaseReadOnly.payload);
     }
     if (resource === "premium/subscriptions") {
       if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
       return json(res, 200, await handlePremiumSubscriptions(url));
-    }
-    if (resource === "extension/usage") {
-      if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
-      return json(res, 200, await handleExtensionUsageSummary(url));
     }
     if (resource === "seo/landings") {
       if (!["GET", "POST"].includes(req.method)) return json(res, 405, { ok: false, error: "method_not_allowed" });
@@ -3986,10 +4009,6 @@ module.exports = async function handler(req, res) {
     if (resource === "kpis/settings") {
       const result = await handleKpiSettings(req);
       return json(res, result.status, result.payload);
-    }
-    if (resource === "parking/summary") {
-      if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
-      return json(res, 200, await handleParkingSummary());
     }
     if (resource === "operations/releases") {
       const result = await handleReleaseArtifacts(req, url);

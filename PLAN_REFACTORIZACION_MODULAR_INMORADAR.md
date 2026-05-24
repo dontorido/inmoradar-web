@@ -306,3 +306,87 @@ Siguiente tarea tecnica recomendada:
 ```text
 Extrae un router declarativo interno para api/admin.js manteniendo exactamente las mismas rutas publicas. Empieza por recursos read-only y de bajo riesgo: alerts, summary, extension/usage, parking/summary. Anade tests para auth, metodo no permitido, recurso no encontrado y errores saneados. No muevas Meta, LinkedIn, SEO generation ni Social Video en esta fase.
 ```
+
+## 10. Fase realizada - Router admin read-only
+
+Estado: realizada en `feature/admin-router-readonly-refactor`.
+
+Se creo `api/_admin/router.js` como router declarativo minimo. El punto de entrada sigue siendo `api/admin.js`, que conserva auth, gate de Supabase, catch general y fallback legacy.
+
+Recursos migrados:
+
+- `alerts`
+- `summary`
+- `extension/usage`
+- `parking/summary`
+
+Estrategia aplicada:
+
+- Dos grupos de rutas para conservar orden previo:
+  - pre-Supabase: `alerts`;
+  - post-Supabase: `summary`, `extension/usage`, `parking/summary`.
+- El router devuelve `null` si no reconoce el recurso, permitiendo que `api/admin.js` continue con el flujo legacy.
+- No se movieron handlers todavia para evitar un refactor grande.
+
+Tests anadidos:
+
+- Resolucion por `resource/method`.
+- Fallback legacy para rutas no migradas.
+- `method_not_allowed` en rutas registradas.
+- Payload shape de `summary`, `alerts`, `extension/usage` y `parking/summary`.
+- Comportamiento del gate de Supabase.
+- Recurso legacy `kpis/settings`.
+- Errores Supabase saneados dentro de recursos read-only.
+
+## 11. Siguiente fase recomendada
+
+Siguiente lote seguro:
+
+- `analytics/summary`
+- `analytics/pages`
+- `analytics/learning`
+
+Motivo:
+
+- Son read-only.
+- Ya tienen tests.
+- Viven antes del gate global de Supabase y manejan `supabase_not_configured`, igual que `alerts`.
+- No disparan integraciones externas.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-router-readonly-refactor. Sin deploy ni cambios visuales. Migrar al router declarativo los recursos read-only analytics/summary, analytics/pages y analytics/learning, manteniendo auth, URLs, payloads y codigos. No mover handlers a ficheros todavia salvo que sea trivial. Anadir tests de fallback, metodo, ausencia de Supabase y errores saneados. Ejecutar node --test tests/*.test.js y git diff --check.
+```
+
+## 12. Criterios para continuar con recursos write
+
+No migrar un recurso write hasta que cumpla:
+
+- Tiene tests de metodo no permitido.
+- Tiene tests de body invalido.
+- Tiene tests de auth.
+- Tiene tests de error saneado.
+- No llama integraciones externas reales en test.
+- Mantiene kill switch si existe.
+- Es idempotente o documenta claramente su efecto.
+- El payload de exito y error se compara contra fixtures o asserts estables.
+
+Recursos write que deberian esperar:
+
+- `seo/generate-landings`
+- `seo/landings` POST actions
+- `meta/*`
+- `linkedin/*`
+- `operations/chrome`
+- `social-video/render`
+- `viraliza/actions`
+
+## 13. Estrategia para no romper backoffice
+
+- Mantener `api/admin.js` como fachada publica hasta completar varios lotes.
+- Migrar por grupos de recursos coherentes, no por carpetas.
+- Evitar cambios simultaneos en `assets/admin.js`.
+- Evitar cambios de textos, labels o UI.
+- Antes de mover un handler a otro archivo, crear tests que cubran su payload actual.
+- Dejar fallback legacy hasta que el router cubra la mayoria de recursos.

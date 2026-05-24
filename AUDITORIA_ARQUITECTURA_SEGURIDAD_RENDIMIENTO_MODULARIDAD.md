@@ -557,3 +557,75 @@ Prompt sugerido para la siguiente fase:
 ```text
 Continuar en la rama feature/system-architecture-hardening-audit. Sin deploy y sin tocar produccion. Extrae un router declarativo interno para api/admin.js que mantenga exactamente las mismas URLs y payloads, empezando solo por recursos de bajo riesgo: alerts, summary, extension/usage, kpis/settings y parking/summary. Anade tests de metodo permitido, auth requerida y errores saneados para cada recurso migrado. No muevas todavia Meta, LinkedIn, SEO generation ni Social Video.
 ```
+
+## Evolucion posterior: router declarativo read-only para api/admin.js
+
+Fecha: 2026-05-24
+Rama: `feature/admin-router-readonly-refactor`
+
+Se anadio un router declarativo interno en `api/_admin/router.js` para empezar a reducir el dispatch manual de `api/admin.js` sin cambiar la interfaz externa del backoffice.
+
+Recursos migrados al router:
+
+- `alerts`: `GET`, pre-gate de Supabase, conserva respuesta `{ ok, generated_at, alerts }`.
+- `summary`: `GET`, post-gate de Supabase, conserva respuesta de resumen general.
+- `extension/usage`: `GET`, post-gate de Supabase, conserva ventanas, limites y payload de uso de extension.
+- `parking/summary`: `GET`, post-gate de Supabase, conserva resumen de cache y assessments.
+
+Que no se extrajo:
+
+- Los handlers de dominio siguen dentro de `api/admin.js`. Moverlos a ficheros dedicados obligaba a arrastrar helpers, imports y dependencias compartidas, lo que subia el riesgo de esta fase.
+- Recursos con escritura o efectos externos quedaron en flujo legacy: SEO generation, Meta, LinkedIn, Social Video, Viraliza actions, releases, Chrome operations y Kpis write.
+- Recursos read-only mas complejos como `analytics/*` se dejaron legacy porque ya tienen su propio comportamiento sin Supabase configurado y conviene moverlos como lote completo.
+
+Riesgos mitigados:
+
+- El dispatch de cuatro recursos read-only ya no depende de una cadena creciente de `if (resource === ...)`.
+- El router devuelve `null` para recursos no migrados, asi que el fallback legacy sigue intacto.
+- Los metodos no soportados de rutas registradas devuelven el mismo `405 { ok:false, error:"method_not_allowed" }`.
+- Se preservo el comportamiento historico del gate de Supabase: `summary`, `extension/usage` y `parking/summary` siguen devolviendo `supabase_not_configured` antes de validar metodo si Supabase falta.
+
+Riesgos pendientes:
+
+- `api/admin.js` sigue conteniendo los handlers y la mayoria de recursos mutables.
+- La autorizacion sigue centralizada en `api/admin.js`; el router aun no declara auth por recurso.
+- No hay contrato comun para body parsing o write resources.
+- Los recursos de integraciones externas siguen en legacy por prudencia.
+
+Como migrar el siguiente grupo:
+
+1. Migrar un lote pequeno y homogeneo, por ejemplo `analytics/summary`, `analytics/pages`, `analytics/learning`.
+2. Mantener el mismo patron: auth en `api/admin.js`, router declarativo, fallback legacy.
+3. Anadir tests de payload, metodo, fallback y errores saneados antes de mover codigo.
+4. Solo despues mover handlers a ficheros `api/_admin/*.js` o `lib/modules/backoffice/*`.
+
+Criterios para migrar recursos write:
+
+- Deben tener tests de metodo, body invalido, auth, error saneado y no exposicion de secretos.
+- Deben ser idempotentes o documentar claramente sus efectos.
+- No deben llamar servicios externos reales durante tests.
+- Deben conservar exactamente status codes y payloads.
+- Deben mantener kill switches existentes.
+
+Endpoints todavia legacy principales:
+
+- `analytics/summary`
+- `analytics/pages`
+- `analytics/learning`
+- `premium/subscriptions`
+- `seo/landings`
+- `seo/generate-landings`
+- `seo-autogenerate/run`
+- `linkedin/*`
+- `meta/*`
+- `kpis/settings`
+- `operations/releases`
+- `operations/chrome`
+- `social-video/*`
+- `viraliza/*`
+
+Verificacion de esta evolucion:
+
+- `node --check api/admin.js`: OK.
+- `node --check api/_admin/router.js`: OK.
+- `node --test tests/admin-router.test.js tests/extension-usage.test.js tests/status.test.js tests/security-sanitization.test.js`: 34 pass, 0 fail.
