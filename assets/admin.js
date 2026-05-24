@@ -849,6 +849,73 @@ function scoreTone(value) {
   return "bad";
 }
 
+const SEO_GATE_REASON_LABELS = {
+  canonical_valid: "Canonical incorrecto",
+  content_minimum: "Contenido insuficiente",
+  faq_useful: "FAQ insuficiente",
+  internal_links: "Faltan enlaces internos",
+  measurable_cta: "CTA no medible",
+  meta_unique: "Metas duplicadas",
+  not_published: "No publicada",
+  index_status_noindex: "Noindex",
+  prudence_block: "Falta prudencia",
+  quality_gate_failed: "Gate fallido",
+  quality_score_below_80: "Score < 80",
+  quality_score_minimum: "Score bajo",
+  required_meta: "Metas incompletas",
+  source_quality: "Fuente insuficiente",
+  specific_content: "Contenido generico",
+  third_party_independence: "Riesgo de afiliacion",
+  uniqueness: "Duplicidad",
+  not_street_exact: "Dato geografico confuso"
+};
+
+function seoGateLabel(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "passed") return "Gate OK";
+  if (normalized === "failed") return "Falla gate";
+  if (normalized === "not_calculated") return "No calculado";
+  return "Gate ?";
+}
+
+function seoGateTone(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "passed") return "published";
+  if (normalized === "failed") return "bad";
+  if (normalized === "not_calculated") return "warn";
+  return "draft";
+}
+
+function seoGateReasonLabel(reason) {
+  const id = typeof reason === "string" ? reason : reason?.id;
+  return SEO_GATE_REASON_LABELS[id] || String(id || "-");
+}
+
+function seoSitemapLabel(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "included") return "Sitemap: incluido";
+  if (normalized === "legacy_compatible") return "Sitemap: legacy";
+  if (normalized === "excluded") return "Sitemap: excluido";
+  return "Sitemap: -";
+}
+
+function renderSeoGate(row = {}) {
+  const failedChecks = Array.isArray(row.failed_checks) ? row.failed_checks : [];
+  const failedText = failedChecks.length
+    ? failedChecks.slice(0, 3).map(seoGateReasonLabel).join(" · ")
+    : row.exclusion_reason
+      ? seoGateReasonLabel(row.exclusion_reason)
+      : seoSitemapLabel(row.sitemap_status);
+  const recalc = row.needs_quality_gate_recalc ? " · recalcular" : "";
+  return `
+    <div>
+      ${chip(seoGateLabel(row.quality_gate_status), seoGateTone(row.quality_gate_status))}
+      <div class="admin-subtle">${escapeHtml(failedText || "-")}${escapeHtml(recalc)}</div>
+      <div class="admin-subtle">${escapeHtml(row.quality_gate_action || seoSitemapLabel(row.sitemap_status))}</div>
+    </div>
+  `;
+}
+
 function stat(label, value, options = {}) {
   const id = options.id || slugId(label);
   const isZero = Number(value || 0) === 0;
@@ -1669,7 +1736,7 @@ function renderSeo(payload) {
   renderSeoSummary(payload.summary || {}, rows);
 
   if (!rows.length) {
-    els.seoRows.innerHTML = `<tr><td colspan="5">No hay landings con este filtro.</td></tr>`;
+    els.seoRows.innerHTML = `<tr><td colspan="6">No hay landings con este filtro.</td></tr>`;
     renderSeoPagination(payload);
     return;
   }
@@ -1684,7 +1751,8 @@ function renderSeo(payload) {
             <div class="admin-subtle">${escapeHtml(row.slug)} · ${escapeHtml(row.word_count || 0)} palabras</div>
           </td>
           <td>${escapeHtml(row.city || "-")}</td>
-        <td>${chip(Number(row.quality_score || 0).toFixed(0), scoreTone(row.quality_score), "score")}</td>
+          <td>${chip(Number(row.quality_score || 0).toFixed(0), scoreTone(row.quality_score), "score")}</td>
+          <td>${renderSeoGate(row)}</td>
           <td>
             ${chip(row.status, statusTone(row.status))}
             ${chip(row.index_status, statusTone(row.index_status))}
@@ -1714,6 +1782,7 @@ function renderSeoSummary(summary = {}, fallbackRows = []) {
   const needsReview = Number(summary.needs_review ?? rows.filter((row) => row.status === "needs_review").length);
   const noindex = Number(summary.noindex ?? rows.filter((row) => row.index_status === "noindex" || row.status === "noindex").length);
   const opportunities = Number(summary.pending_opportunities ?? 0);
+  const qualityGate = summary.quality_gate || {};
   const landingsToday = Number(summary.published_landings_today ?? 0);
   const newsToday = Number(summary.published_news_today ?? 0);
   const targetLandings = Number(summary.target_landings_per_day ?? 2);
@@ -1730,6 +1799,8 @@ function renderSeoSummary(summary = {}, fallbackRows = []) {
     stat("Ready", ready, { id: "seo-ready", hint: "Listas para publicar" }),
     stat("Revision", needsReview, { id: "seo-review", hint: "Necesitan criterio humano" }),
     stat("Noindex", noindex, { id: "seo-noindex", hint: "Bloqueadas para indice" }),
+    stat("Gate falla", Number(qualityGate.failed ?? 0), { id: "seo-gate-failed", hint: "Quality gate con checks fallidos" }),
+    stat("Gate legacy", Number(qualityGate.not_calculated ?? 0), { id: "seo-gate-legacy", hint: "Sin quality_gate calculado" }),
     stat("Oportunidades", opportunities, { id: "seo-opportunities", hint: "Pendientes de generar" }),
     stat("Score medio", averageScore ? averageScore.toFixed(0) : 0, { id: "seo-average-score", unit: "/100", hint: "Solo landings con score" })
   ].join("");

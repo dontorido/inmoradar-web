@@ -55,6 +55,25 @@ Antes de este endurecimiento, el score de calidad existia, pero la publicacion, 
 - Los resultados de generacion/autogeneracion exponen `quality_gate_passed` y `quality_gate_reasons` para depuracion interna.
 - Se amplian tests SEO para comprobar CTA medible, canonical, noindex por gate, sitemap con umbral 80 y autogeneracion con gate.
 
+## Visibilidad en backoffice
+
+El backoffice SEO muestra ahora una lectura operativa del quality gate sin tener que inspeccionar `source_data_json`:
+
+- `quality_gate_status`: `passed`, `failed` o `not_calculated`.
+- `failed_checks`: checks obligatorios fallidos, con `id`, `message` y `severity`.
+- `exclusion_reason`: primer motivo por el que la landing no deberia entrar en sitemap, si aplica.
+- `sitemap_status`: `included`, `excluded` o `legacy_compatible`.
+- `needs_quality_gate_recalc`: `true` cuando la landing no tiene `source_data_json.quality_gate`.
+- `quality_gate_action`: recomendacion breve para revisar, recalcular, publicar o mantener.
+
+Interpretacion recomendada:
+
+- `passed`: la landing tiene gate calculado y no hay bloqueos.
+- `failed`: revisar los checks fallidos antes de publicar o indexar.
+- `not_calculated`: landing legacy; no se bloquea por compatibilidad, pero conviene recalcular antes de republicar.
+- `legacy_compatible`: publicada, indexable y con score suficiente, pero sin gate guardado; queda compatible con el comportamiento anterior hasta recalculo.
+- `excluded`: no entra en sitemap por estado, `index_status`, score o gate fallido.
+
 ## Criterios finales del quality gate
 
 Una landing puede publicarse solo si cumple todos estos criterios:
@@ -166,8 +185,11 @@ Antes de publicar una landing generada:
 - `api/admin.js`
 - `api/seo-page.js`
 - `api/sitemap.js`
+- `admin.html`
+- `assets/admin.js`
 - `tests/seo.test.js`
 - `tests/seo-autogeneration.test.js`
+- `tests/status.test.js`
 - `docs/SEO_AUTOMATION_QUALITY_GATE.md`
 
 ## Tests/checks ejecutados
@@ -178,10 +200,13 @@ Antes de publicar una landing generada:
 - `node --check api/sitemap.js`
 - `node --check api/seo-page.js`
 - `node --check api/admin.js`
+- `node --check assets/admin.js`
 - `node --check tests/seo.test.js`
 - `node --check tests/seo-autogeneration.test.js`
-- `node --test tests/seo.test.js tests/seo-autogeneration.test.js tests/status.test.js` (54/54 OK)
-- `node --test tests/*.test.js` (232/232 OK)
+- `node --check tests/status.test.js`
+- `node --test tests/seo.test.js tests/status.test.js` (33/33 OK)
+- `node --test tests/seo.test.js tests/seo-autogeneration.test.js tests/status.test.js` (56/56 OK)
+- `node --test tests/*.test.js` (234/234 OK)
 - `git diff --check` (OK; solo avisos LF/CRLF de Git en Windows)
 
 ## Riesgos o pendientes
@@ -189,11 +214,11 @@ Antes de publicar una landing generada:
 - Las landings antiguas pueden no tener `source_data_json.quality_gate`; el render publico y sitemap tratan esto de forma compatible, pero conviene recalcular el gate antes de republicarlas manualmente.
 - El quality gate no sustituye una revision editorial cuando se cree una familia nueva de landings.
 - La deteccion de similitud depende de los mecanismos existentes de unicidad; si se generan muchas paginas por barrios, conviene anadir comparacion mas estricta por embeddings o shingles.
-- Los motivos del gate se guardan en JSON, pero el backoffice aun no muestra una UI especifica de motivos. La API de publicacion manual ya devuelve el detalle si falla.
+- El backoffice ya muestra motivos de gate, pero no recalcula landings antiguas desde la UI; de momento las marca como `not_calculated` y recomienda recalculo.
 - La medicion del CTA debe seguir llamandose clic o intencion de instalacion, no instalacion confirmada.
 
 ## Recomendacion de siguiente rama
 
-Crear una rama corta para exponer los motivos del quality gate en el backoffice SEO sin redisenar la pantalla: lista de bloqueos, accion recomendada y estado `indexable/noindex`. Nombre sugerido:
+Crear una rama corta para recalcular `source_data_json.quality_gate` de landings legacy bajo demanda desde backoffice, sin publicar automaticamente ni tocar sitemap hasta que el recalculo termine. Nombre sugerido:
 
-`codex/seo-quality-gate-admin-reasons`
+`codex/seo-quality-gate-recalculate-legacy`

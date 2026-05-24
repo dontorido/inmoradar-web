@@ -908,6 +908,85 @@ function seoSourceDataFromLanding(landing = {}) {
   };
 }
 
+function failedQualityGateChecks(qualityGate) {
+  const checks = Array.isArray(qualityGate?.checks) ? qualityGate.checks : [];
+  if (checks.length) {
+    return checks
+      .filter((check) => check && check.ok === false)
+      .map((check) => ({
+        id: String(check.id || "unknown"),
+        message: String(check.message || check.id || "Quality gate check failed."),
+        severity: String(check.severity || "blocker")
+      }));
+  }
+  const reasons = Array.isArray(qualityGate?.reasons) ? qualityGate.reasons : [];
+  return reasons.map((reason) => ({
+    id: String(reason || "unknown"),
+    message: String(reason || "Quality gate check failed."),
+    severity: "blocker"
+  }));
+}
+
+function sitemapExclusionReasonForLanding(landing, qualityGateStatus, failedChecks) {
+  const status = String(landing?.status || "").toLowerCase();
+  const indexStatus = String(landing?.index_status || "").toLowerCase();
+  const score = Number(landing?.quality_score || 0);
+  if (status !== "published") return "not_published";
+  if (indexStatus !== "index") return "index_status_noindex";
+  if (score < SEO_INDEX_MIN_SCORE) return "quality_score_below_80";
+  if (qualityGateStatus === "failed") return failedChecks[0]?.id || "quality_gate_failed";
+  return null;
+}
+
+function actionForSeoQualityGate(summary) {
+  if (summary.quality_gate_status === "not_calculated") return "Recalcular quality_gate antes de publicar o revisar sitemap.";
+  if (summary.quality_gate_status === "failed") return "Revisar checks fallidos antes de publicar o indexar.";
+  if (summary.exclusion_reason) return "Revisar estado, score o index_status antes de incluir en sitemap.";
+  return "Mantener publicada/indexable.";
+}
+
+function summarizeSeoQualityGateForAdmin(landing = {}) {
+  const saved = landing.source_data_json && typeof landing.source_data_json === "object" ? landing.source_data_json : {};
+  const qualityGate = saved.quality_gate && typeof saved.quality_gate === "object" ? saved.quality_gate : null;
+  const failedChecks = failedQualityGateChecks(qualityGate);
+  const qualityGateStatus =
+    qualityGate && (qualityGate.can_publish === false || qualityGate.passed === false || failedChecks.length)
+      ? "failed"
+      : qualityGate
+        ? "passed"
+        : "not_calculated";
+  const exclusionReason = sitemapExclusionReasonForLanding(landing, qualityGateStatus, failedChecks);
+  const score = Number(landing.quality_score || 0);
+  const publishedIndexable =
+    String(landing.status || "").toLowerCase() === "published" &&
+    String(landing.index_status || "").toLowerCase() === "index" &&
+    score >= SEO_INDEX_MIN_SCORE;
+  const sitemapStatus = exclusionReason ? "excluded" : qualityGateStatus === "not_calculated" && publishedIndexable ? "legacy_compatible" : "included";
+  const summary = {
+    quality_gate_status: qualityGateStatus,
+    quality_gate_missing: !qualityGate,
+    quality_gate_can_publish: qualityGate?.can_publish ?? null,
+    quality_gate_can_index: qualityGate?.can_index ?? null,
+    failed_checks: failedChecks,
+    exclusion_reason: exclusionReason,
+    sitemap_status: sitemapStatus,
+    needs_quality_gate_recalc: !qualityGate,
+    quality_gate_min_score: qualityGate?.min_score ?? SEO_INDEX_MIN_SCORE,
+    quality_gate_index_min_score: qualityGate?.index_min_score ?? SEO_INDEX_MIN_SCORE
+  };
+  return {
+    ...summary,
+    quality_gate_action: actionForSeoQualityGate(summary)
+  };
+}
+
+function decorateSeoLandingForAdmin(landing = {}) {
+  return {
+    ...landing,
+    ...summarizeSeoQualityGateForAdmin(landing)
+  };
+}
+
 async function handleSeoLandingAction(body) {
   const action = String(body.action || "").trim();
   const slug = normalizeSlug(body.slug);
@@ -1203,7 +1282,7 @@ async function handleSeoLandings(req, url) {
   if (status && status !== "all") params.set("status", `eq.${status}`);
 
   const summaryParams = new URLSearchParams({
-    select: "status,index_status,quality_score,template_type,published_at,updated_at,last_generated_at",
+    select: "status,index_status,quality_score,template_type,published_at,updated_at,last_generated_at,source_data_json",
     limit: "5000"
   });
   const opportunitiesParams = new URLSearchParams({
@@ -1217,7 +1296,7 @@ async function handleSeoLandings(req, url) {
   ]);
   const allRows = Array.isArray(rows) ? rows : [];
   const hasNextPage = allRows.length > pageSize;
-  const landings = allRows.slice(0, pageSize);
+  const landings = allRows.slice(0, pageSize).map(decorateSeoLandingForAdmin);
   const summary = buildSeoLandingsSummary(summaryRows, opportunityRows, status);
   return {
     status: 200,
@@ -1251,6 +1330,17 @@ function buildSeoLandingsSummary(rows = [], opportunities = [], activeStatus = "
   const scores = landings
     .map((row) => Number(row.quality_score || 0))
     .filter((score) => Number.isFinite(score) && score > 0);
+  const gateSummaries = landings.map(summarizeSeoQualityGateForAdmin);
+  const gateCounts = gateSummaries.reduce(
+    (acc, row) => {
+      acc[row.quality_gate_status] = (acc[row.quality_gate_status] || 0) + 1;
+      if (row.needs_quality_gate_recalc) acc.needs_recalc += 1;
+      if (row.sitemap_status === "excluded") acc.excluded_from_sitemap += 1;
+      if (row.sitemap_status === "legacy_compatible") acc.legacy_compatible += 1;
+      return acc;
+    },
+    { passed: 0, failed: 0, not_calculated: 0, needs_recalc: 0, excluded_from_sitemap: 0, legacy_compatible: 0 }
+  );
   const filteredTotal =
     activeStatus && activeStatus !== "all"
       ? landings.filter((row) => String(row.status || "").toLowerCase() === activeStatus).length
@@ -1284,7 +1374,8 @@ function buildSeoLandingsSummary(rows = [], opportunities = [], activeStatus = "
     seo_daily_status: dailyPolicy.published_landings_today >= SEO_DAILY_TARGETS.landings && dailyPolicy.published_news_today >= SEO_DAILY_TARGETS.news ? "complete" : "pending",
     average_quality_score: scores.length
       ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
-      : 0
+      : 0,
+    quality_gate: gateCounts
   };
 }
 

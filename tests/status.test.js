@@ -270,6 +270,19 @@ test("backoffice muestra fallback si /api/status falla", () => {
   assert.match(adminJs, /No se pudo leer \/api\/status/);
 });
 
+test("backoffice SEO muestra quality gate y motivos sin inspeccionar JSON", () => {
+  const root = path.join(__dirname, "..");
+  const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
+  const adminJs = fs.readFileSync(path.join(root, "assets", "admin.js"), "utf8");
+
+  assert.match(adminHtml, /<th>Quality gate<\/th>/);
+  assert.match(adminJs, /renderSeoGate/);
+  assert.match(adminJs, /quality_gate_status/);
+  assert.match(adminJs, /failed_checks/);
+  assert.match(adminJs, /needs_quality_gate_recalc/);
+  assert.match(adminJs, /Sitemap: legacy/);
+});
+
 test("status UI usa nombres legibles y no muestra campos tecnicos", () => {
   const root = path.join(__dirname, "..");
   const publicHtml = fs.readFileSync(path.join(root, "status.html"), "utf8");

@@ -9,9 +9,55 @@ const { SEO_INDEX_MIN_SCORE, calculateSeoLandingQuality, evaluateSeoQualityGate 
 const { runSeoLandingGeneration } = require("../api/_seo/generator");
 const { buildSeoDailyPolicySnapshot, selectNextSeoContentType } = require("../api/_seo/publishingPolicy");
 const { getSeedPublishedLanding } = require("../api/_seo/seedPublished");
+const adminHandler = require("../api/admin");
 const sitemapHandler = require("../api/sitemap");
 const seoPageHandler = require("../api/seo-page");
 const { renderLandingHtml } = require("../api/seo-page");
+
+function createJsonResponse() {
+  const chunks = [];
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[String(name).toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+  return {
+    res,
+    payload() {
+      return JSON.parse(chunks.join("") || "{}");
+    }
+  };
+}
+
+async function withEnv(patch, callback) {
+  const previous = new Map();
+  for (const key of Object.keys(patch)) {
+    previous.set(key, process.env[key]);
+    if (patch[key] === undefined) delete process.env[key];
+    else process.env[key] = patch[key];
+  }
+  try {
+    return await callback();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+function supabaseJson(payload) {
+  return {
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(payload)
+  };
+}
 
 test("price_city genera una landing de alta calidad cuando hay datos reales, fuente y fecha", async () => {
   const opportunity = {
@@ -387,6 +433,109 @@ test("sitemap consulta solo landings publicadas indexables y con quality_score s
   assert.equal(params.get("status"), "eq.published");
   assert.equal(params.get("index_status"), "eq.index");
   assert.equal(params.get("quality_score"), `gte.${SEO_INDEX_MIN_SCORE}`);
+});
+
+test("admin SEO landings devuelve estado y motivos del quality gate", async () => {
+  const rows = [
+    {
+      id: 1,
+      slug: "precio-metro-cuadrado/madrid",
+      title: "Precio metro cuadrado Madrid",
+      city: "Madrid",
+      status: "published",
+      index_status: "index",
+      quality_score: 92,
+      word_count: 1200,
+      updated_at: "2026-05-24T10:00:00.000Z",
+      source_data_json: {
+        quality_gate: {
+          passed: true,
+          can_publish: true,
+          can_index: true,
+          checks: [{ id: "canonical_valid", ok: true, severity: "blocker", message: "OK" }]
+        }
+      }
+    },
+    {
+      id: 2,
+      slug: "precio-metro-cuadrado/test",
+      title: "Precio metro cuadrado Test",
+      city: "Test",
+      status: "published",
+      index_status: "index",
+      quality_score: 86,
+      word_count: 900,
+      updated_at: "2026-05-24T10:00:00.000Z",
+      source_data_json: {
+        quality_gate: {
+          passed: false,
+          can_publish: false,
+          can_index: false,
+          reasons: ["measurable_cta"],
+          checks: [{ id: "measurable_cta", ok: false, severity: "blocker", message: "Debe existir CTA SEO medible." }]
+        }
+      }
+    },
+    {
+      id: 3,
+      slug: "precio-metro-cuadrado/legacy",
+      title: "Precio metro cuadrado Legacy",
+      city: "Legacy",
+      status: "published",
+      index_status: "index",
+      quality_score: 88,
+      word_count: 1000,
+      updated_at: "2026-05-24T10:00:00.000Z",
+      source_data_json: {}
+    }
+  ];
+  const previousFetch = global.fetch;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url) => {
+        const requestUrl = String(url);
+        if (requestUrl.includes("/rest/v1/seo_landing_opportunities?")) return supabaseJson([]);
+        if (requestUrl.includes("/rest/v1/seo_landings?")) return supabaseJson(rows);
+        throw new Error(`Unexpected fetch ${requestUrl}`);
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "GET",
+        url: "/api/admin?resource=seo/landings&limit=10&page=1",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      const passed = body.landings.find((row) => row.slug.endsWith("/madrid"));
+      const failed = body.landings.find((row) => row.slug.endsWith("/test"));
+      const legacy = body.landings.find((row) => row.slug.endsWith("/legacy"));
+
+      assert.equal(res.statusCode, 200);
+      assert.equal(passed.quality_gate_status, "passed");
+      assert.equal(passed.sitemap_status, "included");
+      assert.equal(failed.quality_gate_status, "failed");
+      assert.equal(failed.failed_checks[0].id, "measurable_cta");
+      assert.equal(failed.exclusion_reason, "measurable_cta");
+      assert.equal(legacy.quality_gate_status, "not_calculated");
+      assert.equal(legacy.needs_quality_gate_recalc, true);
+      assert.equal(legacy.sitemap_status, "legacy_compatible");
+      assert.equal(body.summary.quality_gate.passed, 1);
+      assert.equal(body.summary.quality_gate.failed, 1);
+      assert.equal(body.summary.quality_gate.not_calculated, 1);
+    }
+  );
 });
 
 test("la home tiene seccion Noticias con enlaces a publicaciones", () => {
