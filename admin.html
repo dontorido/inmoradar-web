@@ -272,6 +272,35 @@
             <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
             <div class="admin-pagination" data-seo-pagination></div>
           </article>
+          <article class="admin-panel">
+            <div class="admin-panel-head">
+              <div>
+                <span class="admin-kicker muted">SEO Keyword Backlog</span>
+                <h2>Oportunidades y briefs</h2>
+                <p class="admin-panel-sub">Prioriza keywords y revisa briefs antes de generar landings. No publica ni indexa contenido.</p>
+              </div>
+              <div class="admin-view-toolbar">
+                <button class="admin-button tiny ghost" type="button" data-seo-keyword-refresh>Actualizar backlog</button>
+              </div>
+            </div>
+            <div class="admin-stat-grid compact admin-seo-summary" data-seo-keyword-summary aria-live="polite"></div>
+            <div class="admin-table-wrap">
+              <table class="admin-table" data-testid="seo-keyword-backlog-table">
+                <thead>
+                  <tr>
+                    <th>Keyword</th>
+                    <th>Intencion</th>
+                    <th>Tipo</th>
+                    <th>Prioridad</th>
+                    <th>Estado</th>
+                    <th>Brief</th>
+                  </tr>
+                </thead>
+                <tbody data-seo-keyword-rows></tbody>
+              </table>
+            </div>
+            <div class="admin-empty-state compact" data-seo-keyword-brief-preview>Selecciona una keyword para ver el brief editorial.</div>
+          </article>
           <article class="admin-panel admin-seo-autogen-panel" id="seo-autogeneration">
             <div class="admin-panel-head">
               <div>

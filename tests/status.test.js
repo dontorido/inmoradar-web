@@ -285,6 +285,19 @@ test("backoffice SEO muestra quality gate y motivos sin inspeccionar JSON", () =
   assert.match(adminJs, /runSeoGateRecalculation/);
 });
 
+test("backoffice SEO muestra backlog de keywords y briefs sin publicar", () => {
+  const root = path.join(__dirname, "..");
+  const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
+  const adminJs = fs.readFileSync(path.join(root, "assets", "admin.js"), "utf8");
+
+  assert.match(adminHtml, /SEO Keyword Backlog/);
+  assert.match(adminHtml, /data-seo-keyword-rows/);
+  assert.match(adminHtml, /data-seo-keyword-brief-preview/);
+  assert.match(adminJs, /loadSeoKeywordBacklog/);
+  assert.match(adminJs, /renderSeoKeywordBrief/);
+  assert.match(adminJs, /resource=seo\/keyword-backlog/);
+});
+
 test("status UI usa nombres legibles y no muestra campos tecnicos", () => {
   const root = path.join(__dirname, "..");
   const publicHtml = fs.readFileSync(path.join(root, "status.html"), "utf8");

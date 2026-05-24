@@ -171,6 +171,10 @@ const state = {
     status: null,
     recentRuns: []
   },
+  seoKeywordBacklog: {
+    keywords: [],
+    briefsById: new Map()
+  },
   parking: {
     lastProbe: null
   },
@@ -284,6 +288,10 @@ const els = {
   seoAutogenRun: document.querySelector("[data-seo-autogen-run]"),
   seoAutogenDryRun: document.querySelector("[data-seo-autogen-dry-run]"),
   seoAutogenNote: document.querySelector("[data-seo-autogen-note]"),
+  seoKeywordSummary: document.querySelector("[data-seo-keyword-summary]"),
+  seoKeywordRows: document.querySelector("[data-seo-keyword-rows]"),
+  seoKeywordBriefPreview: document.querySelector("[data-seo-keyword-brief-preview]"),
+  seoKeywordRefresh: document.querySelector("[data-seo-keyword-refresh]"),
   linkedinRefresh: document.querySelector("[data-linkedin-refresh]"),
   linkedinTest: document.querySelector("[data-linkedin-test]"),
   linkedinConnect: document.querySelector("[data-linkedin-connect]"),
@@ -1805,6 +1813,78 @@ function renderSeoSummary(summary = {}, fallbackRows = []) {
     stat("Oportunidades", opportunities, { id: "seo-opportunities", hint: "Pendientes de generar" }),
     stat("Score medio", averageScore ? averageScore.toFixed(0) : 0, { id: "seo-average-score", unit: "/100", hint: "Solo landings con score" })
   ].join("");
+}
+
+function seoKeywordIntentLabel(value) {
+  return String(value || "").replace(/_/g, " ");
+}
+
+function renderSeoKeywordSummary(summary = {}) {
+  if (!els.seoKeywordSummary) return;
+  els.seoKeywordSummary.innerHTML = [
+    stat("Keywords", Number(summary.total || 0), { id: "seo-keywords-total", hint: "Backlog controlado" }),
+    stat("Brief ready", Number(summary.brief_ready || 0), { id: "seo-keywords-ready", hint: "Listas para revisar" }),
+    stat("Alta prioridad", Number(summary.high_priority || 0), { id: "seo-keywords-high", hint: "Prioridad >= 80" })
+  ].join("");
+}
+
+function renderSeoKeywordBacklog(payload = {}) {
+  if (!els.seoKeywordRows) return;
+  const keywords = Array.isArray(payload.keywords) ? payload.keywords : [];
+  state.seoKeywordBacklog.keywords = keywords;
+  state.seoKeywordBacklog.briefsById = new Map(keywords.filter((item) => item.brief).map((item) => [item.id, item.brief]));
+  renderSeoKeywordSummary(payload.summary || {});
+
+  if (!keywords.length) {
+    els.seoKeywordRows.innerHTML = `<tr><td colspan="6">No hay keywords en el backlog.</td></tr>`;
+    return;
+  }
+
+  els.seoKeywordRows.innerHTML = keywords
+    .map(
+      (item) => `
+        <tr>
+          <td>
+            <strong>${escapeHtml(item.keyword || "-")}</strong>
+            <div class="admin-subtle">${escapeHtml(item.suggested_landing || "-")}</div>
+          </td>
+          <td>${escapeHtml(seoKeywordIntentLabel(item.intent))}</td>
+          <td>${chip(item.page_type || "-", "draft")}</td>
+          <td>${chip(Number(item.priority || 0).toFixed(0), scoreTone(item.priority), "score")}</td>
+          <td>
+            ${chip(item.status || "idea", statusTone(item.status))}
+            <div class="admin-subtle">${escapeHtml(item.risk_level || "-")} riesgo</div>
+          </td>
+          <td>
+            <button class="admin-button tiny ghost" type="button" data-seo-keyword-brief="${escapeHtml(item.id)}">Ver brief</button>
+          </td>
+        </tr>
+      `
+    )
+    .join("");
+}
+
+function renderSeoKeywordBrief(brief = {}) {
+  if (!els.seoKeywordBriefPreview) return;
+  if (!brief.keyword) {
+    els.seoKeywordBriefPreview.textContent = "Selecciona una keyword para ver el brief editorial.";
+    return;
+  }
+  const list = (items = []) => items.slice(0, 8).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  els.seoKeywordBriefPreview.innerHTML = `
+    <strong>${escapeHtml(brief.keyword)}</strong>
+    <p>${escapeHtml(brief.target_user || "")}</p>
+    <p><b>H1:</b> ${escapeHtml(brief.suggested_h1 || "")}</p>
+    <p><b>Meta title:</b> ${escapeHtml(brief.suggested_meta_title || "")}</p>
+    <p><b>Meta description:</b> ${escapeHtml(brief.suggested_meta_description || "")}</p>
+    <p><b>CTA:</b> ${escapeHtml(brief.cta || "")}</p>
+    <p><b>Prudencia:</b> ${escapeHtml(brief.prudence_block || "")}</p>
+    <p><b>Independencia:</b> ${escapeHtml(brief.portal_independence_block || "")}</p>
+    <p><b>H2 sugeridos:</b></p>
+    <ul>${list(brief.h2_structure)}</ul>
+    <p><b>Para pasar quality gate:</b></p>
+    <ul>${list(brief.quality_gate_requirements)}</ul>
+  `;
 }
 
 function ratioLabel(current, limit) {
@@ -5197,6 +5277,12 @@ async function loadSeoAutogeneration() {
   renderSeoAutogeneration(payload);
 }
 
+async function loadSeoKeywordBacklog() {
+  if (!els.seoKeywordRows) return;
+  const payload = await api("/api/admin?resource=seo/keyword-backlog&limit=15&include_briefs=true");
+  renderSeoKeywordBacklog(payload);
+}
+
 async function loadKpis() {
   const payload = await api("/api/admin?resource=kpis/settings");
   renderKpis(payload);
@@ -5318,6 +5404,7 @@ async function loadAll() {
       loadAnalytics(),
       loadSeo(),
       loadSeoAutogeneration(),
+      loadSeoKeywordBacklog(),
       loadLinkedIn(),
       loadMeta(),
       loadKpis(),
@@ -6000,6 +6087,29 @@ if (els.seoPagination) {
     if (direction === "previous") state.seo.page = Math.max(1, state.seo.page - 1);
     if (direction === "next") state.seo.page += 1;
     loadSeo().catch((error) => showStatus(error.message, "bad"));
+  });
+}
+
+if (els.seoKeywordRefresh) {
+  els.seoKeywordRefresh.addEventListener("click", () => loadSeoKeywordBacklog().catch((error) => showStatus(error.message, "bad")));
+}
+
+if (els.seoKeywordRows) {
+  els.seoKeywordRows.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-seo-keyword-brief]");
+    if (!button) return;
+    const id = button.dataset.seoKeywordBrief;
+    const cached = state.seoKeywordBacklog.briefsById.get(id);
+    if (cached) {
+      renderSeoKeywordBrief(cached);
+      return;
+    }
+    api("/api/admin?resource=seo/keyword-backlog", {
+      method: "POST",
+      body: JSON.stringify({ action: "generate_brief", id })
+    })
+      .then((payload) => renderSeoKeywordBrief(payload.brief))
+      .catch((error) => showStatus(error.message, "bad"));
   });
 }
 

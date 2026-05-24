@@ -67,6 +67,15 @@ const {
   summarizeOwnedAnalytics,
   summarizePagePerformance
 } = require("../lib/analytics/learning");
+const {
+  SEO_KEYWORD_BACKLOG_SEEDS,
+  SEO_KEYWORD_INTENTS,
+  SEO_KEYWORD_PAGE_TYPES,
+  SEO_KEYWORD_STATUSES,
+  buildSeoKeywordBacklog,
+  buildSeoKeywordBrief,
+  findBacklogItem
+} = require("../lib/seo/keywordBacklog");
 
 const {
   MANUAL_MODE_NOTICE,
@@ -1461,6 +1470,80 @@ function buildSeoLandingsSummary(rows = [], opportunities = [], activeStatus = "
       ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
       : 0,
     quality_gate: gateCounts
+  };
+}
+
+const SEO_KEYWORD_BACKLOG_SELECT =
+  "id,keyword,intent,page_type,city,province,priority,manual_difficulty,status,suggested_landing,recommended_cta,risk_level,risk_notes,created_at,updated_at,brief_json";
+
+async function fetchSeoKeywordBacklogRows({ limit = 15, status = "all", intent = "all" } = {}) {
+  if (!hasSupabaseConfig()) {
+    return { source: "seed", rows: SEO_KEYWORD_BACKLOG_SEEDS, storage_warning: "" };
+  }
+  const params = new URLSearchParams({
+    select: SEO_KEYWORD_BACKLOG_SELECT,
+    order: "priority.desc,updated_at.desc",
+    limit: String(Math.max(1, Math.min(50, Number(limit || 15))))
+  });
+  if (status && status !== "all") params.set("status", `eq.${status}`);
+  if (intent && intent !== "all") params.set("intent", `eq.${intent}`);
+  const result = await safeFetch(`seo_keyword_backlog?${params.toString()}`, []);
+  const rows = safeRows(result);
+  if (rows.length) {
+    return { source: "supabase", rows, storage_warning: safeFetchFailed(result) ? result.error : "" };
+  }
+  return {
+    source: "seed",
+    rows: SEO_KEYWORD_BACKLOG_SEEDS,
+    storage_warning: safeFetchFailed(result) ? result.error : ""
+  };
+}
+
+async function handleSeoKeywordBacklog(req, url) {
+  const limit = clampLimit(url.searchParams.get("limit"), 15, 50);
+  const status = String(url.searchParams.get("status") || "all").trim();
+  const intent = String(url.searchParams.get("intent") || "all").trim();
+  if (req.method === "GET") {
+    const includeBriefs = ["1", "true", "yes"].includes(String(url.searchParams.get("include_briefs") || "").toLowerCase());
+    const storage = await fetchSeoKeywordBacklogRows({ limit, status, intent });
+    const backlog = buildSeoKeywordBacklog(storage.rows, { limit, status, intent, include_briefs: includeBriefs });
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        source: storage.source,
+        storage_warning: storage.storage_warning,
+        statuses: SEO_KEYWORD_STATUSES,
+        intents: SEO_KEYWORD_INTENTS,
+        page_types: SEO_KEYWORD_PAGE_TYPES,
+        count: backlog.keywords.length,
+        summary: backlog.summary,
+        keywords: backlog.keywords
+      }
+    };
+  }
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+
+  const body = await readJsonBody(req);
+  const action = String(body.action || "").trim();
+  if (action !== "generate_brief") return { status: 400, payload: { ok: false, error: "invalid_action" } };
+
+  const storage = await fetchSeoKeywordBacklogRows({ limit: 50, status: "all", intent: "all" });
+  const item = findBacklogItem(storage.rows, body) || findBacklogItem(SEO_KEYWORD_BACKLOG_SEEDS, body);
+  if (!item) return { status: 404, payload: { ok: false, error: "keyword_not_found" } };
+  const brief = item.brief_json || buildSeoKeywordBrief(item);
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      action,
+      source: storage.source,
+      persisted: false,
+      generated_landing: false,
+      published: false,
+      keyword: item,
+      brief
+    }
   };
 }
 
@@ -3905,6 +3988,10 @@ module.exports = async function handler(req, res) {
     }
     if (resource === "analytics/learning") {
       const result = await handleOwnedAnalyticsLearning(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "seo/keyword-backlog") {
+      const result = await handleSeoKeywordBacklog(req, url);
       return json(res, result.status, result.payload);
     }
     if (!hasSupabaseConfig()) {
