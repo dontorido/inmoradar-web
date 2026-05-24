@@ -1721,7 +1721,7 @@ test("admin SEO autonomous pipeline respeta kill switch principal", async () => 
   );
 });
 
-test("admin SEO autonomous pipeline dry-run no persiste y devuelve razones", async () => {
+test("admin SEO autonomous pipeline dry-run no persiste contenido y guarda run log", async () => {
   const idea = { ...SEO_KEYWORD_BACKLOG_SEEDS[3], id: 301, status: "idea", risk_level: "baja" };
   const highRisk = { ...SEO_KEYWORD_BACKLOG_SEEDS[9], id: 302, status: "idea", risk_level: "alta" };
   const briefReady = {
@@ -1744,7 +1744,8 @@ test("admin SEO autonomous pipeline dry-run no persiste y devuelve razones", asy
     canonical_url: "https://inmoradar.app/autonomous-ready-dry-run/"
   };
   const previousFetch = global.fetch;
-  let writes = 0;
+  const contentWrites = [];
+  const runLogs = [];
 
   await withEnv(
     {
@@ -1757,7 +1758,13 @@ test("admin SEO autonomous pipeline dry-run no persiste y devuelve razones", asy
     async () => {
       global.fetch = async (url, options = {}) => {
         const requestUrl = String(url);
-        if (["PATCH", "POST", "DELETE"].includes(String(options.method || "GET").toUpperCase())) writes += 1;
+        const method = String(options.method || "GET").toUpperCase();
+        if (method === "POST" && requestUrl.endsWith("/rest/v1/seo_autonomous_pipeline_runs")) {
+          const runBody = JSON.parse(options.body);
+          runLogs.push(runBody);
+          return supabaseJson([{ ...runBody, id: "run-dry" }]);
+        }
+        if (["PATCH", "POST", "DELETE"].includes(method)) contentWrites.push(requestUrl);
         if (requestUrl.includes("seo_keyword_backlog") && requestUrl.includes("status=eq.idea")) return supabaseJson([highRisk, idea]);
         if (requestUrl.includes("seo_keyword_backlog") && requestUrl.includes("status=eq.brief_ready")) return supabaseJson([briefReady]);
         if (requestUrl.includes("/rest/v1/seo_landings?slug=eq.")) return supabaseJson([]);
@@ -1790,7 +1797,15 @@ test("admin SEO autonomous pipeline dry-run no persiste y devuelve razones", asy
       assert.equal(body.phases.auto_approve_high_quality_drafts.changed_count, 1);
       assert.equal(body.summary.would_publish_count, 1);
       assert.equal(body.touched_sitemap, false);
-      assert.equal(writes, 0);
+      assert.equal(contentWrites.length, 0);
+      assert.equal(runLogs.length, 1);
+      assert.equal(runLogs[0].dry_run, true);
+      assert.equal(runLogs[0].status, "dry_run");
+      assert.equal(runLogs[0].published_count, 0);
+      assert.equal(runLogs[0].would_publish_count, 1);
+      assert.equal(runLogs[0].touched_sitemap, false);
+      assert.equal(runLogs[0].skipped_items_json.some((item) => item.reason === "risk_level_high"), true);
+      assert.equal(body.run_log.persisted, true);
     }
   );
 });
@@ -1820,6 +1835,7 @@ test("admin SEO autonomous pipeline real crea, autoaprueba y autopublica con aud
   const keywordPatches = [];
   const landingPosts = [];
   const landingPatches = [];
+  const runLogs = [];
 
   await withEnv(
     {
@@ -1846,6 +1862,11 @@ test("admin SEO autonomous pipeline real crea, autoaprueba y autopublica con aud
           const postBody = JSON.parse(options.body);
           landingPosts.push(postBody);
           return supabaseJson([{ ...postBody, id: 500 }]);
+        }
+        if (method === "POST" && requestUrl.endsWith("/rest/v1/seo_autonomous_pipeline_runs")) {
+          const runBody = JSON.parse(options.body);
+          runLogs.push(runBody);
+          return supabaseJson([{ ...runBody, id: "run-real" }]);
         }
         if (requestUrl.includes("/rest/v1/seo_landings?slug=eq.")) {
           if (method === "PATCH") {
@@ -1902,6 +1923,16 @@ test("admin SEO autonomous pipeline real crea, autoaprueba y autopublica con aud
       assert.equal(landingPatches.some((patch) => patch.status === "ready_to_publish" && patch.source_data_json.auto_approval_audit), true);
       assert.equal(landingPatches.some((patch) => patch.status === "published" && patch.source_data_json.auto_publish_audit), true);
       assert.equal(landingPatches.some((patch) => patch.source_data_json.quality_gate_snapshot?.can_index === true), true);
+      assert.equal(runLogs.length, 1);
+      assert.equal(runLogs[0].dry_run, false);
+      assert.equal(runLogs[0].status, "published");
+      assert.equal(runLogs[0].briefs_generated_count, 1);
+      assert.equal(runLogs[0].drafts_created_count, 1);
+      assert.equal(runLogs[0].auto_approved_count, 1);
+      assert.equal(runLogs[0].published_count, 1);
+      assert.deepEqual(runLogs[0].published_slugs, ["autonomous-publish-real"]);
+      assert.equal(runLogs[0].phases_json.auto_publish_ready_drafts.items[0].landing, undefined);
+      assert.equal(body.run_log.persisted, true);
     }
   );
 });
@@ -1928,6 +1959,9 @@ test("admin SEO autonomous pipeline no autoaprueba score menor de 90", async () 
     async () => {
       global.fetch = async (url, options = {}) => {
         const requestUrl = String(url);
+        if (String(options.method || "GET").toUpperCase() === "POST" && requestUrl.endsWith("/rest/v1/seo_autonomous_pipeline_runs")) {
+          return supabaseJson([{ execution_id: "run-low-score" }]);
+        }
         if (options.method === "PATCH") patchCount += 1;
         if (requestUrl.includes("seo_keyword_backlog") && requestUrl.includes("status=eq.idea")) return supabaseJson([]);
         if (requestUrl.includes("seo_keyword_backlog") && requestUrl.includes("status=eq.brief_ready")) return supabaseJson([]);
@@ -1957,6 +1991,67 @@ test("admin SEO autonomous pipeline no autoaprueba score menor de 90", async () 
       assert.equal(body.phases.auto_approve_high_quality_drafts.changed_count, 0);
       assert.equal(patchCount, 0);
       assert.equal(body.touched_sitemap, false);
+    }
+  );
+});
+
+test("admin SEO autonomous pipeline lista runs persistidos para BackOffice", async () => {
+  const previousFetch = global.fetch;
+  const storedRun = {
+    id: "run-1",
+    execution_id: "seo_auto_cycle_test",
+    started_at: "2026-05-24T10:00:00.000Z",
+    finished_at: "2026-05-24T10:00:10.000Z",
+    status: "published",
+    dry_run: false,
+    briefs_generated_count: 1,
+    drafts_created_count: 1,
+    auto_approved_count: 1,
+    published_count: 1,
+    skipped_count: 2,
+    failed_count: 0,
+    touched_sitemap: false,
+    published_slugs: ["autonomous-publish-real"],
+    skipped_items_json: [{ slug: "legacy", reason: "quality_gate_not_calculated" }],
+    failed_items_json: [],
+    phases_json: { auto_publish_ready_drafts: { items: [{ slug: "autonomous-publish-real", status: "published" }] } },
+    summary_json: { published_count: 1, skipped_count: 2, touched_sitemap: false }
+  };
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        const requestUrl = String(url);
+        assert.notEqual(options.method, "POST");
+        if (requestUrl.includes("seo_autonomous_pipeline_runs?select=*&order=started_at.desc")) return supabaseJson([storedRun]);
+        throw new Error(`Unexpected fetch ${requestUrl}`);
+      };
+
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "GET",
+        url: "/api/admin?resource=seo/automation",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 200);
+      assert.equal(body.ok, true);
+      assert.equal(body.runs.length, 1);
+      assert.equal(body.runs[0].execution_id, "seo_auto_cycle_test");
+      assert.equal(body.runs[0].published_slugs[0], "autonomous-publish-real");
+      assert.equal(body.storage.runs_table_missing, false);
     }
   );
 });

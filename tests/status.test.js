@@ -344,20 +344,25 @@ test("backoffice SEO expone autopublicacion ready con dry-run y confirmacion", (
   assert.match(adminJs, /confirmation: dryRun \? "dry_run" : "auto_publish_ready_drafts"/);
 });
 
-test("backoffice SEO expone ciclo autonomo con dry-run y confirmacion", () => {
+test("backoffice SEO expone ciclo autonomo con confirmacion y log", () => {
   const root = path.join(__dirname, "..");
   const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
   const adminJs = fs.readFileSync(path.join(root, "assets", "admin.js"), "utf8");
   const adminApi = fs.readFileSync(path.join(root, "api", "admin.js"), "utf8");
 
-  assert.match(adminHtml, /data-seo-autonomous-dry-run/);
+  assert.doesNotMatch(adminHtml, /data-seo-autonomous-dry-run/);
   assert.match(adminHtml, /data-seo-autonomous-run/);
+  assert.match(adminHtml, /data-seo-autonomous-runs/);
+  assert.match(adminHtml, /data-seo-autonomous-summary/);
   assert.match(adminJs, /runSeoAutonomousCycle/);
+  assert.match(adminJs, /renderSeoAutonomousPipeline/);
   assert.match(adminJs, /resource=seo\/automation/);
   assert.match(adminJs, /run_autonomous_cycle/);
   assert.match(adminJs, /confirmation: dryRun \? "dry_run" : "run_autonomous_cycle"/);
+  assert.doesNotMatch(adminJs, /seoAutonomousDryRun/);
   assert.match(adminApi, /SEO_AUTONOMOUS_PIPELINE_ENABLED/);
   assert.match(adminApi, /SEO_AUTONOMOUS_PIPELINE_AUTO_APPROVE_MIN_SCORE = 90/);
+  assert.match(adminApi, /seo_autonomous_pipeline_runs/);
 });
 
 test("status UI usa nombres legibles y no muestra campos tecnicos", () => {

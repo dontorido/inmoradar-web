@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#0A140F">
   <link rel="icon" href="/assets/favicon-32.png?v=20260519b" type="image/png" sizes="32x32">
   <link rel="stylesheet" href="/assets/styles.css">
-  <link rel="stylesheet" href="/assets/admin.css?v=20260524-kpi-tooltips">
+  <link rel="stylesheet" href="/assets/admin.css?v=20260524-backoffice-tooltips">
   <link rel="stylesheet" href="/assets/admin-video-busy.css">
 </head>
 <body class="admin-body">
@@ -24,7 +24,7 @@
         <a class="admin-status-link" href="/status/" target="_blank" rel="noopener noreferrer" data-admin-status-link data-state="unknown" aria-label="Abrir estado de servicios">
           <span data-admin-status-text>Estado: comprobando</span>
         </a>
-        <button class="admin-button ghost" type="button" data-admin-logout data-testid="admin-logout">Salir</button>
+        <button class="admin-button ghost" type="button" data-admin-logout data-help-key="admin-logout" data-testid="admin-logout">Salir</button>
       </div>
     </header>
 
@@ -49,11 +49,11 @@
           <h1>Backoffice</h1>
         </div>
         <div class="admin-tabs admin-main-menu" aria-label="Secciones del backoffice">
-          <button class="admin-tab active" type="button" data-admin-section-button="ventas" data-testid="admin-tab-ventas" aria-pressed="true">Ventas</button>
-          <button class="admin-tab" type="button" data-admin-section-button="marketing" data-testid="admin-tab-marketing" aria-pressed="false">Marketing</button>
-          <button class="admin-tab" type="button" data-admin-section-button="kpis" data-testid="admin-tab-kpis" aria-pressed="false">KPIs</button>
-          <button class="admin-tab" type="button" data-admin-section-button="operaciones" data-testid="admin-tab-operaciones" aria-pressed="false">Operaciones</button>
-          <button class="admin-button tiny secondary" type="button" data-admin-refresh data-testid="admin-action-refresh">Actualizar</button>
+          <button class="admin-tab active" type="button" data-admin-section-button="ventas" data-help-key="admin-section" data-testid="admin-tab-ventas" aria-pressed="true">Ventas</button>
+          <button class="admin-tab" type="button" data-admin-section-button="marketing" data-help-key="admin-section" data-testid="admin-tab-marketing" aria-pressed="false">Marketing</button>
+          <button class="admin-tab" type="button" data-admin-section-button="kpis" data-help-key="admin-section" data-testid="admin-tab-kpis" aria-pressed="false">KPIs</button>
+          <button class="admin-tab" type="button" data-admin-section-button="operaciones" data-help-key="admin-section" data-testid="admin-tab-operaciones" aria-pressed="false">Operaciones</button>
+          <button class="admin-button tiny secondary" type="button" data-admin-refresh data-help-key="admin-refresh" data-testid="admin-action-refresh">Actualizar</button>
         </div>
       </div>
 
@@ -118,7 +118,7 @@
               </select>
               <input type="search" name="provider" placeholder="Proveedor">
               <input type="search" name="event_name" placeholder="Evento">
-              <button class="admin-button tiny ghost" type="submit" data-testid="admin-premium-filter">Filtrar</button>
+              <button class="admin-button tiny ghost" type="submit" data-help-key="premium-filter" data-testid="admin-premium-filter">Filtrar</button>
             </form>
           </div>
           <div class="admin-table-wrap">
@@ -237,15 +237,14 @@
                 <p class="admin-panel-sub">Genera borradores, publica landings elegibles y revisa el estado de indexación.</p>
               </div>
               <div class="admin-view-toolbar">
-                <button class="admin-button ghost" type="button" data-seo-generate data-testid="admin-action-generate-seo">Generar draft SEO</button>
-                <button class="admin-button" type="button" data-seo-publish data-testid="admin-action-publish-seo">Publicar 1 SEO elegible</button>
-                <button class="admin-button tiny ghost" type="button" data-seo-ready-auto-dry-run>Dry-run ready</button>
-                <button class="admin-button tiny" type="button" data-seo-ready-auto-publish>Autopublicar ready</button>
-                <button class="admin-button tiny ghost" type="button" data-seo-autonomous-dry-run>Dry-run ciclo autonomo</button>
-                <button class="admin-button tiny" type="button" data-seo-autonomous-run>Ejecutar ciclo autonomo</button>
+                <button class="admin-button ghost" type="button" data-seo-generate data-help-key="seo-generate" data-testid="admin-action-generate-seo">Generar draft SEO</button>
+                <button class="admin-button" type="button" data-seo-publish data-help-key="seo-publish" data-testid="admin-action-publish-seo">Publicar 1 SEO elegible</button>
+                <button class="admin-button tiny ghost" type="button" data-seo-ready-auto-dry-run data-help-key="seo-ready-auto-dry-run">Dry-run ready</button>
+                <button class="admin-button tiny" type="button" data-seo-ready-auto-publish data-help-key="seo-ready-auto-publish">Autopublicar ready</button>
+                <button class="admin-button tiny" type="button" data-seo-autonomous-run data-help-key="seo-autonomous-run">Ejecutar ciclo autonomo</button>
               </div>
               <form class="admin-filter" data-seo-filter>
-                <select name="status">
+                <select name="status" data-help-key="seo-filter">
                   <option value="all">Todos</option>
                   <option value="published">Published</option>
                   <option value="ready_to_publish">Ready</option>
@@ -254,7 +253,7 @@
                   <option value="noindex">Noindex</option>
                   <option value="archived">Archived</option>
                 </select>
-                <button class="admin-button tiny ghost" type="submit" data-testid="admin-seo-filter">Filtrar</button>
+                <button class="admin-button tiny ghost" type="submit" data-help-key="seo-filter" data-testid="admin-seo-filter">Filtrar</button>
               </form>
             </div>
             <div class="admin-stat-grid compact admin-seo-summary" data-seo-summary aria-live="polite"></div>
@@ -282,13 +281,41 @@
               <label class="admin-linkedin-wide"><span>Notas editoriales</span><textarea name="editorial_notes" rows="3" placeholder="Cambios realizados, dudas o revisiones pendientes"></textarea></label>
               <p class="admin-table-hint" data-seo-draft-editor-status>Editar un draft recalcula el quality gate, pero no publica, no indexa y no toca sitemap.</p>
               <div class="admin-row-actions">
-                <button class="admin-button tiny" type="submit" data-seo-draft-save>Guardar y recalcular gate</button>
-                <button class="admin-button tiny ghost" type="button" data-seo-draft-action="recalculate">Recalcular gate</button>
-                <button class="admin-button tiny ghost" type="button" data-seo-draft-action="approve">Aprobar para publicaci&oacute;n futura</button>
+                <button class="admin-button tiny" type="submit" data-seo-draft-save data-help-key="seo-draft-save">Guardar y recalcular gate</button>
+                <button class="admin-button tiny ghost" type="button" data-seo-draft-action="recalculate" data-help-key="seo-recalculate-gate">Recalcular gate</button>
+                <button class="admin-button tiny ghost" type="button" data-seo-draft-action="approve" data-help-key="seo-approve-draft">Aprobar para publicaci&oacute;n futura</button>
               </div>
             </form>
             <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
             <div class="admin-pagination" data-seo-pagination></div>
+          </article>
+          <article class="admin-panel admin-seo-autogen-panel" id="seo-autonomous-pipeline">
+            <div class="admin-panel-head">
+              <div>
+                <span class="admin-kicker muted">SEO Autonomous Pipeline</span>
+                <h2>Ciclo aut&oacute;nomo</h2>
+                <p class="admin-panel-sub">Hist&oacute;rico consultable de briefs, drafts, autoaprobaciones, publicaciones, omitidos y fallos por ejecuci&oacute;n.</p>
+              </div>
+              <div class="admin-view-toolbar">
+                <button class="admin-button tiny" type="button" data-seo-autonomous-run data-help-key="seo-autonomous-run">Ejecutar ciclo</button>
+              </div>
+            </div>
+            <div class="admin-seo-autogen-summary" data-seo-autonomous-summary aria-live="polite"></div>
+            <div class="admin-table-wrap">
+              <table class="admin-table admin-seo-autogen-table">
+                <thead>
+                  <tr>
+                    <th>Ejecuci&oacute;n</th>
+                    <th>Estado</th>
+                    <th>Fases</th>
+                    <th>Publicadas</th>
+                    <th>Detalle</th>
+                  </tr>
+                </thead>
+                <tbody data-seo-autonomous-runs></tbody>
+              </table>
+            </div>
+            <p class="admin-table-hint">El log no toca sitemap. La inclusi&oacute;n sigue siendo din&aacute;mica y quality-gated.</p>
           </article>
           <article class="admin-panel">
             <div class="admin-panel-head">
@@ -298,7 +325,7 @@
                 <p class="admin-panel-sub">Prioriza keywords y revisa briefs antes de generar landings. No publica ni indexa contenido.</p>
               </div>
               <div class="admin-view-toolbar">
-                <button class="admin-button tiny ghost" type="button" data-seo-keyword-refresh>Actualizar backlog</button>
+                <button class="admin-button tiny ghost" type="button" data-seo-keyword-refresh data-help-key="seo-keyword-refresh">Actualizar backlog</button>
               </div>
             </div>
             <div class="admin-stat-grid compact admin-seo-summary" data-seo-keyword-summary aria-live="polite"></div>
@@ -334,7 +361,7 @@
               </select></label>
               <label><span>Riesgo</span><select name="risk_level"><option value="baja">baja</option><option value="media" selected>media</option><option value="alta">alta</option></select></label>
               <label class="admin-linkedin-wide"><span>Landing sugerida</span><input name="suggested_landing" placeholder="/guias/analizar-piso-valencia/"></label>
-              <button class="admin-button tiny" type="submit">Crear oportunidad</button>
+              <button class="admin-button tiny" type="submit" data-help-key="seo-keyword-create">Crear oportunidad</button>
             </form>
             <div class="admin-table-wrap">
               <table class="admin-table" data-testid="seo-keyword-backlog-table">
@@ -361,8 +388,8 @@
                 <p class="admin-panel-sub">Publicación automática cada 6 horas con límites duros, score mínimo y registro de skipped por motivo.</p>
               </div>
               <div class="admin-view-toolbar">
-                <button class="admin-button ghost" type="button" data-seo-autogen-dry-run>Dry run</button>
-                <button class="admin-button" type="button" data-seo-autogen-run>Run now</button>
+                <button class="admin-button ghost" type="button" data-seo-autogen-dry-run data-help-key="seo-autogen-dry-run">Dry run</button>
+                <button class="admin-button" type="button" data-seo-autogen-run data-help-key="seo-autogen-run">Run now</button>
               </div>
             </div>
             <div class="admin-seo-autogen-summary" data-seo-autogen-summary aria-live="polite"></div>
@@ -392,13 +419,13 @@
               <div class="admin-view-toolbar">
                 <label class="admin-range-control">
                   <span>Desde</span>
-                  <input type="date" data-analytics-from>
+                  <input type="date" data-analytics-from data-help-key="analytics-date">
                 </label>
                 <label class="admin-range-control">
                   <span>Hasta</span>
-                  <input type="date" data-analytics-to>
+                  <input type="date" data-analytics-to data-help-key="analytics-date">
                 </label>
-                <button class="admin-button tiny ghost" type="button" data-analytics-refresh>Actualizar funnel</button>
+                <button class="admin-button tiny ghost" type="button" data-analytics-refresh data-help-key="analytics-refresh">Actualizar funnel</button>
               </div>
             </div>
             <section class="admin-stat-grid compact" data-analytics-summary></section>
@@ -543,11 +570,11 @@
                 <p class="admin-panel-sub">Genera y publica landings SEO en Facebook Page e Instagram profesional. Sale pausado hasta activar entorno, OAuth, Page, permisos y ajustes.</p>
               </div>
               <div class="admin-row-actions">
-                <button class="admin-button tiny ghost" type="button" data-meta-refresh title="Recarga estado, ajustes, cola y runs.">Actualizar</button>
-                <button class="admin-button tiny ghost" type="button" data-meta-test title="Comprueba permisos y conexion sin publicar.">Probar conexi&oacute;n</button>
-                <button class="admin-button tiny ghost" type="button" data-meta-load-pages title="Lista Pages gestionadas desde OAuth.">Cargar Pages</button>
-                <button class="admin-button tiny" type="button" data-meta-generate-next title="Crea un borrador desde la siguiente landing elegible.">Generar pr&oacute;ximo contenido</button>
-                <button class="admin-button tiny ghost" type="button" data-meta-pause title="Pausa el autopublisher manteniendo tokens y trazabilidad.">Pausar</button>
+                <button class="admin-button tiny ghost" type="button" data-meta-refresh data-help-key="meta-refresh">Actualizar</button>
+                <button class="admin-button tiny ghost" type="button" data-meta-test data-help-key="meta-test">Probar conexi&oacute;n</button>
+                <button class="admin-button tiny ghost" type="button" data-meta-load-pages data-help-key="meta-load-pages">Cargar Pages</button>
+                <button class="admin-button tiny" type="button" data-meta-generate-next data-help-key="meta-generate-next">Generar pr&oacute;ximo contenido</button>
+                <button class="admin-button tiny ghost" type="button" data-meta-pause data-help-key="meta-pause">Pausar</button>
               </div>
             </div>
             <div class="admin-linkedin-notice" data-meta-notice></div>
@@ -556,20 +583,20 @@
                 <div class="admin-linkedin-card-head">
                   <span>01 &middot; Conexi&oacute;n Meta</span>
                   <div class="admin-row-actions">
-                    <button class="admin-button tiny ghost" type="button" data-meta-connect title="Abre Meta para autorizar Pages e Instagram.">Conectar Meta</button>
-                    <button class="admin-button tiny ghost" type="button" data-meta-disconnect title="Desconecta tokens guardados.">Desconectar</button>
+                    <button class="admin-button tiny ghost" type="button" data-meta-connect data-help-key="meta-connect">Conectar Meta</button>
+                    <button class="admin-button tiny ghost" type="button" data-meta-disconnect data-help-key="meta-disconnect">Desconectar</button>
                   </div>
                 </div>
                 <div class="admin-linkedin-status" data-meta-connection></div>
                 <form class="admin-linkedin-form" data-meta-page-form>
                   <label class="admin-linkedin-wide"><span>Facebook Page</span><select name="page_id" data-meta-pages><option value="">Cargar Pages</option></select></label>
-                  <button class="admin-button tiny" type="submit">Guardar Page</button>
+                  <button class="admin-button tiny" type="submit" data-help-key="meta-save-page">Guardar Page</button>
                 </form>
               </article>
               <article class="admin-linkedin-card">
                 <div class="admin-linkedin-card-head">
                   <span>02 &middot; Ajustes</span>
-                  <button class="admin-button tiny" type="submit" form="admin-meta-settings-form">Guardar ajustes</button>
+                  <button class="admin-button tiny" type="submit" form="admin-meta-settings-form" data-help-key="meta-save-settings">Guardar ajustes</button>
                 </div>
                 <form class="admin-linkedin-form" id="admin-meta-settings-form" data-meta-settings-form>
                   <label><span>Autopublisher</span><select name="autopost_enabled"><option value="false">Desactivado</option><option value="true">Activado</option></select></label>
@@ -587,7 +614,7 @@
               <article class="admin-linkedin-card admin-linkedin-queue-card">
                 <div class="admin-linkedin-card-head">
                   <span>03 &middot; Cola Meta</span>
-                  <label class="admin-range-control"><span>Plataforma</span><select data-meta-generate-platform><option value="facebook">Facebook</option><option value="instagram">Instagram</option></select></label>
+                  <label class="admin-range-control"><span>Plataforma</span><select data-meta-generate-platform data-help-key="meta-save-settings"><option value="facebook">Facebook</option><option value="instagram">Instagram</option></select></label>
                 </div>
                 <section class="admin-stat-grid compact admin-linkedin-summary" data-meta-summary></section>
                 <div class="admin-table-wrap">
@@ -620,12 +647,12 @@
                   <label class="admin-linkedin-wide"><span>Caption</span><textarea name="caption" rows="10"></textarea></label>
                   <label class="admin-linkedin-wide"><span>Imagen p&uacute;blica</span><input name="image_url" placeholder="https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg"></label>
                   <div class="admin-linkedin-editor-actions">
-                    <button class="admin-button tiny" type="submit">Guardar borrador</button>
-                    <button class="admin-button tiny ghost" type="button" data-meta-post-action="generate_image">Generar preview SVG</button>
-                    <button class="admin-button tiny" type="button" data-meta-post-action="publish_now">Publicar ahora</button>
-                    <button class="admin-button tiny ghost" type="button" data-meta-copy-caption>Copiar caption</button>
-                    <button class="admin-button tiny ghost" type="button" data-meta-post-action="retry">Reintentar</button>
-                    <button class="admin-button tiny ghost" type="button" data-meta-post-action="skip">Omitir</button>
+                    <button class="admin-button tiny" type="submit" data-help-key="meta-save-post">Guardar borrador</button>
+                    <button class="admin-button tiny ghost" type="button" data-meta-post-action="generate_image" data-help-key="meta-generate-image">Generar preview SVG</button>
+                    <button class="admin-button tiny" type="button" data-meta-post-action="publish_now" data-help-key="meta-publish-now">Publicar ahora</button>
+                    <button class="admin-button tiny ghost" type="button" data-meta-copy-caption data-help-key="meta-copy-caption">Copiar caption</button>
+                    <button class="admin-button tiny ghost" type="button" data-meta-post-action="retry" data-help-key="meta-retry">Reintentar</button>
+                    <button class="admin-button tiny ghost" type="button" data-meta-post-action="skip" data-help-key="meta-skip">Omitir</button>
                   </div>
                 </form>
               </article>
@@ -642,8 +669,8 @@
               <h2>KPIs</h2>
             </div>
             <div class="admin-row-actions">
-              <button class="admin-button tiny ghost" type="button" data-kpi-reset>Restaurar defaults</button>
-              <button class="admin-button tiny" type="submit" form="admin-kpi-form">Guardar KPIs</button>
+              <button class="admin-button tiny ghost" type="button" data-kpi-reset data-help-key="kpi-reset">Restaurar defaults</button>
+              <button class="admin-button tiny" type="submit" form="admin-kpi-form" data-help-key="kpi-save">Guardar KPIs</button>
             </div>
           </div>
           <p class="admin-kpi-note">
@@ -682,8 +709,8 @@
               <p class="admin-panel-sub">Resumen seguro del endpoint publico de estado, sin errores internos ni detalles privados.</p>
             </div>
             <div class="admin-view-toolbar">
-              <a class="admin-button tiny ghost" href="/status/" target="_blank" rel="noopener noreferrer">Abrir status page</a>
-              <button class="admin-button tiny" type="button" data-service-status-refresh>Actualizar estado</button>
+              <a class="admin-button tiny ghost" href="/status/" target="_blank" rel="noopener noreferrer" data-help-key="admin-status-page">Abrir status page</a>
+              <button class="admin-button tiny" type="button" data-service-status-refresh data-help-key="service-status-refresh">Actualizar estado</button>
             </div>
           </div>
           <section class="admin-stat-grid compact admin-service-status-summary" data-service-status-summary></section>
@@ -701,7 +728,7 @@
               <span class="admin-kicker muted">Parking Intelligence</span>
               <h2>Parking</h2>
             </div>
-              <button class="admin-button tiny" type="button" data-parking-refresh data-testid="admin-action-refresh-parking">Actualizar Parking</button>
+              <button class="admin-button tiny" type="button" data-parking-refresh data-help-key="parking-refresh" data-testid="admin-action-refresh-parking">Actualizar Parking</button>
           </div>
           <p class="admin-kpi-note">
             Separa calle, SER, residentes, rotación y garaje. El resultado es orientativo y auditable.
@@ -749,7 +776,7 @@
                 <span>URL anuncio</span>
                 <input type="url" name="source_url" value="https://anuncio.local/preview/109503975">
               </label>
-              <button class="admin-button" type="submit" data-testid="admin-action-probe-parking">Probar Parking Intelligence</button>
+              <button class="admin-button" type="submit" data-help-key="parking-probe" data-testid="admin-action-probe-parking">Probar Parking Intelligence</button>
             </form>
             <pre class="admin-parking-result" data-parking-result>{}</pre>
           </div>
@@ -779,7 +806,7 @@
               <h2>Web</h2>
               <p class="admin-panel-sub">Registra cada cambio de la web antes de publicarlo: qué versión es, qué archivo lo acompaña, dónde se probará y qué conector lo desplegará.</p>
             </div>
-            <button class="admin-button tiny ghost" type="button" data-release-refresh="web">Actualizar Web</button>
+            <button class="admin-button tiny ghost" type="button" data-release-refresh="web" data-help-key="release-refresh">Actualizar Web</button>
           </div>
           <div class="admin-release-explain">
             <p><strong>Qué guardas aquí:</strong> manifiestos, notas o paquetes pequeños relacionados con un cambio de la web.</p>
@@ -835,7 +862,7 @@
                 <small>Explica qué cambia, qué riesgo tiene y cómo volver atrás si algo falla.</small>
                 <textarea name="notes" rows="4" placeholder="Qué contiene, riesgo, pasos de publicación y rollback."></textarea>
               </label>
-              <button class="admin-button" type="submit">Guardar versión web</button>
+              <button class="admin-button" type="submit" data-help-key="release-save-web">Guardar versión web</button>
               <p class="admin-release-note">Guardar no publica todavía: deja la versión preparada y auditada en Supabase. La publicación vendrá cuando activemos el conector.</p>
             </form>
             <div class="admin-release-side">
@@ -866,7 +893,7 @@
               <h2>Extensión</h2>
               <p class="admin-panel-sub">Prepara las versiones de la extensión por navegador. Aquí guardas el build, el manifest y las notas que luego se enviarán a Chrome, Edge o Firefox.</p>
             </div>
-            <button class="admin-button tiny ghost" type="button" data-release-refresh="extension">Actualizar Extensión</button>
+            <button class="admin-button tiny ghost" type="button" data-release-refresh="extension" data-help-key="release-refresh">Actualizar Extensión</button>
           </div>
           <div class="admin-release-explain">
             <p><strong>Qué guardas aquí:</strong> ZIP, CRX, XPI, manifest o notas de revisión de la extensión.</p>
@@ -923,7 +950,7 @@
                 <small>Incluye permisos nuevos, cambios visibles y pruebas hechas antes de enviar a revisión.</small>
                 <textarea name="notes" rows="4" placeholder="Cambios, permisos nuevos, pruebas y notas para revisión de store."></textarea>
               </label>
-              <button class="admin-button" type="submit">Guardar versión de extensión</button>
+              <button class="admin-button" type="submit" data-help-key="release-save-extension">Guardar versión de extensión</button>
               <p class="admin-release-note">Guardar no actualiza usuarios todavía: deja el paquete preparado para enviarlo a la tienda oficial correspondiente.</p>
             </form>
             <div class="admin-release-side">
@@ -954,7 +981,7 @@
               <h2>Backoffice</h2>
               <p class="admin-panel-sub">Controla los cambios del propio panel: scripts SQL, ajustes de configuración, previews, logs y notas de despliegue.</p>
             </div>
-            <button class="admin-button tiny ghost" type="button" data-release-refresh="backoffice">Actualizar Backoffice</button>
+            <button class="admin-button tiny ghost" type="button" data-release-refresh="backoffice" data-help-key="release-refresh">Actualizar Backoffice</button>
           </div>
           <div class="admin-release-explain">
             <p><strong>Qué guardas aquí:</strong> SQL, configuración, notas internas, logs o paquetes pequeños del panel admin.</p>
@@ -1011,7 +1038,7 @@
                 <small>Describe qué tabla, pantalla o proceso afecta y qué hacer si hay que deshacerlo.</small>
                 <textarea name="notes" rows="4" placeholder="Qué se cambia, tabla afectada, rollback y responsable."></textarea>
               </label>
-              <button class="admin-button" type="submit">Guardar cambio interno</button>
+              <button class="admin-button" type="submit" data-help-key="release-save-backoffice">Guardar cambio interno</button>
               <p class="admin-release-note">Guardar crea histórico operativo dentro del panel. No ejecuta SQL ni despliega por sí solo hasta que activemos esa acción.</p>
             </form>
             <div class="admin-release-side">
@@ -1042,9 +1069,9 @@
               <p class="admin-panel-sub" data-viraliza-subtitle>Tu radar diario para encontrar conversaciones, creadores y formatos que pueden hacer crecer InmoRadar.</p>
             </div>
             <div class="admin-row-actions">
-              <button class="admin-button tiny" type="button" data-viraliza-generate>Generar rutina de hoy</button>
-              <button class="admin-button tiny ghost" type="button" data-viraliza-mode>Modo ejecución</button>
-              <button class="admin-button tiny ghost" type="button" data-viraliza-open-search>Buscar oportunidades</button>
+              <button class="admin-button tiny" type="button" data-viraliza-generate data-help-key="viraliza-generate">Generar rutina de hoy</button>
+              <button class="admin-button tiny ghost" type="button" data-viraliza-mode data-help-key="viraliza-mode">Modo ejecución</button>
+              <button class="admin-button tiny ghost" type="button" data-viraliza-open-search data-help-key="viraliza-open-search">Buscar oportunidades</button>
             </div>
           </div>
           <p class="admin-panel-sub">Encuentra conversaciones, comenta con criterio y convierte creadores en distribución para InmoRadar. El sistema propone; tú revisas y ejecutas.</p>
@@ -1057,7 +1084,7 @@
                 <h3>Plan diario con cuentas concretas</h3>
                 <p>Nada se publica automaticamente. Importa cuentas reales revisadas, abre perfiles, copia mensajes y registra el resultado manualmente.</p>
               </div>
-              <button class="admin-button tiny ghost" type="button" data-viraliza-daily-plan-refresh>Actualizar plan de hoy</button>
+              <button class="admin-button tiny ghost" type="button" data-viraliza-daily-plan-refresh data-help-key="viraliza-daily-plan-refresh">Actualizar plan de hoy</button>
             </div>
             <div class="admin-viraliza-real-grid">
               <article class="admin-viraliza-real-card">
@@ -1079,11 +1106,11 @@
                   <label><span>Comentarios media</span><input name="avg_comments" type="number" min="0" step="1"></label>
                   <label><span>Frecuencia</span><input name="posting_frequency" placeholder="3-5/semana"></label>
                   <label class="admin-viraliza-wide"><span>Notas</span><textarea name="notes" rows="3" placeholder="Cuenta real revisada manualmente"></textarea></label>
-                  <button class="admin-button tiny" type="submit">Guardar cuenta</button>
+                  <button class="admin-button tiny" type="submit" data-help-key="viraliza-save-creator">Guardar cuenta</button>
                 </form>
                 <div class="admin-viraliza-import">
                   <label><span>Importar JSON</span><textarea data-viraliza-import-json rows="5" placeholder='[{"platform":"tiktok","handle":"@cuenta_real"}]'></textarea></label>
-                  <button class="admin-button tiny ghost" type="button" data-viraliza-import>Importar cuentas</button>
+                  <button class="admin-button tiny ghost" type="button" data-viraliza-import data-help-key="viraliza-import">Importar cuentas</button>
                 </div>
                 <div class="admin-viraliza-list" data-viraliza-real-creators></div>
               </article>
@@ -1111,7 +1138,7 @@
                   <label><span>Installs atribuidas</span><input name="installs_attributed" type="number" min="0" step="1"></label>
                   <label><span>Estado final</span><select name="status"><option value="completed">Completado</option><option value="replied">Respondio</option><option value="collaboration_agreed">Colaboracion abierta</option><option value="skipped">Descartado</option></select></label>
                   <label class="admin-viraliza-wide"><span>Notas</span><textarea name="notes" rows="4" placeholder="Que paso despues de comentar, seguir o escribir"></textarea></label>
-                  <button class="admin-button tiny" type="submit">Guardar resultado</button>
+                  <button class="admin-button tiny" type="submit" data-help-key="viraliza-save-result">Guardar resultado</button>
                 </form>
               </article>
             </div>
@@ -1123,7 +1150,7 @@
                 <h2>Aprendizaje</h2>
                 <p class="admin-panel-sub">Resume resultados manuales y convierte likes, respuestas, visitas e installs en recomendaciones para manana.</p>
               </div>
-              <button class="admin-button tiny ghost" type="button" data-viraliza-learning-refresh>Actualizar aprendizaje</button>
+              <button class="admin-button tiny ghost" type="button" data-viraliza-learning-refresh data-help-key="viraliza-learning-refresh">Actualizar aprendizaje</button>
             </div>
             <p class="admin-viraliza-safety">Nada se publica automaticamente. El aprendizaje solo usa resultados que registras manualmente en Viraliza.</p>
             <div data-viraliza-learning-content></div>
@@ -1221,7 +1248,7 @@
               <span>Descripción o transcripción</span>
               <textarea name="description" rows="4" placeholder="Resume el vídeo, comentarios destacados o el punto principal."></textarea>
             </label>
-            <button class="admin-button tiny" type="submit">Generar comentarios contextuales</button>
+            <button class="admin-button tiny" type="submit" data-help-key="viraliza-context-comments">Generar comentarios contextuales</button>
           </form>
           <div class="admin-viraliza-list" data-viraliza-context-output></div>
         </section>
@@ -1470,10 +1497,10 @@
                 </label>
                 <div class="admin-video-runway-status" data-video-runway-status>Genera un storyboard y estima coste antes de renderizar.</div>
                 <div class="admin-row-actions">
-                  <button class="admin-button tiny ghost" type="button" data-video-runway-estimate disabled>Estimar coste</button>
-                  <button class="admin-button tiny" type="button" data-video-runway-render disabled>Generar clip Runway</button>
-                  <button class="admin-button tiny ghost" type="button" data-video-runway-poll disabled>Comprobar estado</button>
-                  <button class="admin-button tiny ghost" type="button" data-video-runway-import disabled>Usar clip IA</button>
+                  <button class="admin-button tiny ghost" type="button" data-video-runway-estimate data-help-key="video-runway-estimate" disabled>Estimar coste</button>
+                  <button class="admin-button tiny" type="button" data-video-runway-render data-help-key="video-runway-render" disabled>Generar clip Runway</button>
+                  <button class="admin-button tiny ghost" type="button" data-video-runway-poll data-help-key="video-runway-poll" disabled>Comprobar estado</button>
+                  <button class="admin-button tiny ghost" type="button" data-video-runway-import data-help-key="video-runway-import" disabled>Usar clip IA</button>
                 </div>
               </section>
             </section>
@@ -1504,7 +1531,7 @@
                 <p data-video-social-copy>Genera un storyboard para crear un texto de publicación conectado con el análisis del vídeo.</p>
               </section>
               <div class="admin-video-final-action">
-                <button class="admin-button" type="button" data-video-export data-testid="admin-action-export-video" disabled>Componer vídeo final</button>
+                <button class="admin-button" type="button" data-video-export data-help-key="video-export" data-testid="admin-action-export-video" disabled>Componer vídeo final</button>
               </div>
             </section>
           </div>
@@ -1543,6 +1570,6 @@
     </section>
   </main>
 
-  <script src="/assets/admin.js?v=20260524-kpi-tooltips"></script>
+  <script src="/assets/admin.js?v=20260524-backoffice-tooltips"></script>
 </body>
 </html>

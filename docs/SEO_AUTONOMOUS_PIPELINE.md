@@ -118,11 +118,26 @@ La respuesta del endpoint devuelve:
 
 Ademas:
 
+- cada ejecucion se registra en `seo_autonomous_pipeline_runs` si Supabase y la tabla estan disponibles
 - los drafts creados desde el ciclo guardan `source_data_json.autonomous_pipeline`
 - los drafts autoaprobados guardan `source_data_json.auto_approval_audit`
 - las publicaciones guardan `source_data_json.auto_publish_audit`
 
-No se crea tabla dedicada de ejecuciones en este MVP para evitar refactor amplio. Si se quiere historico consultable, el siguiente paso natural es una tabla `seo_autonomous_pipeline_runs`.
+La tabla `seo_autonomous_pipeline_runs` guarda:
+
+- `execution_id`
+- `started_at` / `finished_at`
+- `status`
+- `dry_run`
+- counts por fase
+- `published_slugs`
+- `skipped_items_json`
+- `failed_items_json`
+- `summary_json`
+- `phases_json`
+- `config_json`
+
+No guarda credenciales, tokens ni datos personales. Los items se reducen a slug, estado, motivo, score y errores operativos.
 
 ## Como detenerlo
 
@@ -137,6 +152,20 @@ Para permitir briefs/drafts/aprobaciones pero impedir publicacion:
 ```env
 SEO_READY_DRAFT_AUTO_PUBLISH_ENABLED=false
 ```
+
+## BackOffice
+
+La seccion SEO muestra un panel `Ciclo autonomo` con las ultimas ejecuciones persistidas:
+
+- fecha y `execution_id`
+- estado del run
+- counts por fase
+- slugs publicados
+- motivos principales de omitidos/fallidos
+
+La UI del BackOffice muestra solo `Ejecutar ciclo` para evitar confusion operativa. El modo `dry_run` queda disponible en la API para pruebas internas o automatizadas.
+
+Si la tabla no esta aplicada, el panel muestra `Tabla seo_autonomous_pipeline_runs pendiente de aplicar` y el ciclo sigue funcionando; simplemente no queda historico consultable.
 
 ## Riesgos y seguimiento
 

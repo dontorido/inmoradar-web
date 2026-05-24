@@ -1962,6 +1962,153 @@ function summarizeSeoAutonomousPhases(phases = {}) {
   };
 }
 
+function seoAutonomousLogItem(item = {}) {
+  const landing = item.landing && typeof item.landing === "object" ? item.landing : null;
+  return {
+    id: item.id || landing?.id || null,
+    slug: item.slug || landing?.slug || "",
+    keyword: item.keyword || landing?.title || "",
+    status: item.status || "",
+    reason: item.reason || "",
+    quality_score: item.quality_score ?? landing?.quality_score ?? null,
+    quality_gate_status: item.quality_gate_status || landing?.quality_gate_status || "",
+    published: Boolean(item.published),
+    indexed: Boolean(item.indexed),
+    touched_sitemap: Boolean(item.touched_sitemap),
+    error_message: item.error_message || "",
+    errors: Array.isArray(item.errors) ? item.errors.slice(0, 10) : [],
+    failed_checks: Array.isArray(item.failed_checks)
+      ? item.failed_checks.map((check) => (typeof check === "string" ? check : check?.id || "unknown")).slice(0, 10)
+      : [],
+    existing_slug: item.existing_slug || ""
+  };
+}
+
+function seoAutonomousLogPhase(phase = {}) {
+  return {
+    name: phase.name || "",
+    dry_run: Boolean(phase.dry_run),
+    ok: phase.ok !== false,
+    status: phase.status || "",
+    error: phase.error || "",
+    reason: phase.reason || "",
+    processed_count: Number(phase.processed_count || 0),
+    changed_count: Number(phase.changed_count || 0),
+    skipped_count: Number(phase.skipped_count || 0),
+    failed_count: Number(phase.failed_count || 0),
+    published_count: Number(phase.published_count || 0),
+    would_publish_count: Number(phase.would_publish_count || 0),
+    items: Array.isArray(phase.items) ? phase.items.map(seoAutonomousLogItem) : [],
+    touched_sitemap: false
+  };
+}
+
+function seoAutonomousLogPhases(phases = {}) {
+  return Object.fromEntries(Object.entries(phases).map(([key, phase]) => [key, seoAutonomousLogPhase(phase)]));
+}
+
+function flattenSeoAutonomousLogItems(phases = {}, status) {
+  return Object.values(phases)
+    .flatMap((phase) => (Array.isArray(phase.items) ? phase.items : []))
+    .map(seoAutonomousLogItem)
+    .filter((item) => !status || item.status === status)
+    .slice(0, 100);
+}
+
+function seoAutonomousRunStatus(summary = {}, dryRun = true) {
+  if (dryRun) return "dry_run";
+  if (Number(summary.failed_count || 0) > 0) return "completed_with_warnings";
+  if (Number(summary.published_count || 0) > 0) return "published";
+  if (Number(summary.changed_count || 0) > 0) return "completed";
+  return "skipped";
+}
+
+function firstSeoAutonomousError(phases = {}) {
+  for (const phase of Object.values(phases)) {
+    if (phase?.error) return String(phase.error).slice(0, 500);
+    const failed = Array.isArray(phase?.items) ? phase.items.find((item) => item.status === "failed" || item.error_message) : null;
+    if (failed) return String(failed.error_message || failed.reason || "phase_failed").slice(0, 500);
+  }
+  return "";
+}
+
+async function persistSeoAutonomousPipelineRun(payload = {}) {
+  if (!hasSupabaseConfig()) {
+    return { persisted: false, table_missing: false, warning: "supabase_not_configured" };
+  }
+  const phases = seoAutonomousLogPhases(payload.phases || {});
+  const skippedItems = flattenSeoAutonomousLogItems(phases, "skipped");
+  const failedItems = flattenSeoAutonomousLogItems(phases, "failed");
+  const publishedSlugs = flattenSeoAutonomousLogItems(phases, "published")
+    .map((item) => item.slug)
+    .filter(Boolean);
+  const summary = {
+    ...(payload.summary || {}),
+    touched_sitemap: false
+  };
+  const config = payload.config || {};
+  const row = {
+    execution_id: payload.execution_id,
+    started_at: payload.started_at,
+    finished_at: payload.finished_at,
+    status: seoAutonomousRunStatus(summary, payload.dry_run),
+    dry_run: Boolean(payload.dry_run),
+    confirmed: Boolean(config.confirmed),
+    trigger_type: "backoffice",
+    briefs_generated_count: Number(payload.phases?.auto_generate_briefs?.changed_count || 0),
+    drafts_created_count: Number(payload.phases?.auto_create_drafts?.changed_count || 0),
+    auto_approved_count: Number(payload.phases?.auto_approve_high_quality_drafts?.changed_count || 0),
+    published_count: Number(summary.published_count || 0),
+    would_publish_count: Number(summary.would_publish_count || 0),
+    skipped_count: Number(summary.skipped_count || 0),
+    failed_count: Number(summary.failed_count || 0),
+    touched_sitemap: false,
+    config_json: config,
+    phases_json: phases,
+    summary_json: summary,
+    published_slugs: publishedSlugs,
+    skipped_items_json: skippedItems,
+    failed_items_json: failedItems,
+    error_message: firstSeoAutonomousError(phases)
+  };
+  try {
+    const rows = await supabaseFetch("seo_autonomous_pipeline_runs", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(row)
+    });
+    return {
+      persisted: true,
+      table_missing: false,
+      run: Array.isArray(rows) ? rows[0] || row : rows || row
+    };
+  } catch (error) {
+    return {
+      persisted: false,
+      table_missing: /seo_autonomous_pipeline_runs/i.test(String(error.message || error)),
+      warning: String(error.message || error).slice(0, 500)
+    };
+  }
+}
+
+async function fetchSeoAutonomousPipelineRuns(limit = 10) {
+  if (!hasSupabaseConfig()) {
+    return { runs: [], table_missing: false, error: "supabase_not_configured" };
+  }
+  try {
+    const rows = await supabaseFetch(
+      `seo_autonomous_pipeline_runs?select=*&order=started_at.desc&limit=${encodeURIComponent(String(clampLimit(limit, 10, 25)))}`
+    );
+    return { runs: Array.isArray(rows) ? rows : [], table_missing: false, error: "" };
+  } catch (error) {
+    return {
+      runs: [],
+      table_missing: /seo_autonomous_pipeline_runs/i.test(String(error.message || error)),
+      error: String(error.message || error).slice(0, 500)
+    };
+  }
+}
+
 async function runSeoAutonomousCycle(body = {}) {
   const config = seoAutonomousPipelineConfig(body);
   const isRealRun = config.dry_run === false;
@@ -2042,28 +2189,32 @@ async function runSeoAutonomousCycle(body = {}) {
 
   const finishedAt = new Date().toISOString();
   const summary = summarizeSeoAutonomousPhases(phases);
-  return {
-    status: 200,
-    payload: {
-      ok: true,
-      action: "run_autonomous_cycle",
+  const payload = {
+    ok: true,
+    action: "run_autonomous_cycle",
+    execution_id: executionId,
+    dry_run: config.dry_run,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    config,
+    phases,
+    summary,
+    audit: {
       execution_id: executionId,
       dry_run: config.dry_run,
       started_at: startedAt,
       finished_at: finishedAt,
-      config,
-      phases,
-      summary,
-      audit: {
-        execution_id: executionId,
-        dry_run: config.dry_run,
-        started_at: startedAt,
-        finished_at: finishedAt,
-        touched_sitemap: false,
-        persisted_summary_table: false
-      },
-      touched_sitemap: false
-    }
+      touched_sitemap: false,
+      persisted_summary_table: false
+    },
+    touched_sitemap: false
+  };
+  const runLog = await persistSeoAutonomousPipelineRun(payload);
+  payload.run_log = runLog;
+  payload.audit.persisted_summary_table = Boolean(runLog.persisted);
+  return {
+    status: 200,
+    payload
   };
 }
 
@@ -3309,6 +3460,21 @@ async function handleSeoKeywordBacklog(req, url) {
 }
 
 async function handleSeoAutomation(req) {
+  if (req.method === "GET") {
+    const runsState = await fetchSeoAutonomousPipelineRuns();
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        action: "list_autonomous_runs",
+        runs: runsState.runs,
+        storage: {
+          runs_table_missing: runsState.table_missing,
+          runs_error: runsState.error || ""
+        }
+      }
+    };
+  }
   if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
   const body = await readJsonBody(req);
   const action = String(body.action || "").trim();

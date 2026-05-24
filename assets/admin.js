@@ -173,6 +173,10 @@ const state = {
     status: null,
     recentRuns: []
   },
+  seoAutonomousPipeline: {
+    recentRuns: [],
+    storage: {}
+  },
   seoKeywordBacklog: {
     keywords: [],
     briefsById: new Map(),
@@ -290,8 +294,9 @@ const els = {
   seoPublish: document.querySelector("[data-seo-publish]"),
   seoReadyAutoDryRun: document.querySelector("[data-seo-ready-auto-dry-run]"),
   seoReadyAutoPublish: document.querySelector("[data-seo-ready-auto-publish]"),
-  seoAutonomousDryRun: document.querySelector("[data-seo-autonomous-dry-run]"),
-  seoAutonomousRun: document.querySelector("[data-seo-autonomous-run]"),
+  seoAutonomousRun: document.querySelectorAll("[data-seo-autonomous-run]"),
+  seoAutonomousSummary: document.querySelector("[data-seo-autonomous-summary]"),
+  seoAutonomousRuns: document.querySelector("[data-seo-autonomous-runs]"),
   seoAutogenSummary: document.querySelector("[data-seo-autogen-summary]"),
   seoAutogenRuns: document.querySelector("[data-seo-autogen-runs]"),
   seoAutogenRun: document.querySelector("[data-seo-autogen-run]"),
@@ -426,22 +431,399 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-function tooltipAttrs(message) {
-  if (!message) return "";
-  const safeMessage = escapeHtml(message);
-  return `data-tooltip="${safeMessage}" title="${safeMessage}" tabindex="0"`;
+const HELP_TEXTS = Object.freeze({
+  "admin-refresh": "Recarga datos del BackOffice desde los endpoints actuales. No recalcula metricas ni publica contenido.",
+  "admin-logout": "Cierra la sesion local del BackOffice en este navegador.",
+  "admin-section": "Cambia de seccion del BackOffice. No ejecuta acciones ni modifica datos.",
+  "admin-status-page": "Abre la pagina publica de estado en otra pestana. No cambia el estado de servicios.",
+  "premium-filter": "Filtra la tabla de Premium por texto, estado, proveedor o evento. No modifica suscripciones.",
+  "seo-generate": "Genera un draft SEO nuevo si hay una oportunidad elegible. No publica, no indexa y no toca sitemap.",
+  "seo-publish": "Publica una landing SEO elegible del flujo legacy. Usar con cautela; los drafts ready usan el flujo protegido.",
+  "seo-ready-auto-dry-run": "Simula la autopublicacion de drafts ready_to_publish. No publica nada ni cambia indexacion.",
+  "seo-ready-auto-publish": "Autopublica de forma limitada solo drafts ready_to_publish con confirmacion, kill switch y ultimo quality gate pasado.",
+  "seo-autonomous-run": "Ejecuta el ciclo SEO autonomo con limites, kill switches, confirmacion y gates. Puede crear, aprobar o publicar segun reglas.",
+  "seo-filter": "Filtra landings por estado editorial o de indexacion. No recalcula ni publica.",
+  "seo-edit-draft": "Abre el draft en el editor. Editar no publica ni indexa por si solo.",
+  "seo-regenerate": "Regenera contenido de la landing seleccionada. Accion potente: revisar antes de usar.",
+  "seo-recalculate-gate": "Recalcula calidad y quality gate de una landing. No publica, no cambia indexacion y no toca sitemap.",
+  "seo-approve-draft": "Marca el draft como listo para publicacion futura si pasa el gate. No publica, no indexa y no toca sitemap.",
+  "seo-publish-ready": "Publica un draft ready_to_publish solo tras confirmacion y ultimo quality gate correcto. La inclusion en sitemap sigue siendo dinamica.",
+  "seo-noindex": "Marca la landing como noindex para excluirla del indice. No borra la pagina.",
+  "seo-draft-save": "Guarda cambios del draft y recalcula gate. No publica, no indexa y no toca sitemap.",
+  "seo-keyword-refresh": "Recarga backlog, resumen y briefs desde el servidor. No crea paginas.",
+  "seo-keyword-create": "Crea una oportunidad editorial en backlog. No genera landing ni publica contenido.",
+  "seo-keyword-update": "Guarda prioridad o estado de esta oportunidad. No crea ni publica paginas.",
+  "seo-keyword-brief": "Genera o muestra el brief editorial para revisar la oportunidad. No crea landing.",
+  "seo-keyword-save-brief": "Guarda el brief editorial revisado. No publica ni indexa.",
+  "seo-keyword-create-draft": "Crea un borrador SEO no publicado y no indexado desde una oportunidad aprobada.",
+  "seo-keyword-approve": "Aprueba la oportunidad editorial. No crea ni publica paginas por si sola.",
+  "seo-keyword-reject": "Rechaza la oportunidad editorial. No borra landings existentes.",
+  "seo-autogen-dry-run": "Simula la autogeneracion SEO programada. No publica nada.",
+  "seo-autogen-run": "Ejecuta la autogeneracion SEO ahora con score minimo, limites y registro de omitidos.",
+  "analytics-refresh": "Actualiza el funnel con la ventana seleccionada. No cambia eventos ni atribuciones.",
+  "analytics-date": "Acota la ventana temporal del funnel. Los ratios son agregados de esa ventana.",
+  "kpi-reset": "Restaura los valores por defecto en el formulario. No se guardan hasta pulsar Guardar KPIs.",
+  "kpi-save": "Guarda pesos, umbrales y visibilidad de KPIs. No recalcula historicos ni cambia endpoints.",
+  "service-status-refresh": "Consulta /api/status y refresca el resumen. No modifica servicios.",
+  "parking-refresh": "Recarga cache y ultimos calculos de Parking. No recalcula una direccion.",
+  "parking-probe": "Ejecuta una prueba orientativa de Parking Intelligence con los campos actuales.",
+  "release-refresh": "Recarga versiones y conectores del area. No publica ni sube paquetes.",
+  "release-save-web": "Guarda una version web para auditoria. No despliega en Vercel ni GitHub.",
+  "release-save-extension": "Guarda un build de extension para auditoria. No actualiza usuarios ni tiendas.",
+  "release-save-backoffice": "Guarda un cambio interno del BackOffice. No ejecuta SQL ni despliega.",
+  "chrome-status": "Consulta el estado del item en Chrome Web Store. No sube ni publica.",
+  "chrome-upload": "Sube el ZIP preparado a Chrome Web Store. No equivale a revision publicada.",
+  "chrome-publish": "Envia el paquete a revision/publicacion en Chrome Web Store segun la API oficial.",
+  "linkedin-refresh": "Recarga conexion, ajustes y cola de LinkedIn. No publica.",
+  "linkedin-test": "Comprueba conexion y permisos de LinkedIn sin publicar.",
+  "linkedin-generate-daily": "Crea un borrador LinkedIn desde el tipo activo. No lo publica automaticamente.",
+  "linkedin-pause": "Pausa el autopublisher de LinkedIn manteniendo conexion y borradores.",
+  "linkedin-connect": "Abre LinkedIn para autorizar cuenta y pagina.",
+  "linkedin-disconnect": "Desactiva la conexion guardada y vuelve al modo manual.",
+  "linkedin-save-settings": "Guarda horario, modo de contenido y preferencias. No publica posts existentes.",
+  "linkedin-create-post": "Crea un borrador manual vacio en la cola.",
+  "linkedin-view": "Abre este post en el editor. No publica ni cambia estado.",
+  "linkedin-save-post": "Guarda cambios del post seleccionado en la cola. No publica por si solo.",
+  "linkedin-generate-image": "Crea o regenera una imagen para el post seleccionado. No publica.",
+  "linkedin-regenerate-copy": "Reescribe hook, texto, CTA y hashtags con la plantilla actual.",
+  "linkedin-approve": "Aprueba el post; con fecha lo deja programado y sin fecha queda pendiente.",
+  "linkedin-schedule": "Programa el post usando la fecha indicada o la siguiente hora diaria.",
+  "linkedin-publish-now": "Intenta publicar ahora mediante la API oficial de LinkedIn.",
+  "linkedin-copy-text": "Copia el texto completo para publicacion manual. No marca el post como publicado.",
+  "linkedin-download-image": "Descarga la imagen del post para subirla manualmente.",
+  "linkedin-mark-manual": "Marca el post como publicado manualmente sin llamar a LinkedIn.",
+  "linkedin-mark-manually-published": "Marca el post como publicado manualmente sin llamar a LinkedIn.",
+  "linkedin-retry": "Quita el error y devuelve el post a revision o pendiente.",
+  "linkedin-cancel": "Cancela el post para que no se publique.",
+  "meta-refresh": "Recarga estado, ajustes, cola y runs de Meta. No publica.",
+  "meta-test": "Comprueba permisos y conexion de Meta sin publicar.",
+  "meta-load-pages": "Lista las Pages gestionadas por OAuth para seleccionar destino.",
+  "meta-generate-next": "Crea un borrador Meta desde la siguiente landing elegible. No publica.",
+  "meta-pause": "Pausa el autopublisher Meta manteniendo tokens y trazabilidad.",
+  "meta-connect": "Abre Meta para autorizar Pages e Instagram.",
+  "meta-disconnect": "Desconecta los tokens guardados. No borra posts ya creados.",
+  "meta-save-page": "Guarda la Page seleccionada como destino. No publica contenido.",
+  "meta-save-settings": "Guarda frecuencia, destinos y limites de Meta. No publica.",
+  "meta-save-post": "Guarda el borrador Meta seleccionado. No publica.",
+  "meta-generate-image": "Genera un preview SVG para el post Meta. No publica.",
+  "meta-publish-now": "Intenta publicar ahora en Facebook o Instagram con la conexion activa.",
+  "meta-copy-caption": "Copia el caption para uso manual. No marca el post como publicado.",
+  "meta-retry": "Reintenta un post Meta en error segun su estado actual.",
+  "meta-skip": "Omite este post Meta para que no se publique en el ciclo.",
+  "viraliza-generate": "Genera la rutina diaria de Viraliza. Propone acciones; no publica en redes.",
+  "viraliza-mode": "Activa una vista paso a paso para ejecutar manualmente la rutina.",
+  "viraliza-open-search": "Abre la primera busqueda sugerida para validar conversaciones reales.",
+  "viraliza-daily-plan-refresh": "Actualiza el plan con cuentas reales revisadas. No contacta ni publica.",
+  "viraliza-save-creator": "Guarda una cuenta real revisada manualmente.",
+  "viraliza-import": "Importa cuentas desde JSON revisado. No sigue ni contacta cuentas.",
+  "viraliza-save-result": "Registra el resultado manual de una accion. No atribuye instalaciones reales si no hay evidencia.",
+  "viraliza-learning-refresh": "Actualiza aprendizajes desde resultados manuales guardados.",
+  "viraliza-context-comments": "Genera propuestas de comentario desde contexto pegado. Deben revisarse antes de publicar.",
+  "video-runway-estimate": "Estima coste de Runway. No gasta creditos ni lanza render.",
+  "video-runway-render": "Lanza el clip en Runway solo si hay estimacion y confirmacion de coste.",
+  "video-runway-poll": "Consulta el estado del job Runway. No lanza renders nuevos.",
+  "video-runway-import": "Carga el clip terminado como fondo del proyecto. No publica en redes.",
+  "video-export": "Compone el video final con branding. No publica en redes."
+});
+
+const STATUS_HELP_TEXTS = Object.freeze({
+  passed: "El quality gate cumple las condiciones minimas actuales. No garantiza ranking ni conversion.",
+  failed: "Hay checks bloqueantes o errores. Revisar motivo antes de publicar o indexar.",
+  not_calculated: "No hay quality_gate calculado todavia. No debe interpretarse como aprobado.",
+  legacy_compatible: "Landing antigua compatible con reglas previas. Conviene recalcular gate antes de decisiones nuevas.",
+  needs_review: "Necesita revision humana. No esta lista para publicarse sin criterio editorial.",
+  ready_to_publish: "Draft revisado que puede publicarse si supera el ultimo gate y hay confirmacion.",
+  ready: "Elemento listo dentro de su flujo. No siempre significa publicado.",
+  published: "Publicado en el canal correspondiente. En SEO no implica ranking ni trafico organico.",
+  noindex: "Marcado para no indexar. Puede existir publicamente, pero no deberia entrar en indice.",
+  index: "Marcado como indexable si el resto de reglas lo permite. No garantiza indexacion real de Google.",
+  skipped: "Omitido por una regla, limite o decision manual. No es un fallo tecnico por si solo.",
+  would_publish: "Resultado de simulacion: se publicaria si el modo real estuviera confirmado.",
+  draft: "Borrador no publicado. No debe tratarse como contenido visible o indexado.",
+  approved: "Aprobado editorialmente. No equivale a publicado.",
+  rejected: "Descartado editorialmente. No borra contenido ya publicado.",
+  active: "Activo en el sistema actual. Revisar contexto antes de inferir ingresos o uso real.",
+  on_trial: "Periodo de prueba activo. No equivale a pago confirmado.",
+  unpaid: "Pago pendiente o no cobrado. No equivale a baja definitiva.",
+  payment_failed: "Intento de pago fallido. Requiere revision de cobro.",
+  cancelled: "Cancelado. No necesariamente indica perdida inmediata de acceso.",
+  expired: "Periodo o acceso expirado.",
+  operational: "Servicio operativo segun /api/status. No sustituye una prueba end-to-end.",
+  degraded: "Servicio disponible con degradacion o dependencia no ideal.",
+  down: "Servicio marcado como caido o no disponible.",
+  unknown: "Estado no verificado. No asumir que funciona ni que esta caido.",
+  queued: "En cola para procesarse o publicarse segun reglas.",
+  scheduled: "Programado para una fecha futura. Aun puede fallar por permisos, limites o conexion.",
+  pending_review: "Pendiente de revision humana. No se publicara hasta aprobar o programar.",
+  image_pending: "Falta imagen o generacion visual. No esta listo para publicar.",
+  publishing: "Publicacion en curso. Puede terminar en publicado, omitido o error.",
+  error: "Error detectado. Revisar detalle antes de reintentar.",
+  connected: "Conexion configurada. No garantiza permisos completos para publicar.",
+  disconnected: "Sin conexion activa para automatizar este canal.",
+  needs_connection: "Falta conexion o autorizacion antes de ejecutar acciones automaticas.",
+  manually_published: "Marcado como publicado manualmente. No confirma llamada API automatica.",
+  touched_sitemap_false: "La accion no ha regenerado ni tocado el sitemap directamente."
+});
+
+const KPI_HELP_TEXTS = Object.freeze({
+  "premium-total": "Numero total de registros Premium conocidos. No mide usuarios activos ni ingresos.",
+  "premium-active": "Suscripciones activas o en prueba esta semana. No equivale a cobros confirmados del mes.",
+  "premium-trial": "Cuentas en prueba. Mide potencial, no conversion pagada.",
+  "premium-unpaid": "Suscripciones con pago pendiente, vencido o fallido. No mide churn definitivo.",
+  "premium-cancelled": "Suscripciones canceladas o expiradas. No explica el motivo de baja.",
+  "premium-paid": "Eventos de pago confirmados. No equivale a MRR por si solo.",
+  "revenue-total": "Cobros Premium confirmados en la ventana de 12 meses. No incluye intentos fallidos.",
+  "revenue-current-month": "Cobros confirmados del mes actual. No es forecast.",
+  "revenue-average": "Media mensual en la ventana visible. No es un objetivo ni garantia futura.",
+  "extension-users": "Usuarios anonimos distintos que enviaron eventos de extension en 30 dias. No mide instalaciones reales.",
+  "extension-active-7d": "Usuarios anonimos con actividad reciente de extension. No equivale a usuarios premium.",
+  "extension-sessions": "Sesiones de uso registradas por eventos anonimos. No mide visitas web.",
+  "extension-usage-time": "Tiempo activo agregado estimado desde eventos. Puede subestimar si faltan cierres de sesion.",
+  "analytics-events": "Eventos anonimos propios recogidos en la ventana seleccionada. Volumen base, no usuarios unicos.",
+  "analytics-page-views": "Vistas de paginas SEO registradas. No equivale a usuarios unicos ni impresiones organicas.",
+  "analytics-install-intent": "Clics hacia Chrome Store o flujo de instalacion. Mide intencion, no instalacion real.",
+  "analytics-chrome-store": "Clics hacia Chrome Web Store. No confirma instalacion ni uso posterior.",
+  "analytics-calculators": "Uso y finalizacion de calculadora. Mide interaccion cualificada, no pago ni instalacion.",
+  "analytics-scroll": "Profundidad de scroll 50/90. Mide lectura o interaccion, no conversion.",
+  "analytics-waitlist": "Registros de waitlist. Mide interes declarado, no checkout ni instalacion.",
+  "analytics-checkout": "Checkouts creados o iniciados. No equivale necesariamente a pago completado.",
+  "seo-total": "Landings SEO existentes en el BackOffice. No indica que esten publicadas ni indexadas.",
+  "seo-published": "Landings publicadas. No garantiza indexacion real, ranking ni trafico.",
+  "seo-today-landings": "Landings publicadas hoy frente al objetivo diario programatico.",
+  "seo-today-guides": "Guias publicadas hoy frente al objetivo editorial diario.",
+  "seo-pending": "Drafts, revisiones y ready pendientes. No estan necesariamente listas para publicar.",
+  "seo-ready": "Drafts ready_to_publish. Aun requieren ultimo gate y confirmacion para publicarse.",
+  "seo-review": "Landings que requieren criterio humano antes de avanzar.",
+  "seo-noindex": "Landings bloqueadas para indice. No necesariamente estan borradas.",
+  "seo-gate-failed": "Landings cuyo quality gate falla. No deben publicarse/indexarse sin resolver motivos.",
+  "seo-gate-legacy": "Landings antiguas sin quality_gate calculado. Recalcular antes de tratarlas como aptas.",
+  "seo-opportunities": "Oportunidades editoriales pendientes. No son landings ni drafts publicados.",
+  "seo-average-score": "Media del quality score interno. No es una metrica de Google ni predice ranking.",
+  "seo-keywords-total": "Keywords del backlog editorial. No son paginas creadas.",
+  "seo-keywords-ready": "Briefs listos para revisar. No equivalen a landings publicadas.",
+  "seo-keywords-high": "Oportunidades con prioridad alta. Prioridad interna, no volumen real de busqueda.",
+  "cache-total": "Entradas cacheadas de Parking. No mide exactitud del dato.",
+  "cache-vigente": "Entradas de Parking dentro de TTL. Vigente no significa infalible.",
+  assessments: "Pruebas o assessments de Parking guardados. Son orientativos y auditables.",
+  "score-medio": "Score medio de dificultad de parking. Indice interno, no dato municipal oficial.",
+  "linkedin-total": "Posts de LinkedIn en cola. No todos estan listos o publicados.",
+  "linkedin-ready": "Posts listos para publicar o programar. No equivale a publicados.",
+  "linkedin-pending": "Posts que requieren revision o conexion. No se publican solos.",
+  "linkedin-scheduled": "Posts programados. Aun pueden fallar por permisos o conexion.",
+  "linkedin-published": "Posts publicados via API o marcados manualmente. Manual no confirma API.",
+  "linkedin-failed": "Posts con error. Reintentar solo tras revisar causa.",
+  "meta-total": "Posts Meta en cola. No todos estan listos o publicados.",
+  "meta-draft": "Borradores Meta. No publicados.",
+  "meta-queued": "Posts Meta en cola/listos. No equivale a publicados.",
+  "meta-published": "Posts publicados en Facebook o Instagram. No mide alcance.",
+  "meta-failed": "Posts Meta con error. Revisar permisos, imagen o payload.",
+  "meta-skipped": "Posts Meta omitidos por reglas o decision. No es publicacion.",
+  "service-status-global": "Estado agregado de /api/status. No sustituye pruebas manuales de cada flujo.",
+  "service-status-operational": "Servicios que /api/status marca como operativos frente al total publicado.",
+  "service-status-attention": "Servicios degradados, caidos o sin verificar. Revisar mensaje antes de actuar.",
+  "seo-autogen-estado": "Estado del kill switch o configuracion del ciclo. Activo no significa que haya publicado.",
+  "seo-autogen-modo": "Modo del ciclo SEO. Dry run simula; real puede persistir cambios si gates y confirmaciones lo permiten.",
+  "seo-autogen-run": "Publicaciones de este run frente al limite. No cuenta elementos omitidos.",
+  "seo-autogen-24h": "Publicaciones de las ultimas 24h frente al limite diario.",
+  "seo-autogen-7-dias": "Publicaciones de los ultimos 7 dias frente al limite semanal.",
+  "seo-autogen-min-score": "Umbral minimo interno de calidad. No es una metrica de Google.",
+  "seo-autogen-ultima": "Ultima ejecucion registrada. No implica exito si el estado fue error u omitido.",
+  "seo-autogen-proxima": "Proxima ejecucion estimada. Puede cambiar por scheduler o kill switch.",
+  "seo-autogen-runs": "Ejecuciones del ciclo registradas. No equivale a publicaciones.",
+  "seo-autogen-briefs": "Briefs generados por el ciclo. No son landings publicadas.",
+  "seo-autogen-drafts": "Drafts creados por el ciclo. Nacen no publicados y no indexados.",
+  "seo-autogen-aprob": "Drafts autoaprobados por reglas internas. No equivale a publicado.",
+  "seo-autogen-pub": "Publicaciones realizadas por el ciclo. Sitemap sigue siendo dinamico y quality-gated.",
+  "seo-autogen-skip-fallo": "Elementos omitidos o fallidos. Revisar motivos antes de reintentar.",
+  "Rutina de hoy": "Progreso de la rutina manual de Viraliza. No publica en redes.",
+  "Racha actual": "Dias con rutina ejecutada o activa. No mide crecimiento real por si solo.",
+  Oportunidades: "Oportunidades detectadas o registradas. Requieren revision humana.",
+  Comentarios: "Comentarios preparados para adaptar y publicar manualmente. No se publican solos.",
+  "Creadores nuevos": "Cuentas detectadas para revisar. No significa contacto ni colaboracion.",
+  "Contactados semana": "Contactos registrados manualmente esta semana. No atribuye conversion real sin evidencia.",
+  "Videos semana": "Briefs o piezas de video creadas. No equivale a publicaciones ni views.",
+  "Formatos winners": "Formatos con aprendizaje positivo interno. No garantiza rendimiento futuro."
+});
+
+const ACTION_HELP_BY_DATASET = Object.freeze({
+  adminRefresh: "admin-refresh",
+  adminLogout: "admin-logout",
+  seoGenerate: "seo-generate",
+  seoPublish: "seo-publish",
+  seoReadyAutoDryRun: "seo-ready-auto-dry-run",
+  seoReadyAutoPublish: "seo-ready-auto-publish",
+  seoAutonomousRun: "seo-autonomous-run",
+  seoDraftSave: "seo-draft-save",
+  seoKeywordRefresh: "seo-keyword-refresh",
+  seoKeywordUpdate: "seo-keyword-update",
+  seoKeywordBrief: "seo-keyword-brief",
+  seoKeywordSaveBrief: "seo-keyword-save-brief",
+  seoKeywordCreateDraft: "seo-keyword-create-draft",
+  seoAutogenDryRun: "seo-autogen-dry-run",
+  seoAutogenRun: "seo-autogen-run",
+  analyticsRefresh: "analytics-refresh",
+  kpiReset: "kpi-reset",
+  serviceStatusRefresh: "service-status-refresh",
+  parkingRefresh: "parking-refresh",
+  releaseRefresh: "release-refresh",
+  linkedinRefresh: "linkedin-refresh",
+  linkedinTest: "linkedin-test",
+  linkedinGenerateDaily: "linkedin-generate-daily",
+  linkedinPause: "linkedin-pause",
+  linkedinConnect: "linkedin-connect",
+  linkedinDisconnect: "linkedin-disconnect",
+  linkedinCreatePost: "linkedin-create-post",
+  linkedinCopyText: "linkedin-copy-text",
+  linkedinDownloadImage: "linkedin-download-image",
+  metaRefresh: "meta-refresh",
+  metaTest: "meta-test",
+  metaLoadPages: "meta-load-pages",
+  metaGenerateNext: "meta-generate-next",
+  metaPause: "meta-pause",
+  metaConnect: "meta-connect",
+  metaDisconnect: "meta-disconnect",
+  metaCopyCaption: "meta-copy-caption",
+  viralizaGenerate: "viraliza-generate",
+  viralizaMode: "viraliza-mode",
+  viralizaOpenSearch: "viraliza-open-search",
+  viralizaDailyPlanRefresh: "viraliza-daily-plan-refresh",
+  viralizaImport: "viraliza-import",
+  viralizaLearningRefresh: "viraliza-learning-refresh",
+  videoRunwayEstimate: "video-runway-estimate",
+  videoRunwayRender: "video-runway-render",
+  videoRunwayPoll: "video-runway-poll",
+  videoRunwayImport: "video-runway-import",
+  videoExport: "video-export"
+});
+
+function helpText(keyOrMessage) {
+  if (!keyOrMessage) return "";
+  return HELP_TEXTS[keyOrMessage] || keyOrMessage;
+}
+
+function tooltipAttrs(message, options = {}) {
+  const resolved = helpText(message);
+  if (!resolved) return "";
+  const safeMessage = escapeHtml(resolved);
+  const attrs = [`data-tooltip="${safeMessage}"`, `title="${safeMessage}"`, 'aria-describedby="admin-floating-tooltip"'];
+  if (options.focusable !== false) attrs.push(`tabindex="${options.tabindex ?? 0}"`);
+  return attrs.join(" ");
+}
+
+function helpAttrs(key, options = {}) {
+  return tooltipAttrs(helpText(key), options);
 }
 
 let adminTooltipEl = null;
+let adminTooltipHideTimer = null;
+
+function normalizeHelpKey(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&[a-z]+;/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function isNaturallyFocusable(element) {
+  return element.matches("a[href], button, input, select, textarea, summary, [tabindex]");
+}
+
+function tooltipForStatus(value, kind = "status") {
+  if (kind === "score") {
+    return "Indice interno o score calculado por InmoRadar. No es una metrica externa ni una garantia de resultado.";
+  }
+  const normalized = normalizeHelpKey(value).replace(/-/g, "_");
+  return STATUS_HELP_TEXTS[normalized] || STATUS_HELP_TEXTS[normalizeHelpKey(value)] || "";
+}
+
+function tooltipForStat(label, options = {}) {
+  const id = options.id || slugId(label);
+  return (
+    options.tooltip ||
+    KPI_HELP_TEXTS[id] ||
+    KPI_HELP_TEXTS[label] ||
+    KPI_HELP_TEXTS[normalizeHelpKey(label)] ||
+    (options.hint ? `${label}: ${options.hint}. Interpreta este dato en su contexto; no mide mas de lo indicado.` : "")
+  );
+}
+
+function actionHelpForElement(element) {
+  const data = element?.dataset || {};
+  if (data.tooltip) return data.tooltip;
+  if (data.helpKey) return helpText(data.helpKey);
+  for (const [datasetKey, helpKey] of Object.entries(ACTION_HELP_BY_DATASET)) {
+    if (datasetKey in data) return helpText(helpKey);
+  }
+  if (data.adminSectionButton || data.adminSubsectionButton) return helpText("admin-section");
+  if (data.seoAction === "regenerate") return helpText("seo-regenerate");
+  if (data.seoAction === "recalculate_quality_gate") return helpText("seo-recalculate-gate");
+  if (data.seoAction === "noindex") return helpText("seo-noindex");
+  if (data.seoEditDraft) return helpText("seo-edit-draft");
+  if (data.seoApproveDraft) return helpText("seo-approve-draft");
+  if (data.seoPublishReadyDraft) return helpText("seo-publish-ready");
+  if (data.seoDraftAction === "recalculate") return helpText("seo-recalculate-gate");
+  if (data.seoDraftAction === "approve") return helpText("seo-approve-draft");
+  if (data.seoKeywordChangeStatus && data.status === "approved") return helpText("seo-keyword-approve");
+  if (data.seoKeywordChangeStatus && data.status === "rejected") return helpText("seo-keyword-reject");
+  if (data.releaseChromeAction === "status") return helpText("chrome-status");
+  if (data.releaseChromeAction === "upload") return helpText("chrome-upload");
+  if (data.releaseChromeAction === "publish") return helpText("chrome-publish");
+  if (data.linkedinPostAction) return helpText(`linkedin-${data.linkedinPostAction.replace(/_/g, "-")}`);
+  if (data.linkedinRowAction) return helpText(`linkedin-${data.linkedinRowAction.replace(/_/g, "-")}`) || helpText("linkedin-save-post");
+  if (data.metaPostAction === "generate_image") return helpText("meta-generate-image");
+  if (data.metaPostAction === "publish_now") return helpText("meta-publish-now");
+  if (data.metaPostAction === "retry") return helpText("meta-retry");
+  if (data.metaPostAction === "skip") return helpText("meta-skip");
+  if (data.metaRowAction === "view") return "Abre este post Meta en el editor. No publica.";
+  if (data.metaRowAction === "publish_now") return helpText("meta-publish-now");
+  if (data.metaRowAction === "skip") return helpText("meta-skip");
+  if (data.viralizaRecord) return "Registra esta accion manual en Viraliza. No publica en redes ni atribuye conversiones por si sola.";
+  if (data.copyText) return "Copia este texto al portapapeles. No publica ni guarda cambios.";
+  if (data.openUrl) return "Abre el enlace externo para revision manual. No registra resultado automaticamente.";
+  const normalizedText = normalizeHelpKey(element.textContent);
+  return {
+    filtrar: "Aplica los filtros visibles a esta tabla. No modifica datos.",
+    copiar: "Copia el texto al portapapeles. No publica ni guarda cambios.",
+    guardar: "Guarda los cambios del formulario actual. Revisa el contexto: guardar no suele publicar.",
+    aprobar: "Cambia el estado a aprobado dentro de este flujo. No publica por si solo.",
+    rechazar: "Cambia el estado a rechazado o descartado. No borra publicaciones existentes.",
+    reintentar: "Reintenta la accion o quita el estado de error segun el flujo actual.",
+    cancelar: "Cancela este elemento para que no siga avanzando en el flujo.",
+    publicar: "Accion de publicacion. Revisar confirmaciones, gates y destino antes de usar.",
+    "publicar-ahora": "Intenta publicar ahora en el canal configurado. Puede fallar por permisos o gates.",
+    "guardar-ajustes": "Guarda la configuracion de este modulo. No ejecuta publicaciones pendientes.",
+    "guardar-borrador": "Guarda el borrador actual. No publica por si solo."
+  }[normalizedText] || "";
+}
+
+function ensureTooltipForTarget(target) {
+  if (!target || !(target instanceof Element)) return "";
+  const message = helpText(target.dataset.tooltip || target.dataset.helpKey || actionHelpForElement(target));
+  if (!message) return "";
+  target.dataset.tooltip = message;
+  if (!target.hasAttribute("title")) target.setAttribute("title", message);
+  target.setAttribute("aria-describedby", "admin-floating-tooltip");
+  if (!isNaturallyFocusable(target)) target.setAttribute("tabindex", target.getAttribute("tabindex") || "0");
+  return message;
+}
 
 function tooltipTargetFromEvent(event) {
-  return event.target instanceof Element ? event.target.closest(".admin-linkedin-panel [data-tooltip], .admin-seo-performance-panel [data-tooltip]") : null;
+  if (!(event.target instanceof Element)) return null;
+  const explicit = event.target.closest("[data-tooltip], [data-help-key]");
+  if (explicit && ensureTooltipForTarget(explicit)) return explicit;
+  const implicit = event.target.closest("button, a.admin-button, .admin-chip, .admin-stat, .admin-seo-autogen-card");
+  if (implicit && ensureTooltipForTarget(implicit)) return implicit;
+  return null;
 }
 
 function ensureAdminTooltip() {
   if (!adminTooltipEl) {
     adminTooltipEl = document.createElement("div");
     adminTooltipEl.className = "admin-floating-tooltip";
+    adminTooltipEl.id = "admin-floating-tooltip";
     adminTooltipEl.setAttribute("role", "tooltip");
     adminTooltipEl.hidden = true;
     document.body.append(adminTooltipEl);
@@ -466,8 +848,12 @@ function positionAdminTooltip(target) {
 }
 
 function showAdminTooltip(target) {
-  const message = target?.dataset?.tooltip;
+  const message = ensureTooltipForTarget(target);
   if (!message) return;
+  if (adminTooltipHideTimer) {
+    window.clearTimeout(adminTooltipHideTimer);
+    adminTooltipHideTimer = null;
+  }
   const tooltip = ensureAdminTooltip();
   tooltip.textContent = message;
   tooltip.hidden = false;
@@ -475,7 +861,16 @@ function showAdminTooltip(target) {
 }
 
 function hideAdminTooltip() {
+  if (adminTooltipHideTimer) {
+    window.clearTimeout(adminTooltipHideTimer);
+    adminTooltipHideTimer = null;
+  }
   if (adminTooltipEl) adminTooltipEl.hidden = true;
+}
+
+function hideAdminTooltipSoon(delay = 2600) {
+  if (adminTooltipHideTimer) window.clearTimeout(adminTooltipHideTimer);
+  adminTooltipHideTimer = window.setTimeout(hideAdminTooltip, delay);
 }
 
 function formatDate(value) {
@@ -838,11 +1233,12 @@ function slugId(value) {
     .replace(/^-+|-+$/g, "");
 }
 
-function chip(value, variant = "", kind = "status") {
+function chip(value, variant = "", kind = "status", options = {}) {
   const label = escapeHtml(value || "-");
   const className = ["admin-chip", kind, variant].filter(Boolean).join(" ");
   const testId = kind === "score" ? `score-pill-${slugId(value)}` : `status-pill-${slugId(value)}`;
-  return `<span class="${className}" data-testid="${escapeHtml(testId)}">${label}</span>`;
+  const tooltip = tooltipAttrs(options.tooltip || tooltipForStatus(value, kind));
+  return `<span class="${className}" data-testid="${escapeHtml(testId)}"${tooltip ? ` ${tooltip}` : ""}>${label}</span>`;
 }
 
 function statusTone(value) {
@@ -927,7 +1323,7 @@ function renderSeoGate(row = {}) {
   const recalc = row.needs_quality_gate_recalc ? " · recalcular" : "";
   return `
     <div>
-      ${chip(seoGateLabel(row.quality_gate_status), seoGateTone(row.quality_gate_status))}
+      ${chip(seoGateLabel(row.quality_gate_status), seoGateTone(row.quality_gate_status), "status", { tooltip: tooltipForStatus(row.quality_gate_status) })}
       <div class="admin-subtle">${escapeHtml(failedText || "-")}${escapeHtml(recalc)}</div>
       <div class="admin-subtle">${escapeHtml(row.quality_gate_action || seoSitemapLabel(row.sitemap_status))}</div>
     </div>
@@ -937,7 +1333,7 @@ function renderSeoGate(row = {}) {
 function stat(label, value, options = {}) {
   const id = options.id || slugId(label);
   const isZero = Number(value || 0) === 0;
-  const tooltip = tooltipAttrs(options.tooltip);
+  const tooltip = tooltipAttrs(tooltipForStat(label, options));
   return `
     <div class="admin-stat${isZero ? " is-zero" : ""}" data-testid="stat-row-${escapeHtml(id)}"${tooltip ? ` ${tooltip}` : ""}>
       <div>
@@ -1025,7 +1421,7 @@ function renderServiceStatus(payload = {}) {
             <p>${escapeHtml(service.message || "Estado no disponible.")}</p>
           </div>
           <div>
-            ${chip(serviceStatusLabel(serviceState), statusTone(serviceState))}
+            ${chip(serviceStatusLabel(serviceState), statusTone(serviceState), "status", { tooltip: tooltipForStatus(serviceState) })}
             <small>${escapeHtml(latency)}</small>
           </div>
         </article>
@@ -1561,9 +1957,9 @@ function releaseChromeActions(row) {
   const id = escapeHtml(row.id || "");
   return `
     <div class="admin-row-actions">
-      <button class="admin-button tiny ghost" type="button" data-release-chrome-action="status" data-release-id="${id}">Estado Chrome</button>
-      <button class="admin-button tiny ghost" type="button" data-release-chrome-action="upload" data-release-id="${id}">Subir ZIP</button>
-      <button class="admin-button tiny" type="button" data-release-chrome-action="publish" data-release-id="${id}">Enviar revisión</button>
+      <button class="admin-button tiny ghost" type="button" data-release-chrome-action="status" data-release-id="${id}" ${helpAttrs("chrome-status", { focusable: false })}>Estado Chrome</button>
+      <button class="admin-button tiny ghost" type="button" data-release-chrome-action="upload" data-release-id="${id}" ${helpAttrs("chrome-upload", { focusable: false })}>Subir ZIP</button>
+      <button class="admin-button tiny" type="button" data-release-chrome-action="publish" data-release-id="${id}" ${helpAttrs("chrome-publish", { focusable: false })}>Enviar revisión</button>
     </div>
   `;
 }
@@ -1817,22 +2213,22 @@ function renderSeo(payload) {
             <div class="admin-row-actions">
               ${
                 isSeoDraftReviewStatus(row.status)
-                  ? `<button class="admin-button tiny ghost" type="button" data-seo-edit-draft="${escapeHtml(row.slug)}">Editar</button>`
+                  ? `<button class="admin-button tiny ghost" type="button" data-seo-edit-draft="${escapeHtml(row.slug)}" ${helpAttrs("seo-edit-draft", { focusable: false })}>Editar</button>`
                   : ""
               }
-              <button class="admin-icon-button" type="button" data-seo-action="regenerate" data-slug="${escapeHtml(row.slug)}" aria-label="Regenerar landing">R</button>
-              <button class="admin-icon-button" type="button" data-seo-action="recalculate_quality_gate" data-slug="${escapeHtml(row.slug)}" aria-label="Recalcular quality gate" title="Recalcular gate">Q</button>
+              <button class="admin-icon-button" type="button" data-seo-action="regenerate" data-slug="${escapeHtml(row.slug)}" aria-label="Regenerar landing" ${helpAttrs("seo-regenerate", { focusable: false })}>R</button>
+              <button class="admin-icon-button" type="button" data-seo-action="recalculate_quality_gate" data-slug="${escapeHtml(row.slug)}" aria-label="Recalcular quality gate" ${helpAttrs("seo-recalculate-gate", { focusable: false })}>Q</button>
               ${
                 canApproveSeoDraft(row)
-                  ? `<button class="admin-button tiny ghost" type="button" data-seo-approve-draft="${escapeHtml(row.slug)}">Aprobar</button>`
+                  ? `<button class="admin-button tiny ghost" type="button" data-seo-approve-draft="${escapeHtml(row.slug)}" ${helpAttrs("seo-approve-draft", { focusable: false })}>Aprobar</button>`
                   : ""
               }
               ${
                 canPublishReadySeoDraft(row)
-                  ? `<button class="admin-button tiny" type="button" data-seo-publish-ready-draft="${escapeHtml(row.slug)}">Publicar</button>`
+                  ? `<button class="admin-button tiny" type="button" data-seo-publish-ready-draft="${escapeHtml(row.slug)}" ${helpAttrs("seo-publish-ready", { focusable: false })}>Publicar</button>`
                   : ""
               }
-              <button class="admin-icon-button" type="button" data-seo-action="noindex" data-slug="${escapeHtml(row.slug)}" aria-label="Marcar noindex">N</button>
+              <button class="admin-icon-button" type="button" data-seo-action="noindex" data-slug="${escapeHtml(row.slug)}" aria-label="Marcar noindex" ${helpAttrs("seo-noindex", { focusable: false })}>N</button>
             </div>
           </td>
         </tr>
@@ -1938,16 +2334,16 @@ function renderSeoKeywordBacklog(payload = {}) {
           </td>
           <td>
             <div class="admin-row-actions">
-              <button class="admin-button tiny ghost" type="button" data-seo-keyword-update="${escapeHtml(item.id)}">Guardar</button>
-              <button class="admin-button tiny ghost" type="button" data-seo-keyword-brief="${escapeHtml(item.id)}">Ver brief</button>
-              <button class="admin-button tiny ghost" type="button" data-seo-keyword-save-brief="${escapeHtml(item.id)}">Guardar brief</button>
+              <button class="admin-button tiny ghost" type="button" data-seo-keyword-update="${escapeHtml(item.id)}" ${helpAttrs("seo-keyword-update", { focusable: false })}>Guardar</button>
+              <button class="admin-button tiny ghost" type="button" data-seo-keyword-brief="${escapeHtml(item.id)}" ${helpAttrs("seo-keyword-brief", { focusable: false })}>Ver brief</button>
+              <button class="admin-button tiny ghost" type="button" data-seo-keyword-save-brief="${escapeHtml(item.id)}" ${helpAttrs("seo-keyword-save-brief", { focusable: false })}>Guardar brief</button>
               ${
                 item.status === "approved"
-                  ? `<button class="admin-button tiny ghost" type="button" data-seo-keyword-create-draft="${escapeHtml(item.id)}">Crear borrador</button>`
+                  ? `<button class="admin-button tiny ghost" type="button" data-seo-keyword-create-draft="${escapeHtml(item.id)}" ${helpAttrs("seo-keyword-create-draft", { focusable: false })}>Crear borrador</button>`
                   : ""
               }
-              <button class="admin-button tiny ghost" type="button" data-seo-keyword-change-status="${escapeHtml(item.id)}" data-status="approved">Aprobar</button>
-              <button class="admin-button tiny ghost" type="button" data-seo-keyword-change-status="${escapeHtml(item.id)}" data-status="rejected">Rechazar</button>
+              <button class="admin-button tiny ghost" type="button" data-seo-keyword-change-status="${escapeHtml(item.id)}" data-status="approved" ${helpAttrs("seo-keyword-approve", { focusable: false })}>Aprobar</button>
+              <button class="admin-button tiny ghost" type="button" data-seo-keyword-change-status="${escapeHtml(item.id)}" data-status="rejected" ${helpAttrs("seo-keyword-reject", { focusable: false })}>Rechazar</button>
             </div>
           </td>
         </tr>
@@ -2009,8 +2405,9 @@ function seoAutogenBadge(label, tone = "neutral") {
 function seoAutogenCard(label, value, options = {}) {
   const classes = ["admin-seo-autogen-card"];
   if (options.overLimit) classes.push("is-over-limit");
+  const tooltip = tooltipAttrs(options.tooltip || tooltipForStat(label, { ...options, id: options.id || `seo-autogen-${slugId(label)}` }));
   return `
-    <article class="${classes.join(" ")}">
+    <article class="${classes.join(" ")}"${tooltip ? ` ${tooltip}` : ""}>
       <span>${escapeHtml(label)}</span>
       <div class="admin-seo-autogen-value">${options.badge ? seoAutogenBadge(value, options.tone) : escapeHtml(value)}</div>
       ${options.hint ? `<small>${escapeHtml(options.hint)}</small>` : ""}
@@ -2077,6 +2474,71 @@ function renderSeoAutogeneration(payload = {}) {
           <td>${chip(row.status || "unknown", statusTone(row.status))}</td>
           <td>${escapeHtml(counts)}</td>
           <td><div class="admin-seo-autogen-detail">${escapeHtml(detail || row.error_message || "-")}</div></td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+function renderSeoAutonomousPipeline(payload = {}) {
+  if (!els.seoAutonomousSummary || !els.seoAutonomousRuns) return;
+  const runs = payload.runs || [];
+  const storage = payload.storage || {};
+  state.seoAutonomousPipeline.recentRuns = runs;
+  state.seoAutonomousPipeline.storage = storage;
+  const lastRun = runs[0] || null;
+  const lastSummary = lastRun?.summary_json || {};
+  const lastPhases = lastRun?.phases_json || {};
+  const missingTable = Boolean(storage.runs_table_missing);
+
+  els.seoAutonomousSummary.innerHTML = [
+    seoAutogenCard("Runs", String(runs.length), { hint: missingTable ? "Tabla pendiente" : "Ultimos ciclos" }),
+    seoAutogenCard("Ultima", lastRun ? formatCompactDate(lastRun.started_at) : "-", { hint: lastRun?.status || "Sin ejecuciones" }),
+    seoAutogenCard("Modo", lastRun ? (lastRun.dry_run ? "Dry run" : "Real") : "-", { badge: true, tone: lastRun?.dry_run ? "warn" : "good" }),
+    seoAutogenCard("Briefs", String(lastRun?.briefs_generated_count || 0), { hint: "Generados" }),
+    seoAutogenCard("Drafts", String(lastRun?.drafts_created_count || 0), { hint: "Creados" }),
+    seoAutogenCard("Aprob.", String(lastRun?.auto_approved_count || 0), { hint: "Autoaprobados" }),
+    seoAutogenCard("Pub.", String(lastRun?.published_count || lastSummary.published_count || 0), { hint: "Publicadas" }),
+    seoAutogenCard("Skip/Fallo", `${Number(lastRun?.skipped_count || 0)} / ${Number(lastRun?.failed_count || 0)}`, { hint: "Razones en tabla" })
+  ].join("");
+
+  if (missingTable) {
+    els.seoAutonomousRuns.innerHTML = `<tr><td colspan="5">Tabla seo_autonomous_pipeline_runs pendiente de aplicar.</td></tr>`;
+    return;
+  }
+  if (!runs.length) {
+    els.seoAutonomousRuns.innerHTML = `<tr><td colspan="5">Sin ejecuciones registradas.</td></tr>`;
+    return;
+  }
+
+  els.seoAutonomousRuns.innerHTML = runs
+    .map((row) => {
+      const phases = row.phases_json || {};
+      const phaseCounts = [
+        `briefs ${Number(row.briefs_generated_count || phases.auto_generate_briefs?.changed_count || 0)}`,
+        `drafts ${Number(row.drafts_created_count || phases.auto_create_drafts?.changed_count || 0)}`,
+        `aprob. ${Number(row.auto_approved_count || phases.auto_approve_high_quality_drafts?.changed_count || 0)}`,
+        `pub. ${Number(row.published_count || phases.auto_publish_ready_drafts?.published_count || 0)}`
+      ].join(" - ");
+      const publishedSlugs = Array.isArray(row.published_slugs) ? row.published_slugs : [];
+      const failedItems = Array.isArray(row.failed_items_json) ? row.failed_items_json : [];
+      const skippedItems = Array.isArray(row.skipped_items_json) ? row.skipped_items_json : [];
+      const reasons = [...failedItems, ...skippedItems]
+        .slice(0, 3)
+        .map((item) => [item.slug, item.reason || item.error_message].filter(Boolean).join(" - "))
+        .filter(Boolean)
+        .join(" | ");
+      const detail = reasons || row.error_message || (row.dry_run ? "Dry-run sin cambios de contenido." : "Sin incidencias.");
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(formatCompactDate(row.started_at))}</strong>
+            <div class="admin-subtle">${escapeHtml(row.execution_id || "-")}</div>
+          </td>
+          <td>${chip(row.status || "unknown", statusTone(row.status))}</td>
+          <td>${escapeHtml(phaseCounts)}</td>
+          <td>${escapeHtml(publishedSlugs.slice(0, 3).join(", ") || "-")}</td>
+          <td><div class="admin-seo-autogen-detail">${escapeHtml(detail)}</div></td>
         </tr>
       `;
     })
@@ -2266,10 +2728,10 @@ function renderLinkedInConnection() {
   const autopublisher = state.linkedin.autopublisher || {};
   const hasPage = Boolean(c.organization_name || c.organization_urn || env.organization_urn_configured);
   els.linkedinConnection.innerHTML = `
-    <div class="admin-linkedin-status-row"><span>Estado</span>${chip(linkedInStatusLabel(c.status || "disconnected"), statusTone(c.status))}</div>
+    <div class="admin-linkedin-status-row"><span>Estado</span>${chip(linkedInStatusLabel(c.status || "disconnected"), statusTone(c.status), "status", { tooltip: tooltipForStatus(c.status || "disconnected") })}</div>
     <div class="admin-linkedin-status-row"><span>P\u00e1gina destino</span><strong>${escapeHtml(autopublisher.company_url || c.linkedin_company_url || env.company_url || "-")}</strong></div>
     <div class="admin-linkedin-status-row"><span>Modo manual</span>${chip(c.manual_available ? "Activo" : "No", c.manual_available ? "published" : "bad")}</div>
-    <div class="admin-linkedin-status-row"><span>Autopublisher</span>${chip(autopublisher.enabled ? "Activo" : "Pausado", autopublisher.enabled ? "published" : "draft")}</div>
+    <div class="admin-linkedin-status-row"><span>Autopublisher</span>${chip(autopublisher.enabled ? "Activo" : "Pausado", autopublisher.enabled ? "published" : "draft", "status", { tooltip: autopublisher.enabled ? "Autopublisher activo segun configuracion. Aun depende de permisos, horarios y limites." : "Autopublisher pausado. No publicara automaticamente mientras siga asi." })}</div>
     <div class="admin-linkedin-status-row"><span>Frecuencia</span><strong>${escapeHtml(autopublisher.frequency || "every_2_days")}</strong></div>
     <div class="admin-linkedin-status-row"><span>Pr\u00f3xima publicaci\u00f3n</span><strong>${escapeHtml(formatDate(autopublisher.next_publication))}</strong></div>
     <div class="admin-linkedin-status-row"><span>P\u00e1gina configurada</span><strong>${escapeHtml(hasPage ? "Si" : "No")}</strong></div>
@@ -2336,7 +2798,7 @@ function renderLinkedInPosts() {
         <td>${escapeHtml(formatDate(post.created_at))}</td>
         <td>${preview}</td>
         <td><strong>${escapeHtml(post.hook || post.title || "-")}</strong><div class="admin-subtle">${escapeHtml(post.source_reference || post.source_type || "-")}</div></td>
-        <td>${chip(linkedInStatusLabel(post.status), statusTone(post.status))}</td>
+        <td>${chip(linkedInStatusLabel(post.status), statusTone(post.status), "status", { tooltip: tooltipForStatus(post.status) })}</td>
         <td>${chip(mode, mode === "autom\u00e1tico" ? "ready" : "draft")}</td>
         <td>${escapeHtml(formatDate(post.scheduled_at))}</td>
         <td>${escapeHtml(formatDate(publishedAt))}</td>
@@ -2621,11 +3083,11 @@ function renderMetaConnection() {
   const env = state.meta.env || {};
   const autopublisher = state.meta.autopublisher || {};
   els.metaConnection.innerHTML = `
-    <div class="admin-linkedin-status-row"><span>Estado</span>${chip(metaStatusLabel(c.status || "disconnected"), statusTone(c.status))}</div>
+    <div class="admin-linkedin-status-row"><span>Estado</span>${chip(metaStatusLabel(c.status || "disconnected"), statusTone(c.status), "status", { tooltip: tooltipForStatus(c.status || "disconnected") })}</div>
     <div class="admin-linkedin-status-row"><span>Facebook Page</span><strong>${escapeHtml(c.facebook_page_name || env.facebook_page_name || "-")}</strong></div>
     <div class="admin-linkedin-status-row"><span>Page ID</span><code>${escapeHtml(c.facebook_page_id || "-")}</code></div>
     <div class="admin-linkedin-status-row"><span>Instagram ID</span><code>${escapeHtml(c.instagram_business_account_id || "-")}</code></div>
-    <div class="admin-linkedin-status-row"><span>Autopublisher</span>${chip(autopublisher.enabled ? "Activo" : "Pausado", autopublisher.enabled ? "published" : "draft")}</div>
+    <div class="admin-linkedin-status-row"><span>Autopublisher</span>${chip(autopublisher.enabled ? "Activo" : "Pausado", autopublisher.enabled ? "published" : "draft", "status", { tooltip: autopublisher.enabled ? "Autopublisher Meta activo segun configuracion. Aun depende de OAuth, permisos, gates y limites." : "Autopublisher Meta pausado. No publicara automaticamente mientras siga asi." })}</div>
     <div class="admin-linkedin-status-row"><span>Frecuencia</span><strong>${escapeHtml(`${autopublisher.frequency_days || 1} dia(s)`)}</strong></div>
     <div class="admin-linkedin-status-row"><span>Proximo intento</span><strong>${escapeHtml(formatDate(autopublisher.next_publication))}</strong></div>
     <div class="admin-linkedin-status-row"><span>Permisos faltantes</span><strong>${escapeHtml((c.missing_scopes || []).join(", ") || "-")}</strong></div>
@@ -2691,14 +3153,14 @@ function renderMetaPosts() {
       <td>${escapeHtml(formatDate(post.created_at))}</td>
       <td>${chip(post.platform || "-", post.platform === "instagram" ? "ready" : "draft")}</td>
       <td><strong>${escapeHtml(post.source_slug || post.source_type || "-")}</strong><div class="admin-subtle">${escapeHtml(post.utm_campaign || "-")}</div></td>
-      <td>${chip(metaStatusLabel(post.status), statusTone(post.status))}</td>
+      <td>${chip(metaStatusLabel(post.status), statusTone(post.status), "status", { tooltip: tooltipForStatus(post.status) })}</td>
       <td>${escapeHtml(formatDate(post.published_at))}</td>
       <td><span class="admin-linkedin-error">${escapeHtml(post.error_message || "-")}</span></td>
       <td>
         <div class="admin-row-actions">
-          <button class="admin-icon-button admin-linkedin-action-button" type="button" data-meta-row-action="view" data-meta-id="${escapeHtml(post.id)}" title="Ver post">Ver</button>
-          <button class="admin-icon-button admin-linkedin-action-button" type="button" data-meta-row-action="publish_now" data-meta-id="${escapeHtml(post.id)}" title="Publicar ahora">Publicar</button>
-          <button class="admin-icon-button admin-linkedin-action-button" type="button" data-meta-row-action="skip" data-meta-id="${escapeHtml(post.id)}" title="Omitir">Omitir</button>
+          <button class="admin-icon-button admin-linkedin-action-button" type="button" data-meta-row-action="view" data-meta-id="${escapeHtml(post.id)}" ${tooltipAttrs("Abre este post Meta en el editor. No publica.", { focusable: false })}>Ver</button>
+          <button class="admin-icon-button admin-linkedin-action-button" type="button" data-meta-row-action="publish_now" data-meta-id="${escapeHtml(post.id)}" ${helpAttrs("meta-publish-now", { focusable: false })}>Publicar</button>
+          <button class="admin-icon-button admin-linkedin-action-button" type="button" data-meta-row-action="skip" data-meta-id="${escapeHtml(post.id)}" ${helpAttrs("meta-skip", { focusable: false })}>Omitir</button>
         </div>
       </td>
     </tr>
@@ -2913,7 +3375,7 @@ function renderKpis(payload) {
                 const startingValue = defaultKpiValue(field);
                 const currentValue = value ?? startingValue;
                 return `
-                  <label class="admin-kpi-field">
+                  <label class="admin-kpi-field" ${tooltipAttrs(`${field.label}: ${field.description || "Define como se calcula o se muestra este KPI."}`)}>
                     <span>
                       ${escapeHtml(field.label)}
                       ${field.suffix ? `<em>${escapeHtml(field.suffix)}</em>` : ""}
@@ -3984,7 +4446,7 @@ function renderVideoReadiness() {
   els.videoReadiness.innerHTML = cards
     .map(
       (card) => `
-        <article data-tone="${escapeHtml(card.tone)}">
+        <article data-tone="${escapeHtml(card.tone)}" ${tooltipAttrs(`${card.label}: ${card.detail}`)}>
           <span>${escapeHtml(card.label)}</span>
           <strong>${escapeHtml(card.status)}</strong>
           <p>${escapeHtml(card.detail)}</p>
@@ -4426,7 +4888,7 @@ function renderVideoPipeline() {
       ${steps
         .map(
           (step) => `
-          <article class="admin-video-pipeline-step${step.done ? " done" : ""}${step.active ? " active" : ""}" data-testid="admin-video-pipeline-${escapeHtml(step.id)}">
+          <article class="admin-video-pipeline-step${step.done ? " done" : ""}${step.active ? " active" : ""}" data-testid="admin-video-pipeline-${escapeHtml(step.id)}" ${tooltipAttrs(`${step.label}: ${step.detail}`)}>
             <span>${escapeHtml(step.label)}</span>
             <strong>${step.done ? "OK" : step.active ? "Ahora" : "Pendiente"}</strong>
             <p>${escapeHtml(step.detail)}</p>
@@ -5388,6 +5850,12 @@ async function loadSeoAutogeneration() {
   renderSeoAutogeneration(payload);
 }
 
+async function loadSeoAutonomousPipeline() {
+  if (!els.seoAutonomousRuns) return;
+  const payload = await api("/api/admin?resource=seo/automation");
+  renderSeoAutonomousPipeline(payload);
+}
+
 async function loadSeoKeywordBacklog() {
   if (!els.seoKeywordRows) return;
   const payload = await api("/api/admin?resource=seo/keyword-backlog&limit=15&include_briefs=true");
@@ -5660,6 +6128,7 @@ async function runSeoAutonomousCycle(dryRun = true) {
   });
   await loadSeoKeywordBacklog();
   await loadSeo();
+  await loadSeoAutonomousPipeline();
   const summary = payload.summary || {};
   const phases = payload.phases || {};
   const briefCount = Number(phases.auto_generate_briefs?.changed_count || 0);
@@ -5799,6 +6268,7 @@ async function loadAll() {
       loadAnalytics(),
       loadSeo(),
       loadSeoAutogeneration(),
+      loadSeoAutonomousPipeline(),
       loadSeoKeywordBacklog(),
       loadLinkedIn(),
       loadMeta(),
@@ -6057,12 +6527,9 @@ if (els.seoReadyAutoDryRun) {
 if (els.seoReadyAutoPublish) {
   els.seoReadyAutoPublish.addEventListener("click", () => autoPublishReadySeoDrafts(false).catch((error) => showStatus(error.message, "bad")));
 }
-if (els.seoAutonomousDryRun) {
-  els.seoAutonomousDryRun.addEventListener("click", () => runSeoAutonomousCycle(true).catch((error) => showStatus(error.message, "bad")));
-}
-if (els.seoAutonomousRun) {
-  els.seoAutonomousRun.addEventListener("click", () => runSeoAutonomousCycle(false).catch((error) => showStatus(error.message, "bad")));
-}
+els.seoAutonomousRun.forEach((button) => {
+  button.addEventListener("click", () => runSeoAutonomousCycle(false).catch((error) => showStatus(error.message, "bad")));
+});
 if (els.seoAutogenRun) {
   els.seoAutogenRun.addEventListener("click", () => runSeoAutogeneration(false).catch((error) => showStatus(error.message, "bad")));
 }
@@ -6576,6 +7043,13 @@ if (els.seoKeywordRows) {
 document.addEventListener("pointerover", (event) => {
   const target = tooltipTargetFromEvent(event);
   if (target) showAdminTooltip(target);
+});
+
+document.addEventListener("pointerdown", (event) => {
+  const target = tooltipTargetFromEvent(event);
+  if (!target) return;
+  showAdminTooltip(target);
+  if (event.pointerType === "touch") hideAdminTooltipSoon();
 });
 
 document.addEventListener("pointerout", (event) => {

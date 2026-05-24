@@ -3725,13 +3725,24 @@
   overflow-wrap: anywhere;
 }
 
-.admin-seo-performance-panel [data-tooltip] {
+[data-tooltip],
+[data-help-key] {
   cursor: help;
 }
 
-.admin-seo-performance-panel [data-tooltip]:focus-visible {
+[data-tooltip]:focus-visible,
+[data-help-key]:focus-visible {
   outline: 2px solid rgba(11, 102, 72, .42);
   outline-offset: 2px;
+}
+
+.admin-stat[data-tooltip] span,
+.admin-chip[data-tooltip],
+.admin-seo-autogen-card[data-tooltip] > span,
+.admin-kpi-field[data-tooltip] > span,
+.admin-analytics-item dt[data-tooltip] {
+  text-decoration: underline dotted rgba(10, 20, 15, .36);
+  text-underline-offset: 3px;
 }
 
 .admin-seo-performance-panel .admin-stat[data-tooltip] span,
