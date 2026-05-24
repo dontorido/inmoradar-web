@@ -1558,6 +1558,53 @@
   box-shadow: 0 0 0 4px rgba(255, 69, 0, .12);
 }
 
+.admin-status-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid rgba(9, 9, 11, .1);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--ink);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.admin-status-link::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #71717a;
+  box-shadow: 0 0 0 4px rgba(113, 113, 122, .14);
+}
+
+.admin-status-link[data-state="operational"]::before {
+  background: #16a34a;
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, .14);
+}
+
+.admin-status-link[data-state="degraded"]::before {
+  background: #d97706;
+  box-shadow: 0 0 0 4px rgba(217, 119, 6, .16);
+}
+
+.admin-status-link[data-state="down"]::before {
+  background: #dc2626;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, .16);
+}
+
+.admin-status-link:hover {
+  border-color: rgba(9, 9, 11, .18);
+  background: rgba(9, 9, 11, .06);
+}
+
 .admin-topbar .admin-button.ghost {
   border: 1px solid rgba(9, 9, 11, .1);
   background: #ffffff;

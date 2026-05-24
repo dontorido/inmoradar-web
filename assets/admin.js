@@ -324,6 +324,8 @@ const els = {
   parkingRefresh: document.querySelector("[data-parking-refresh]"),
   parkingProbeForm: document.querySelector("[data-parking-probe-form]"),
   parkingResult: document.querySelector("[data-parking-result]"),
+  serviceStatusLink: document.querySelector("[data-admin-status-link]"),
+  serviceStatusText: document.querySelector("[data-admin-status-text]"),
   serviceStatusSummary: document.querySelector("[data-service-status-summary]"),
   serviceStatusList: document.querySelector("[data-service-status-list]"),
   serviceStatusRefresh: document.querySelector("[data-service-status-refresh]"),
@@ -887,13 +889,26 @@ function serviceDisplayName(service = {}) {
   }[service.id] || "Servicio";
 }
 
+function renderServiceStatusHeader(payload = {}) {
+  if (!els.serviceStatusLink) return;
+  const global = String(payload.status || "unknown").toLowerCase();
+  const safeStatus = ["operational", "degraded", "down", "unknown"].includes(global) ? global : "unknown";
+  const label = serviceStatusLabel(safeStatus);
+  els.serviceStatusLink.dataset.state = safeStatus;
+  els.serviceStatusLink.setAttribute("aria-label", `Abrir status page. Estado de servicios: ${label}`);
+  els.serviceStatusLink.title = payload.updated_at ? `Actualizado: ${formatDate(payload.updated_at)}` : "Abrir status page";
+  if (els.serviceStatusText) els.serviceStatusText.textContent = `Estado: ${label}`;
+}
+
 function renderServiceStatus(payload = {}) {
-  if (!els.serviceStatusSummary || !els.serviceStatusList) return;
   const services = Array.isArray(payload.services) ? payload.services : [];
   const global = payload.status || "unknown";
   const operationalCount = services.filter((service) => service.status === "operational").length;
   const attentionCount = services.filter((service) => service.status !== "operational").length;
   state.serviceStatus = payload;
+  renderServiceStatusHeader(payload);
+
+  if (!els.serviceStatusSummary || !els.serviceStatusList) return;
 
   els.serviceStatusSummary.innerHTML = [
     stat("Estado global", serviceStatusLabel(global), {
@@ -5132,7 +5147,7 @@ async function loadReleaseHubs() {
 }
 
 async function loadServiceStatus() {
-  if (!els.serviceStatusSummary && !els.serviceStatusList) return;
+  if (!els.serviceStatusLink && !els.serviceStatusSummary && !els.serviceStatusList) return;
   try {
     const response = await fetch("/api/status", { headers: { accept: "application/json" } });
     const payload = await response.json().catch(() => ({}));

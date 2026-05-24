@@ -262,8 +262,11 @@ test("backoffice muestra fallback si /api/status falla", () => {
   const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
   const adminJs = fs.readFileSync(path.join(root, "assets", "admin.js"), "utf8");
 
+  assert.match(adminHtml, /data-admin-status-link/);
+  assert.match(adminHtml, /href="\/status\/"/);
   assert.match(adminHtml, /data-service-status-list/);
   assert.match(adminJs, /fetch\("\/api\/status"/);
+  assert.match(adminJs, /renderServiceStatusHeader/);
   assert.match(adminJs, /No se pudo leer \/api\/status/);
 });
 
