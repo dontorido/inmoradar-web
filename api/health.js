@@ -1,4 +1,5 @@
 const { hasSupabaseConfig, json, supabaseFetch } = require("./_utils");
+const statusHandler = require("./_status");
 
 function safeError(error) {
   return String(error?.message || error || "unknown_error")
@@ -36,6 +37,11 @@ async function checkSupabaseTable(path) {
 }
 
 module.exports = async function handler(req, res) {
+  const url = new URL(req.url || "/api/health", `https://${req.headers?.host || "inmoradar.app"}`);
+  if (url.searchParams.get("resource") === "status") {
+    return statusHandler(req, res);
+  }
+
   const supabaseConfigured = hasSupabaseConfig();
   const supabaseChecks = {};
 

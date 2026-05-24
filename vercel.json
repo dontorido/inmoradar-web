@@ -4,6 +4,8 @@
     { "source": "/api/news", "destination": "/api/sitemap?format=news" },
     { "source": "/api/lemonsqueezy-portal", "destination": "/api/lemonsqueezy-checkout?resource=portal" },
     { "source": "/api/extension-usage", "destination": "/api/extension-version?resource=usage" },
+    { "source": "/api/status", "destination": "/api/health?resource=status" },
+    { "source": "/api/status/", "destination": "/api/health?resource=status" },
     { "source": "/api", "destination": "/api/health" },
     { "source": "/api/", "destination": "/api/health" },
     { "source": "/api/contact", "destination": "/api/market-price?resource=contact" },

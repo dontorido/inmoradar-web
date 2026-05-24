@@ -217,10 +217,44 @@ test("status page queda rutada en Vercel, redirects y servidor local", () => {
   assert.match(vercel, /"source": "\/status"/);
   assert.match(vercel, /"source": "\/status\/"/);
   assert.match(vercel, /"destination": "\/status\.html"/);
+  assert.match(vercel, /"source": "\/api\/status"/);
+  assert.match(vercel, /"destination": "\/api\/health\?resource=status"/);
   assert.match(redirects, /\/status \/status\.html 200/);
   assert.match(redirects, /\/status\/ \/status\.html 200/);
+  assert.match(localServer, /"\/api\/status": "\/api\/health\?resource=status"/);
+  assert.match(localServer, /"\/api\/status\/": "\/api\/health\?resource=status"/);
   assert.match(localServer, /"\/status": "\/status\.html"/);
   assert.match(localServer, /"\/status\/": "\/status\.html"/);
+});
+
+test("status endpoint no suma una serverless function nueva en Vercel", () => {
+  const root = path.join(__dirname, "..");
+  const vercelIgnore = fs.readFileSync(path.join(root, ".vercelignore"), "utf8");
+  const statusEntry = fs.readFileSync(path.join(root, "api", "status.js"), "utf8");
+  const apiRoot = path.join(root, "api");
+  const ignored = new Set(vercelIgnore.split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
+  const functionFiles = [];
+
+  function walk(directory) {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name.startsWith("_")) continue;
+      const fullPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      if (!entry.name.endsWith(".js")) continue;
+      const relative = path.relative(root, fullPath).replace(/\\/g, "/");
+      if (!ignored.has(relative)) functionFiles.push(relative);
+    }
+  }
+
+  walk(apiRoot);
+
+  assert.match(statusEntry, /require\("\.\/_status"\)/);
+  assert.match(vercelIgnore, /^api\/status\.js$/m);
+  assert.equal(functionFiles.includes("api/status.js"), false);
+  assert.equal(functionFiles.length <= 12, true);
 });
 
 test("backoffice muestra fallback si /api/status falla", () => {

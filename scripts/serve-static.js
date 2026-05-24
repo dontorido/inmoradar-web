@@ -18,6 +18,8 @@ const types = {
 const rewrites = {
   "/sitemap.xml": "/api/sitemap",
   "/api/news": "/api/sitemap?format=news",
+  "/api/status": "/api/health?resource=status",
+  "/api/status/": "/api/health?resource=status",
   "/api": "/api/health",
   "/api/": "/api/health",
   "/api/contact": "/api/market-price?resource=contact",
