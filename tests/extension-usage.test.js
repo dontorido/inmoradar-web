@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const adminHandler = require("../api/admin");
+const extensionVersionHandler = require("../api/extension-version");
 const {
   browserFromUserAgent,
   extensionUsageEventFromInput,
@@ -195,6 +196,78 @@ test("extension usage reports insufficient duration when a session has only isol
   assert.equal(summary.kpis.avg_session_seconds, 0);
   assert.equal(summary.kpis.usage_data_quality, "insufficient");
   assert.equal(summary.kpis.usage_has_insufficient_data, true);
+});
+
+test("extension usage endpoint accepts resource from URL query", async () => {
+  const previousFetch = global.fetch;
+  await withEnv(
+    {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      EXTENSION_USAGE_HASH_SECRET: "hash-test"
+    },
+    async () => {
+      global.fetch = async () => ({
+        ok: true,
+        status: 201,
+        text: async () => ""
+      });
+
+      try {
+        const { res, payload } = createJsonResponse();
+        const req = {
+          method: "POST",
+          url: "/api/extension-version?resource=usage",
+          headers: { host: "inmoradar.app", "user-agent": "Mozilla/5.0 Chrome/124.0" },
+          body: JSON.stringify({
+            event_name: "heartbeat",
+            anonymous_install_id: "install-1",
+            session_id: "session-1",
+            extension_version: "1.0.10"
+          })
+        };
+        await extensionVersionHandler(req, res);
+        assert.equal(res.statusCode, 200);
+        assert.equal(payload().accepted, true);
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+});
+
+test("extension usage endpoint rejects oversized JSON before storage", async () => {
+  const previousFetch = global.fetch;
+  await withEnv(
+    {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      let called = false;
+      global.fetch = async () => {
+        called = true;
+        return { ok: true, status: 201, text: async () => "" };
+      };
+
+      try {
+        const { res, payload } = createJsonResponse();
+        const req = {
+          method: "POST",
+          url: "/api/extension-version?resource=usage",
+          headers: { host: "inmoradar.app" },
+          body: JSON.stringify({ metadata: "x".repeat(17 * 1024) })
+        };
+        await extensionVersionHandler(req, res);
+        const body = payload();
+        assert.equal(res.statusCode, 400);
+        assert.equal(body.reason, "payload_too_large");
+        assert.equal(called, false);
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
 });
 
 test("admin extension usage aplica from/to al filtro de Supabase", async () => {

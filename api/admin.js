@@ -1,4 +1,4 @@
-const { assertAdmin, fetchWithTimeout, handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
+const { assertAdmin, fetchWithTimeout, handleCors, hasSupabaseConfig, json, readRawBody, sanitizeErrorMessage, supabaseFetch } = require("./_utils");
 const {
   buildSeoAutogenerationOperationalAlerts,
   getSeoAutogenerationStatus,
@@ -222,7 +222,7 @@ async function safeFetch(path, fallback = []) {
     const rows = await supabaseFetch(path);
     return Array.isArray(rows) ? rows : fallback;
   } catch (error) {
-    return { error: error.message, rows: fallback };
+    return { error: sanitizeErrorMessage(error), rows: fallback };
   }
 }
 
@@ -3910,7 +3910,7 @@ module.exports = async function handler(req, res) {
       const result = await handleLinkedIn(req, url, resource);
       return json(res, result.status, result.payload);
     } catch (error) {
-      return json(res, 500, { ok: false, error: "linkedin_daily_failed", message: String(error.message || error).slice(0, 500) });
+      return json(res, 500, { ok: false, error: "linkedin_daily_failed", message: sanitizeErrorMessage(error, 500) });
     }
   }
   if (resource === "meta/daily" || resource === "meta/autopublisher/run") {
@@ -3928,7 +3928,7 @@ module.exports = async function handler(req, res) {
       const result = await handleSeoAutogeneration(req, url);
       return json(res, result.status, result.payload);
     } catch (error) {
-      return json(res, 500, { ok: false, error: "seo_autogeneration_failed", message: String(error.message || error).slice(0, 500) });
+      return json(res, 500, { ok: false, error: "seo_autogeneration_failed", message: sanitizeErrorMessage(error, 500) });
     }
   }
 
@@ -4052,12 +4052,12 @@ module.exports = async function handler(req, res) {
     if (String(resource || "").startsWith("meta")) {
       console.error("[admin]", resource, sanitizeMetaSecretText(error.message || error));
     } else {
-      console.error("[admin]", resource, error);
+      console.error("[admin]", resource, sanitizeErrorMessage(error));
     }
     return json(res, 500, {
       ok: false,
       error: "admin_request_failed",
-      message: String(resource || "").startsWith("meta") ? sanitizeMetaSecretText(error.message || error) : error.message
+      message: String(resource || "").startsWith("meta") ? sanitizeMetaSecretText(error.message || error) : sanitizeErrorMessage(error)
     });
   }
 };
