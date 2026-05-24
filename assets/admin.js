@@ -292,7 +292,6 @@ const els = {
   seoFilter: document.querySelector("[data-seo-filter]"),
   seoGenerate: document.querySelector("[data-seo-generate]"),
   seoPublish: document.querySelector("[data-seo-publish]"),
-  seoReadyAutoDryRun: document.querySelector("[data-seo-ready-auto-dry-run]"),
   seoReadyAutoPublish: document.querySelector("[data-seo-ready-auto-publish]"),
   seoAutonomousRun: document.querySelectorAll("[data-seo-autonomous-run]"),
   seoAutonomousSummary: document.querySelector("[data-seo-autonomous-summary]"),
@@ -300,7 +299,6 @@ const els = {
   seoAutogenSummary: document.querySelector("[data-seo-autogen-summary]"),
   seoAutogenRuns: document.querySelector("[data-seo-autogen-runs]"),
   seoAutogenRun: document.querySelector("[data-seo-autogen-run]"),
-  seoAutogenDryRun: document.querySelector("[data-seo-autogen-dry-run]"),
   seoAutogenNote: document.querySelector("[data-seo-autogen-note]"),
   seoKeywordSummary: document.querySelector("[data-seo-keyword-summary]"),
   seoKeywordRows: document.querySelector("[data-seo-keyword-rows]"),
@@ -439,7 +437,6 @@ const HELP_TEXTS = Object.freeze({
   "premium-filter": "Filtra la tabla de Premium por texto, estado, proveedor o evento. No modifica suscripciones.",
   "seo-generate": "Genera un draft SEO nuevo si hay una oportunidad elegible. No publica, no indexa y no toca sitemap.",
   "seo-publish": "Publica una landing SEO elegible del flujo legacy. Usar con cautela; los drafts ready usan el flujo protegido.",
-  "seo-ready-auto-dry-run": "Simula la autopublicacion de drafts ready_to_publish. No publica nada ni cambia indexacion.",
   "seo-ready-auto-publish": "Autopublica de forma limitada solo drafts ready_to_publish con confirmacion, kill switch y ultimo quality gate pasado.",
   "seo-autonomous-run": "Ejecuta el ciclo SEO autonomo con limites, kill switches, confirmacion y gates. Puede crear, aprobar o publicar segun reglas.",
   "seo-filter": "Filtra landings por estado editorial o de indexacion. No recalcula ni publica.",
@@ -458,7 +455,6 @@ const HELP_TEXTS = Object.freeze({
   "seo-keyword-create-draft": "Crea un borrador SEO no publicado y no indexado desde una oportunidad aprobada.",
   "seo-keyword-approve": "Aprueba la oportunidad editorial. No crea ni publica paginas por si sola.",
   "seo-keyword-reject": "Rechaza la oportunidad editorial. No borra landings existentes.",
-  "seo-autogen-dry-run": "Simula la autogeneracion SEO programada. No publica nada.",
   "seo-autogen-run": "Ejecuta la autogeneracion SEO ahora con score minimo, limites y registro de omitidos.",
   "analytics-refresh": "Actualiza el funnel con la ventana seleccionada. No cambia eventos ni atribuciones.",
   "analytics-date": "Acota la ventana temporal del funnel. Los ratios son agregados de esa ventana.",
@@ -622,7 +618,7 @@ const KPI_HELP_TEXTS = Object.freeze({
   "service-status-operational": "Servicios que /api/status marca como operativos frente al total publicado.",
   "service-status-attention": "Servicios degradados, caidos o sin verificar. Revisar mensaje antes de actuar.",
   "seo-autogen-estado": "Estado del kill switch o configuracion del ciclo. Activo no significa que haya publicado.",
-  "seo-autogen-modo": "Modo del ciclo SEO. Dry run simula; real puede persistir cambios si gates y confirmaciones lo permiten.",
+  "seo-autogen-modo": "Modo del ciclo SEO. Simulacion no publica; real puede persistir cambios si gates y confirmaciones lo permiten.",
   "seo-autogen-run": "Publicaciones de este run frente al limite. No cuenta elementos omitidos.",
   "seo-autogen-24h": "Publicaciones de las ultimas 24h frente al limite diario.",
   "seo-autogen-7-dias": "Publicaciones de los ultimos 7 dias frente al limite semanal.",
@@ -650,7 +646,6 @@ const ACTION_HELP_BY_DATASET = Object.freeze({
   adminLogout: "admin-logout",
   seoGenerate: "seo-generate",
   seoPublish: "seo-publish",
-  seoReadyAutoDryRun: "seo-ready-auto-dry-run",
   seoReadyAutoPublish: "seo-ready-auto-publish",
   seoAutonomousRun: "seo-autonomous-run",
   seoDraftSave: "seo-draft-save",
@@ -659,7 +654,6 @@ const ACTION_HELP_BY_DATASET = Object.freeze({
   seoKeywordBrief: "seo-keyword-brief",
   seoKeywordSaveBrief: "seo-keyword-save-brief",
   seoKeywordCreateDraft: "seo-keyword-create-draft",
-  seoAutogenDryRun: "seo-autogen-dry-run",
   seoAutogenRun: "seo-autogen-run",
   analyticsRefresh: "analytics-refresh",
   kpiReset: "kpi-reset",
@@ -2424,7 +2418,7 @@ function renderSeoAutogeneration(payload = {}) {
   const lastRun = payload.last_run || null;
   const lastResult = lastRun?.result_json || {};
   const enabledLabel = config.enabled ? "Activo" : "Inactivo";
-  const dryRunLabel = config.dry_run ? "Dry run" : "Publicacion real";
+  const dryRunLabel = config.dry_run ? "Simulacion" : "Publicacion real";
   const runCount = Number(limits.published_this_run || 0);
   const runLimit = Number(limits.max_per_run || 1);
   const dayCount = Number(limits.published_last_24h || 0);
@@ -2494,7 +2488,7 @@ function renderSeoAutonomousPipeline(payload = {}) {
   els.seoAutonomousSummary.innerHTML = [
     seoAutogenCard("Runs", String(runs.length), { hint: missingTable ? "Tabla pendiente" : "Ultimos ciclos" }),
     seoAutogenCard("Ultima", lastRun ? formatCompactDate(lastRun.started_at) : "-", { hint: lastRun?.status || "Sin ejecuciones" }),
-    seoAutogenCard("Modo", lastRun ? (lastRun.dry_run ? "Dry run" : "Real") : "-", { badge: true, tone: lastRun?.dry_run ? "warn" : "good" }),
+    seoAutogenCard("Modo", lastRun ? (lastRun.dry_run ? "Simulacion" : "Real") : "-", { badge: true, tone: lastRun?.dry_run ? "warn" : "good" }),
     seoAutogenCard("Briefs", String(lastRun?.briefs_generated_count || 0), { hint: "Generados" }),
     seoAutogenCard("Drafts", String(lastRun?.drafts_created_count || 0), { hint: "Creados" }),
     seoAutogenCard("Aprob.", String(lastRun?.auto_approved_count || 0), { hint: "Autoaprobados" }),
@@ -2528,7 +2522,7 @@ function renderSeoAutonomousPipeline(payload = {}) {
         .map((item) => [item.slug, item.reason || item.error_message].filter(Boolean).join(" - "))
         .filter(Boolean)
         .join(" | ");
-      const detail = reasons || row.error_message || (row.dry_run ? "Dry-run sin cambios de contenido." : "Sin incidencias.");
+      const detail = reasons || row.error_message || (row.dry_run ? "Simulacion sin cambios de contenido." : "Sin incidencias.");
       return `
         <tr>
           <td>
@@ -6099,7 +6093,7 @@ async function autoPublishReadySeoDrafts(dryRun = true) {
   const firstReason = payload.results?.find((item) => item.reason)?.reason || payload.reason || payload.error || "";
   showStatus(
     dryRun
-      ? `Dry-run ready: publicaria ${wouldPublish}, omitidas ${skipped}, fallidas ${failed}${firstReason ? ` · ${firstReason}` : ""}`
+    ? `Simulacion ready: publicaria ${wouldPublish}, omitidas ${skipped}, fallidas ${failed}${firstReason ? ` · ${firstReason}` : ""}`
       : `Autopublish ready: publicadas ${published}, omitidas ${skipped}, fallidas ${failed}${firstReason ? ` · ${firstReason}` : ""}`,
     failed ? "neutral" : published || wouldPublish ? "good" : "neutral"
   );
@@ -6141,7 +6135,7 @@ async function runSeoAutonomousCycle(dryRun = true) {
   const publishError = phases.auto_publish_ready_drafts?.error || "";
   showStatus(
     dryRun
-      ? `Dry-run ciclo SEO: briefs ${briefCount}, drafts ${draftCount}, autoaprobaciones ${approvalCount}, publicaria ${wouldPublish}, omitidas ${skipped}, fallidas ${failed}${publishError ? ` - ${publishError}` : ""}`
+    ? `Simulacion ciclo SEO: briefs ${briefCount}, drafts ${draftCount}, autoaprobaciones ${approvalCount}, publicaria ${wouldPublish}, omitidas ${skipped}, fallidas ${failed}${publishError ? ` - ${publishError}` : ""}`
       : `Ciclo SEO ejecutado: briefs ${briefCount}, drafts ${draftCount}, autoaprobaciones ${approvalCount}, publicadas ${published}, omitidas ${skipped}, fallidas ${failed}${publishError ? ` - ${publishError}` : ""}`,
     failed ? "neutral" : briefCount || draftCount || approvalCount || published || wouldPublish ? "good" : "neutral"
   );
@@ -6417,7 +6411,7 @@ async function runSeoAutogeneration(dryRun = false) {
     return;
   }
   if (result.would_publish_count) {
-    showStatus(`Dry run OK: publicaria ${first.target_path || "pagina SEO"} - score ${first.final_score || 0}`, "neutral");
+    showStatus(`Simulacion OK: publicaria ${first.target_path || "pagina SEO"} - score ${first.final_score || 0}`, "neutral");
     return;
   }
   showStatus(`Autogeneracion sin publicacion: ${first.reason || result.reason || "sin candidato elegible"}`, "neutral");
@@ -6521,9 +6515,6 @@ els.seoFilter.addEventListener("submit", async (event) => {
 
 els.seoGenerate.addEventListener("click", () => runSeoGeneration("generate").catch((error) => showStatus(error.message, "bad")));
 els.seoPublish.addEventListener("click", () => runSeoGeneration("publish").catch((error) => showStatus(error.message, "bad")));
-if (els.seoReadyAutoDryRun) {
-  els.seoReadyAutoDryRun.addEventListener("click", () => autoPublishReadySeoDrafts(true).catch((error) => showStatus(error.message, "bad")));
-}
 if (els.seoReadyAutoPublish) {
   els.seoReadyAutoPublish.addEventListener("click", () => autoPublishReadySeoDrafts(false).catch((error) => showStatus(error.message, "bad")));
 }
@@ -6532,9 +6523,6 @@ els.seoAutonomousRun.forEach((button) => {
 });
 if (els.seoAutogenRun) {
   els.seoAutogenRun.addEventListener("click", () => runSeoAutogeneration(false).catch((error) => showStatus(error.message, "bad")));
-}
-if (els.seoAutogenDryRun) {
-  els.seoAutogenDryRun.addEventListener("click", () => runSeoAutogeneration(true).catch((error) => showStatus(error.message, "bad")));
 }
 if (els.linkedinRefresh) {
   els.linkedinRefresh.addEventListener("click", () => loadLinkedIn().catch((error) => showStatus(error.message, "bad")));

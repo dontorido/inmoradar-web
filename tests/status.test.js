@@ -270,6 +270,27 @@ test("backoffice muestra fallback si /api/status falla", () => {
   assert.match(adminJs, /No se pudo leer \/api\/status/);
 });
 
+test("backoffice documenta tooltips para KPIs, estados y acciones criticas", () => {
+  const root = path.join(__dirname, "..");
+  const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
+  const adminJs = fs.readFileSync(path.join(root, "assets", "admin.js"), "utf8");
+  const docs = fs.readFileSync(path.join(root, "docs", "BACKOFFICE_TOOLTIPS.md"), "utf8");
+
+  assert.match(adminHtml, /data-help-key="seo-ready-auto-publish"/);
+  assert.match(adminHtml, /data-help-key="seo-autonomous-run"/);
+  assert.match(adminHtml, /data-help-key="meta-publish-now"/);
+  assert.match(adminHtml, /data-help-key="video-runway-render"/);
+  assert.match(adminJs, /const HELP_TEXTS = Object\.freeze/);
+  assert.match(adminJs, /const KPI_HELP_TEXTS = Object\.freeze/);
+  assert.match(adminJs, /const STATUS_HELP_TEXTS = Object\.freeze/);
+  assert.match(adminJs, /aria-describedby="admin-floating-tooltip"/);
+  assert.match(adminJs, /Clics hacia Chrome Web Store\. No confirma instalacion/);
+  assert.match(adminJs, /Recalcula calidad y quality gate de una landing\. No publica/);
+  assert.match(docs, /Ratio Chrome Store -> primer analisis/);
+  assert.match(docs, /No llamar instalacion a un clic a Chrome Store/);
+  assert.match(docs, /Simulacion interna\/API: permite probar flujos sin publicar/);
+});
+
 test("backoffice SEO muestra quality gate y motivos sin inspeccionar JSON", () => {
   const root = path.join(__dirname, "..");
   const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
@@ -331,17 +352,18 @@ test("backoffice SEO publica manualmente solo drafts ready con confirmacion", ()
   assert.doesNotMatch(adminJs, /data-seo-action="publish"/);
 });
 
-test("backoffice SEO expone autopublicacion ready con dry-run y confirmacion", () => {
+test("backoffice SEO expone autopublicacion ready con confirmacion", () => {
   const root = path.join(__dirname, "..");
   const adminHtml = fs.readFileSync(path.join(root, "admin.html"), "utf8");
   const adminJs = fs.readFileSync(path.join(root, "assets", "admin.js"), "utf8");
 
-  assert.match(adminHtml, /data-seo-ready-auto-dry-run/);
+  assert.doesNotMatch(adminHtml, /data-seo-ready-auto-dry-run/);
   assert.match(adminHtml, /data-seo-ready-auto-publish/);
   assert.match(adminJs, /auto_publish_ready_drafts/);
   assert.match(adminJs, /autoPublishReadySeoDrafts/);
   assert.match(adminJs, /dry_run: dryRun/);
   assert.match(adminJs, /confirmation: dryRun \? "dry_run" : "auto_publish_ready_drafts"/);
+  assert.doesNotMatch(adminJs, /seoReadyAutoDryRun/);
 });
 
 test("backoffice SEO expone ciclo autonomo con confirmacion y log", () => {
@@ -351,6 +373,7 @@ test("backoffice SEO expone ciclo autonomo con confirmacion y log", () => {
   const adminApi = fs.readFileSync(path.join(root, "api", "admin.js"), "utf8");
 
   assert.doesNotMatch(adminHtml, /data-seo-autonomous-dry-run/);
+  assert.doesNotMatch(adminHtml, /data-seo-autogen-dry-run/);
   assert.match(adminHtml, /data-seo-autonomous-run/);
   assert.match(adminHtml, /data-seo-autonomous-runs/);
   assert.match(adminHtml, /data-seo-autonomous-summary/);
