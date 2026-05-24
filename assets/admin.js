@@ -288,6 +288,8 @@ const els = {
   seoFilter: document.querySelector("[data-seo-filter]"),
   seoGenerate: document.querySelector("[data-seo-generate]"),
   seoPublish: document.querySelector("[data-seo-publish]"),
+  seoReadyAutoDryRun: document.querySelector("[data-seo-ready-auto-dry-run]"),
+  seoReadyAutoPublish: document.querySelector("[data-seo-ready-auto-publish]"),
   seoAutogenSummary: document.querySelector("[data-seo-autogen-summary]"),
   seoAutogenRuns: document.querySelector("[data-seo-autogen-runs]"),
   seoAutogenRun: document.querySelector("[data-seo-autogen-run]"),
@@ -5600,6 +5602,39 @@ async function publishReadySeoDraft(slug) {
   );
 }
 
+async function autoPublishReadySeoDrafts(dryRun = true) {
+  const limit = 3;
+  if (!dryRun) {
+    const confirmed = window.confirm(
+      `Esto autopublicara hasta ${limit} landings en estado ready_to_publish. Solo se publicaran si vuelven a pasar el quality gate y el kill switch del servidor esta activo.\n\n¿Confirmas la ejecucion real?`
+    );
+    if (!confirmed) return;
+  }
+  showStatus(dryRun ? "Probando autopublicacion de ready_to_publish..." : "Autopublicando ready_to_publish...");
+  const payload = await api("/api/admin?resource=seo/landings", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "auto_publish_ready_drafts",
+      dry_run: dryRun,
+      limit,
+      confirm: !dryRun,
+      confirmation: dryRun ? "dry_run" : "auto_publish_ready_drafts"
+    })
+  });
+  await loadSeo();
+  const published = Number(payload.published_count || 0);
+  const wouldPublish = Number(payload.would_publish_count || 0);
+  const skipped = Number(payload.skipped_count || 0);
+  const failed = Number(payload.failed_count || 0);
+  const firstReason = payload.results?.find((item) => item.reason)?.reason || payload.reason || payload.error || "";
+  showStatus(
+    dryRun
+      ? `Dry-run ready: publicaria ${wouldPublish}, omitidas ${skipped}, fallidas ${failed}${firstReason ? ` · ${firstReason}` : ""}`
+      : `Autopublish ready: publicadas ${published}, omitidas ${skipped}, fallidas ${failed}${firstReason ? ` · ${firstReason}` : ""}`,
+    failed ? "neutral" : published || wouldPublish ? "good" : "neutral"
+  );
+}
+
 async function loadKpis() {
   const payload = await api("/api/admin?resource=kpis/settings");
   renderKpis(payload);
@@ -5973,6 +6008,12 @@ els.seoFilter.addEventListener("submit", async (event) => {
 
 els.seoGenerate.addEventListener("click", () => runSeoGeneration("generate").catch((error) => showStatus(error.message, "bad")));
 els.seoPublish.addEventListener("click", () => runSeoGeneration("publish").catch((error) => showStatus(error.message, "bad")));
+if (els.seoReadyAutoDryRun) {
+  els.seoReadyAutoDryRun.addEventListener("click", () => autoPublishReadySeoDrafts(true).catch((error) => showStatus(error.message, "bad")));
+}
+if (els.seoReadyAutoPublish) {
+  els.seoReadyAutoPublish.addEventListener("click", () => autoPublishReadySeoDrafts(false).catch((error) => showStatus(error.message, "bad")));
+}
 if (els.seoAutogenRun) {
   els.seoAutogenRun.addEventListener("click", () => runSeoAutogeneration(false).catch((error) => showStatus(error.message, "bad")));
 }

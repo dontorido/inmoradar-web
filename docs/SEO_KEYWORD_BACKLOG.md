@@ -260,6 +260,8 @@ Las acciones `update_draft` y `approve_draft_for_publish` operan sobre `seo_land
 
 La accion `publish_ready_draft` es la unica accion de este flujo que publica. Solo acepta una landing individual en `ready_to_publish`, exige `confirm=true`, recalcula el quality gate justo antes de publicar y guarda auditoria en `source_data_json.manual_publish_audit`. No hace batch y devuelve `touched_sitemap=false`.
 
+La accion `auto_publish_ready_drafts` puede automatizar ese ultimo paso para un numero pequeno de landings ya aprobadas editorialmente. Funciona en `dry_run` por defecto, exige kill switch y confirmacion para ejecucion real, y guarda auditoria en `source_data_json.auto_publish_audit`. Ver `docs/SEO_AUTO_PUBLISH.md`.
+
 ## Limitaciones
 
 - El fallback a seeds es solo operativo/desarrollo; no sustituye la persistencia editorial.

@@ -70,6 +70,7 @@ async function buildReadySeoDraftFixture(overrides = {}) {
   const sourceData = await buildPriceCitySourceData(opportunity);
   const landing = buildPriceCityLanding(opportunity, sourceData);
   const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: landing.faq });
+  const qualityGate = evaluateSeoQualityGate({ landing, sourceData: { ...sourceData, faq: landing.faq }, quality });
   return {
     landing,
     sourceData,
@@ -102,7 +103,15 @@ async function buildReadySeoDraftFixture(overrides = {}) {
         sources: sourceData.sources,
         records: sourceData.records,
         faq: landing.faq,
-        hasRealData: sourceData.hasRealData
+        hasRealData: sourceData.hasRealData,
+        quality,
+        quality_gate: qualityGate,
+        quality_gate_summary: {
+          quality_gate_status: qualityGate.can_publish ? "passed" : "failed",
+          failed_checks: [],
+          exclusion_reason: null,
+          sitemap_status: "excluded"
+        }
       },
       ...overrides
     }
@@ -1342,6 +1351,317 @@ test("admin SEO bloquea la accion publish legacy para publicacion manual", async
       assert.equal(body.error, "use_publish_ready_draft");
       assert.equal(body.published, false);
       assert.equal(body.touched_sitemap, false);
+    }
+  );
+});
+
+test("admin SEO auto_publish_ready_drafts dry-run no publica", async () => {
+  const { storedLanding } = await buildReadySeoDraftFixture({ id: 208 });
+  const previousFetch = global.fetch;
+  let patchCount = 0;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      SEO_READY_DRAFT_AUTO_PUBLISH_ENABLED: undefined
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        const requestUrl = String(url);
+        if (options.method === "PATCH") patchCount += 1;
+        if (requestUrl.includes("status=eq.published") && requestUrl.includes("published_at=gte.")) return supabaseJson([]);
+        if (requestUrl.includes("status=eq.ready_to_publish")) return supabaseJson([storedLanding]);
+        throw new Error(`Unexpected fetch ${requestUrl}`);
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "auto_publish_ready_drafts", limit: 3 }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 200);
+      assert.equal(body.status, "dry_run");
+      assert.equal(body.published_count, 0);
+      assert.equal(body.would_publish_count, 1);
+      assert.equal(body.results[0].status, "would_publish");
+      assert.equal(body.touched_sitemap, false);
+      assert.equal(patchCount, 0);
+    }
+  );
+});
+
+test("admin SEO auto_publish_ready_drafts exige confirmacion para ejecucion real", async () => {
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      SEO_READY_DRAFT_AUTO_PUBLISH_ENABLED: "true"
+    },
+    async () => {
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "auto_publish_ready_drafts", dry_run: false, limit: 1 }
+      };
+
+      await adminHandler(req, res);
+
+      const body = payload();
+      assert.equal(res.statusCode, 400);
+      assert.equal(body.error, "auto_publish_confirmation_required");
+      assert.equal(body.published_count, 0);
+      assert.equal(body.touched_sitemap, false);
+    }
+  );
+});
+
+test("admin SEO auto_publish_ready_drafts respeta kill switch", async () => {
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      SEO_READY_DRAFT_AUTO_PUBLISH_ENABLED: "false"
+    },
+    async () => {
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "auto_publish_ready_drafts", dry_run: false, confirm: true, confirmation: "auto_publish_ready_drafts" }
+      };
+
+      await adminHandler(req, res);
+
+      const body = payload();
+      assert.equal(res.statusCode, 403);
+      assert.equal(body.error, "auto_publish_disabled");
+      assert.equal(body.published_count, 0);
+    }
+  );
+});
+
+test("admin SEO auto_publish_ready_drafts omite no ready, score bajo, gate fallido y legacy sin gate", async () => {
+  const base = await buildReadySeoDraftFixture({ id: 209 });
+  const notReady = { ...base.storedLanding, id: 210, slug: "no-ready", status: "needs_review" };
+  const lowScore = {
+    ...base.storedLanding,
+    id: 211,
+    slug: "low-score",
+    canonical_url: "https://inmoradar.app/low-score/",
+    body_html: "<article><h1>Low score</h1><p>Fuente: test. Fecha del dato: 2026-05-24.</p></article>"
+  };
+  const gateFailed = {
+    ...base.storedLanding,
+    id: 212,
+    slug: "gate-failed",
+    canonical_url: "https://inmoradar.app/gate-failed/",
+    body_html: base.storedLanding.body_html.replace(/data-install-button/g, "data-install-disabled")
+  };
+  const legacyNoGate = {
+    ...base.storedLanding,
+    id: 213,
+    slug: "legacy-no-gate",
+    canonical_url: "https://inmoradar.app/legacy-no-gate/",
+    source_data_json: { ...base.storedLanding.source_data_json, quality_gate: null }
+  };
+  const previousFetch = global.fetch;
+  let patchCount = 0;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      SEO_READY_DRAFT_AUTO_PUBLISH_ENABLED: "true"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        const requestUrl = String(url);
+        if (options.method === "PATCH") patchCount += 1;
+        if (requestUrl.includes("status=eq.published") && requestUrl.includes("published_at=gte.")) return supabaseJson([]);
+        if (requestUrl.includes("status=eq.ready_to_publish")) return supabaseJson([notReady, lowScore, gateFailed, legacyNoGate]);
+        throw new Error(`Unexpected fetch ${requestUrl}`);
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "auto_publish_ready_drafts", dry_run: false, confirm: true, confirmation: "auto_publish_ready_drafts", limit: 3 }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 200);
+      assert.equal(body.published_count, 0);
+      assert.equal(body.skipped_count, 4);
+      assert.equal(patchCount, 0);
+      assert.deepEqual(
+        body.results.map((result) => result.reason),
+        ["not_ready_to_publish", "quality_score_below_80", "measurable_cta", "quality_gate_not_calculated"]
+      );
+      assert.equal(body.touched_sitemap, false);
+    }
+  );
+});
+
+test("admin SEO auto_publish_ready_drafts publica hasta el limite duro y guarda auditoria", async () => {
+  const base = await buildReadySeoDraftFixture({ id: 214 });
+  const candidates = Array.from({ length: 4 }, (_, index) => ({
+    ...base.storedLanding,
+    id: 214 + index,
+    slug: `ready-auto-${index + 1}`,
+    canonical_url: `https://inmoradar.app/ready-auto-${index + 1}/`
+  }));
+  const previousFetch = global.fetch;
+  const patches = [];
+  const seenUrls = [];
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      SEO_READY_DRAFT_AUTO_PUBLISH_ENABLED: "true",
+      SEO_READY_DRAFT_AUTO_PUBLISH_MAX_PER_DAY: "5"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        const requestUrl = String(url);
+        seenUrls.push(requestUrl);
+        if (requestUrl.includes("status=eq.published") && requestUrl.includes("published_at=gte.")) return supabaseJson([]);
+        if (requestUrl.includes("status=eq.ready_to_publish")) return supabaseJson(candidates);
+        if (options.method === "PATCH" && requestUrl.includes("/rest/v1/seo_landings?slug=eq.")) {
+          const patchBody = JSON.parse(options.body);
+          patches.push(patchBody);
+          const slug = decodeURIComponent(requestUrl.match(/slug=eq\.([^&]+)/)?.[1] || "");
+          const original = candidates.find((candidate) => candidate.slug === slug) || candidates[0];
+          return supabaseJson([{ ...original, ...patchBody }]);
+        }
+        throw new Error(`Unexpected fetch ${requestUrl}`);
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "auto_publish_ready_drafts", dry_run: false, confirm: true, confirmation: "auto_publish_ready_drafts", limit: 10 }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 200);
+      assert.equal(body.config.limit, 3);
+      assert.equal(body.config.hard_limit, 3);
+      assert.equal(body.published_count, 3);
+      assert.equal(body.results.filter((result) => result.status === "published").length, 3);
+      assert.equal(patches.length, 3);
+      assert.equal(patches.every((patch) => patch.status === "published"), true);
+      assert.equal(patches.every((patch) => patch.index_status === "index"), true);
+      assert.equal(patches.every((patch) => patch.source_data_json.auto_publish_audit.source === "auto_publish_ready_drafts"), true);
+      assert.equal(patches.every((patch) => patch.source_data_json.auto_publish_audit.dry_run === false), true);
+      assert.equal(patches.every((patch) => patch.source_data_json.auto_publish_audit.confirm === true), true);
+      assert.equal(patches.every((patch) => patch.source_data_json.quality_gate_snapshot.can_index === true), true);
+      assert.equal(body.touched_sitemap, false);
+      assert.equal(seenUrls.some((requestUrl) => requestUrl.includes("sitemap")), false);
+    }
+  );
+});
+
+test("admin SEO auto_publish_ready_drafts respeta limite diario", async () => {
+  const { storedLanding } = await buildReadySeoDraftFixture({ id: 220 });
+  const previousFetch = global.fetch;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      SEO_READY_DRAFT_AUTO_PUBLISH_ENABLED: "true",
+      SEO_READY_DRAFT_AUTO_PUBLISH_MAX_PER_DAY: "1"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        const requestUrl = String(url);
+        assert.notEqual(options.method, "PATCH");
+        if (requestUrl.includes("status=eq.published") && requestUrl.includes("published_at=gte.")) {
+          return supabaseJson([{ id: 1, published_at: new Date().toISOString(), source_data_json: { auto_publish_audit: { source: "auto_publish_ready_drafts" } } }]);
+        }
+        if (requestUrl.includes("status=eq.ready_to_publish")) return supabaseJson([storedLanding]);
+        throw new Error(`Unexpected fetch ${requestUrl}`);
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "auto_publish_ready_drafts", dry_run: false, confirm: true, confirmation: "auto_publish_ready_drafts", limit: 1 }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 200);
+      assert.equal(body.status, "skipped");
+      assert.equal(body.reason, "daily_limit_reached");
+      assert.equal(body.published_count, 0);
+      assert.equal(body.touched_sitemap, false);
+    }
+  );
+});
+
+test("admin SEO auto_publish_ready_drafts no permite ids en lote", async () => {
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "auto_publish_ready_drafts", ids: [1, 2], dry_run: false, confirm: true }
+      };
+
+      await adminHandler(req, res);
+
+      const body = payload();
+      assert.equal(res.statusCode, 400);
+      assert.equal(body.error, "batch_publish_not_allowed");
+      assert.equal(body.published, false);
     }
   );
 });

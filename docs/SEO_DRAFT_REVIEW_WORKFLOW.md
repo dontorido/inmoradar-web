@@ -114,6 +114,29 @@ La auditoria incluye:
 - `quality_gate_at_publish`;
 - `seo_keyword_backlog_id` si existe.
 
+### Autopublicar ready drafts
+
+```json
+{
+  "action": "auto_publish_ready_drafts",
+  "dry_run": true,
+  "limit": 3
+}
+```
+
+La autopublicacion solo actua sobre landings que ya estan en `ready_to_publish`. `dry_run=true` es el valor por defecto. La ejecucion real exige `dry_run=false`, `confirm=true`, `confirmation=auto_publish_ready_drafts` y `SEO_READY_DRAFT_AUTO_PUBLISH_ENABLED=true`.
+
+Limites:
+
+- maximo duro de 3 por ejecucion;
+- maximo duro diario de 5;
+- sin `ids` ni `slugs` en lote;
+- si una landing falla el ultimo gate, se devuelve como `skipped` y no se publica.
+
+Cada publicacion real guarda `source_data_json.auto_publish_audit` y `source_data_json.quality_gate_snapshot`.
+
+Ver tambien: `docs/SEO_AUTO_PUBLISH.md`.
+
 ## Garantias
 
 Estas acciones NO hacen:
@@ -123,7 +146,7 @@ Estas acciones NO hacen:
 - activar autogeneracion;
 - alterar funnel, extension, analytics o autopublisher Meta.
 
-`update_draft` y `approve_draft_for_publish` tampoco publican ni indexan. `publish_ready_draft` si publica y puede dejar la landing indexable, pero solo con confirmacion y gate aprobado.
+`update_draft` y `approve_draft_for_publish` tampoco publican ni indexan. `publish_ready_draft` si publica y puede dejar la landing indexable, pero solo con confirmacion y gate aprobado. `auto_publish_ready_drafts` solo automatiza ese ultimo paso para un numero pequeno de landings ya aprobadas editorialmente.
 
 Las respuestas incluyen siempre:
 

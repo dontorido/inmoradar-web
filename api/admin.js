@@ -1020,6 +1020,8 @@ function decorateSeoLandingForAdmin(landing = {}) {
 }
 
 const SEO_DRAFT_REVIEW_STATUSES = new Set(["draft", "needs_review", "quality_review", "ready_to_publish", "approved_for_publish"]);
+const SEO_READY_DRAFT_AUTO_PUBLISH_HARD_LIMIT = 3;
+const SEO_READY_DRAFT_AUTO_PUBLISH_DAILY_HARD_LIMIT = 5;
 
 function seoDraftReviewSafetyFlags() {
   return {
@@ -1039,6 +1041,38 @@ function seoReadyDraftPublishFlags(indexed = false) {
 
 function hasExplicitPublishConfirmation(body = {}) {
   return body.confirm === true || body.confirm_publish === true || String(body.confirmation || "").toLowerCase() === "publish_ready_draft";
+}
+
+function booleanFromInput(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  const normalized = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "y", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "n", "off"].includes(normalized)) return false;
+  return fallback;
+}
+
+function hasExplicitAutoPublishConfirmation(body = {}) {
+  return (
+    body.confirm === true ||
+    body.confirm_auto_publish === true ||
+    String(body.confirmation || "").toLowerCase() === "auto_publish_ready_drafts"
+  );
+}
+
+function seoReadyDraftAutoPublishConfig(body = {}) {
+  const dryRun = booleanFromInput(body.dry_run, true);
+  const requestedLimit = body.limit ?? process.env.SEO_READY_DRAFT_AUTO_PUBLISH_MAX_PER_RUN ?? 1;
+  const requestedDailyLimit = process.env.SEO_READY_DRAFT_AUTO_PUBLISH_MAX_PER_DAY ?? 3;
+  return {
+    enabled: booleanFromInput(process.env.SEO_READY_DRAFT_AUTO_PUBLISH_ENABLED, false),
+    dry_run: dryRun,
+    requested_limit: Number.parseInt(String(requestedLimit || 1), 10) || 1,
+    limit: clampLimit(requestedLimit, 1, SEO_READY_DRAFT_AUTO_PUBLISH_HARD_LIMIT),
+    hard_limit: SEO_READY_DRAFT_AUTO_PUBLISH_HARD_LIMIT,
+    max_per_day: clampLimit(requestedDailyLimit, 3, SEO_READY_DRAFT_AUTO_PUBLISH_DAILY_HARD_LIMIT),
+    daily_hard_limit: SEO_READY_DRAFT_AUTO_PUBLISH_DAILY_HARD_LIMIT
+  };
 }
 
 function seoDraftReviewSafetyError(landing = {}) {
@@ -1150,7 +1184,7 @@ function buildSeoDraftEditPatch(landing = {}, body = {}) {
   };
 }
 
-function buildSeoReadyDraftPublishPatch(landing = {}, body = {}, now = new Date().toISOString()) {
+function buildSeoReadyDraftPublishPatch(landing = {}, body = {}, now = new Date().toISOString(), options = {}) {
   const recalculation = recalculateSeoQualityGatePatch(landing);
   const sourceData = recalculation.patch.source_data_json || {};
   const gateSummary = summarizeSeoQualityGateForAdmin({
@@ -1169,10 +1203,15 @@ function buildSeoReadyDraftPublishPatch(landing = {}, body = {}, now = new Date(
     previous_index_status: String(landing.index_status || ""),
     previous_published_at: landing.published_at || null,
     confirm: true,
+    dry_run: false,
+    source: String(options.source || "publish_ready_draft"),
     quality_score_at_publish: recalculation.quality.score,
     quality_gate_at_publish: recalculation.qualityGate,
     seo_keyword_backlog_id: sourceData.seo_keyword_backlog_id || sourceData.keyword_backlog?.id || null
   };
+  if (options.executionId) audit.execution_id = String(options.executionId);
+  if (options.limit) audit.limit = Number(options.limit);
+  if (options.position) audit.position = Number(options.position);
   const nextSourceData = {
     ...sourceData,
     quality: recalculation.quality,
@@ -1184,7 +1223,7 @@ function buildSeoReadyDraftPublishPatch(landing = {}, body = {}, now = new Date(
       sitemap_status: gateSummary.sitemap_status
     },
     quality_gate_snapshot: recalculation.qualityGate,
-    manual_publish_audit: audit
+    [options.auditKey || "manual_publish_audit"]: audit
   };
   return {
     ...recalculation,
@@ -1197,6 +1236,272 @@ function buildSeoReadyDraftPublishPatch(landing = {}, body = {}, now = new Date(
       quality_score: recalculation.quality.score,
       word_count: recalculation.quality.word_count,
       source_data_json: nextSourceData
+    }
+  };
+}
+
+async function fetchSeoReadyDraftAutoPublishCandidates(limit = 50) {
+  const params = new URLSearchParams({
+    select: LANDING_SELECT,
+    status: "eq.ready_to_publish",
+    order: "updated_at.asc",
+    limit: String(clampLimit(limit, 50, 50))
+  });
+  const rows = await supabaseFetch(`seo_landings?${params.toString()}`);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function fetchSeoReadyDraftAutoPublishedLast24h(now = new Date()) {
+  const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const rows = await supabaseFetch(
+      `seo_landings?select=id,published_at,source_data_json&status=eq.published&published_at=gte.${encodeURIComponent(since)}&limit=500`
+    );
+    const count = (Array.isArray(rows) ? rows : []).filter(
+      (row) => row.source_data_json?.auto_publish_audit?.source === "auto_publish_ready_drafts"
+    ).length;
+    return { ok: true, count, since };
+  } catch (error) {
+    return { ok: false, count: 0, since, error: error.message };
+  }
+}
+
+function autoPublishSkip(reason, landing = {}, extra = {}) {
+  return {
+    slug: landing.slug || "",
+    id: landing.id || null,
+    status: "skipped",
+    reason,
+    published: false,
+    indexed: false,
+    touched_sitemap: false,
+    ...extra
+  };
+}
+
+function autoPublishFailure(reason, landing = {}, extra = {}) {
+  return {
+    slug: landing.slug || "",
+    id: landing.id || null,
+    status: "failed",
+    reason,
+    published: false,
+    indexed: false,
+    touched_sitemap: false,
+    ...extra
+  };
+}
+
+async function autoPublishReadySeoDrafts(body = {}) {
+  if (!hasSupabaseConfig()) {
+    return {
+      status: 503,
+      payload: {
+        ok: false,
+        action: "auto_publish_ready_drafts",
+        error: "supabase_not_configured",
+        results: [],
+        published_count: 0,
+        would_publish_count: 0,
+        skipped_count: 0,
+        failed_count: 0,
+        touched_sitemap: false
+      }
+    };
+  }
+  const config = seoReadyDraftAutoPublishConfig(body);
+  const executionId = `seo_ready_auto_${Date.now()}`;
+  const isRealRun = config.dry_run === false;
+  if (isRealRun && !hasExplicitAutoPublishConfirmation(body)) {
+    return {
+      status: 400,
+      payload: {
+        ok: false,
+        action: "auto_publish_ready_drafts",
+        error: "auto_publish_confirmation_required",
+        config,
+        results: [],
+        published_count: 0,
+        would_publish_count: 0,
+        skipped_count: 0,
+        failed_count: 0,
+        touched_sitemap: false
+      }
+    };
+  }
+  if (isRealRun && !config.enabled) {
+    return {
+      status: 403,
+      payload: {
+        ok: false,
+        action: "auto_publish_ready_drafts",
+        error: "auto_publish_disabled",
+        message: "Set SEO_READY_DRAFT_AUTO_PUBLISH_ENABLED=true to allow real autopublish runs.",
+        config,
+        results: [],
+        published_count: 0,
+        would_publish_count: 0,
+        skipped_count: 0,
+        failed_count: 0,
+        touched_sitemap: false
+      }
+    };
+  }
+
+  const now = new Date();
+  const daily = await fetchSeoReadyDraftAutoPublishedLast24h(now);
+  if (isRealRun && !daily.ok) {
+    return {
+      status: 503,
+      payload: {
+        ok: false,
+        action: "auto_publish_ready_drafts",
+        error: "daily_limit_unavailable",
+        message: daily.error || "Could not calculate daily autopublish limit.",
+        config,
+        daily,
+        results: [],
+        published_count: 0,
+        would_publish_count: 0,
+        skipped_count: 0,
+        failed_count: 0,
+        touched_sitemap: false
+      }
+    };
+  }
+
+  const dailyRemaining = Math.max(0, config.max_per_day - Number(daily.count || 0));
+  const runLimit = isRealRun ? Math.min(config.limit, dailyRemaining) : config.limit;
+  const candidates = await fetchSeoReadyDraftAutoPublishCandidates(Math.max(config.limit * 5, 10));
+  const seenSlugs = new Set();
+  const results = [];
+  let publishedCount = 0;
+  let wouldPublishCount = 0;
+  let skippedCount = 0;
+  let failedCount = 0;
+
+  if (isRealRun && runLimit <= 0) {
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        action: "auto_publish_ready_drafts",
+        status: "skipped",
+        reason: "daily_limit_reached",
+        config,
+        daily,
+        results: [],
+        published_count: 0,
+        would_publish_count: 0,
+        skipped_count: 1,
+        failed_count: 0,
+        touched_sitemap: false
+      }
+    };
+  }
+
+  for (const candidate of candidates) {
+    const slug = String(candidate.slug || "");
+    if (!slug || seenSlugs.has(slug)) {
+      results.push(autoPublishSkip("duplicate_slug", candidate));
+      skippedCount += 1;
+      continue;
+    }
+    seenSlugs.add(slug);
+    if (publishedCount + wouldPublishCount >= runLimit) break;
+    if (String(candidate.status || "").toLowerCase() !== "ready_to_publish") {
+      results.push(autoPublishSkip("not_ready_to_publish", candidate));
+      skippedCount += 1;
+      continue;
+    }
+    if (!candidate.source_data_json?.quality_gate) {
+      results.push(autoPublishSkip("quality_gate_not_calculated", candidate));
+      skippedCount += 1;
+      continue;
+    }
+
+    const publishPatch = buildSeoReadyDraftPublishPatch(
+      candidate,
+      {
+        ...body,
+        published_by: body.published_by || "auto_publish_ready_drafts"
+      },
+      now.toISOString(),
+      {
+        auditKey: "auto_publish_audit",
+        source: "auto_publish_ready_drafts",
+        executionId,
+        limit: runLimit,
+        position: publishedCount + wouldPublishCount + 1
+      }
+    );
+    if (!publishPatch.qualityGate.can_publish || !publishPatch.qualityGate.can_index || publishPatch.quality.score < SEO_INDEX_MIN_SCORE) {
+      const reason = publishPatch.quality.score < SEO_INDEX_MIN_SCORE ? "quality_score_below_80" : publishPatch.qualityGate.reasons[0] || "quality_gate_failed";
+      results.push(
+        autoPublishSkip(reason, candidate, {
+          quality_score: publishPatch.quality.score,
+          quality_gate: publishPatch.qualityGate,
+          quality_gate_summary: publishPatch.gateSummary
+        })
+      );
+      skippedCount += 1;
+      continue;
+    }
+
+    if (config.dry_run) {
+      results.push({
+        slug,
+        id: candidate.id || null,
+        status: "would_publish",
+        reason: "dry_run",
+        dry_run: true,
+        quality_score: publishPatch.quality.score,
+        quality_gate_status: publishPatch.gateSummary.quality_gate_status,
+        published: false,
+        indexed: false,
+        touched_sitemap: false
+      });
+      wouldPublishCount += 1;
+      continue;
+    }
+
+    try {
+      const updated = await patchLanding(slug, publishPatch.patch);
+      const decorated = decorateSeoLandingForAdmin(updated || { ...candidate, ...publishPatch.patch });
+      results.push({
+        slug,
+        id: decorated.id || candidate.id || null,
+        status: "published",
+        reason: "published",
+        landing: decorated,
+        quality_score: decorated.quality_score,
+        published: true,
+        indexed: decorated.index_status === "index",
+        touched_sitemap: false
+      });
+      publishedCount += 1;
+    } catch (error) {
+      results.push(autoPublishFailure("publish_failed", candidate, { error_message: String(error.message || error).slice(0, 300) }));
+      failedCount += 1;
+    }
+  }
+
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      action: "auto_publish_ready_drafts",
+      status: publishedCount ? "published" : wouldPublishCount ? "dry_run" : failedCount ? "failed" : "skipped",
+      execution_id: executionId,
+      config,
+      daily,
+      candidate_count: candidates.length,
+      results,
+      published_count: publishedCount,
+      would_publish_count: wouldPublishCount,
+      skipped_count: skippedCount,
+      failed_count: failedCount,
+      touched_sitemap: false
     }
   };
 }
@@ -1247,9 +1552,10 @@ async function handleSeoLandingAction(body) {
   const slug = normalizeSlug(body.slug);
   const landingId = Number.parseInt(String(body.id || body.landing_id || ""), 10);
   const hasLandingId = Number.isFinite(landingId) && landingId > 0;
-  if (!["publish", "publish_ready_draft", "noindex", "archive", "regenerate", "recalculate_quality_gate", "update_draft", "approve_draft_for_publish", "mark_draft_reviewed"].includes(action)) {
+  if (!["publish", "publish_ready_draft", "auto_publish_ready_drafts", "noindex", "archive", "regenerate", "recalculate_quality_gate", "update_draft", "approve_draft_for_publish", "mark_draft_reviewed"].includes(action)) {
     return { status: 400, payload: { ok: false, error: "invalid_action" } };
   }
+  if (action === "auto_publish_ready_drafts") return autoPublishReadySeoDrafts(body);
   const allowIdLookup = ["publish_ready_draft", "recalculate_quality_gate", "update_draft", "approve_draft_for_publish", "mark_draft_reviewed"].includes(action);
   if (!slug && !(allowIdLookup && hasLandingId)) {
     return { status: 400, payload: { ok: false, error: "slug_required" } };
