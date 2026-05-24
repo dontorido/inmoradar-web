@@ -30,7 +30,7 @@ const {
   runwaySettings
 } = require("../lib/social-video/runway");
 const { summarizeExtensionUsage } = require("../lib/extension-usage/metrics");
-const { SEO_INDEX_MIN_SCORE, evaluateSeoQualityGate } = require("./_seo/quality");
+const { SEO_INDEX_MIN_SCORE, calculateSeoLandingQuality, evaluateSeoQualityGate } = require("./_seo/quality");
 const { buildRevenueEventFromLemonPayload, summarizeMonthlyRevenue } = require("../lib/sales/revenue");
 const {
   normalizeReleaseArtifactInput,
@@ -866,8 +866,24 @@ async function fetchLanding(slug) {
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 
+async function fetchLandingById(id) {
+  const rows = await supabaseFetch(
+    `seo_landings?id=eq.${encodeURIComponent(id)}&select=${LANDING_SELECT}&limit=1`
+  );
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
 async function patchLanding(slug, patch) {
   const rows = await supabaseFetch(`seo_landings?slug=eq.${encodeURIComponent(slug)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify(patch)
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+async function patchLandingById(id, patch) {
+  const rows = await supabaseFetch(`seo_landings?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify(patch)
@@ -987,15 +1003,57 @@ function decorateSeoLandingForAdmin(landing = {}) {
   };
 }
 
+function recalculateSeoQualityGatePatch(landing = {}) {
+  const sourceData = seoSourceDataFromLanding(landing);
+  const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: sourceData.faq || landing.source_data_json?.faq || [] });
+  const qualityGate = evaluateSeoQualityGate({
+    landing,
+    sourceData: { ...sourceData, faq: sourceData.faq || landing.source_data_json?.faq || [] },
+    quality,
+    minScore: SEO_INDEX_MIN_SCORE
+  });
+  const nextSourceData = {
+    ...(landing.source_data_json || {}),
+    quality,
+    quality_gate: qualityGate
+  };
+  const gateSummary = summarizeSeoQualityGateForAdmin({
+    ...landing,
+    quality_score: quality.score,
+    word_count: quality.word_count,
+    source_data_json: nextSourceData
+  });
+  nextSourceData.quality_gate_summary = {
+    quality_gate_status: gateSummary.quality_gate_status,
+    failed_checks: gateSummary.failed_checks,
+    exclusion_reason: gateSummary.exclusion_reason,
+    sitemap_status: gateSummary.sitemap_status
+  };
+  return {
+    quality,
+    qualityGate,
+    gateSummary,
+    patch: {
+      quality_score: quality.score,
+      word_count: quality.word_count,
+      source_data_json: nextSourceData
+    }
+  };
+}
+
 async function handleSeoLandingAction(body) {
   const action = String(body.action || "").trim();
   const slug = normalizeSlug(body.slug);
-  if (!slug) return { status: 400, payload: { ok: false, error: "slug_required" } };
-  if (!["publish", "noindex", "archive", "regenerate"].includes(action)) {
+  const landingId = Number.parseInt(String(body.id || body.landing_id || ""), 10);
+  const hasLandingId = Number.isFinite(landingId) && landingId > 0;
+  if (!["publish", "noindex", "archive", "regenerate", "recalculate_quality_gate"].includes(action)) {
     return { status: 400, payload: { ok: false, error: "invalid_action" } };
   }
+  if (!slug && !(action === "recalculate_quality_gate" && hasLandingId)) {
+    return { status: 400, payload: { ok: false, error: "slug_required" } };
+  }
 
-  const landing = await fetchLanding(slug);
+  const landing = slug ? await fetchLanding(slug) : await fetchLandingById(landingId);
   if (!landing) return { status: 404, payload: { ok: false, error: "landing_not_found" } };
 
   if (action === "publish") {
@@ -1036,6 +1094,33 @@ async function handleSeoLandingAction(body) {
   if (action === "archive") {
     const updated = await patchLanding(slug, { status: "archived", index_status: "noindex" });
     return { status: 200, payload: { ok: true, action, landing: updated } };
+  }
+
+  if (action === "recalculate_quality_gate") {
+    const saveLanding = slug ? patchLanding : (unusedSlug, patch) => patchLandingById(landingId, patch);
+    const before = {
+      status: landing.status,
+      index_status: landing.index_status,
+      published_at: landing.published_at,
+      canonical_url: landing.canonical_url,
+      had_quality_gate: Boolean(landing.source_data_json?.quality_gate)
+    };
+    const recalculation = recalculateSeoQualityGatePatch(landing);
+    const updated = await saveLanding(slug, recalculation.patch);
+    const decorated = decorateSeoLandingForAdmin(updated || { ...landing, ...recalculation.patch });
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        action,
+        changed_fields: ["quality_score", "word_count", "source_data_json.quality", "source_data_json.quality_gate", "source_data_json.quality_gate_summary"],
+        untouched_fields: ["status", "index_status", "published_at", "canonical_url", "body_html", "title", "meta_title", "meta_description"],
+        before,
+        landing: decorated,
+        quality_gate: recalculation.qualityGate,
+        quality_gate_summary: recalculation.gateSummary
+      }
+    };
   }
 
   const result = await runSeoLandingGeneration({

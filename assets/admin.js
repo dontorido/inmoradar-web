@@ -1760,6 +1760,7 @@ function renderSeo(payload) {
           <td>
             <div class="admin-row-actions">
               <button class="admin-icon-button" type="button" data-seo-action="regenerate" data-slug="${escapeHtml(row.slug)}" aria-label="Regenerar landing">R</button>
+              <button class="admin-icon-button" type="button" data-seo-action="recalculate_quality_gate" data-slug="${escapeHtml(row.slug)}" aria-label="Recalcular quality gate" title="Recalcular gate">Q</button>
               <button class="admin-icon-button" type="button" data-seo-action="publish" data-slug="${escapeHtml(row.slug)}" aria-label="Publicar landing">P</button>
               <button class="admin-icon-button" type="button" data-seo-action="noindex" data-slug="${escapeHtml(row.slug)}" aria-label="Marcar noindex">N</button>
             </div>
@@ -5482,6 +5483,22 @@ async function runSeoRowAction(action, slug) {
   }
 }
 
+async function runSeoGateRecalculation(slug) {
+  showStatus(`Recalculando quality gate - ${slug}`);
+  const result = await api("/api/admin?resource=seo/landings", {
+    method: "POST",
+    body: JSON.stringify({ action: "recalculate_quality_gate", slug })
+  });
+  await loadAll();
+  const landing = result.landing || {};
+  const failed = Array.isArray(landing.failed_checks) ? landing.failed_checks : [];
+  const reason = failed[0] ? seoGateReasonLabel(failed[0]) : seoSitemapLabel(landing.sitemap_status);
+  showStatus(
+    `Quality gate recalculado: ${seoGateLabel(landing.quality_gate_status)} - score ${landing.quality_score || 0} - ${reason}`,
+    landing.quality_gate_status === "failed" ? "neutral" : "good"
+  );
+}
+
 els.tokenForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = new FormData(els.tokenForm);
@@ -5968,6 +5985,10 @@ els.seoRows.addEventListener("click", (event) => {
   if (!button) return;
   const action = button.dataset.seoAction;
   const slug = button.dataset.slug;
+  if (action === "recalculate_quality_gate") {
+    runSeoGateRecalculation(slug).catch((error) => showStatus(error.message, "bad"));
+    return;
+  }
   runSeoRowAction(action, slug).catch((error) => showStatus(error.message, "bad"));
 });
 

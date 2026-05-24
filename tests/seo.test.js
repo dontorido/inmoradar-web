@@ -538,6 +538,219 @@ test("admin SEO landings devuelve estado y motivos del quality gate", async () =
   );
 });
 
+test("admin SEO recalcula quality_gate legacy sin cambiar publicacion ni indexacion", async () => {
+  const opportunity = {
+    keyword: "precio metro cuadrado Logrono",
+    city: "Logrono",
+    province: "La Rioja",
+    autonomous_community: "La Rioja",
+    template_type: "price_city"
+  };
+  const sourceData = await buildPriceCitySourceData(opportunity);
+  const landing = buildPriceCityLanding(opportunity, sourceData);
+  const storedLanding = {
+    id: 99,
+    opportunity_id: null,
+    slug: landing.slug,
+    title: landing.title,
+    meta_title: landing.meta_title,
+    meta_description: landing.meta_description,
+    h1: landing.h1,
+    body_html: landing.body_html,
+    city: landing.city,
+    province: landing.province,
+    autonomous_community: landing.autonomous_community,
+    template_type: landing.template_type,
+    status: "published",
+    index_status: "index",
+    quality_score: 0,
+    word_count: 0,
+    canonical_url: landing.canonical_url,
+    published_at: "2026-05-24T10:00:00.000Z",
+    last_generated_at: "2026-05-24T10:00:00.000Z",
+    created_at: "2026-05-24T10:00:00.000Z",
+    updated_at: "2026-05-24T10:00:00.000Z",
+    source_data_json: {
+      template_type: landing.template_type,
+      sources: sourceData.sources,
+      faq: landing.faq,
+      hasRealData: sourceData.hasRealData
+    }
+  };
+  const previousFetch = global.fetch;
+  const seenUrls = [];
+  let patchBody = null;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        const requestUrl = String(url);
+        seenUrls.push(requestUrl);
+        if (options.method === "PATCH" && requestUrl.includes("/rest/v1/seo_landings?slug=eq.")) {
+          patchBody = JSON.parse(options.body);
+          return supabaseJson([{ ...storedLanding, ...patchBody }]);
+        }
+        if (requestUrl.includes("/rest/v1/seo_landings?slug=eq.")) return supabaseJson([storedLanding]);
+        throw new Error(`Unexpected fetch ${requestUrl}`);
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "recalculate_quality_gate", slug: storedLanding.slug }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 200);
+      assert.equal(body.action, "recalculate_quality_gate");
+      assert.equal(body.before.status, "published");
+      assert.equal(body.before.index_status, "index");
+      assert.equal(body.landing.status, "published");
+      assert.equal(body.landing.index_status, "index");
+      assert.equal(body.landing.quality_gate_status, "passed");
+      assert.equal(body.landing.needs_quality_gate_recalc, false);
+      assert.ok(body.landing.quality_score >= SEO_INDEX_MIN_SCORE);
+      assert.ok(patchBody.source_data_json.quality_gate.can_publish);
+      assert.ok(patchBody.source_data_json.quality);
+      assert.equal(patchBody.source_data_json.quality_gate_summary.quality_gate_status, "passed");
+      assert.equal(Object.hasOwn(patchBody, "status"), false);
+      assert.equal(Object.hasOwn(patchBody, "index_status"), false);
+      assert.equal(Object.hasOwn(patchBody, "published_at"), false);
+      assert.equal(Object.hasOwn(patchBody, "canonical_url"), false);
+      assert.equal(seenUrls.some((url) => url.includes("sitemap")), false);
+    }
+  );
+});
+
+test("admin SEO recalcula quality_gate fallido usando las reglas actuales", async () => {
+  const opportunity = {
+    keyword: "precio metro cuadrado Logrono",
+    city: "Logrono",
+    province: "La Rioja",
+    autonomous_community: "La Rioja",
+    template_type: "price_city"
+  };
+  const sourceData = await buildPriceCitySourceData(opportunity);
+  const landing = buildPriceCityLanding(opportunity, sourceData);
+  const storedLanding = {
+    id: 100,
+    slug: landing.slug,
+    title: landing.title,
+    meta_title: landing.meta_title,
+    meta_description: landing.meta_description,
+    h1: landing.h1,
+    body_html: landing.body_html.replace(/data-install-button/g, "data-install-disabled"),
+    city: landing.city,
+    province: landing.province,
+    autonomous_community: landing.autonomous_community,
+    template_type: landing.template_type,
+    status: "draft",
+    index_status: "noindex",
+    quality_score: 88,
+    word_count: landing.word_count,
+    canonical_url: landing.canonical_url,
+    source_data_json: {
+      sources: sourceData.sources,
+      faq: landing.faq,
+      hasRealData: sourceData.hasRealData,
+      quality_gate: { passed: true, can_publish: true, can_index: true }
+    }
+  };
+  const previousFetch = global.fetch;
+  let patchBody = null;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        const requestUrl = String(url);
+        if (options.method === "PATCH" && requestUrl.includes("/rest/v1/seo_landings?id=eq.100")) {
+          patchBody = JSON.parse(options.body);
+          return supabaseJson([{ ...storedLanding, ...patchBody }]);
+        }
+        if (requestUrl.includes("/rest/v1/seo_landings?id=eq.100")) return supabaseJson([storedLanding]);
+        throw new Error(`Unexpected fetch ${requestUrl}`);
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "recalculate_quality_gate", id: 100 }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      const body = payload();
+      assert.equal(res.statusCode, 200);
+      assert.equal(body.before.had_quality_gate, true);
+      assert.equal(body.landing.status, "draft");
+      assert.equal(body.landing.index_status, "noindex");
+      assert.equal(body.landing.quality_gate_status, "failed");
+      assert.equal(body.landing.failed_checks.some((check) => check.id === "measurable_cta"), true);
+      assert.equal(patchBody.source_data_json.quality_gate.can_publish, false);
+      assert.equal(patchBody.source_data_json.quality_gate_summary.failed_checks[0].id, "measurable_cta");
+      assert.equal(Object.hasOwn(patchBody, "status"), false);
+      assert.equal(Object.hasOwn(patchBody, "index_status"), false);
+    }
+  );
+});
+
+test("admin SEO recalculo de quality_gate falla seguro si la landing no existe", async () => {
+  const previousFetch = global.fetch;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        assert.notEqual(options.method, "PATCH");
+        if (String(url).includes("/rest/v1/seo_landings?slug=eq.no-existe")) return supabaseJson([]);
+        throw new Error(`Unexpected fetch ${String(url)}`);
+      };
+      const { res, payload } = createJsonResponse();
+      const req = {
+        method: "POST",
+        url: "/api/admin?resource=seo/landings",
+        headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" },
+        body: { action: "recalculate_quality_gate", slug: "no-existe" }
+      };
+
+      try {
+        await adminHandler(req, res);
+      } finally {
+        global.fetch = previousFetch;
+      }
+
+      assert.equal(res.statusCode, 404);
+      assert.equal(payload().error, "landing_not_found");
+    }
+  );
+});
+
 test("la home tiene seccion Noticias con enlaces a publicaciones", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 

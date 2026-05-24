@@ -74,6 +74,40 @@ Interpretacion recomendada:
 - `legacy_compatible`: publicada, indexable y con score suficiente, pero sin gate guardado; queda compatible con el comportamiento anterior hasta recalculo.
 - `excluded`: no entra en sitemap por estado, `index_status`, score o gate fallido.
 
+## Recalculo manual del quality gate
+
+El backoffice SEO incluye una accion manual `Recalcular gate` por landing. La API usa `POST /api/admin?resource=seo/landings` con:
+
+- `action = recalculate_quality_gate`
+- `slug`, o `id`/`landing_id` si no se envia slug.
+
+La accion reutiliza la logica central de `calculateSeoLandingQuality()` y `evaluateSeoQualityGate()`. No duplica reglas ni cambia el criterio del gate.
+
+Campos que actualiza:
+
+- `quality_score`
+- `word_count`
+- `source_data_json.quality`
+- `source_data_json.quality_gate`
+- `source_data_json.quality_gate_summary` con `failed_checks`, `exclusion_reason`, `quality_gate_status` y `sitemap_status` del momento del recalculo.
+
+Campos que no toca:
+
+- `status`
+- `index_status`
+- `published_at`
+- `canonical_url`
+- `body_html`
+- `title`
+- `meta_title`
+- `meta_description`
+
+Uso recomendado:
+
+- Recalcular landings marcadas como `not_calculated` o `legacy_compatible`.
+- Recalcular una landing ya calculada si se sospecha que el gate guardado quedo obsoleto.
+- Revisar el resultado (`passed` o `failed`) antes de publicar, noindexar o modificar sitemap con una accion posterior explicita.
+
 ## Criterios finales del quality gate
 
 Una landing puede publicarse solo si cumple todos estos criterios:
@@ -204,9 +238,8 @@ Antes de publicar una landing generada:
 - `node --check tests/seo.test.js`
 - `node --check tests/seo-autogeneration.test.js`
 - `node --check tests/status.test.js`
-- `node --test tests/seo.test.js tests/status.test.js` (33/33 OK)
-- `node --test tests/seo.test.js tests/seo-autogeneration.test.js tests/status.test.js` (56/56 OK)
-- `node --test tests/*.test.js` (234/234 OK)
+- `node --test tests/seo.test.js tests/status.test.js` (36/36 OK)
+- `node --test tests/*.test.js` (237/237 OK)
 - `git diff --check` (OK; solo avisos LF/CRLF de Git en Windows)
 
 ## Riesgos o pendientes
@@ -214,11 +247,11 @@ Antes de publicar una landing generada:
 - Las landings antiguas pueden no tener `source_data_json.quality_gate`; el render publico y sitemap tratan esto de forma compatible, pero conviene recalcular el gate antes de republicarlas manualmente.
 - El quality gate no sustituye una revision editorial cuando se cree una familia nueva de landings.
 - La deteccion de similitud depende de los mecanismos existentes de unicidad; si se generan muchas paginas por barrios, conviene anadir comparacion mas estricta por embeddings o shingles.
-- El backoffice ya muestra motivos de gate, pero no recalcula landings antiguas desde la UI; de momento las marca como `not_calculated` y recomienda recalculo.
+- El backoffice recalcula el gate por landing, pero no incluye aun una accion batch para varias landings legacy.
 - La medicion del CTA debe seguir llamandose clic o intencion de instalacion, no instalacion confirmada.
 
 ## Recomendacion de siguiente rama
 
-Crear una rama corta para recalcular `source_data_json.quality_gate` de landings legacy bajo demanda desde backoffice, sin publicar automaticamente ni tocar sitemap hasta que el recalculo termine. Nombre sugerido:
+Crear una rama corta para recalculo batch limitado de landings legacy, con confirmacion explicita y limite bajo por ejecucion. Nombre sugerido:
 
-`codex/seo-quality-gate-recalculate-legacy`
+`codex/seo-quality-gate-batch-recalc`

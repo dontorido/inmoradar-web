@@ -281,6 +281,8 @@ test("backoffice SEO muestra quality gate y motivos sin inspeccionar JSON", () =
   assert.match(adminJs, /failed_checks/);
   assert.match(adminJs, /needs_quality_gate_recalc/);
   assert.match(adminJs, /Sitemap: legacy/);
+  assert.match(adminJs, /data-seo-action="recalculate_quality_gate"/);
+  assert.match(adminJs, /runSeoGateRecalculation/);
 });
 
 test("status UI usa nombres legibles y no muestra campos tecnicos", () => {
