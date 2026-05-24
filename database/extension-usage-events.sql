@@ -1,8 +1,10 @@
 create table if not exists public.extension_usage_events (
   id uuid primary key default gen_random_uuid(),
   event_name text not null default 'heartbeat',
+  occurred_at timestamptz not null default now(),
   anonymous_id_hash text,
   session_id_hash text,
+  page_domain text not null default 'unknown',
   browser_name text not null default 'unknown',
   browser_version text not null default 'unknown',
   platform text not null default 'unknown',
@@ -15,11 +17,26 @@ create table if not exists public.extension_usage_events (
   created_at timestamptz not null default now()
 );
 
+alter table public.extension_usage_events
+  add column if not exists occurred_at timestamptz not null default now();
+
+alter table public.extension_usage_events
+  add column if not exists page_domain text not null default 'unknown';
+
 create index if not exists extension_usage_events_created_at_idx
   on public.extension_usage_events (created_at desc);
 
+create index if not exists extension_usage_events_occurred_at_idx
+  on public.extension_usage_events (occurred_at desc);
+
 create index if not exists extension_usage_events_anonymous_idx
   on public.extension_usage_events (anonymous_id_hash, created_at desc);
+
+create index if not exists extension_usage_events_domain_idx
+  on public.extension_usage_events (page_domain, occurred_at desc);
+
+create index if not exists extension_usage_events_event_name_idx
+  on public.extension_usage_events (event_name, occurred_at desc);
 
 create index if not exists extension_usage_events_browser_idx
   on public.extension_usage_events (browser_name, created_at desc);

@@ -582,7 +582,7 @@ async function handleExtensionUsageSummary() {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const params = new URLSearchParams({
     select:
-      "event_name,anonymous_id_hash,session_id_hash,browser_name,browser_version,platform,country,extension_version,duration_seconds,active_seconds,created_at",
+      "event_name,occurred_at,anonymous_id_hash,session_id_hash,page_domain,browser_name,browser_version,platform,country,extension_version,duration_seconds,active_seconds,source,metadata,created_at",
     created_at: `gte.${since}`,
     order: "created_at.desc",
     limit: "5000"
@@ -761,6 +761,244 @@ async function loadOwnedAnalyticsEvents(url) {
   }
 }
 
+const WEB_FUNNEL_INTENT_EVENTS = new Set(["install_click", "seo_cta_click", "guide_cta_click", "article_cta_click", "chrome_store_click"]);
+const EXTENSION_FUNNEL_EVENTS = new Set([
+  "extension_opened",
+  "listing_detected",
+  "analysis_started",
+  "analysis_completed",
+  "first_listing_analysis"
+]);
+
+function cleanAggregateLabel(value, fallback = "unknown", maxLength = 120) {
+  return String(value || "")
+    .replace(/https?:\/\/\S+|www\.\S+/gi, "[url]")
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
+    .replace(/\+?\d[\d\s().-]{7,}\d/g, "[number]")
+    .replace(/\b\d{5,}\b/g, "[number]")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength) || fallback;
+}
+
+function cleanAggregatePath(value) {
+  const raw = String(value || "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240);
+  if (!raw) return "unknown";
+  let path = raw.split(/[?#]/)[0];
+  try {
+    const url = new URL(raw.includes("://") ? raw : `https://www.inmoradar.app${raw.startsWith("/") ? raw : `/${raw}`}`);
+    path = url.pathname || "/";
+  } catch {
+    path = raw.split(/[?#]/)[0];
+  }
+  path = `/${String(path || "/").replace(/^\/+/, "")}`;
+  return (
+    path
+      .replace(/[^a-zA-Z0-9/_-]+/g, "-")
+      .replace(/\/{2,}/g, "/")
+      .slice(0, 180) || "/"
+  );
+}
+
+function dayBucket(row = {}) {
+  const date = new Date(row.occurred_at || row.created_at);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  return date.toISOString().slice(0, 10);
+}
+
+function aggregateRate(numerator, denominator) {
+  const top = Number(numerator || 0);
+  const bottom = Number(denominator || 0);
+  if (!bottom) return 0;
+  return Math.round((top / bottom) * 1000) / 10;
+}
+
+async function loadExtensionFunnelEvents(range, url) {
+  if (!hasSupabaseConfig()) {
+    return {
+      ok: false,
+      table_missing: false,
+      reason: "supabase_not_configured",
+      events: []
+    };
+  }
+
+  const limit = clampLimit(url.searchParams.get("extension_limit"), 5000, 10000);
+  const params = new URLSearchParams({
+    select: "event_name,occurred_at,anonymous_id_hash,page_domain,metadata,created_at",
+    order: "occurred_at.desc",
+    limit: String(limit)
+  });
+  params.append("occurred_at", `gte.${range.start}`);
+  params.append("occurred_at", `lte.${range.end}`);
+
+  try {
+    const rows = await supabaseFetch(`extension_usage_events?${params.toString()}`);
+    return {
+      ok: true,
+      table_missing: false,
+      events: Array.isArray(rows) ? rows : []
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      table_missing: /extension_usage_events/i.test(error.message),
+      reason: "storage_error",
+      error: error.message,
+      events: []
+    };
+  }
+}
+
+function webAttributionValue(row = {}, key = "") {
+  const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+  const utm = row.utm && typeof row.utm === "object" ? row.utm : {};
+  if (key === "source") return cleanAggregateLabel(utm.source || metadata.utm_source || row.source || "unknown", "unknown", 90);
+  if (key === "medium") return cleanAggregateLabel(utm.medium || metadata.utm_medium || "unknown", "unknown", 90);
+  if (key === "campaign") return cleanAggregateLabel(utm.campaign || metadata.utm_campaign || "unknown", "unknown", 120);
+  if (key === "landing_path") return cleanAggregatePath(metadata.landing_path || row.page_path || "unknown");
+  return "unknown";
+}
+
+function incrementFunnelCounts(target, eventName) {
+  target.total_events = (target.total_events || 0) + 1;
+  if (WEB_FUNNEL_INTENT_EVENTS.has(eventName)) target.web_intent_events = (target.web_intent_events || 0) + 1;
+  if (eventName === "install_click") target.install_clicks = (target.install_clicks || 0) + 1;
+  if (eventName === "chrome_store_click") target.chrome_store_clicks = (target.chrome_store_clicks || 0) + 1;
+  if (eventName === "extension_opened") target.extension_opened = (target.extension_opened || 0) + 1;
+  if (eventName === "listing_detected") target.listing_detected = (target.listing_detected || 0) + 1;
+  if (eventName === "analysis_started") target.analysis_started = (target.analysis_started || 0) + 1;
+  if (eventName === "analysis_completed") target.analysis_completed = (target.analysis_completed || 0) + 1;
+  if (eventName === "first_listing_analysis") target.first_listing_analysis = (target.first_listing_analysis || 0) + 1;
+}
+
+function emptyFunnelBucket(label) {
+  return {
+    label,
+    total_events: 0,
+    web_intent_events: 0,
+    install_clicks: 0,
+    chrome_store_clicks: 0,
+    extension_opened: 0,
+    listing_detected: 0,
+    analysis_started: 0,
+    analysis_completed: 0,
+    first_listing_analysis: 0
+  };
+}
+
+function finalizeFunnelBucket(bucket) {
+  return {
+    ...bucket,
+    aggregate_chrome_store_to_first_listing_analysis_rate: aggregateRate(bucket.first_listing_analysis, bucket.chrome_store_clicks),
+    aggregate_extension_opened_to_first_listing_analysis_rate: aggregateRate(bucket.first_listing_analysis, bucket.extension_opened),
+    analysis_started_to_completed_rate: aggregateRate(bucket.analysis_completed, bucket.analysis_started)
+  };
+}
+
+function topFunnelGroups(groups, sortKey = "total_events", limit = 8) {
+  return Object.values(groups)
+    .map(finalizeFunnelBucket)
+    .sort((a, b) => Number(b[sortKey] || 0) - Number(a[sortKey] || 0) || Number(b.total_events || 0) - Number(a.total_events || 0) || a.label.localeCompare(b.label))
+    .slice(0, limit);
+}
+
+function buildFunnelAggregate({ webEvents = [], extensionEvents = [], range = {}, warnings = [] } = {}) {
+  const summary = emptyFunnelBucket("summary");
+  const byDay = {};
+  const bySource = {};
+  const byMedium = {};
+  const byCampaign = {};
+  const byLandingPath = {};
+  const byPageDomain = {};
+
+  (Array.isArray(webEvents) ? webEvents : [])
+    .filter((row) => WEB_FUNNEL_INTENT_EVENTS.has(row.event_name))
+    .forEach((row) => {
+      const eventName = row.event_name;
+      const day = dayBucket(row);
+      if (!byDay[day]) byDay[day] = emptyFunnelBucket(day);
+      incrementFunnelCounts(summary, eventName);
+      incrementFunnelCounts(byDay[day], eventName);
+
+      [
+        [bySource, webAttributionValue(row, "source")],
+        [byMedium, webAttributionValue(row, "medium")],
+        [byCampaign, webAttributionValue(row, "campaign")],
+        [byLandingPath, webAttributionValue(row, "landing_path")]
+      ].forEach(([group, label]) => {
+        if (!group[label]) group[label] = emptyFunnelBucket(label);
+        incrementFunnelCounts(group[label], eventName);
+      });
+    });
+
+  (Array.isArray(extensionEvents) ? extensionEvents : [])
+    .filter((row) => EXTENSION_FUNNEL_EVENTS.has(row.event_name))
+    .forEach((row) => {
+      const eventName = row.event_name;
+      const day = dayBucket(row);
+      const domain = cleanAggregateLabel(row.page_domain || "unknown", "unknown", 120);
+      if (!byDay[day]) byDay[day] = emptyFunnelBucket(day);
+      if (!byPageDomain[domain]) byPageDomain[domain] = emptyFunnelBucket(domain);
+      incrementFunnelCounts(summary, eventName);
+      incrementFunnelCounts(byDay[day], eventName);
+      incrementFunnelCounts(byPageDomain[domain], eventName);
+    });
+
+  const finalizedSummary = finalizeFunnelBucket(summary);
+  return {
+    ok: true,
+    generated_at: new Date().toISOString(),
+    attribution_mode: "aggregate_window",
+    attribution_note: "La atribucion es agregada por ventana temporal, no deterministica por usuario.",
+    window_days: range.days,
+    window_hours: range.hours,
+    window_mode: range.mode,
+    window_from_date: range.from_date,
+    window_to_date: range.to_date,
+    window_start: range.start,
+    window_end: range.end,
+    window_clamped: Boolean(range.clamped),
+    warnings,
+    summary: finalizedSummary,
+    by_day: Object.values(byDay)
+      .map(finalizeFunnelBucket)
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    by_utm_source: topFunnelGroups(bySource, "chrome_store_clicks", 8),
+    by_utm_medium: topFunnelGroups(byMedium, "chrome_store_clicks", 8),
+    by_utm_campaign: topFunnelGroups(byCampaign, "chrome_store_clicks", 8),
+    by_landing_path: topFunnelGroups(byLandingPath, "chrome_store_clicks", 8),
+    by_page_domain: topFunnelGroups(byPageDomain, "analysis_completed", 8)
+  };
+}
+
+async function handleFunnelAggregate(req, url) {
+  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const range = ownedAnalyticsWindow(url);
+  const [webResult, extensionResult] = await Promise.all([loadOwnedAnalyticsEvents(url), loadExtensionFunnelEvents(range, url)]);
+  const warnings = [];
+  if (!webResult.ok) warnings.push(webResult.table_missing ? "owned_analytics_events_missing" : webResult.reason || "owned_analytics_unavailable");
+  if (!extensionResult.ok) warnings.push(extensionResult.table_missing ? "extension_usage_events_missing" : extensionResult.reason || "extension_usage_unavailable");
+  return {
+    status: 200,
+    payload: {
+      ...buildFunnelAggregate({
+        webEvents: webResult.events,
+        extensionEvents: extensionResult.events,
+        range,
+        warnings
+      }),
+      persisted: Boolean(webResult.ok && extensionResult.ok),
+      table_missing: Boolean(webResult.table_missing || extensionResult.table_missing)
+    }
+  };
+}
+
 function analyticsGroup(rows, key, limit = 8) {
   const groups = (rows || []).reduce((acc, row) => {
     const label = String(row[key] || "unknown");
@@ -773,6 +1011,24 @@ function analyticsGroup(rows, key, limit = 8) {
   return Object.values(groups)
     .sort((a, b) => b.install_clicks - a.install_clicks || b.checkout_created - a.checkout_created || b.count - a.count || a.label.localeCompare(b.label))
     .slice(0, limit);
+}
+
+function analyticsValueGroup(rows, readValue, limit = 8) {
+  const groups = (rows || []).reduce((acc, row) => {
+    const label = String(readValue(row) || "unknown");
+    if (!acc[label]) acc[label] = { label, count: 0, chrome_store_clicks: 0, install_clicks: 0 };
+    acc[label].count += 1;
+    if (row.event_name === "chrome_store_click") acc[label].chrome_store_clicks += 1;
+    if (["install_click", "chrome_store_click", "seo_cta_click", "guide_cta_click", "article_cta_click"].includes(row.event_name)) acc[label].install_clicks += 1;
+    return acc;
+  }, {});
+  return Object.values(groups)
+    .sort((a, b) => b.chrome_store_clicks - a.chrome_store_clicks || b.install_clicks - a.install_clicks || b.count - a.count || a.label.localeCompare(b.label))
+    .slice(0, limit);
+}
+
+function analyticsUtmGroup(rows, key, limit = 8) {
+  return analyticsValueGroup(rows, (row) => row.utm?.[key] || row.metadata?.[`utm_${key}`], limit);
 }
 
 async function handleOwnedAnalyticsSummary(req, url) {
@@ -802,6 +1058,8 @@ async function handleOwnedAnalyticsSummary(req, url) {
       top_cities: analyticsGroup(events, "city"),
       top_templates: analyticsGroup(events, "template_type"),
       top_topics: analyticsGroup(events, "topic"),
+      top_utm_sources: analyticsUtmGroup(events, "source"),
+      top_utm_campaigns: analyticsUtmGroup(events, "campaign"),
       high_interaction_low_install: learning.high_interaction_low_install,
       calculator_install_pages: learning.calculator_install_pages,
       calculator_low_conversion: learning.calculator_low_conversion,
@@ -3699,6 +3957,10 @@ module.exports = async function handler(req, res) {
     }
     if (resource === "analytics/learning") {
       const result = await handleOwnedAnalyticsLearning(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "analytics/funnel") {
+      const result = await handleFunnelAggregate(req, url);
       return json(res, result.status, result.payload);
     }
     if (!hasSupabaseConfig()) {

@@ -5,6 +5,7 @@ const CONTACT_ENDPOINT = "/api/contact";
 const BROWSER_WAITLIST_ENDPOINT = "/api/waitlist/browser";
 const OWNED_ANALYTICS_ENDPOINT = "/api/analytics/event";
 const OWNED_ANALYTICS_SESSION_KEY = "inmoradar_owned_session_id";
+const INSTALL_ATTRIBUTION_STORAGE_KEY = "inmoradar_install_attribution";
 const NEWS_ENDPOINT = "/api/news";
 const CHROME_WEBSTORE_URL = "https://chromewebstore.google.com/detail/inmoradar/mbkjlkagblkmdnjggoggbjiohbjebaab";
 const LANGUAGE_STORAGE_KEY = "inmoradar_language";
@@ -882,6 +883,59 @@ function utmPayload() {
   };
 }
 
+function safeLandingPath() {
+  try {
+    const url = new URL(location.href);
+    return url.pathname || "/";
+  } catch (error) {
+    return location.pathname || "/";
+  }
+}
+
+function randomAttributionId() {
+  const random = window.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  return `attr_${String(random).replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 80)}`;
+}
+
+function createInstallAttribution({ source = "web", label = "", browser = "chrome" } = {}) {
+  const utm = utmPayload();
+  const clickedAt = new Date().toISOString();
+  const attribution = {
+    attribution_id: randomAttributionId(),
+    install_source: source,
+    label,
+    browser,
+    landing_path: safeLandingPath(),
+    click_timestamp: clickedAt,
+    utm_source: utm.source,
+    utm_medium: utm.medium,
+    utm_campaign: utm.campaign,
+    utm_term: utm.term,
+    utm_content: utm.content
+  };
+  try {
+    localStorage.setItem(INSTALL_ATTRIBUTION_STORAGE_KEY, JSON.stringify({ ...attribution, updated_at: clickedAt }));
+  } catch (error) {
+    // Attribution is best-effort and must never block the install path.
+  }
+  return attribution;
+}
+
+function installAttributionMetadata(attribution = {}, extra = {}) {
+  return {
+    attribution_id: attribution.attribution_id || "",
+    install_source: attribution.install_source || attribution.source || "",
+    landing_path: attribution.landing_path || "",
+    click_timestamp: attribution.click_timestamp || "",
+    utm_source: attribution.utm_source || "",
+    utm_medium: attribution.utm_medium || "",
+    utm_campaign: attribution.utm_campaign || "",
+    utm_term: attribution.utm_term || "",
+    utm_content: attribution.utm_content || "",
+    ...extra
+  };
+}
+
 function pageContextFromDom() {
   const main = document.querySelector("[data-owned-analytics], [data-article-page], .seo-reading, main");
   const path = location.pathname || "/";
@@ -981,17 +1035,22 @@ function installUrlForBrowser(browserId) {
   return BROWSER_LAUNCH_WAITLIST[browserId]?.storeUrl || CHROME_WEBSTORE_URL;
 }
 
-function openChromeWebStore({ browser = "chrome", source = "web", label = "" } = {}) {
+function openChromeWebStore({ browser = "chrome", source = "web", label = "", attribution = null } = {}) {
+  const installAttribution = attribution || createInstallAttribution({ browser, source, label });
   launchWaitlistAnalytics("extension_install_click", {
     browser,
     source,
     label,
-    store: "chrome_web_store"
+    store: "chrome_web_store",
+    attributionId: installAttribution.attribution_id || ""
   });
   trackOwnedEvent("chrome_store_click", {
     browser,
     source,
-    metadata: { label, store: "chrome_web_store" }
+    metadata: {
+      label,
+      ...installAttributionMetadata(installAttribution, { store: "chrome_web_store" })
+    }
   });
   const url = installUrlForBrowser(browser);
   const link = document.createElement("a");
@@ -1311,10 +1370,18 @@ function handleUniversalInstallClick(event, element) {
   const source = element.dataset.installSource || ctaSourceFromElement(element);
   const label = normalizedText(element.textContent || "");
   const browser = element.dataset.installBrowser || detectLaunchBrowser();
-  launchWaitlistAnalytics("launch_waitlist_cta_click", { source, label, browser });
-  trackOwnedEvent(installCtaEventName(source), { browser, source, metadata: { label } });
+  const attribution = createInstallAttribution({ browser, source, label });
+  launchWaitlistAnalytics("launch_waitlist_cta_click", { source, label, browser, attributionId: attribution.attribution_id });
+  trackOwnedEvent(installCtaEventName(source), {
+    browser,
+    source,
+    metadata: {
+      label,
+      ...installAttributionMetadata(attribution, { store: isInstallableBrowser(browser) ? "chrome_web_store" : "waitlist" })
+    }
+  });
   if (isInstallableBrowser(browser)) {
-    openChromeWebStore({ browser, source, label });
+    openChromeWebStore({ browser, source, label, attribution });
     return;
   }
   openLaunchWaitlistModal({

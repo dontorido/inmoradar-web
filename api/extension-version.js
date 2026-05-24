@@ -1,11 +1,29 @@
 const { handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
-const { extensionUsageEventFromInput } = require("../lib/extension-usage/metrics");
+const { extensionUsageEventFromInput, firstListingAnalysisEventFrom } = require("../lib/extension-usage/metrics");
 
 async function readJsonBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
   if (typeof req.body === "string") return req.body ? JSON.parse(req.body) : {};
   const raw = await readRawBody(req);
   return raw ? JSON.parse(raw) : {};
+}
+
+async function hasPriorListingAnalysis(anonymousIdHash) {
+  if (!anonymousIdHash) return true;
+  const hash = encodeURIComponent(anonymousIdHash);
+  const rows = await supabaseFetch(
+    `extension_usage_events?select=id&anonymous_id_hash=eq.${hash}&event_name=in.(analysis_completed,first_listing_analysis)&limit=1`
+  );
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+async function shouldPersistFirstListingAnalysis(event) {
+  if (event.event_name !== "analysis_completed" || !event.anonymous_id_hash) return false;
+  try {
+    return !(await hasPriorListingAnalysis(event.anonymous_id_hash));
+  } catch {
+    return false;
+  }
 }
 
 async function handleExtensionUsage(req, res) {
@@ -19,11 +37,25 @@ async function handleExtensionUsage(req, res) {
   try {
     const body = await readJsonBody(req);
     const event = extensionUsageEventFromInput(body, req.headers || {});
+    const persistFirstAnalysis = await shouldPersistFirstListingAnalysis(event);
     await supabaseFetch("extension_usage_events", {
       method: "POST",
       body: JSON.stringify(event)
     });
-    return json(res, 200, { ok: true, accepted: true });
+
+    const firstAnalysisEvent = persistFirstAnalysis ? firstListingAnalysisEventFrom(event) : null;
+    if (firstAnalysisEvent) {
+      await supabaseFetch("extension_usage_events", {
+        method: "POST",
+        body: JSON.stringify(firstAnalysisEvent)
+      });
+    }
+
+    return json(res, 200, {
+      ok: true,
+      accepted: true,
+      derived_event: firstAnalysisEvent?.event_name || null
+    });
   } catch (error) {
     return json(res, 400, {
       ok: false,

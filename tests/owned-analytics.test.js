@@ -191,6 +191,62 @@ test("sanitizeMetadata elimina emails, claves sensibles y valores exactos de cal
   assert.deepEqual(metadata.array, [{ label: "ok" }, { link_context: "related_content" }]);
 });
 
+test("owned analytics conserva atribucion web-store no sensible", () => {
+  const result = buildOwnedAnalyticsEvent({
+    event_name: "chrome_store_click",
+    anonymous_session_id: "anon-store",
+    page_path: "/analizar-anuncio-inmobiliario/",
+    page_url: "https://www.inmoradar.app/analizar-anuncio-inmobiliario/?utm_source=google&utm_campaign=chrome_extension",
+    source: "hero_install",
+    utm: {
+      source: "google",
+      medium: "cpc",
+      campaign: "chrome_extension"
+    },
+    metadata: {
+      attribution_id: "attr_123_safe",
+      install_source: "hero_install",
+      landing_path: "https://www.inmoradar.app/analizar-anuncio-inmobiliario/?email=sergio@example.com",
+      click_timestamp: "2026-05-24T08:30:00.000Z",
+      utm_source: "google",
+      utm_medium: "cpc",
+      utm_campaign: "chrome_extension",
+      store: "chrome_web_store",
+      full_url: "https://www.inmoradar.app/analizar?email=sergio@example.com",
+      listing_url: "https://www.idealista.com/inmueble/123456789/",
+      note: "visita https://example.com/piso/123456789 o llama 600 000 000"
+    }
+  });
+
+  assert.equal(result.event.utm.source, "google");
+  assert.equal(result.event.utm.medium, "cpc");
+  assert.equal(result.event.utm.campaign, "chrome_extension");
+  assert.equal(result.event.metadata.attribution_id, "attr_123_safe");
+  assert.equal(result.event.metadata.install_source, "hero_install");
+  assert.equal(result.event.metadata.landing_path, "/analizar-anuncio-inmobiliario/");
+  assert.equal(result.event.metadata.click_timestamp, "2026-05-24T08:30:00.000Z");
+  assert.equal(result.event.metadata.utm_source, "google");
+  assert.equal(result.event.metadata.utm_campaign, "chrome_extension");
+  assert.equal(result.event.metadata.store, "chrome_web_store");
+  assert.equal(result.event.metadata.full_url, undefined);
+  assert.equal(result.event.metadata.listing_url, undefined);
+  assert.equal(JSON.stringify(result.event.metadata).includes("https://"), false);
+  assert.equal(JSON.stringify(result.event.metadata).includes("123456789"), false);
+  assert.equal(JSON.stringify(result.event.metadata).includes("600"), false);
+});
+
+test("app.js genera attribution_id para install_click y chrome_store_click", () => {
+  const script = fs.readFileSync(path.join(__dirname, "..", "assets", "app.js"), "utf8");
+
+  assert.match(script, /INSTALL_ATTRIBUTION_STORAGE_KEY/);
+  assert.match(script, /function createInstallAttribution/);
+  assert.match(script, /attribution_id/);
+  assert.match(script, /landing_path/);
+  assert.match(script, /utm_campaign/);
+  assert.match(script, /trackOwnedEvent\(installCtaEventName\(source\)/);
+  assert.match(script, /trackOwnedEvent\("chrome_store_click"/);
+});
+
 test("summarizeOwnedAnalytics calcula ratios de conversion", () => {
   const events = [
     { event_name: "page_view", page_path: "/" },
@@ -425,6 +481,146 @@ test("admin analytics aplica el rango explicito al filtro de Supabase", async ()
   assert.deepEqual(filters, ["gte.2026-05-01T00:00:00.000Z", "lte.2026-05-10T23:59:59.999Z"]);
 });
 
+test("admin analytics/funnel agrega intencion web y activacion extension", async () => {
+  const previousFetch = global.fetch;
+  const webRows = [
+    {
+      event_name: "chrome_store_click",
+      occurred_at: "2026-05-01T10:00:00.000Z",
+      page_path: "/analizar-anuncio-inmobiliario/",
+      source: "hero",
+      utm: { source: "google", medium: "cpc", campaign: "cpc_madrid" },
+      metadata: {
+        landing_path: "https://www.inmoradar.app/analizar-anuncio-inmobiliario/?email=sergio@example.com",
+        attribution_id: "attr_1"
+      }
+    },
+    {
+      event_name: "install_click",
+      occurred_at: "2026-05-01T10:01:00.000Z",
+      page_path: "/analizar-anuncio-inmobiliario/",
+      source: "hero",
+      utm: { source: "google", medium: "cpc", campaign: "cpc_madrid" },
+      metadata: { landing_path: "/analizar-anuncio-inmobiliario/?utm_campaign=cpc_madrid" }
+    },
+    {
+      event_name: "chrome_store_click",
+      occurred_at: "2026-05-02T10:00:00.000Z",
+      page_path: "/",
+      source: "social",
+      utm: { source: "instagram", medium: "social", campaign: "ig_launch" },
+      metadata: { landing_path: "/" }
+    },
+    { event_name: "page_view", occurred_at: "2026-05-02T11:00:00.000Z", page_path: "/" }
+  ];
+  const extensionRows = [
+    { event_name: "extension_opened", occurred_at: "2026-05-01T11:00:00.000Z", anonymous_id_hash: "u1", page_domain: "idealista.com" },
+    { event_name: "listing_detected", occurred_at: "2026-05-01T11:01:00.000Z", anonymous_id_hash: "u1", page_domain: "idealista.com" },
+    { event_name: "analysis_started", occurred_at: "2026-05-01T11:02:00.000Z", anonymous_id_hash: "u1", page_domain: "idealista.com" },
+    { event_name: "analysis_completed", occurred_at: "2026-05-01T11:03:00.000Z", anonymous_id_hash: "u1", page_domain: "idealista.com" },
+    { event_name: "first_listing_analysis", occurred_at: "2026-05-02T11:03:00.000Z", anonymous_id_hash: "u1", page_domain: "idealista.com" }
+  ];
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url) => {
+        const href = String(url);
+        const rows = href.includes("extension_usage_events") ? extensionRows : webRows;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => rows,
+          text: async () => JSON.stringify(rows)
+        };
+      };
+
+      try {
+        const { res, payload } = createJsonResponse();
+        const req = {
+          method: "GET",
+          url: "/api/admin?resource=analytics/funnel&from=2026-05-01&to=2026-05-07",
+          headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" }
+        };
+        await adminHandler(req, res);
+        const body = payload();
+
+        assert.equal(res.statusCode, 200);
+        assert.equal(body.attribution_mode, "aggregate_window");
+        assert.match(body.attribution_note, /agregada/);
+        assert.equal(body.summary.chrome_store_clicks, 2);
+        assert.equal(body.summary.install_clicks, 1);
+        assert.equal(body.summary.first_listing_analysis, 1);
+        assert.equal(body.summary.analysis_completed, 1);
+        assert.equal(body.summary.aggregate_chrome_store_to_first_listing_analysis_rate, 50);
+        assert.equal(body.summary.aggregate_extension_opened_to_first_listing_analysis_rate, 100);
+        assert.equal(body.by_day.find((item) => item.label === "2026-05-01").analysis_completed, 1);
+        assert.equal(body.by_day.find((item) => item.label === "2026-05-02").first_listing_analysis, 1);
+        assert.equal(body.by_utm_source[0].label, "google");
+        assert.equal(body.by_utm_campaign.find((item) => item.label === "cpc_madrid").chrome_store_clicks, 1);
+        assert.equal(body.by_landing_path.find((item) => item.label === "/analizar-anuncio-inmobiliario/").web_intent_events, 2);
+        assert.equal(body.by_page_domain[0].label, "idealista.com");
+        assert.equal(body.by_page_domain[0].analysis_completed, 1);
+        assert.equal(JSON.stringify(body).includes("sergio@example.com"), false);
+        assert.equal(JSON.stringify(body).includes("?email="), false);
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+});
+
+test("admin analytics/funnel maneja eventos legacy y divisiones por cero", async () => {
+  const previousFetch = global.fetch;
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url) => {
+        const href = String(url);
+        const rows = href.includes("extension_usage_events")
+          ? [{ event_name: "analysis_completed", created_at: "2026-05-03T09:00:00.000Z" }]
+          : [{ event_name: "chrome_store_click", created_at: "2026-05-03T08:00:00.000Z" }];
+        return {
+          ok: true,
+          status: 200,
+          json: async () => rows,
+          text: async () => JSON.stringify(rows)
+        };
+      };
+
+      try {
+        const { res, payload } = createJsonResponse();
+        const req = {
+          method: "GET",
+          url: "/api/admin?resource=analytics/funnel&from=2026-05-01&to=2026-05-07",
+          headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" }
+        };
+        await adminHandler(req, res);
+        const body = payload();
+
+        assert.equal(res.statusCode, 200);
+        assert.equal(body.summary.chrome_store_clicks, 1);
+        assert.equal(body.summary.analysis_completed, 1);
+        assert.equal(body.summary.first_listing_analysis, 0);
+        assert.equal(body.summary.aggregate_extension_opened_to_first_listing_analysis_rate, 0);
+        assert.equal(body.summary.analysis_started_to_completed_rate, 0);
+        assert.equal(body.by_page_domain[0].label, "unknown");
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+});
+
 test("admin analytics limita rangos explicitos a 90 dias", async () => {
   const summary = await callAdminAnalyticsResource("analytics/summary", "from=2026-01-01&to=2026-05-23");
 
@@ -452,6 +648,7 @@ test("admin analytics resources usan 7 dias por defecto si el rango no es valido
 
 test("BackOffice presenta intencion de instalacion y score interno sin prometer instalacion real", () => {
   const script = fs.readFileSync(path.join(__dirname, "..", "assets", "admin.js"), "utf8");
+  const html = fs.readFileSync(path.join(__dirname, "..", "admin.html"), "utf8");
 
   assert.match(script, /Intención instalación/);
   assert.match(script, /Chrome Store/);
@@ -459,6 +656,10 @@ test("BackOffice presenta intencion de instalacion y score interno sin prometer 
   assert.match(script, /No confirma instalación real/);
   assert.match(script, /No es una nota SEO sobre 100/);
   assert.match(script, /Ver p&aacute;gina/);
+  assert.match(script, /analytics\/funnel/);
+  assert.match(script, /Ratio agregado Store -> analisis/);
+  assert.match(html, /IntenciÃ³n web vs activaciÃ³n extensiÃ³n/);
+  assert.match(html, /No es atribuciÃ³n determinÃ­stica por usuario/);
   assert.doesNotMatch(script, /stat\("Instalacion"/);
   assert.doesNotMatch(script, /<dt>Score<\/dt>/);
 });

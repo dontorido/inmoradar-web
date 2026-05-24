@@ -263,6 +263,8 @@ const els = {
   revenueChart: document.querySelector("[data-revenue-chart]"),
   extensionStats: document.querySelector("[data-extension-stats]"),
   extensionBreakdown: document.querySelector("[data-extension-breakdown]"),
+  funnelStats: document.querySelector("[data-funnel-stats]"),
+  funnelBreakdown: document.querySelector("[data-funnel-breakdown]"),
   analyticsSummary: document.querySelector("[data-analytics-summary]"),
   analyticsPages: document.querySelector("[data-analytics-pages]"),
   analyticsLearning: document.querySelector("[data-analytics-learning]"),
@@ -1115,6 +1117,77 @@ function renderExtensionUsage(payload) {
     renderUsageList("País", payload.by_country),
     renderUsageList("Version", payload.by_extension_version),
     renderUsageList("Evento", payload.by_event_name)
+  ].join("");
+}
+
+function renderFunnelGroup(title, rows = [], metricKey = "total_events", detailBuilder = null) {
+  const items = Array.isArray(rows) ? rows.filter((item) => item?.label && item.label !== "unknown").slice(0, 6) : [];
+  const total = items.reduce((sum, item) => sum + Number(item[metricKey] || 0), 0) || 1;
+  return `
+    <section class="admin-extension-card">
+      <span>${escapeHtml(title)}</span>
+      ${
+        items.length
+          ? items
+              .map((item) => {
+                const value = Number(item[metricKey] || 0);
+                const pct = Math.max(4, Math.round((value / total) * 100));
+                const detail = detailBuilder ? detailBuilder(item) : `${value} eventos`;
+                return `
+                  <div class="admin-extension-row">
+                    <strong>${escapeHtml(item.label || "unknown")}</strong>
+                    <em>${escapeHtml(detail)}</em>
+                    <i style="--usage-pct:${pct}%"></i>
+                  </div>
+                `;
+              })
+              .join("")
+          : `<p class="admin-empty-state compact">Sin datos suficientes.</p>`
+      }
+    </section>
+  `;
+}
+
+function renderFunnelAggregate(payload) {
+  if (!els.funnelStats || !els.funnelBreakdown) return;
+  const summary = payload.summary || {};
+  const days = Array.isArray(payload.by_day) ? payload.by_day.slice(-6).reverse() : [];
+  const windowLabel = analyticsWindowLabel(payload, payload.window_days || state.analytics.days || 7);
+  const warning = payload.table_missing
+    ? "Faltan tablas de analitica o extension."
+    : payload.warnings?.length
+      ? payload.warnings.join(", ")
+      : payload.attribution_note || "La atribucion es agregada, no deterministica por usuario.";
+
+  els.funnelStats.innerHTML = [
+    stat("Chrome Store", summary.chrome_store_clicks || 0, {
+      id: "funnel-chrome-store",
+      hint: `${windowLabel} - clicks web hacia Chrome Web Store`
+    }),
+    stat("Primer analisis", summary.first_listing_analysis || 0, {
+      id: "funnel-first-analysis",
+      hint: "Usuarios anonimos que llegaron al primer analisis real"
+    }),
+    stat("Ratio agregado Store -> analisis", formatRate(summary.aggregate_chrome_store_to_first_listing_analysis_rate), {
+      id: "funnel-store-first-rate",
+      hint: "Agregado por ventana temporal; no es conversion exacta usuario a usuario."
+    }),
+    stat("Opened -> primer analisis", formatRate(summary.aggregate_extension_opened_to_first_listing_analysis_rate), {
+      id: "funnel-open-first-rate",
+      hint: "Ratio agregado dentro de eventos de extension."
+    }),
+    stat("Analisis completados", summary.analysis_completed || 0, {
+      id: "funnel-analysis-completed",
+      hint: `${formatRate(summary.analysis_started_to_completed_rate)} iniciados -> completados`
+    })
+  ].join("");
+
+  els.funnelBreakdown.innerHTML = [
+    `<p class="admin-empty-state compact">${escapeHtml(warning)}</p>`,
+    renderFunnelGroup("Dias", days, "total_events", (item) => `${item.chrome_store_clicks || 0} Store / ${item.first_listing_analysis || 0} primer analisis`),
+    renderFunnelGroup("Fuentes UTM", payload.by_utm_source, "chrome_store_clicks", (item) => `${item.chrome_store_clicks || 0} Store / ${item.web_intent_events || 0} intencion`),
+    renderFunnelGroup("Campanas UTM", payload.by_utm_campaign, "chrome_store_clicks", (item) => `${item.chrome_store_clicks || 0} Store / ${item.web_intent_events || 0} intencion`),
+    renderFunnelGroup("Dominios analizados", payload.by_page_domain, "analysis_completed", (item) => `${item.analysis_completed || 0} completados / ${item.first_listing_analysis || 0} primer analisis`)
   ].join("");
 }
 
@@ -5066,6 +5139,14 @@ async function loadExtensionUsage() {
   renderExtensionUsage(payload);
 }
 
+async function loadFunnelAggregate() {
+  if (!els.funnelStats) return;
+  const range = readAnalyticsDateInputs();
+  const params = analyticsRangeParams("analytics/funnel", range);
+  const payload = await api(`/api/admin?${params.toString()}`);
+  renderFunnelAggregate(payload);
+}
+
 async function loadAnalytics() {
   if (!els.analyticsPanels?.length && !els.analyticsSummary) return;
   const range = readAnalyticsDateInputs();
@@ -5228,6 +5309,7 @@ async function loadAll() {
       loadSummary(),
       loadPremium(),
       loadExtensionUsage(),
+      loadFunnelAggregate(),
       loadAnalytics(),
       loadSeo(),
       loadSeoAutogeneration(),
@@ -5444,7 +5526,7 @@ els.premiumFilter.addEventListener("submit", async (event) => {
 els.analyticsRefreshButtons.forEach((button) => {
   button.addEventListener("click", () => {
     readAnalyticsDateInputs();
-    loadAnalytics().catch((error) => showStatus(error.message, "bad"));
+    Promise.all([loadAnalytics(), loadFunnelAggregate()]).catch((error) => showStatus(error.message, "bad"));
   });
 });
 
@@ -5452,7 +5534,7 @@ syncAnalyticsDateInputs();
 [...els.analyticsFromInputs, ...els.analyticsToInputs].forEach((input) => {
   input.addEventListener("change", () => {
     readAnalyticsDateInputs();
-    loadAnalytics().catch((error) => showStatus(error.message, "bad"));
+    Promise.all([loadAnalytics(), loadFunnelAggregate()]).catch((error) => showStatus(error.message, "bad"));
   });
 });
 
