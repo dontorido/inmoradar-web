@@ -3932,6 +3932,11 @@ const ADMIN_SUPABASE_READ_ONLY_ROUTES = createAdminRouter([
     handler: () => handleSummary()
   },
   {
+    resource: "premium/subscriptions",
+    method: "GET",
+    handler: ({ url }) => handlePremiumSubscriptions(url)
+  },
+  {
     resource: "extension/usage",
     method: "GET",
     handler: ({ url }) => handleExtensionUsageSummary(url)

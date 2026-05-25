@@ -908,3 +908,68 @@ Verificacion de esta evolucion:
 - `node --test tests/admin-router.test.js`: 30 pass, 0 fail.
 - `node --test tests/*.test.js`: 269 pass, 0 fail.
 - `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.
+
+## Evolucion posterior: router declarativo premium/subscriptions read-only
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-premium-readonly`
+
+Se amplio el router declarativo para cubrir solo la lectura local segura de suscripciones Premium. La migracion se limito a `GET premium/subscriptions`; no se tocaron checkout, portal de cliente, Lemon Squeezy, webhooks, emails ni cambios de estado premium.
+
+Recursos migrados:
+
+- `premium/subscriptions` `GET`: lista filas locales de `premium_subscriptions` con filtros `limit`, `status`, `q`, `provider` y `event_name`. Sigue en el grupo post-Supabase y conserva payload/codigos.
+
+Recursos no migrados:
+
+- `api/lemonsqueezy-checkout`: checkout, portal magic link y portal de cliente.
+- `api/lemonsqueezy-webhook`: escritura de suscripciones y revenue events.
+- `api/check-premium`: comprobacion publica de premium y envio de reportes.
+- Cualquier flujo de billing externo, portal, email o sincronizacion remota.
+
+Metodos mantenidos en legacy o comportamiento conservado:
+
+- `POST/PUT/PATCH/DELETE premium/subscriptions`: no existen como escritura admin; siguen devolviendo `405`.
+- Recursos de checkout, portal, webhook y billing externo permanecen fuera del router admin.
+
+Dependencias externas detectadas:
+
+- Lemon Squeezy vive en endpoints separados y no fue tocado.
+- `GET premium/subscriptions` no llama proveedor externo: solo lee Supabase.
+- `summary` sigue exponiendo flags de configuracion Lemon, sin llamar APIs externas.
+
+Riesgos reducidos:
+
+- El listado Premium read-only sale del dispatch manual de `api/admin.js`.
+- El router no abre rutas write premium ni billing externo.
+- Errores de Supabase en lectura premium siguen saneados por el catch general.
+- Datos vacios devuelven payload estable.
+
+Riesgos pendientes:
+
+- `handlePremiumSubscriptions` sigue dentro de `api/admin.js`.
+- Los endpoints Lemon/portal/webhook siguen separados y deben mantenerse con revisiones de seguridad propias.
+- Billing externo no debe entrar al router admin hasta tener contratos y fixtures especificos.
+
+Advertencias:
+
+- No migrar checkout, portal ni webhooks a este router.
+- No mezclar premium read-only con cambios de planes, estados o sincronizacion remota.
+- No devolver secretos ni mensajes crudos de proveedor en ningun flujo billing.
+
+Que queda dentro de `api/admin.js`:
+
+- `handlePremiumSubscriptions`.
+- Lecturas de revenue y premium usadas por `summary` y `alerts`.
+
+Verificacion de esta evolucion:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/router.js`: OK con Node bundled.
+- `node --check assets/admin.js`: OK con Node bundled.
+- `node --check api/sitemap.js`: OK con Node bundled.
+- `node --check api/seo-page.js`: OK con Node bundled.
+- `node --check scripts/serve-static.js`: OK con Node bundled.
+- `node --test tests/admin-router.test.js`: 33 pass, 0 fail.
+- `node --test tests/*.test.js`: 272 pass, 0 fail.
+- `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.

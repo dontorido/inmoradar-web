@@ -663,3 +663,74 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-router-operations-readonly. Sin deploy, sin cambios visuales y sin tocar produccion. Migrar al router declarativo premium/subscriptions read-only si es GET puro y no llama billing externo, manteniendo auth, URLs, query params, payloads y codigos. No tocar escritura, portal de cliente, Lemon Squeezy, Chrome Web Store, Meta, LinkedIn ni generacion SEO. Anadir tests de payload, metodo no permitido, fallback legacy y errores saneados. Ejecutar node --test tests/*.test.js y git diff --check.
 ```
+
+## 22. Fase realizada - Router admin premium/subscriptions read-only
+
+Estado: realizada en `feature/admin-router-premium-readonly`.
+
+Se migro al router declarativo solo la lectura local segura de Premium:
+
+- `premium/subscriptions` `GET`
+
+No se migro ningun flujo de checkout, portal, webhook, email, Lemon Squeezy ni billing externo. El handler sigue dentro de `api/admin.js`; el router solo delega el metodo read-only.
+
+Detalle tecnico:
+
+- `premium/subscriptions` `GET` consulta solo `premium_subscriptions` en Supabase.
+- El recurso no tiene escritura admin equivalente; metodos no GET conservan `405`.
+- No se creo `api/_admin/handlers/premium.js` para evitar mover helpers sensibles de billing en esta fase.
+
+Recursos y metodos dejados en legacy/fuera del router:
+
+- `api/lemonsqueezy-checkout`
+- `api/lemonsqueezy-webhook`
+- `api/check-premium`
+- Portal de cliente
+- Checkout
+- Webhooks
+- Emails y reportes premium
+- Cualquier sincronizacion o cambio remoto de billing
+
+Tests anadidos o reforzados:
+
+- Payload shape de `GET premium/subscriptions`.
+- Arrays vacios en `GET premium/subscriptions`.
+- Metodos no GET mantienen `405`.
+- Errores Supabase saneados en `GET premium/subscriptions`.
+- Recurso legacy alternativo sigue fuera del router.
+
+Verificacion:
+
+- `node --test tests/admin-router.test.js`: 33 pass, 0 fail.
+- `node --test tests/*.test.js`: 272 pass, 0 fail.
+- `git diff --check`: OK; solo avisos CRLF de Git en Windows.
+
+## 23. Siguiente fase recomendada
+
+Siguiente lote prudente:
+
+- Revisar si quedan recursos read-only puros sin integraciones.
+- Preparar primer lote write interno de muy bajo riesgo solo con fixtures y sin proveedores externos.
+
+Orden posterior sugerido:
+
+1. Continuar con mas read-only si quedan.
+2. Preparar primer lote write interno de muy bajo riesgo.
+3. Settings write.
+4. SEO write controlado.
+5. Operations write.
+6. Billing externo.
+7. Integraciones externas al final.
+
+Criterios para continuar:
+
+- No migrar writes sin tests de body invalido, payload de error y no exposicion de secretos.
+- No tocar proveedores externos en la primera fase write.
+- Mantener fallback legacy mientras convivan GET/POST en un recurso.
+- Mantener auth en `api/admin.js`.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-router-premium-readonly. Sin deploy, sin cambios visuales y sin tocar produccion. Revisar si queda algun recurso admin read-only puro sin integraciones externas; si no queda ninguno seguro, documentar el limite y preparar una propuesta para el primer lote write interno de muy bajo riesgo, sin implementarlo todavia. No tocar checkout, portal, billing externo, Meta, LinkedIn, Chrome Web Store, social-video, viraliza ni generacion SEO. Ejecutar node --test tests/*.test.js y git diff --check.
+```

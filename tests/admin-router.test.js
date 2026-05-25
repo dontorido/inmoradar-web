@@ -253,6 +253,30 @@ test("admin read-only router preserves summary payload shape", async () => {
   assert.equal(result.payload.parking.total_cache_rows, 1);
 });
 
+test("admin read-only router preserves premium subscriptions payload shape", async () => {
+  const result = await callAdmin("premium/subscriptions", {
+    query: "status=active&q=client&limit=1"
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.count, 1);
+  assert.equal(Array.isArray(result.payload.subscriptions), true);
+  assert.equal(result.payload.subscriptions[0].email, "client@example.com");
+  assert.equal(result.payload.subscriptions[0].status, "active");
+});
+
+test("admin read-only router preserves premium subscriptions empty arrays", async () => {
+  const result = await callAdmin("premium/subscriptions", {
+    fetchImpl: async () => jsonResponse([])
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.count, 0);
+  assert.deepEqual(result.payload.subscriptions, []);
+});
+
 test("admin read-only router preserves alerts payload without Supabase", async () => {
   const result = await callAdmin("alerts", {
     env: {
@@ -415,6 +439,7 @@ test("admin read-only router preserves operations releases empty arrays", async 
 test("admin read-only router preserves method handling around Supabase gate", async () => {
   const alertsPost = await callAdmin("alerts", { method: "POST" });
   const summaryPost = await callAdmin("summary", { method: "POST" });
+  const premiumPost = await callAdmin("premium/subscriptions", { method: "POST" });
   const summaryPostWithoutSupabase = await callAdmin("summary", {
     method: "POST",
     env: {
@@ -425,6 +450,8 @@ test("admin read-only router preserves method handling around Supabase gate", as
 
   assert.equal(alertsPost.statusCode, 405);
   assert.equal(summaryPost.statusCode, 405);
+  assert.equal(premiumPost.statusCode, 405);
+  assert.deepEqual(premiumPost.payload, { ok: false, error: "method_not_allowed" });
   assert.equal(summaryPostWithoutSupabase.statusCode, 500);
   assert.equal(summaryPostWithoutSupabase.payload.error, "supabase_not_configured");
 });
@@ -503,12 +530,12 @@ test("admin analytics router preserves method handling before Supabase gate", as
 });
 
 test("admin legacy resources still fall back after read-only router", async () => {
-  const result = await callAdmin("premium/subscriptions");
+  const result = await callAdmin("social-video/runway-config");
 
   assert.equal(result.statusCode, 200);
   assert.equal(result.payload.ok, true);
-  assert.equal(result.payload.count, 1);
-  assert.ok(Array.isArray(result.payload.subscriptions));
+  assert.equal(result.payload.enabled, false);
+  assert.equal(result.payload.api_secret_configured, false);
 });
 
 test("admin analytics routes not registered in router still fall back to legacy flow", async () => {
@@ -611,6 +638,30 @@ test("admin operations releases router keeps Supabase errors sanitized", async (
   assert.equal(result.statusCode, 200);
   assert.equal(result.payload.ok, true);
   assert.equal(result.payload.table_missing, false);
+  assert.doesNotMatch(payloadText, /abc123|sb_secret_live/);
+  assert.match(payloadText, /access_token=\[redacted\]/);
+  assert.match(payloadText, /\[redacted-secret\]/);
+});
+
+test("admin premium subscriptions router keeps Supabase errors sanitized", async () => {
+  const previousConsoleError = console.error;
+  let result;
+  console.error = () => {};
+  try {
+    result = await callAdmin("premium/subscriptions", {
+      fetchImpl: async () => ({
+        ok: false,
+        status: 500,
+        text: async () => "backend leaked access_token=abc123 and sb_secret_live_abcdef"
+      })
+    });
+  } finally {
+    console.error = previousConsoleError;
+  }
+
+  const payloadText = JSON.stringify(result.payload);
+  assert.equal(result.statusCode, 500);
+  assert.equal(result.payload.error, "admin_request_failed");
   assert.doesNotMatch(payloadText, /abc123|sb_secret_live/);
   assert.match(payloadText, /access_token=\[redacted\]/);
   assert.match(payloadText, /\[redacted-secret\]/);
