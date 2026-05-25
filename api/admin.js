@@ -3952,6 +3952,12 @@ const ADMIN_SUPABASE_READ_ONLY_ROUTES = createAdminRouter([
     method: "GET",
     fallbackOnMethodMismatch: true,
     handler: ({ req }) => handleKpiSettings(req)
+  },
+  {
+    resource: "operations/releases",
+    method: "GET",
+    fallbackOnMethodMismatch: true,
+    handler: ({ req, url }) => handleReleaseArtifacts(req, url)
   }
 ]);
 

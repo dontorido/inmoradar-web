@@ -595,3 +595,71 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-router-settings-kpis-readonly. Sin deploy, sin cambios visuales y sin tocar produccion. Migrar al router declarativo un lote pequeno de operations read-only o premium/subscriptions read-only, manteniendo auth, URLs, query params, payloads y codigos. Si un recurso mezcla GET y POST, usar fallback legacy por metodo y migrar solo GET. No tocar escritura, publicacion, Chrome Web Store, billing externo, Meta, LinkedIn ni generacion SEO. Anadir tests de payload, metodo no permitido, fallback legacy y errores saneados. Ejecutar node --test tests/*.test.js y git diff --check.
 ```
+
+## 20. Fase realizada - Router admin operations read-only
+
+Estado: realizada en `feature/admin-router-operations-readonly`.
+
+Se migro al router declarativo solo la lectura operativa segura:
+
+- `operations/releases` `GET`
+
+No se migro ningun endpoint que ejecute jobs, repare datos, suba paquetes, publique, llame Chrome Web Store o escriba en Supabase. El handler sigue dentro de `api/admin.js`; el router solo delega el metodo read-only.
+
+Detalle tecnico:
+
+- `operations/releases` es un recurso mixto: `GET` lista artefactos y `POST` crea artefactos.
+- Se reutiliza `fallbackOnMethodMismatch` para que `POST` siga en legacy.
+- `PUT/PATCH/DELETE` conservan `405` desde el handler legacy.
+- `operations/chrome` queda fuera por ser accion externa y potencialmente persistente.
+- No se creo `api/_admin/handlers/operations.js` para evitar mover helpers de operaciones y conectores.
+
+Recursos y metodos dejados en legacy:
+
+- `operations/releases` `POST`
+- `operations/chrome`
+- Cualquier accion futura `operations/*` que escriba, publique o llame integraciones externas.
+
+Tests anadidos o reforzados:
+
+- Payload shape de `GET operations/releases`.
+- Arrays vacios en `GET operations/releases`.
+- Fallback legacy para `POST operations/releases`.
+- `PUT operations/releases` mantiene `405`.
+- `operations/chrome` sigue en legacy.
+- Errores Supabase saneados en `GET operations/releases`.
+
+Verificacion:
+
+- `node --test tests/admin-router.test.js`: 30 pass, 0 fail.
+- `node --test tests/*.test.js`: 269 pass, 0 fail.
+- `git diff --check`: OK; solo avisos CRLF de Git en Windows.
+
+## 21. Siguiente fase recomendada
+
+Siguiente lote prudente:
+
+- `premium/subscriptions` read-only, si se mantiene como GET puro.
+- Primeros write internos de muy bajo riesgo, solo si tienen fixtures y no llaman integraciones.
+
+Orden posterior sugerido:
+
+1. Premium/subscriptions read-only.
+2. Primeros write internos de muy bajo riesgo.
+3. Settings write.
+4. SEO write con efectos controlados.
+5. Operations write.
+6. Integraciones externas al final.
+
+Criterios para continuar:
+
+- No tocar billing externo ni portal de cliente si se migra premium.
+- Mantener fallback legacy para recursos mixtos.
+- No migrar actions que creen, publiquen, reparen o llamen proveedores.
+- Cubrir payload, metodos no soportados, fallback y error saneado.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-router-operations-readonly. Sin deploy, sin cambios visuales y sin tocar produccion. Migrar al router declarativo premium/subscriptions read-only si es GET puro y no llama billing externo, manteniendo auth, URLs, query params, payloads y codigos. No tocar escritura, portal de cliente, Lemon Squeezy, Chrome Web Store, Meta, LinkedIn ni generacion SEO. Anadir tests de payload, metodo no permitido, fallback legacy y errores saneados. Ejecutar node --test tests/*.test.js y git diff --check.
+```

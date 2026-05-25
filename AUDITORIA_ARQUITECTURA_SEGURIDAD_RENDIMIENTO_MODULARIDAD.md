@@ -849,3 +849,62 @@ Verificacion de esta evolucion:
 - `node --test tests/admin-router.test.js`: 25 pass, 0 fail.
 - `node --test tests/*.test.js`: 264 pass, 0 fail.
 - `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.
+
+## Evolucion posterior: router declarativo operations read-only
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-operations-readonly`
+
+Se amplio el router declarativo para cubrir solo lectura operativa segura. La migracion se limito a `GET operations/releases`; no se tocaron acciones de Chrome Web Store, subida/publicacion de artefactos, jobs, reparaciones ni escritura operativa.
+
+Recursos migrados:
+
+- `operations/releases` `GET`: lista artefactos operativos con `target` y `limit`, devuelve conectores y estado de tabla. Sigue en el grupo post-Supabase y conserva payload/codigos.
+
+Recursos no migrados:
+
+- `operations/releases` `POST`: crea artefactos en `release_artifacts`.
+- `operations/chrome`: solo acepta acciones POST y puede consultar/subir/publicar contra Chrome Web Store y actualizar artefactos.
+
+Metodos mantenidos en legacy:
+
+- `POST operations/releases`: sigue cayendo al flujo legacy.
+- `PUT/PATCH/DELETE operations/releases`: siguen devolviendo `405` desde el handler legacy.
+- `GET/POST operations/chrome`: queda completamente en legacy.
+
+Riesgos reducidos:
+
+- Otra rama read-only sale del dispatch manual de `api/admin.js`.
+- El recurso mixto `operations/releases` conserva escritura en legacy mediante `fallbackOnMethodMismatch`.
+- Errores de Supabase en lectura operativa siguen saneados.
+- Respuestas con tabla vacia mantienen payload estable.
+
+Riesgos pendientes:
+
+- `handleReleaseArtifacts` sigue mezclando lectura y creacion de artefactos.
+- `handleChromeOperation` sigue en `api/admin.js` y concentra acciones externas delicadas.
+- No hay todavia contrato separado para operaciones write ni para conectores externos.
+
+Advertencias sobre endpoints operativos:
+
+- No migrar `operations/chrome` al router read-only: incluso su accion `status` puede llamar API externa y actualizar notas del artefacto.
+- No migrar operaciones que creen artefactos, cambien estado, suban paquetes, publiquen o escriban notas.
+- No ejecutar endpoints operativos reales durante tests.
+
+Que queda dentro de `api/admin.js`:
+
+- `handleReleaseArtifacts` completo.
+- `handleChromeOperation`.
+- Helpers de Chrome status, upload, publish y patch de artefactos.
+
+Verificacion de esta evolucion:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/router.js`: OK con Node bundled.
+- `node --check assets/admin.js`: OK con Node bundled.
+- `node --check api/sitemap.js`: OK con Node bundled.
+- `node --check api/seo-page.js`: OK con Node bundled.
+- `node --check scripts/serve-static.js`: OK con Node bundled.
+- `node --test tests/admin-router.test.js`: 30 pass, 0 fail.
+- `node --test tests/*.test.js`: 269 pass, 0 fail.
+- `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.

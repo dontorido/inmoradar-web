@@ -112,6 +112,42 @@ function supabaseMockFetch(url) {
     return jsonResponse([{ id: "assessment-1", overall_score: 71, overall_label: "medio", confidence_score: 0.7 }]);
   }
   if (path.startsWith("kpi_settings?")) return jsonResponse([]);
+  if (path.startsWith("release_artifacts?select")) {
+    return jsonResponse([
+      {
+        id: "artifact-1",
+        target: "extension",
+        version: "1.0.11",
+        title: "Extension build",
+        channel: "stable",
+        status: "ready",
+        artifact_kind: "bundle",
+        connector_target: "chrome",
+        file_name: "inmoradar-1.0.11.zip",
+        mime_type: "application/zip",
+        file_size_bytes: 1024,
+        sha256: "a".repeat(64),
+        storage_path: null,
+        notes: "Ready",
+        created_at: "2026-05-24T00:00:00.000Z",
+        updated_at: "2026-05-24T00:00:00.000Z"
+      }
+    ]);
+  }
+  if (path === "release_artifacts") {
+    return jsonResponse([
+      {
+        id: "artifact-created",
+        target: "web",
+        version: "1.0.0",
+        title: "Web release",
+        channel: "draft",
+        status: "draft",
+        artifact_kind: "bundle",
+        connector_target: null
+      }
+    ]);
+  }
   return jsonResponse([]);
 }
 
@@ -347,6 +383,35 @@ test("admin read-only router preserves kpi settings payload shape", async () => 
   assert.equal(result.payload.error, null);
 });
 
+test("admin read-only router preserves operations releases payload shape", async () => {
+  const result = await callAdmin("operations/releases", {
+    query: "target=extension&limit=1"
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.target, "extension");
+  assert.equal(Array.isArray(result.payload.artifacts), true);
+  assert.equal(result.payload.artifacts[0].id, "artifact-1");
+  assert.equal(result.payload.artifacts[0].connector_target, "chrome");
+  assert.equal(typeof result.payload.connectors, "object");
+  assert.equal(result.payload.table_missing, false);
+  assert.equal(result.payload.error, null);
+});
+
+test("admin read-only router preserves operations releases empty arrays", async () => {
+  const result = await callAdmin("operations/releases", {
+    fetchImpl: async () => jsonResponse([])
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.target, "all");
+  assert.deepEqual(result.payload.artifacts, []);
+  assert.equal(typeof result.payload.connectors, "object");
+  assert.equal(result.payload.table_missing, false);
+});
+
 test("admin read-only router preserves method handling around Supabase gate", async () => {
   const alertsPost = await callAdmin("alerts", { method: "POST" });
   const summaryPost = await callAdmin("summary", { method: "POST" });
@@ -397,6 +462,31 @@ test("admin kpi settings router preserves mixed method legacy fallback", async (
   assert.equal(typeof postResult.payload.settings, "object");
   assert.equal(putResult.statusCode, 405);
   assert.deepEqual(putResult.payload, { ok: false, error: "method_not_allowed" });
+});
+
+test("admin operations releases router preserves mixed method legacy fallback", async () => {
+  const postResult = await callAdmin("operations/releases", {
+    method: "POST",
+    body: {
+      target: "web",
+      version: "1.0.0",
+      title: "Web release"
+    }
+  });
+  const putResult = await callAdmin("operations/releases", { method: "PUT" });
+
+  assert.equal(postResult.statusCode, 200);
+  assert.equal(postResult.payload.ok, true);
+  assert.equal(postResult.payload.artifact.id, "artifact-created");
+  assert.equal(putResult.statusCode, 405);
+  assert.deepEqual(putResult.payload, { ok: false, error: "method_not_allowed" });
+});
+
+test("admin operations action resources remain legacy", async () => {
+  const result = await callAdmin("operations/chrome", { method: "GET" });
+
+  assert.equal(result.statusCode, 405);
+  assert.deepEqual(result.payload, { ok: false, error: "method_not_allowed" });
 });
 
 test("admin analytics router preserves method handling before Supabase gate", async () => {
@@ -492,6 +582,24 @@ test("admin seo landings router keeps Supabase errors sanitized", async () => {
 
 test("admin kpi settings router keeps Supabase errors sanitized", async () => {
   const result = await callAdmin("kpis/settings", {
+    fetchImpl: async () => ({
+      ok: false,
+      status: 500,
+      text: async () => "backend leaked access_token=abc123 and sb_secret_live_abcdef"
+    })
+  });
+
+  const payloadText = JSON.stringify(result.payload);
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.table_missing, false);
+  assert.doesNotMatch(payloadText, /abc123|sb_secret_live/);
+  assert.match(payloadText, /access_token=\[redacted\]/);
+  assert.match(payloadText, /\[redacted-secret\]/);
+});
+
+test("admin operations releases router keeps Supabase errors sanitized", async () => {
+  const result = await callAdmin("operations/releases", {
     fetchImpl: async () => ({
       ok: false,
       status: 500,
