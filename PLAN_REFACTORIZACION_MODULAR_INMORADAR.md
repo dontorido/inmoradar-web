@@ -1129,3 +1129,34 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-handler-seo-landings-readonly. Sin deploy y sin tocar produccion. Hacer una pausa tecnica de cierre de read-only: inventariar que queda dentro de api/admin.js tras extraer analytics, premium, parking, extension/usage y seo/landings GET; confirmar que solo summary, alerts y legacy sensible siguen dentro; proponer si conviene extraer servicios auxiliares por dominio antes de tocar writes SEO. No migrar endpoints nuevos ni writes. Ejecutar node --check, node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
 ```
+
+## 34. Fase realizada - Consolidacion post-extraccion
+
+Estado: realizada en `feature/admin-post-extraction-inventory`.
+
+Se creo:
+
+- `ADMIN_POST_EXTRACTION_INVENTORY.md`
+
+No se hicieron cambios funcionales. No se migraron endpoints nuevos. No se tocaron writes, SEO write, Chrome, Meta, LinkedIn, Runway, Viraliza, checkout, billing ni webhooks.
+
+Conclusion:
+
+- La extraccion directa de read-only seguros esta cerrada.
+- `summary` y `alerts` requieren services por dominio antes de moverse.
+- SEO write requiere fixtures, rollback y contrato por accion.
+- La cadena de ramas ya merece merge/consolidacion controlada antes de seguir.
+
+Orden recomendado:
+
+1. Consolidar/mergear la cadena actual.
+2. Endurecer seguridad/operacion: rate limiting, CORS, observabilidad, payload limits.
+3. Extraer services auxiliares por dominio.
+4. Preparar SEO write solo con fixtures y rollback.
+5. Dejar integraciones externas para el final.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-post-extraction-inventory. Sin deploy y sin tocar produccion. Preparar consolidacion controlada de la cadena admin router/handlers: revisar diff acumulado contra main, ejecutar node --check en api/admin.js, api/_admin/router.js y handlers, ejecutar node --test tests/admin-router.test.js, tests/seo.test.js, tests/owned-analytics.test.js y tests/*.test.js, ejecutar git diff --check, y generar checklist de PR/merge con riesgos y rollback. No migrar endpoints nuevos ni writes. No tocar SEO write, Chrome, Meta, LinkedIn, Runway, Viraliza, checkout, billing ni webhooks.
+```

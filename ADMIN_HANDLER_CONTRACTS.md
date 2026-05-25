@@ -338,3 +338,31 @@ Criterio para handlers cercanos a escritura/generacion:
 - inyectar las dependencias de lectura en lugar de mover helpers compartidos de escritura;
 - reforzar tests de filtros, paginacion, errores saneados y fallback legacy de writes;
 - no mezclar GET y POST en el mismo movimiento si el POST tiene efectos publicos.
+
+## 21. Estado final post-extraccion
+
+Tras `feature/admin-handler-seo-landings-readonly`, los handlers extraidos son:
+
+- `api/_admin/handlers/kpis.js`;
+- `api/_admin/handlers/operations.js`;
+- `api/_admin/handlers/analytics.js`;
+- `api/_admin/handlers/premium.js`;
+- `api/_admin/handlers/core.js`;
+- `api/_admin/handlers/extension-usage.js`;
+- `api/_admin/handlers/seo.js`.
+
+No conviene extraer mas handlers directamente desde `api/admin.js` cuando:
+
+- el bloque es un agregador de varios dominios (`summary`, `alerts`);
+- el bloque maneja tokens, OAuth o proveedores externos;
+- el bloque puede publicar, generar, archivar, noindexar o regenerar contenido;
+- el bloque puede incurrir coste externo;
+- el bloque necesita fixtures y rollback antes de moverse.
+
+Frontera recomendada:
+
+- Handler: adapta request/contexto admin y devuelve `{ status, payload }`.
+- Service: contiene logica de dominio testeable sin depender de `req`/`res`.
+- External integration: vive aislada, con kill switches, saneado de secretos, mocks y tests de proveedor.
+
+La siguiente extraccion sana no deberia ser otro endpoint; deberia ser un service por dominio o una consolidacion/merge controlada.

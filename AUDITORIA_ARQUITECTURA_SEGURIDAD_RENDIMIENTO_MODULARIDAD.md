@@ -1263,6 +1263,45 @@ Verificacion especifica de fase:
 - `node --test tests/seo.test.js`: 17 pass, 0 fail.
 - `node --test tests/*.test.js`: 285 pass, 0 fail.
 
+## Cierre de fase read-only y handlers extraidos
+
+Fecha: 2026-05-25
+Rama: `feature/admin-post-extraction-inventory`
+
+Se cerro la fase de extraccion segura sin mover nuevos endpoints ni tocar runtime.
+
+Foto tecnica:
+
+- `api/admin.js`: 3109 lineas aproximadas.
+- Funciones detectadas: 139.
+- Funciones `handle*` restantes: 39.
+- Handlers extraidos: 7 archivos en `api/_admin/handlers`.
+- Lineas aproximadas en handlers extraidos: 888.
+
+Responsabilidades que quedan correctamente en `api/admin.js`:
+
+- auth;
+- CORS;
+- Supabase gate;
+- router dispatch;
+- catch comun;
+- saneado de errores;
+- fallback legacy.
+
+Responsabilidades que siguen pendientes de reducir:
+
+- agregadores mixtos `summary` y `alerts`;
+- SEO write y autogeneracion;
+- integrations externas: Chrome, Meta, LinkedIn, Runway, billing;
+- dominios grandes como social-video y Viraliza.
+
+Decision recomendada:
+
+1. Consolidar/mergear la cadena actual de forma controlada.
+2. Endurecer seguridad y operacion: rate limiting, CORS, observabilidad, payload limits.
+3. Extraer services por dominio para preparar `summary`, `alerts` y writes.
+4. Posponer SEO write hasta tener fixtures, rollback y contrato por accion.
+
 ## Extraccion handler operations/releases
 
 Fecha: 2026-05-25

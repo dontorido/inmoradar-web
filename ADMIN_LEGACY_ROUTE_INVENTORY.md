@@ -451,3 +451,29 @@ Riesgo residual:
 
 - `summary` y `alerts` siguen dentro de `api/admin.js` por mezcla de dominios.
 - SEO write sigue siendo una frontera de alto riesgo y requiere fase propia con fixtures y rollback.
+
+## Cierre post-extraccion
+
+Rama: `feature/admin-post-extraction-inventory`
+
+Estado final de recursos ya extraidos:
+
+- `kpis/settings` `GET/POST`;
+- `operations/releases` `GET/POST`;
+- `analytics/summary`, `analytics/pages`, `analytics/learning`;
+- `premium/subscriptions` `GET`;
+- `parking/summary` `GET`;
+- `extension/usage` `GET`;
+- `seo/landings` `GET`.
+
+Estado final de recursos no extraidos:
+
+- `summary`: aggregator mixto de premium/revenue, SEO, parking y flags Lemon.
+- `alerts`: aggregator operativo de mantenimiento nocturno, SEO autogeneration, waitlist, premium y Viraliza.
+- `POST seo/landings`: write SEO con `publish`, `noindex`, `archive`, `regenerate`.
+- `seo/generate-landings`: generacion SEO manual.
+- `seo-autogenerate/run`: cron/admin con potencial de autogeneracion.
+- `operations/chrome`: integracion externa con Chrome Web Store.
+- `meta/*`, `linkedin/*`, `social-video/*`, `viraliza/*`: dominios mixtos o externos.
+
+Decision: no quedan read-only simples que convenga extraer de forma directa. La siguiente fase deberia ser consolidacion/merge controlado o hardening transversal antes de entrar en writes SEO.
