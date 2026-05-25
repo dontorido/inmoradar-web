@@ -42,7 +42,7 @@ El objetivo de este documento es dejar inventariado lo que sigue en legacy, clas
 | `seo/generate-landings` | generacion | `POST` | generation/write | si | si | no | si | alto | Lanza generacion de landings; puede crear o modificar contenido. | no | fase SEO generacion | Fuera del primer write interno. |
 | `seo-autogenerate/run` | status/run | `GET/POST` | mixed/cron-like | si | si en run | no | si | critico | El mismo recurso cubre estado y ejecucion, acepta cron/admin y puede lanzar autogeneracion. | no | fase cron SEO separada | Aunque hay lectura de estado, el recurso es demasiado delicado para esta fase. |
 | `kpis/settings` | save | `POST` | write interno migrado | si | si | no | no | bajo | Escritura local pequena de configuracion KPI, con validacion acotada. | migrado | primer write interno completado | Migrado al router en `feature/admin-router-kpis-settings-write`; handler extraido a `api/_admin/handlers/kpis.js` en la pausa tecnica. |
-| `operations/releases` | create artifact | `POST` | write interno migrado | si | si | no | no | bajo-medio | Crea artefacto local en `release_artifacts`; no llama Chrome ni proveedores. | migrado | segundo write interno completado | Migrado al router en `feature/admin-router-operations-releases-write`; `operations/chrome` sigue fuera. |
+| `operations/releases` | create artifact | `POST` | write interno migrado | si | si | no | no | bajo-medio | Crea artefacto local en `release_artifacts`; no llama Chrome ni proveedores. | migrado | segundo write interno completado | Migrado al router en `feature/admin-router-operations-releases-write`; handler extraido a `api/_admin/handlers/operations.js`; `operations/chrome` sigue fuera. |
 | `operations/chrome` | status/upload/publish | `POST` | external/write | si | si | si | si | critico | Puede consultar, subir o publicar en Chrome Web Store y parchear artefactos. | no | integraciones externas al final | No ejecutar en tests reales. |
 | `linkedin` | dashboard | `GET` | read-only sensible | si | no | no | no | medio | Lectura de configuracion/tokens en dominio social excluido. | no | integraciones sociales | No migrar en fase admin generica. |
 | `linkedin/connect` | oauth url | `GET` | external/oauth | no | no | no | no | medio | Construye flujo OAuth y scopes; dominio sensible. | no | integraciones sociales | Mantener junto al resto de LinkedIn. |
@@ -151,7 +151,7 @@ Cobertura anadida:
 
 Riesgo residual:
 
-- `handleReleaseArtifacts` sigue dentro de `api/admin.js`.
+- `handleReleaseArtifacts` seguia dentro de `api/admin.js` tras la segunda migracion write; queda extraido en `feature/admin-handler-operations-releases`.
 - `operations/chrome` sigue en legacy completo y debe quedarse fuera hasta una fase de integraciones externas.
 - Ya hay dos writes internos migrados; conviene pausar y evaluar extraccion de handlers antes de abordar writes con mas efectos.
 
@@ -177,10 +177,10 @@ Handlers ya registrados en el router:
 Extraccion realizada:
 
 - `kpis/settings` queda en `api/_admin/handlers/kpis.js`.
+- `operations/releases` queda en `api/_admin/handlers/operations.js`.
 
 Siguen dentro de `api/admin.js`:
 
-- `handleReleaseArtifacts`;
 - `handleSummary`;
 - `handleAlerts`;
 - `handlePremiumSubscriptions`;
@@ -192,7 +192,6 @@ Siguen dentro de `api/admin.js`:
 
 Candidatos a extraccion posterior:
 
-- `operations/releases`, si se inyectan `safeFetch`, `clampLimit` y `supabaseFetch` sin mover Chrome.
 - `premium/subscriptions`, si se mantiene separado de checkout/portal/webhooks.
 - analytics read-only, si se quiere reducir el peso del bloque de analitica.
 
@@ -202,3 +201,29 @@ Bloqueados por riesgo:
 - SEO write/generacion/autogeneracion;
 - Meta, LinkedIn, social-video, Runway y Viraliza;
 - billing externo, checkout, portal y webhooks.
+
+## Extraccion handler operations/releases
+
+Fecha: 2026-05-25
+Rama: `feature/admin-handler-operations-releases`
+
+Se extrajo `operations/releases` `GET/POST` a `api/_admin/handlers/operations.js` usando un factory con dependencias inyectadas.
+
+Dependencias inyectadas:
+
+- `safeFetch`;
+- `supabaseFetch`;
+- `readJsonBody`;
+- `clampLimit`.
+
+Confirmacion de frontera:
+
+- `operations/chrome` sigue en legacy dentro de `api/admin.js`.
+- No se movieron helpers de Chrome.
+- No se importo Chrome Web Store en el handler de releases.
+- No se migraron nuevos endpoints.
+
+Riesgo residual:
+
+- El modulo operations extraido solo cubre releases locales.
+- Chrome, publish, upload y status remoto siguen bloqueados hasta fase dedicada.

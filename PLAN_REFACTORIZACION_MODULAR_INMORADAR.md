@@ -910,3 +910,37 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-router-handler-contracts. Sin deploy y sin tocar produccion. Extraer `operations/releases` a un handler interno solo si se puede inyectar `safeFetch`, `supabaseFetch`, `readJsonBody` y `clampLimit` sin tocar `operations/chrome` ni Chrome Web Store. No migrar nuevos endpoints. Mantener URLs, payloads, codigos, auth y tests. Si aumenta el riesgo, documentar y no extraer. Ejecutar node --check, node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
 ```
+
+## 28. Fase realizada - Extraccion handler operations/releases
+
+Estado: realizada en `feature/admin-handler-operations-releases`.
+
+Se creo:
+
+- `api/_admin/handlers/operations.js`
+
+Se extrajo del monolito:
+
+- `operations/releases` `GET/POST`
+
+No se migraron nuevos endpoints ni nuevos writes. `operations/chrome` sigue dentro de `api/admin.js` y fuera del handler extraido.
+
+Criterios validados:
+
+- Inyeccion de `safeFetch`, `supabaseFetch`, `readJsonBody` y `clampLimit`.
+- Helpers puros de releases importados desde `lib/operations/releases`.
+- Auth, service role y catch comun permanecen en `api/admin.js`.
+- No se toca Chrome Web Store.
+
+Orden recomendado:
+
+1. Extraer analytics read-only si se quiere seguir reduciendo el monolito sin nuevos writes.
+2. Extraer premium/subscriptions read-only solo si se mantiene separado de billing externo.
+3. Considerar metadatos de rutas.
+4. Mantener SEO write, Chrome, billing y social para fases dedicadas.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-handler-operations-releases. Sin deploy y sin tocar produccion. Evaluar la siguiente extraccion de handlers ya migrados, priorizando analytics read-only o premium/subscriptions read-only. No migrar nuevos endpoints ni writes. Mantener auth, URLs, payloads, codigos y saneado de errores. No tocar SEO write, Chrome Web Store, billing, Meta, LinkedIn, social-video ni Viraliza. Si se extrae algo, usar factories con dependencias inyectadas y tests existentes/reforzados. Ejecutar node --check, node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
+```

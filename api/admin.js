@@ -8,6 +8,7 @@ const {
 const { runSeoLandingGeneration } = require("./_seo/generator");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
 const { createKpiSettingsHandler } = require("./_admin/handlers/kpis");
+const { createOperationsReleaseHandler } = require("./_admin/handlers/operations");
 const { generateSocialVideoProject, MUSIC_STYLES, seriesConfig, TOPICS, VISUAL_BACKDROPS } = require("../lib/social-video/generator");
 const { getVideoBrandingConfig } = require("../lib/social-video/branding");
 const {
@@ -31,11 +32,6 @@ const {
   summarizeExtensionUsage
 } = require("../lib/extension-usage/metrics");
 const { buildRevenueEventFromLemonPayload, summarizeMonthlyRevenue } = require("../lib/sales/revenue");
-const {
-  normalizeReleaseArtifactInput,
-  normalizeReleaseTarget,
-  releaseConnectors
-} = require("../lib/operations/releases");
 const { loadNightlyMaintenanceAlerts } = require("../lib/operations/nightlyMaintenanceAlerts");
 const {
   chromeWebStoreConfig,
@@ -223,6 +219,13 @@ async function safeFetch(path, fallback = []) {
     return { error: sanitizeErrorMessage(error), rows: fallback };
   }
 }
+
+const handleReleaseArtifacts = createOperationsReleaseHandler({
+  clampLimit,
+  readJsonBody,
+  safeFetch,
+  supabaseFetch
+});
 
 function safeRows(result) {
   return Array.isArray(result) ? result : result?.rows || [];
@@ -1185,57 +1188,6 @@ async function handleSeoLandingAction(body) {
     autoPublish: false
   });
   return { status: 200, payload: { ok: true, action, result } };
-}
-
-async function handleReleaseArtifacts(req, url) {
-  if (req.method === "GET") {
-    const rawTarget = url.searchParams.get("target");
-    const target = rawTarget ? normalizeReleaseTarget(rawTarget) : "";
-    const limit = clampLimit(url.searchParams.get("limit"), 50, 100);
-    const params = new URLSearchParams({
-      select:
-        "id,target,version,title,channel,status,artifact_kind,connector_target,file_name,mime_type,file_size_bytes,sha256,storage_path,notes,created_at,updated_at",
-      order: "created_at.desc",
-      limit: String(limit)
-    });
-    if (target) params.set("target", `eq.${target}`);
-    const result = await safeFetch(`release_artifacts?${params.toString()}`);
-    const rows = Array.isArray(result) ? result : result.rows;
-    return {
-      status: 200,
-      payload: {
-        ok: true,
-        target: target || "all",
-        artifacts: rows,
-        connectors: releaseConnectors(),
-        table_missing: !Array.isArray(result) && /release_artifacts/.test(result.error || ""),
-        error: Array.isArray(result) ? null : result.error || null
-      }
-    };
-  }
-
-  if (req.method !== "POST") {
-    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
-  }
-
-  const input = await readJsonBody(req);
-  const artifact = normalizeReleaseArtifactInput(input);
-  const rows = await supabaseFetch("release_artifacts", {
-    method: "POST",
-    headers: {
-      prefer: "return=representation"
-    },
-    body: JSON.stringify(artifact)
-  });
-
-  return {
-    status: 200,
-    payload: {
-      ok: true,
-      artifact: Array.isArray(rows) ? rows[0] : artifact,
-      connectors: releaseConnectors()
-    }
-  };
 }
 
 function chromeFetch(url, options = {}) {

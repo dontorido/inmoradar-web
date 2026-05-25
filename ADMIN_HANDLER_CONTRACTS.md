@@ -178,12 +178,34 @@ Se extrajo solo `kpis/settings` a `api/_admin/handlers/kpis.js` porque sus depen
 - `supabaseFetch`;
 - `api/_kpi/settings`.
 
-No se extrajo `operations/releases` todavia porque depende tambien de:
+En la fase posterior `feature/admin-handler-operations-releases` se extrajo tambien `operations/releases` a `api/_admin/handlers/operations.js`.
+
+Dependencias inyectadas para `operations/releases`:
 
 - `safeFetch`;
 - `clampLimit`;
+- `readJsonBody`;
+- `supabaseFetch`.
+
+Dependencias puras importadas por el handler:
+
 - `normalizeReleaseArtifactInput`;
 - `normalizeReleaseTarget`;
 - `releaseConnectors`.
 
-Aunque sigue siendo un handler razonable, extraerlo ahora ampliaria la fase. Conviene hacerlo como paso separado o despues de definir mejor dependencias compartidas para operaciones.
+`operations/chrome` sigue fuera del handler extraido porque:
+
+- llama Chrome Web Store;
+- puede subir paquetes;
+- puede publicar o enviar a revision;
+- puede parchear artefactos segun respuestas externas;
+- necesita credenciales y fixtures especificas.
+
+## 15. Checklist especifica para handlers con dependencias compartidas
+
+- Importar en el handler solo helpers puros de dominio.
+- Inyectar fetchers, body parsing y clamps desde `api/admin.js`.
+- Evitar que un handler local importe conectores externos.
+- Confirmar con tests que no se invoca ningun proveedor externo.
+- Mantener fuera cualquier action de publicacion/subida.
+- Dejar legacy sensible en `api/admin.js` hasta fase dedicada.

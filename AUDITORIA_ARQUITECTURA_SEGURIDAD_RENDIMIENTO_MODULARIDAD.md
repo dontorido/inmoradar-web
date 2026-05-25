@@ -1180,9 +1180,9 @@ Por que fue segura:
 - mantiene payloads y codigos;
 - esta cubierta por tests de GET, POST, body vacio, JSON mal formado, error Supabase y no secretos.
 
-No se extrajo todavia:
+No se extrajo todavia en esa pausa:
 
-- `operations/releases`, porque requiere decidir como inyectar `safeFetch`, `clampLimit` y conectores de operaciones sin mezclarlo con Chrome.
+- `operations/releases`, porque requeria decidir como inyectar `safeFetch`, `clampLimit` y conectores de operaciones sin mezclarlo con Chrome. Queda extraido en la fase posterior `feature/admin-handler-operations-releases`.
 - analytics, premium y summary, porque no eran necesarios para validar el contrato.
 
 Riesgos reducidos:
@@ -1194,7 +1194,7 @@ Riesgos reducidos:
 Riesgos pendientes:
 
 - `api/admin.js` sigue conteniendo muchos handlers.
-- `operations/releases` sigue dentro.
+- `operations/releases` quedaba dentro en esa fase; queda extraido en la fase posterior.
 - Zonas sensibles siguen legacy y no deben tocarse sin fase dedicada.
 
 Verificacion de esta evolucion:
@@ -1202,6 +1202,61 @@ Verificacion de esta evolucion:
 - `node --check api/admin.js`: OK con Node bundled.
 - `node --check api/_admin/router.js`: OK con Node bundled.
 - `node --check api/_admin/handlers/kpis.js`: OK con Node bundled.
+- `node --check assets/admin.js`: OK con Node bundled.
+- `node --check api/sitemap.js`: OK con Node bundled.
+- `node --check api/seo-page.js`: OK con Node bundled.
+- `node --check scripts/serve-static.js`: OK con Node bundled.
+- `node --test tests/admin-router.test.js`: 41 pass, 0 fail.
+- `node --test tests/*.test.js`: 280 pass, 0 fail.
+- `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.
+
+## Extraccion handler operations/releases
+
+Fecha: 2026-05-25
+Rama: `feature/admin-handler-operations-releases`
+
+Se extrajo `operations/releases` `GET/POST` desde `api/admin.js` a `api/_admin/handlers/operations.js`. La extraccion mantiene el contrato `{ status, payload }` y usa dependencias inyectadas desde `api/admin.js`.
+
+Dependencias inyectadas:
+
+- `safeFetch`;
+- `supabaseFetch`;
+- `readJsonBody`;
+- `clampLimit`.
+
+Dependencias puras importadas por el handler:
+
+- `normalizeReleaseArtifactInput`;
+- `normalizeReleaseTarget`;
+- `releaseConnectors`.
+
+Por que fue segura:
+
+- `GET` sigue leyendo `release_artifacts` con los mismos query params.
+- `POST` sigue insertando localmente en `release_artifacts`.
+- No se movio auth, CORS, Supabase gate ni catch comun.
+- No se toco `operations/chrome`.
+- No se importo ningun cliente Chrome Web Store en el handler extraido.
+- Tests existentes cubren payloads, body valido/invalido, JSON mal formado, errores saneados, no secretos, no wildcards y Chrome legacy.
+
+Riesgos reducidos:
+
+- El segundo write interno queda fuera del monolito.
+- `api/admin.js` pierde otra responsabilidad sin ampliar superficie externa.
+- El patron de factory queda validado para un handler con dependencias compartidas.
+
+Riesgos pendientes:
+
+- `operations/chrome` sigue en legacy critico.
+- Analytics, premium, summary y SEO read-only siguen dentro de `api/admin.js`.
+- No conviene pasar a writes externos hasta aislar mas contratos o crear fases especificas.
+
+Verificacion de esta evolucion:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/router.js`: OK con Node bundled.
+- `node --check api/_admin/handlers/kpis.js`: OK con Node bundled.
+- `node --check api/_admin/handlers/operations.js`: OK con Node bundled.
 - `node --check assets/admin.js`: OK con Node bundled.
 - `node --check api/sitemap.js`: OK con Node bundled.
 - `node --check api/seo-page.js`: OK con Node bundled.

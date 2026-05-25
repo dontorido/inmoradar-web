@@ -101,6 +101,31 @@ Recomendacion:
 - Antes de seguir con writes, consolidar los contratos del router y decidir si extraer `operations/releases` o analytics read-only.
 - No pasar todavia a SEO write, Chrome, Meta, LinkedIn, billing, social-video ni Viraliza.
 
+## Resultado de extraccion operations/releases
+
+Fecha: 2026-05-25
+Rama: `feature/admin-handler-operations-releases`
+
+Decision:
+
+- Se extrajo `operations/releases` `GET/POST` a `api/_admin/handlers/operations.js`.
+- No se migraron nuevos writes.
+- No se toco `operations/chrome`.
+- No se importo ni llamo Chrome Web Store.
+
+Dependencias inyectadas:
+
+- `safeFetch`;
+- `supabaseFetch`;
+- `readJsonBody`;
+- `clampLimit`.
+
+Recomendacion:
+
+- No seguir con writes de mayor riesgo todavia.
+- Siguiente paso prudente: extraer analytics read-only o premium read-only si se busca reducir `api/admin.js` sin tocar efectos externos.
+- Mantener SEO write, Chrome, Meta, LinkedIn, billing, social-video y Viraliza bloqueados.
+
 ## 2. Criterios de inclusion
 
 Un endpoint write puede entrar en el primer lote solo si cumple todo:
