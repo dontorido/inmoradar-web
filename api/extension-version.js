@@ -1,4 +1,8 @@
 const { handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
+const {
+  isReliableInstallActivationEvent,
+  scheduleReliableInstallActivationNotification
+} = require("./_extensionInstallNotification");
 const { logRequestMetric } = require("../lib/observability/request-metrics");
 const { extensionUsageEventFromInput } = require("../lib/extension-usage/metrics");
 const { checkDurableRateLimit } = require("../lib/security/durable-rate-limit");
@@ -49,10 +53,19 @@ async function handleExtensionUsage(req, res) {
   try {
     const body = await readJsonBody(req);
     const event = extensionUsageEventFromInput(body, req.headers || {});
+    const eventCreatedAt = new Date().toISOString();
     await supabaseFetch("extension_usage_events", {
       method: "POST",
       body: JSON.stringify(event)
     });
+    if (isReliableInstallActivationEvent(event, body)) {
+      scheduleReliableInstallActivationNotification({
+        event,
+        input: body,
+        eventCreatedAt,
+        supabaseFetch
+      });
+    }
     return json(res, 200, { ok: true, accepted: true });
   } catch (error) {
     const invalidPayload = error.message === "payload_too_large" ? "payload_too_large" : "invalid_json";

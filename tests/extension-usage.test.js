@@ -4,6 +4,13 @@ const test = require("node:test");
 const adminHandler = require("../api/admin");
 const extensionVersionHandler = require("../api/extension-version");
 const {
+  buildInstallNotificationPayload,
+  hasPriorExtensionUsageEvent,
+  isReliableInstallActivationEvent,
+  renderInstallNotificationEmail,
+  summarizeInstallMetrics
+} = require("../api/_extensionInstallNotification");
+const {
   browserFromUserAgent,
   extensionUsageEventFromInput,
   summarizeExtensionUsage
@@ -46,6 +53,20 @@ function createJsonResponse() {
   };
 }
 
+async function invokeExtensionUsage(body, headers = {}) {
+  const { res, payload } = createJsonResponse();
+  await extensionVersionHandler(
+    {
+      method: "POST",
+      url: "/api/extension-version?resource=usage",
+      headers: { host: "inmoradar.app", ...headers },
+      body: JSON.stringify(body)
+    },
+    res
+  );
+  return { res, payload: payload() };
+}
+
 test("extension usage normalizes browser, country and hashes identifiers", () => {
   const event = extensionUsageEventFromInput(
     {
@@ -72,6 +93,91 @@ test("extension usage normalizes browser, country and hashes identifiers", () =>
   assert.equal(event.active_seconds, 95);
   assert.equal(event.anonymous_id_hash.length, 48);
   assert.notEqual(event.anonymous_id_hash, "install-123");
+});
+
+test("extension install notification solo acepta eventos fiables y no updates/clicks", () => {
+  const anonymous = { anonymous_id_hash: "hash-1" };
+
+  assert.equal(
+    isReliableInstallActivationEvent(
+      { ...anonymous, event_name: "extension_installed" },
+      { metadata: { reason: "install", has_previous_version: false } }
+    ),
+    true
+  );
+  assert.equal(
+    isReliableInstallActivationEvent(
+      { ...anonymous, event_name: "extension_installed" },
+      { metadata: { reason: "update", has_previous_version: true } }
+    ),
+    false
+  );
+  assert.equal(isReliableInstallActivationEvent({ ...anonymous, event_name: "install_click" }), false);
+  assert.equal(isReliableInstallActivationEvent({ ...anonymous, event_name: "session_started" }), false);
+  assert.equal(isReliableInstallActivationEvent({ ...anonymous, event_name: "analysis_completed" }), true);
+});
+
+test("extension install notification deduplica ignorando clicks previos", async () => {
+  const firstReliable = await hasPriorExtensionUsageEvent({
+    anonymousIdHash: "hash-1",
+    beforeCreatedAt: "2026-05-25T10:00:00.000Z",
+    supabaseFetch: async (path) => {
+      assert.match(path, /created_at=lt\.2026-05-25T10%3A00%3A00\.000Z/);
+      return [{ event_name: "install_click" }, { event_name: "seo_cta_click" }];
+    }
+  });
+  const alreadySeen = await hasPriorExtensionUsageEvent({
+    anonymousIdHash: "hash-1",
+    supabaseFetch: async () => [{ event_name: "install_click" }, { event_name: "extension_opened" }]
+  });
+
+  assert.equal(firstReliable, false);
+  assert.equal(alreadySeen, true);
+});
+
+test("extension install notification email no expone IP ni user-agent completo", () => {
+  const metrics = summarizeInstallMetrics(
+    [
+      {
+        anonymous_id_hash: "u1",
+        event_name: "install_click",
+        metadata: { install_source: "seo" },
+        created_at: "2026-05-25T08:00:00.000Z"
+      },
+      {
+        anonymous_id_hash: "u1",
+        event_name: "extension_opened",
+        metadata: { install_source: "chrome_web_store" },
+        created_at: "2026-05-25T08:02:00.000Z"
+      }
+    ],
+    new Date("2026-05-25T12:00:00.000Z")
+  );
+  const payload = buildInstallNotificationPayload({
+    event: {
+      event_name: "extension_opened",
+      anonymous_id_hash: "u1",
+      browser_version: "124.0.0.0",
+      metadata: {}
+    },
+    input: {
+      metadata: {
+        install_source: "chrome_web_store",
+        campaign: "launch"
+      }
+    },
+    eventCreatedAt: "2026-05-25T08:02:00.000Z",
+    metrics,
+    env: { PUBLIC_SITE_URL: "https://www.inmoradar.app" }
+  });
+  const email = renderInstallNotificationEmail(payload);
+
+  assert.equal(metrics.totalInstalls, 1);
+  assert.match(email.html, /Chrome Web Store/);
+  assert.match(email.text, /Privacidad/);
+  assert.doesNotMatch(email.text, /203\.0\.113\.10/);
+  assert.doesNotMatch(email.text, /Mozilla\/5\.0/);
+  assert.doesNotMatch(email.text, /cliente@example\.com/);
 });
 
 test("extension usage parses common browser user agents", () => {
@@ -269,6 +375,113 @@ test("extension usage endpoint rejects oversized JSON before storage", async () 
         assert.equal(called, false);
       } finally {
         global.fetch = previousFetch;
+      }
+    }
+  );
+});
+
+test("extension usage endpoint agenda email sin bloquear y deduplica usuarios vistos", async () => {
+  const previousFetch = global.fetch;
+  const previousWaitUntil = globalThis.waitUntil;
+  const waitUntilTasks = [];
+  const requests = [];
+  let releaseEmail;
+  const emailResponse = new Promise((resolve) => {
+    releaseEmail = () =>
+      resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ id: "email-test" }),
+        text: async () => ""
+      });
+  });
+
+  await withEnv(
+    {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      EXTENSION_USAGE_HASH_SECRET: "hash-test",
+      EXTENSION_USAGE_RATE_LIMIT_MAX: "10000",
+      RESEND_API_KEY: "resend-test",
+      INSTALL_NOTIFICATION_EMAIL_TO: "sergio@example.com",
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined
+    },
+    async () => {
+      globalThis.waitUntil = (promise) => waitUntilTasks.push(promise);
+      global.fetch = async (url, options = {}) => {
+        const request = { url: String(url), options };
+        requests.push(request);
+        if (request.url.includes("api.resend.com")) return emailResponse;
+        if (request.url.includes("extension_usage_events?")) {
+          const params = new URL(request.url).searchParams;
+          if (params.get("select") === "event_name") {
+            return { ok: true, status: 200, text: async () => JSON.stringify([{ event_name: "install_click" }]) };
+          }
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify([
+                {
+                  anonymous_id_hash: "u1",
+                  event_name: "extension_opened",
+                  metadata: { install_source: "chrome_web_store" },
+                  created_at: "2026-05-25T08:00:00.000Z"
+                }
+              ])
+          };
+        }
+        return { ok: true, status: 201, text: async () => "" };
+      };
+
+      try {
+        const install = await invokeExtensionUsage(
+          {
+            event_name: "extension_installed",
+            anonymous_install_id: "install-email-1",
+            session_id: "session-email-1",
+            extension_version: "2.0.5",
+            metadata: { reason: "install", has_previous_version: false, install_source: "chrome_web_store" }
+          },
+          { "x-forwarded-for": "203.0.113.10", "user-agent": "Mozilla/5.0 Chrome/124.0" }
+        );
+
+        assert.equal(install.res.statusCode, 200);
+        assert.equal(install.payload.accepted, true);
+        assert.equal(waitUntilTasks.length, 1);
+        assert.equal(requests.some((request) => request.url.includes("extension_usage_events")), true);
+
+        releaseEmail();
+        const emailResult = await waitUntilTasks[0];
+        assert.equal(emailResult.ok, true);
+        const emailRequest = requests.find((request) => request.url.includes("api.resend.com"));
+        assert.ok(emailRequest);
+        const emailPayload = JSON.parse(emailRequest.options.body);
+        assert.deepEqual(emailPayload.to, ["sergio@example.com"]);
+        assert.doesNotMatch(emailPayload.text, /203\.0\.113\.10/);
+        assert.doesNotMatch(emailPayload.text, /Mozilla\/5\.0/);
+
+        waitUntilTasks.length = 0;
+        requests.length = 0;
+        const update = await invokeExtensionUsage(
+          {
+            event_name: "extension_installed",
+            anonymous_install_id: "install-email-2",
+            session_id: "session-email-2",
+            extension_version: "2.0.6",
+            metadata: { reason: "update", has_previous_version: true }
+          },
+          { "x-forwarded-for": "203.0.113.11", "user-agent": "Mozilla/5.0 Chrome/124.0" }
+        );
+
+        assert.equal(update.res.statusCode, 200);
+        assert.equal(waitUntilTasks.length, 0);
+        assert.equal(requests.some((request) => request.url.includes("api.resend.com")), false);
+      } finally {
+        global.fetch = previousFetch;
+        if (previousWaitUntil === undefined) delete globalThis.waitUntil;
+        else globalThis.waitUntil = previousWaitUntil;
       }
     }
   );
