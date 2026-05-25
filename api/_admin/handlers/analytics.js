@@ -96,6 +96,71 @@ function analyticsGroup(rows, key, limit = 8) {
     .slice(0, limit);
 }
 
+const INSTALL_CTA_EVENTS = new Set(["install_click", "seo_cta_click", "guide_cta_click", "article_cta_click"]);
+
+function cleanSourceToken(value, fallback = "unknown") {
+  const token = String(value || "").trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9._:-]+/g, "");
+  return token || fallback;
+}
+
+function analyticsSourceIdentity(row = {}) {
+  const utm = row.utm && typeof row.utm === "object" && !Array.isArray(row.utm) ? row.utm : {};
+  const rawSource = utm.source || utm.utm_source || row.source || (row.referrer ? "referral" : "direct");
+  const source = cleanSourceToken(rawSource, "direct");
+  const mediumFallback = source === "direct" ? "none" : source === "referral" ? "referral" : "unknown";
+  const medium = cleanSourceToken(utm.medium || utm.utm_medium, mediumFallback);
+  const campaign = cleanSourceToken(utm.campaign || utm.utm_campaign, "");
+  return { source, medium, campaign };
+}
+
+function analyticsSourceGroups(rows, limit = 12) {
+  const groups = new Map();
+  for (const row of rows || []) {
+    const identity = analyticsSourceIdentity(row);
+    const key = `${identity.source}|${identity.medium}|${identity.campaign}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        ...identity,
+        page_views: 0,
+        events: 0,
+        cta_installation: 0,
+        chrome_store_clicks: 0,
+        sessions: new Set()
+      });
+    }
+
+    const item = groups.get(key);
+    item.events += 1;
+    if (row.anonymous_session_id) item.sessions.add(String(row.anonymous_session_id));
+    if (row.event_name === "page_view") item.page_views += 1;
+    if (INSTALL_CTA_EVENTS.has(row.event_name)) item.cta_installation += 1;
+    if (row.event_name === "chrome_store_click") item.chrome_store_clicks += 1;
+  }
+
+  return Array.from(groups.values())
+    .map((item) => {
+      const sessions = item.sessions.size;
+      return {
+        source: item.source,
+        medium: item.medium,
+        campaign: item.campaign,
+        users: sessions,
+        new_users: 0,
+        sessions,
+        cta_installation: item.cta_installation,
+        chrome_store_clicks: item.chrome_store_clicks,
+        activations: null,
+        analyses: null,
+        page_views: item.page_views,
+        events: item.events,
+        visit_to_cta_rate: item.page_views ? Number(((item.cta_installation / item.page_views) * 100).toFixed(1)) : 0,
+        cta_to_analysis_rate: null
+      };
+    })
+    .sort((a, b) => b.users - a.users || b.cta_installation - a.cta_installation || b.chrome_store_clicks - a.chrome_store_clicks || b.page_views - a.page_views || a.source.localeCompare(b.source))
+    .slice(0, limit);
+}
+
 function createAnalyticsHandlers({ clampLimit, hasSupabaseConfig, supabaseFetch } = {}) {
   if (typeof clampLimit !== "function") throw new Error("admin_analytics_clamp_limit_required");
   if (typeof hasSupabaseConfig !== "function") throw new Error("admin_analytics_supabase_config_required");
@@ -193,6 +258,7 @@ function createAnalyticsHandlers({ clampLimit, hasSupabaseConfig, supabaseFetch 
         top_cities: analyticsGroup(events, "city"),
         top_templates: analyticsGroup(events, "template_type"),
         top_topics: analyticsGroup(events, "topic"),
+        top_sources: analyticsSourceGroups(events),
         high_interaction_low_install: learning.high_interaction_low_install,
         calculator_install_pages: learning.calculator_install_pages,
         calculator_low_conversion: learning.calculator_low_conversion,
@@ -258,5 +324,6 @@ function createAnalyticsHandlers({ clampLimit, hasSupabaseConfig, supabaseFetch 
 }
 
 module.exports = {
+  analyticsSourceGroups,
   createAnalyticsHandlers
 };

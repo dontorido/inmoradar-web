@@ -3458,6 +3458,104 @@
   gap: 18px;
 }
 
+[data-admin-view="ventas"] .admin-dashboard-hero { order: 0; }
+[data-admin-view="ventas"] .admin-dashboard-kpis { order: 1; }
+[data-admin-view="ventas"] .admin-extension-panel { order: 2; }
+[data-admin-view="ventas"] .admin-dashboard-acquisition-panel { order: 3; }
+[data-admin-view="ventas"] .admin-dashboard-landings-panel { order: 4; }
+[data-admin-view="ventas"] .admin-ops-panel { order: 5; }
+[data-admin-view="ventas"] .admin-revenue-panel { order: 6; }
+[data-admin-view="ventas"] > .admin-panel:not(.admin-dashboard-hero):not(.admin-extension-panel):not(.admin-dashboard-acquisition-panel):not(.admin-dashboard-landings-panel):not(.admin-ops-panel):not(.admin-revenue-panel) {
+  order: 7;
+}
+
+.admin-dashboard-hero .admin-panel-head {
+  align-items: end;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.admin-dashboard-toolbar {
+  justify-content: flex-end;
+}
+
+.admin-dashboard-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-dashboard-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--admin-line);
+  border-radius: var(--admin-radius);
+  background: #ffffff;
+  box-shadow: 0 22px 64px -60px rgba(10, 20, 15, .72);
+}
+
+.admin-dashboard-kpis .admin-stat:nth-child(-n+4) {
+  border-top: 0;
+}
+
+.admin-dashboard-table {
+  overflow-x: auto;
+}
+
+.admin-dashboard-table .admin-table {
+  min-width: 920px;
+}
+
+.admin-dashboard-source-table {
+  min-width: 1180px;
+}
+
+.admin-dashboard-landing-table {
+  min-width: 760px;
+}
+
+@media (max-width: 960px) {
+  .admin-dashboard-hero .admin-panel-head {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-dashboard-toolbar {
+    justify-content: flex-start;
+  }
+
+  .admin-dashboard-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-dashboard-kpis .admin-stat:nth-child(-n+4) {
+    border-top: 1px solid var(--admin-line);
+  }
+
+  .admin-dashboard-kpis .admin-stat:nth-child(-n+2) {
+    border-top: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .admin-dashboard-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-dashboard-kpis .admin-stat {
+    border-right: 0;
+  }
+
+  .admin-dashboard-kpis .admin-stat:nth-child(-n+2) {
+    border-top: 1px solid var(--admin-line);
+  }
+
+  .admin-dashboard-kpis .admin-stat:first-child {
+    border-top: 0;
+  }
+}
+
 .admin-filter.admin-filter-wide input,
 .admin-filter.admin-filter-wide select {
   width: 100%;

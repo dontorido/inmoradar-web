@@ -152,6 +152,13 @@ const VIDEO_TOPIC_PROPERTY_DATA = Object.freeze({
 
 const INITIAL_ANALYTICS_RANGE = defaultAnalyticsDateRange();
 const INITIAL_EXTENSION_USAGE_RANGE = defaultExtensionUsageRange();
+const INITIAL_DASHBOARD_RANGE = INITIAL_EXTENSION_USAGE_RANGE.from && INITIAL_EXTENSION_USAGE_RANGE.to
+  ? {
+      preset: ["7d", "30d"].includes(INITIAL_EXTENSION_USAGE_RANGE.preset) ? INITIAL_EXTENSION_USAGE_RANGE.preset : "custom",
+      from: INITIAL_EXTENSION_USAGE_RANGE.from,
+      to: INITIAL_EXTENSION_USAGE_RANGE.to
+    }
+  : extensionPresetDateRange("30d");
 
 const state = {
   token: sessionStorage.getItem(TOKEN_KEY) || "",
@@ -216,8 +223,8 @@ const state = {
   },
   analytics: {
     days: ANALYTICS_DEFAULT_DAYS,
-    fromDate: INITIAL_ANALYTICS_RANGE.from,
-    toDate: INITIAL_ANALYTICS_RANGE.to,
+    fromDate: INITIAL_DASHBOARD_RANGE.from || INITIAL_ANALYTICS_RANGE.from,
+    toDate: INITIAL_DASHBOARD_RANGE.to || INITIAL_ANALYTICS_RANGE.to,
     summary: null,
     pages: [],
     learning: null,
@@ -228,6 +235,13 @@ const state = {
     fromDate: INITIAL_EXTENSION_USAGE_RANGE.from,
     toDate: INITIAL_EXTENSION_USAGE_RANGE.to,
     timezone: EXTENSION_USAGE_TIMEZONE
+  },
+  dashboard: {
+    preset: INITIAL_DASHBOARD_RANGE.preset || "30d",
+    fromDate: INITIAL_DASHBOARD_RANGE.from,
+    toDate: INITIAL_DASHBOARD_RANGE.to,
+    extensionUsage: null,
+    analytics: null
   },
   linkedin: {
     connection: null,
@@ -271,6 +285,14 @@ const els = {
   stats: document.querySelector("[data-admin-stats]"),
   revenueSummary: document.querySelector("[data-revenue-summary]"),
   revenueChart: document.querySelector("[data-revenue-chart]"),
+  dashboardKpis: document.querySelector("[data-dashboard-kpis]"),
+  dashboardFrom: document.querySelector("[data-dashboard-from]"),
+  dashboardTo: document.querySelector("[data-dashboard-to]"),
+  dashboardApply: document.querySelector("[data-dashboard-apply]"),
+  dashboardPresetButtons: document.querySelectorAll("[data-dashboard-preset]"),
+  dashboardRangeFeedback: document.querySelector("[data-dashboard-range-feedback]"),
+  dashboardAcquisition: document.querySelector("[data-dashboard-acquisition]"),
+  dashboardLandings: document.querySelector("[data-dashboard-landings]"),
   extensionStats: document.querySelector("[data-extension-stats]"),
   extensionBreakdown: document.querySelector("[data-extension-breakdown]"),
   extensionTimeseries: document.querySelector("[data-extension-timeseries]"),
@@ -671,6 +693,63 @@ function setExtensionRangeFeedback(message = "", tone = "neutral") {
   els.extensionRangeFeedback.hidden = !message;
 }
 
+function dashboardPresetDateRange(preset = "30d") {
+  const normalized = String(preset || "30d").toLowerCase();
+  const to = new Date();
+  if (normalized === "today") {
+    return { preset: "today", from: toLocalDateValue(to), to: toLocalDateValue(to) };
+  }
+  if (normalized === "7d") {
+    return { preset: "7d", from: toLocalDateValue(addLocalDays(to, -6)), to: toLocalDateValue(to) };
+  }
+  return { preset: "30d", from: toLocalDateValue(addLocalDays(to, -29)), to: toLocalDateValue(to) };
+}
+
+function syncDashboardInputs() {
+  if (els.dashboardFrom) els.dashboardFrom.value = state.dashboard.fromDate || "";
+  if (els.dashboardTo) els.dashboardTo.value = state.dashboard.toDate || "";
+  els.dashboardPresetButtons?.forEach((button) => {
+    const active = button.dataset.dashboardPreset === state.dashboard.preset;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
+
+function setDashboardRangeFeedback(message = "", tone = "neutral") {
+  if (!els.dashboardRangeFeedback) return;
+  els.dashboardRangeFeedback.textContent = message;
+  els.dashboardRangeFeedback.dataset.tone = tone;
+  els.dashboardRangeFeedback.hidden = !message;
+}
+
+function applyDashboardRange(range, options = {}) {
+  const normalized = normalizeAnalyticsDateRange(range?.from || state.dashboard.fromDate, range?.to || state.dashboard.toDate);
+  const preset = range?.preset || "custom";
+  state.dashboard.preset = preset;
+  state.dashboard.fromDate = normalized.from;
+  state.dashboard.toDate = normalized.to;
+  state.analytics.fromDate = normalized.from;
+  state.analytics.toDate = normalized.to;
+  state.extensionUsage.preset = ["7d", "30d"].includes(preset) ? preset : "custom";
+  state.extensionUsage.fromDate = normalized.from;
+  state.extensionUsage.toDate = normalized.to;
+  syncDashboardInputs();
+  syncAnalyticsDateInputs();
+  syncExtensionUsageInputs();
+  if (options.feedback !== false) {
+    setDashboardRangeFeedback(
+      `Rango: ${formatDateOnly(normalized.from)} - ${formatDateOnly(normalized.to)} · ${EXTENSION_USAGE_TIMEZONE}.`,
+      "neutral"
+    );
+  }
+  return { preset, ...normalized };
+}
+
+function readDashboardDateInputs() {
+  const range = normalizeAnalyticsDateRange(els.dashboardFrom?.value || state.dashboard.fromDate, els.dashboardTo?.value || state.dashboard.toDate);
+  return applyDashboardRange({ preset: "custom", ...range });
+}
+
 function syncExtensionUsageQueryString() {
   const params = new URLSearchParams(window.location.search || "");
   params.set("extension_preset", state.extensionUsage.preset || EXTENSION_USAGE_DEFAULT_PRESET);
@@ -807,7 +886,7 @@ function adminAlertSourceLabel(alert) {
     nightly_maintenance: "Mantenimiento nocturno",
     nightly_audit: "Auditoria nocturna",
     seo: "SEO",
-    sales: "Ventas",
+    sales: "Dashboard",
     system: "Sistema",
     viraliza: "Viraliza",
     waitlist: "Waitlist"
@@ -1335,6 +1414,7 @@ function renderExtensionTimeseries(rows = []) {
 
 function renderExtensionUsage(payload) {
   if (!els.extensionStats || !els.extensionBreakdown) return;
+  state.dashboard.extensionUsage = payload || {};
   const kpis = payload?.kpis || {};
   const breakdowns = payload?.breakdowns || {};
   if (payload?.result_limited) {
@@ -1349,6 +1429,7 @@ function renderExtensionUsage(payload) {
     ].join("");
     els.extensionBreakdown.innerHTML = `<p class="admin-empty-state compact">Falta la tabla <strong>extension_usage_events</strong>. Cuando exista y la extensión envíe eventos, aquí aparecerán navegador, país, versión y eventos.</p>`;
     renderExtensionTimeseries([]);
+    renderDashboardOverview();
     return;
   }
 
@@ -1432,6 +1513,160 @@ function renderExtensionUsage(payload) {
     renderUsageList("Evento", breakdowns.events || payload.by_event_name)
   ].join("");
   renderExtensionTimeseries(payload.timeseries || []);
+  renderDashboardOverview();
+}
+
+function dashboardCount(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function dashboardCell(value, fallback = "0") {
+  if (value === null || value === undefined || value === "") return fallback;
+  return escapeHtml(value);
+}
+
+function dashboardRate(value) {
+  return value === null || value === undefined || value === "" ? "-" : formatRate(value);
+}
+
+function renderDashboardKpis() {
+  if (!els.dashboardKpis) return;
+  const extension = state.dashboard.extensionUsage || {};
+  const extensionKpis = extension.kpis || {};
+  const analytics = state.dashboard.analytics || state.analytics.learning || {};
+  const summary = analytics.summary || state.analytics.summary || {};
+  const installCtas = dashboardCount(summary.install_clicks);
+  const chromeStore = dashboardCount(summary.chrome_store_clicks);
+
+  els.dashboardKpis.innerHTML = [
+    stat("Usuarios", dashboardCount(extensionKpis.unique_users ?? extension.unique_users_30d), {
+      id: "dashboard-users",
+      hint: "Extension"
+    }),
+    stat("Nuevos usuarios", dashboardCount(extensionKpis.new_users), {
+      id: "dashboard-new-users",
+      hint: "Primer evento en rango"
+    }),
+    stat("Sesiones", dashboardCount(extensionKpis.sessions ?? extension.sessions_30d), {
+      id: "dashboard-sessions",
+      hint: `${dashboardCount(extensionKpis.sessions_per_user)} por usuario`
+    }),
+    stat("Analisis", dashboardCount(extensionKpis.completed_analyses), {
+      id: "dashboard-analyses",
+      hint: "analysis_completed"
+    }),
+    stat("CTA instalacion", installCtas, {
+      id: "dashboard-install-cta",
+      hint: "Intencion, no instalacion"
+    }),
+    stat("Clic Chrome Store", chromeStore, {
+      id: "dashboard-store-clicks",
+      hint: "Salida hacia store"
+    }),
+    stat("Activacion extension", dashboardCount(extensionKpis.activation_users), {
+      id: "dashboard-extension-activation",
+      hint: "Usuarios con analisis"
+    }),
+    stat("Media sesion", formatDurationOrEmpty(extensionKpis.avg_session_seconds, "-"), {
+      id: "dashboard-avg-session",
+      hint: EXTENSION_USAGE_TIMEZONE
+    })
+  ].join("");
+}
+
+function renderDashboardAcquisition() {
+  if (!els.dashboardAcquisition) return;
+  const analytics = state.dashboard.analytics || state.analytics.learning || {};
+  const rows = Array.isArray(analytics.top_sources) ? analytics.top_sources : [];
+  if (!rows.length) {
+    els.dashboardAcquisition.innerHTML = `<p class="admin-empty-state compact">Sin datos de adquisicion por fuente para este rango.</p>`;
+    return;
+  }
+
+  els.dashboardAcquisition.innerHTML = `
+    <table class="admin-table admin-dashboard-source-table">
+      <thead>
+        <tr>
+          <th>Fuente</th>
+          <th>Medio</th>
+          <th>Campana</th>
+          <th>Usuarios</th>
+          <th>Nuevos</th>
+          <th>Sesiones</th>
+          <th>CTA instalacion</th>
+          <th>Clic Chrome Store</th>
+          <th>Activaciones</th>
+          <th>Analisis</th>
+          <th>Conv. visita &rarr; CTA</th>
+          <th>Conv. CTA &rarr; analisis</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => `
+          <tr>
+            <td><strong>${dashboardCell(row.source, "-")}</strong></td>
+            <td>${dashboardCell(row.medium, "-")}</td>
+            <td>${dashboardCell(row.campaign, "-")}</td>
+            <td>${dashboardCell(row.users)}</td>
+            <td>${dashboardCell(row.new_users)}</td>
+            <td>${dashboardCell(row.sessions)}</td>
+            <td>${dashboardCell(row.cta_installation)}</td>
+            <td>${dashboardCell(row.chrome_store_clicks)}</td>
+            <td>${dashboardCell(row.activations, "-")}</td>
+            <td>${dashboardCell(row.analyses, "-")}</td>
+            <td>${escapeHtml(dashboardRate(row.visit_to_cta_rate))}</td>
+            <td>${escapeHtml(dashboardRate(row.cta_to_analysis_rate))}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderDashboardLandings() {
+  if (!els.dashboardLandings) return;
+  const rows = (state.analytics.pages || []).slice(0, 10);
+  if (!rows.length) {
+    els.dashboardLandings.innerHTML = `<p class="admin-empty-state compact">Sin landings con eventos para este rango.</p>`;
+    return;
+  }
+
+  els.dashboardLandings.innerHTML = `
+    <table class="admin-table admin-dashboard-landing-table">
+      <thead>
+        <tr>
+          <th>Landing</th>
+          <th>Usuarios</th>
+          <th>CTA instalacion</th>
+          <th>Clic Store</th>
+          <th>Analisis</th>
+          <th>Conv.</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => {
+          const label = row.page || row.page_path || row.slug || "unknown";
+          return `
+            <tr>
+              <td><strong>${escapeHtml(label)}</strong></td>
+              <td>${dashboardCell(row.visits || row.sessions || 0)}</td>
+              <td>${dashboardCell(row.install_intent || row.install_clicks || 0)}</td>
+              <td>${dashboardCell(row.chrome_store_clicks || row.chrome_store_clicks_count || 0)}</td>
+              <td>-</td>
+              <td>${escapeHtml(formatRate(row.install_rate))}</td>
+            </tr>
+          `;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderDashboardOverview() {
+  renderDashboardKpis();
+  renderDashboardAcquisition();
+  renderDashboardLandings();
 }
 
 function formatRate(value) {
@@ -1657,6 +1892,7 @@ function renderAnalyticsPerformance(payload = {}) {
   state.analytics.summary = summary;
   state.analytics.pages = pages;
   state.analytics.learning = payload;
+  state.dashboard.analytics = payload;
   state.analytics.warning = payload.warning || payload.pages_warning || payload.learning_warning || "";
   const normalizedRange = normalizeAnalyticsDateRange(payload.window_from_date || state.analytics.fromDate, payload.window_to_date || state.analytics.toDate);
   state.analytics.fromDate = normalizedRange.from;
@@ -1664,6 +1900,7 @@ function renderAnalyticsPerformance(payload = {}) {
   syncAnalyticsDateInputs();
 
   targets.forEach((target) => renderAnalyticsPanel(target, payload));
+  renderDashboardOverview();
 }
 function renderParkingStats(payload) {
   if (!els.parkingStats) return;
@@ -5413,6 +5650,15 @@ async function loadAnalytics() {
   });
 }
 
+async function loadDashboard() {
+  applyDashboardRange({
+    preset: state.dashboard.preset || "custom",
+    from: state.dashboard.fromDate,
+    to: state.dashboard.toDate
+  });
+  await Promise.all([loadExtensionUsage(), loadAnalytics()]);
+}
+
 async function loadSeo() {
   const params = new URLSearchParams({
     limit: String(state.seo.pageSize || 10),
@@ -5758,6 +6004,34 @@ els.premiumFilter.addEventListener("submit", async (event) => {
   state.premium.provider = String(form.get("provider") || "").trim();
   state.premium.eventName = String(form.get("event_name") || "").trim();
   await loadPremium();
+});
+
+applyDashboardRange({
+  preset: state.dashboard.preset,
+  from: state.dashboard.fromDate,
+  to: state.dashboard.toDate
+});
+if (els.dashboardApply) {
+  els.dashboardApply.addEventListener("click", () => {
+    readDashboardDateInputs();
+    loadDashboard().catch((error) => showStatus(error.message, "bad"));
+  });
+}
+els.dashboardPresetButtons?.forEach((button) => {
+  button.addEventListener("click", () => {
+    const range = dashboardPresetDateRange(button.dataset.dashboardPreset);
+    applyDashboardRange(range);
+    loadDashboard().catch((error) => showStatus(error.message, "bad"));
+  });
+});
+[els.dashboardFrom, els.dashboardTo].filter(Boolean).forEach((input) => {
+  input.addEventListener("change", () => {
+    state.dashboard.preset = "custom";
+    els.dashboardPresetButtons?.forEach((button) => {
+      button.classList.remove("is-active");
+      button.setAttribute("aria-pressed", "false");
+    });
+  });
 });
 
 syncExtensionUsageInputs();
