@@ -15,6 +15,60 @@ function createSeoHandlers({
   if (!seoDailyTargets || typeof seoDailyTargets !== "object") throw new Error("admin_seo_daily_targets_required");
   if (typeof supabaseFetch !== "function") throw new Error("admin_seo_supabase_fetch_required");
 
+  function parseJsonMaybe(value, fallback = {}) {
+    if (!value) return fallback;
+    if (typeof value === "object") return value;
+    try {
+      return JSON.parse(value);
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function arrayOrEmpty(value) {
+    return Array.isArray(value) ? value.filter(Boolean) : [];
+  }
+
+  function sitemapDecision(row) {
+    const status = String(row.status || "").toLowerCase();
+    const indexStatus = String(row.index_status || "").toLowerCase();
+    const score = Number(row.quality_score || 0);
+    if (status !== "published") return { status: "excluded", reason: `status_${status || "unknown"}` };
+    if (indexStatus !== "index") return { status: "excluded", reason: `index_status_${indexStatus || "unknown"}` };
+    if (score < 75) return { status: "excluded", reason: "quality_score_below_75" };
+    return { status: "included", reason: "published_index_quality_ok" };
+  }
+
+  function qualityDetailsForLanding(row = {}) {
+    const sourceData = parseJsonMaybe(row.source_data_json);
+    const quality = parseJsonMaybe(sourceData.quality);
+    const score = Number(row.quality_score || quality.score || 0);
+    const sitemap = sitemapDecision(row);
+    const qualityReasons = arrayOrEmpty(quality.rejection_reasons);
+    const reasons = sitemap.status === "excluded" ? [...new Set([sitemap.reason, ...qualityReasons])] : qualityReasons;
+    return {
+      quality_signals: arrayOrEmpty(quality.signals),
+      quality_penalties: arrayOrEmpty(quality.penalties),
+      quality_warnings: arrayOrEmpty(quality.warnings),
+      quality_reasons: reasons,
+      technical_indexability_status:
+        quality.technical_indexability_status ||
+        (sitemap.status === "included" ? "indexable" : sitemap.reason),
+      editorial_quality_status:
+        quality.editorial_quality_status || (score >= 75 ? "pass" : score >= 60 ? "review" : "fail"),
+      sitemap_status: sitemap.status,
+      sitemap_reason: sitemap.reason
+    };
+  }
+
+  function publicLandingRow(row = {}) {
+    const { source_data_json: _sourceDataJson, ...publicRow } = row;
+    return {
+      ...publicRow,
+      ...qualityDetailsForLanding(row)
+    };
+  }
+
   function buildSeoLandingsSummary(rows = [], opportunities = [], activeStatus = "all") {
     const landings = Array.isArray(rows) ? rows : [];
     const statusCounts = landings.reduce((acc, row) => {
@@ -95,7 +149,7 @@ function createSeoHandlers({
     ]);
     const allRows = Array.isArray(rows) ? rows : [];
     const hasNextPage = allRows.length > pageSize;
-    const landings = allRows.slice(0, pageSize);
+    const landings = allRows.slice(0, pageSize).map(publicLandingRow);
     const summary = buildSeoLandingsSummary(summaryRows, opportunityRows, status);
     return {
       status: 200,

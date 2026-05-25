@@ -432,7 +432,12 @@ function resultSummary(record, sourceData, quality, saved) {
     word_count: record.word_count,
     data_available: sourceData.hasRealData,
     sources: sourceData.sources,
+    signals: quality.signals,
     penalties: quality.penalties,
+    warnings: quality.warnings || [],
+    rejection_reasons: quality.rejection_reasons || [],
+    technical_indexability_status: quality.technical_indexability_status || "ok",
+    editorial_quality_status: quality.editorial_quality_status || "pass",
     saved: Boolean(saved)
   };
 }

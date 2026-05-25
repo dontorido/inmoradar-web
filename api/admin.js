@@ -109,7 +109,7 @@ const {
 } = require("../lib/meta/services");
 const { logRequestMetric } = require("../lib/observability/request-metrics");
 const LANDING_SELECT =
-  "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at";
+  "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at,source_data_json";
 
 function requestHeader(req, name) {
   const headers = req.headers || {};

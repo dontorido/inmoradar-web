@@ -1808,6 +1808,51 @@
   max-width: 180px;
 }
 
+.admin-seo-quality {
+  display: grid;
+  gap: 7px;
+  min-width: 240px;
+}
+
+.admin-seo-quality-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-seo-quality-line {
+  border-left: 3px solid rgba(9, 9, 11, .14);
+  display: grid;
+  gap: 2px;
+  padding-left: 8px;
+}
+
+.admin-seo-quality-line strong {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.admin-seo-quality-line span {
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.admin-seo-quality-line.is-good {
+  border-left-color: rgba(22, 163, 74, .42);
+}
+
+.admin-seo-quality-line.is-warn {
+  border-left-color: rgba(244, 165, 35, .58);
+}
+
+.admin-seo-quality-line.is-bad {
+  border-left-color: rgba(220, 38, 38, .48);
+}
+
 @media (max-width: 920px) {
   .admin-seo-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
