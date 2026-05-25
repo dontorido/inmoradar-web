@@ -557,6 +557,346 @@ test("analytics event uses Upstash with hashed keys when configured", async () =
   );
 });
 
+test("browser waitlist rate limit allows normal request and emits headers", async () => {
+  resetRateLimitStore();
+  const previousFetch = global.fetch;
+  const fetchCalls = [];
+
+  await withEnv(
+    {
+      WAITLIST_BROWSER_RATE_LIMIT_MAX: "2",
+      WAITLIST_BROWSER_RATE_LIMIT_WINDOW_MS: "60000",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        fetchCalls.push({ url, options });
+        if (options.method === "GET") return { ok: true, status: 200, text: async () => "[]" };
+        return { ok: true, status: 201, text: async () => "" };
+      };
+
+      try {
+        const response = createJsonResponse();
+        await marketPriceHandler(
+          {
+            method: "POST",
+            url: "/api/market-price?resource=browser-waitlist",
+            headers: {
+              host: "inmoradar.app",
+              "x-forwarded-for": "203.0.113.70",
+              "user-agent": "Mozilla/5.0 Chrome/124.0"
+            },
+            body: JSON.stringify({
+              email: "Test@Email.com",
+              browser: "firefox",
+              source: "launch_waitlist_modal"
+            })
+          },
+          response.res
+        );
+
+        assert.equal(response.res.statusCode, 200);
+        assert.deepEqual(response.payload(), { ok: true, alreadyExists: false });
+        assert.equal(response.res.headers["x-ratelimit-limit"], "2");
+        assert.equal(response.res.headers["x-ratelimit-remaining"], "1");
+        assert.ok(response.res.headers["x-ratelimit-reset"]);
+        assert.equal(fetchCalls.length, 2);
+      } finally {
+        global.fetch = previousFetch;
+        resetRateLimitStore();
+      }
+    }
+  );
+});
+
+test("browser waitlist rate limit normalizes email and ignores controlled path fields", async () => {
+  resetRateLimitStore();
+  const previousFetch = global.fetch;
+  const fetchCalls = [];
+
+  await withEnv(
+    {
+      WAITLIST_BROWSER_RATE_LIMIT_MAX: "1",
+      WAITLIST_BROWSER_RATE_LIMIT_WINDOW_MS: "60000",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        fetchCalls.push({ url, options });
+        if (options.method === "GET") return { ok: true, status: 200, text: async () => "[]" };
+        return { ok: true, status: 201, text: async () => "" };
+      };
+
+      try {
+        const baseReq = {
+          method: "POST",
+          url: "/api/market-price?resource=browser-waitlist",
+          headers: {
+            host: "inmoradar.app",
+            "x-forwarded-for": "203.0.113.71",
+            "user-agent": "Mozilla/5.0 Firefox/126.0"
+          },
+          body: ""
+        };
+
+        const first = createJsonResponse();
+        await marketPriceHandler(
+          {
+            ...baseReq,
+            body: JSON.stringify({
+              email: " Test@Email.com ",
+              browser: "chrome",
+              page: "/extension/firefox",
+              referrer: "https://example.com/a",
+              utm: { campaign: "launch-a" }
+            })
+          },
+          first.res
+        );
+        assert.equal(first.res.statusCode, 200);
+        assert.equal(first.res.headers["x-ratelimit-remaining"], "0");
+
+        const second = createJsonResponse();
+        await marketPriceHandler(
+          {
+            ...baseReq,
+            body: JSON.stringify({
+              email: "test@email.com",
+              browser: "chrome",
+              page_path: "/extension/chrome",
+              referrer: "https://example.com/b",
+              utm: { campaign: "launch-b" }
+            })
+          },
+          second.res
+        );
+        assert.equal(second.res.statusCode, 429);
+        assert.equal(second.payload().error, "rate_limited");
+        assert.equal(second.res.headers["retry-after"], "60");
+        assert.equal(fetchCalls.length, 2);
+      } finally {
+        global.fetch = previousFetch;
+        resetRateLimitStore();
+      }
+    }
+  );
+});
+
+test("browser waitlist rate limit separates different normalized emails", async () => {
+  resetRateLimitStore();
+  const previousFetch = global.fetch;
+  const fetchCalls = [];
+
+  await withEnv(
+    {
+      WAITLIST_BROWSER_RATE_LIMIT_MAX: "1",
+      WAITLIST_BROWSER_RATE_LIMIT_WINDOW_MS: "60000",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        fetchCalls.push({ url, options });
+        if (options.method === "GET") return { ok: true, status: 200, text: async () => "[]" };
+        return { ok: true, status: 201, text: async () => "" };
+      };
+
+      try {
+        const baseReq = {
+          method: "POST",
+          url: "/api/market-price?resource=browser-waitlist",
+          headers: {
+            host: "inmoradar.app",
+            "x-forwarded-for": "203.0.113.72",
+            "user-agent": "Mozilla/5.0 Safari/605.1"
+          },
+          body: ""
+        };
+
+        const first = createJsonResponse();
+        await marketPriceHandler(
+          { ...baseReq, body: JSON.stringify({ email: "one@example.com", browser: "safari" }) },
+          first.res
+        );
+        const second = createJsonResponse();
+        await marketPriceHandler(
+          { ...baseReq, body: JSON.stringify({ email: "two@example.com", browser: "safari" }) },
+          second.res
+        );
+
+        assert.equal(first.res.statusCode, 200);
+        assert.equal(second.res.statusCode, 200);
+        assert.equal(first.res.headers["x-ratelimit-remaining"], "0");
+        assert.equal(second.res.headers["x-ratelimit-remaining"], "0");
+        assert.equal(fetchCalls.length, 4);
+      } finally {
+        global.fetch = previousFetch;
+        resetRateLimitStore();
+      }
+    }
+  );
+});
+
+test("browser waitlist uses Upstash with hashed keys when configured", async () => {
+  const previousFetch = global.fetch;
+  const fetchCalls = [];
+
+  await withEnv(
+    {
+      WAITLIST_BROWSER_RATE_LIMIT_MAX: "10",
+      WAITLIST_BROWSER_RATE_LIMIT_WINDOW_MS: "60000",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      UPSTASH_REDIS_REST_URL: "https://upstash.example",
+      UPSTASH_REDIS_REST_TOKEN: "upstash-token-test",
+      RATE_LIMIT_HASH_SALT: "rate-limit-salt-test"
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        fetchCalls.push({ url, options });
+        if (String(url).includes("/pipeline")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => [{ result: 1 }, { result: 1 }, { result: 60 }]
+          };
+        }
+        if (options.method === "GET") return { ok: true, status: 200, text: async () => "[]" };
+        return { ok: true, status: 201, text: async () => "" };
+      };
+
+      try {
+        const response = createJsonResponse();
+        await marketPriceHandler(
+          {
+            method: "POST",
+            url: "/api/market-price?resource=browser-waitlist",
+            headers: {
+              host: "inmoradar.app",
+              "x-forwarded-for": "203.0.113.73",
+              "user-agent": "Mozilla/5.0 Chrome/124.0"
+            },
+            body: JSON.stringify({
+              email: "secret-person@example.com",
+              browser: "brave",
+              anonymous_session_id: "waitlist-session-secret",
+              anonymous_install_id: "waitlist-install-secret",
+              page: "/browser-waitlist/a",
+              referrer: "https://example.com/private",
+              utm: { campaign: "client-controlled-campaign" }
+            })
+          },
+          response.res
+        );
+
+        assert.equal(response.res.statusCode, 200);
+        assert.equal(response.res.headers["x-ratelimit-limit"], "10");
+        assert.equal(response.res.headers["x-ratelimit-remaining"], "9");
+
+        const pipelineCall = fetchCalls.find((call) => String(call.url).includes("/pipeline"));
+        assert.ok(pipelineCall);
+        const commands = JSON.parse(pipelineCall.options.body);
+        const key = commands[0][1];
+        assert.match(key, /^rl:v1:/);
+        assert.doesNotMatch(
+          key,
+          /203\.0\.113\.73|secret-person@example\.com|waitlist-session-secret|waitlist-install-secret|Chrome|browser-waitlist|client-controlled-campaign|rate-limit-salt-test/i
+        );
+        assert.equal(fetchCalls.length, 3);
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+});
+
+test("browser waitlist rate limit does not affect analytics event resource", async () => {
+  resetRateLimitStore();
+  const previousFetch = global.fetch;
+
+  await withEnv(
+    {
+      WAITLIST_BROWSER_RATE_LIMIT_MAX: "1",
+      WAITLIST_BROWSER_RATE_LIMIT_WINDOW_MS: "60000",
+      ANALYTICS_EVENT_RATE_LIMIT_MAX: "2",
+      ANALYTICS_EVENT_RATE_LIMIT_WINDOW_MS: "60000",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        if (options.method === "GET") return { ok: true, status: 200, text: async () => "[]" };
+        return { ok: true, status: 201, text: async () => "" };
+      };
+
+      try {
+        const baseHeaders = {
+          host: "inmoradar.app",
+          "x-forwarded-for": "203.0.113.74",
+          "user-agent": "Mozilla/5.0 Chrome/124.0"
+        };
+        const waitlistBody = JSON.stringify({ email: "scope@example.com", browser: "chrome" });
+
+        const waitlistFirst = createJsonResponse();
+        await marketPriceHandler(
+          {
+            method: "POST",
+            url: "/api/market-price?resource=browser-waitlist",
+            headers: baseHeaders,
+            body: waitlistBody
+          },
+          waitlistFirst.res
+        );
+        assert.equal(waitlistFirst.res.statusCode, 200);
+
+        const waitlistSecond = createJsonResponse();
+        await marketPriceHandler(
+          {
+            method: "POST",
+            url: "/api/market-price?resource=browser-waitlist",
+            headers: baseHeaders,
+            body: waitlistBody
+          },
+          waitlistSecond.res
+        );
+        assert.equal(waitlistSecond.res.statusCode, 429);
+
+        const analyticsResponse = createJsonResponse();
+        await marketPriceHandler(
+          {
+            method: "POST",
+            url: "/api/market-price?resource=owned-analytics-event",
+            headers: baseHeaders,
+            body: JSON.stringify({
+              event_name: "page_view",
+              anonymous_session_id: "scope-analytics-session",
+              page_path: "/scope-check"
+            })
+          },
+          analyticsResponse.res
+        );
+        assert.equal(analyticsResponse.res.statusCode, 200);
+        assert.equal(analyticsResponse.payload().tracked, true);
+        assert.equal(analyticsResponse.res.headers["x-ratelimit-limit"], "2");
+        assert.equal(analyticsResponse.res.headers["x-ratelimit-remaining"], "1");
+      } finally {
+        global.fetch = previousFetch;
+        resetRateLimitStore();
+      }
+    }
+  );
+});
+
 test("request metrics never include tokens or authorization values", () => {
   const event = requestMetricEvent(
     {

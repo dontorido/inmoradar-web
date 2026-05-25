@@ -115,11 +115,11 @@ Cobertura:
 - Vigilar que el limite no degrade analytics legitima.
 - Usuarios detras de la misma NAT pueden compartir bucket si falta `anonymous_session_id`; `120/min` es suficientemente suave para rollout inicial.
 - Si aparecen `429` legitimos, subir inicialmente a `240/min` antes de endurecer.
-- Mantener `contact` y `waitlist/browser` fuera hasta observar volumen real de este segundo endpoint.
+- Mantener `contact` fuera hasta definir un limite que no bloquee leads reales ni emails.
 
-## Siguiente endpoint candidato
+## Endpoint elegido para la siguiente extension
 
-Siguiente candidato prudente:
+Endpoint elegido:
 
 - `POST /api/waitlist/browser`
 
@@ -136,11 +136,39 @@ No elegir todavia:
 - `POST /api/photo-condition-analysis`, porque tiene coste OpenAI y requiere fase propia.
 - Billing, webhooks, SEO write, Chrome, Meta, LinkedIn, Runway y Viraliza.
 
+## Extension aplicada a waitlist/browser
+
+`POST /api/waitlist/browser` se incorpora como tercer endpoint durable de bajo riesgo.
+
+- Ruta real: `api/market-price?resource=browser-waitlist`.
+- Handler: `lib/browser-waitlist.js`.
+- Scope: `browser_waitlist`.
+- Limite default: `10/min`.
+- Ventana default: `60s`.
+
+La identidad primaria usa:
+
+- IP saneada.
+- User-Agent truncado.
+- Email normalizado.
+- `anonymous_session_id` si existe.
+- `anonymous_install_id` si existe.
+
+Campos excluidos por ser controlables por cliente:
+
+- `page`
+- `page_path`
+- URL
+- referrer
+- campaign/UTM
+
+Estos campos no deben crear buckets nuevos. El email normalizado se usa solo como material para hashing y no se persiste en claro en la key.
+
 ## Condicion antes de extender de nuevo
 
 Antes de aplicar rate limiting durable a un tercer endpoint:
 
 1. Revisar en Vercel errores `500`, latencia y fallback durable.
 2. Revisar en Upstash consumo y formato de keys.
-3. Hacer un smoke test suave de `analytics/event` sin forzar `429`.
-4. Confirmar que no se degradan metricas legitimas.
+3. Hacer smoke tests suaves de `analytics/event` y `waitlist/browser` sin forzar `429`.
+4. Confirmar que no se degradan metricas legitimas ni leads reales.

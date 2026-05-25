@@ -194,7 +194,7 @@ Cobertura:
 ## 8. Riesgos pendientes
 
 - Rate limit no es durable/global.
-- Contact y waitlist siguen sin limitador comun en esta fase.
+- Contact sigue sin limitador comun en esta fase.
 - Analytics event ya esta cubierto, pero debe observarse antes de extender a un tercer endpoint.
 - Photo condition analysis debe revisarse en una fase propia por coste OpenAI.
 - Billing, checkout, webhooks y portal necesitan fixtures antes de endurecer.
@@ -252,7 +252,7 @@ Fallback:
 - Usa memoria si faltan variables.
 - Usa memoria con log saneado si Upstash falla.
 
-Siguiente candidato:
+Candidato elegido para la siguiente extension:
 
 - `POST /api/waitlist/browser`, despues de observar `analytics/event`.
 
@@ -266,3 +266,44 @@ Riesgo residual:
 
 - Usuarios detras de la misma NAT pueden compartir bucket si falta `anonymous_session_id`; `120/min` es suficientemente suave para rollout inicial.
 - Si aparecen `429` legitimos, subir inicialmente a `240/min` antes de endurecer.
+
+## 11. Waitlist browser como tercera extension durable
+
+Estado:
+
+- `POST /api/waitlist/browser` queda cubierto por rate limiting durable/fallback.
+- Ruta real: `api/market-price?resource=browser-waitlist`.
+- Handler: `lib/browser-waitlist.js`.
+- Scope: `browser_waitlist`.
+- Limite default: `10/min`.
+- Ventana default: `60s`.
+- Variables opcionales:
+  - `WAITLIST_BROWSER_RATE_LIMIT_MAX`
+  - `WAITLIST_BROWSER_RATE_LIMIT_WINDOW_MS`
+
+Key strategy:
+
+- IP saneada.
+- User-Agent truncado.
+- Email normalizado con `trim + lowercase`.
+- `anonymous_session_id` saneado si existe.
+- `anonymous_install_id` saneado si existe.
+- `page`, `page_path`, URL, referrer y campaign no forman parte de la key primaria porque son controlables por cliente y podrian fragmentar buckets.
+- Todo se hashea dentro de `durable-rate-limit`.
+
+Fallback:
+
+- Upstash si `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN` existen.
+- Memoria si faltan variables.
+- Memoria con log saneado si Upstash falla.
+
+No extender todavia a:
+
+- `POST /api/contact`, por riesgo de bloquear leads reales y porque puede disparar email externo.
+- `POST /api/photo-condition-analysis`, por coste OpenAI.
+- SEO write, Chrome, Meta, LinkedIn, Runway, Viraliza, billing, webhooks, cron ni jobs.
+
+Riesgo residual:
+
+- Usuarios detras de la misma NAT pueden compartir bucket si reutilizan email o no aportan identificadores anonimos.
+- `10/min` es apropiado para rollout inicial de waitlist; si hay falsos positivos legitimos, subir temporalmente antes de endurecer.
