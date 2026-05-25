@@ -1160,3 +1160,36 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-post-extraction-inventory. Sin deploy y sin tocar produccion. Preparar consolidacion controlada de la cadena admin router/handlers: revisar diff acumulado contra main, ejecutar node --check en api/admin.js, api/_admin/router.js y handlers, ejecutar node --test tests/admin-router.test.js, tests/seo.test.js, tests/owned-analytics.test.js y tests/*.test.js, ejecutar git diff --check, y generar checklist de PR/merge con riesgos y rollback. No migrar endpoints nuevos ni writes. No tocar SEO write, Chrome, Meta, LinkedIn, Runway, Viraliza, checkout, billing ni webhooks.
 ```
+## Fase realizada: seguridad operacional inicial
+
+Fecha: 2026-05-25
+
+Objetivo:
+
+- Introducir una primera capa de rate limiting, CORS mas estricto y observabilidad sin tocar funcionalidades visibles ni integraciones sensibles.
+
+Resultado:
+
+- Rate limiting en memoria aplicado a `POST /api/extension-usage`.
+- CORS admin con allowlist aplicado a `api/admin.js`.
+- Observabilidad de latencia no sensible en `api/admin.js` y `api/extension-version.js`.
+- Inventario completo en `SECURITY_RATE_LIMIT_CORS_OBSERVABILITY_PLAN.md`.
+
+Criterios respetados:
+
+- Sin cambios de URLs.
+- Sin cambios de auth.
+- Sin migraciones.
+- Sin cambios visuales.
+- Sin SEO write.
+- Sin Chrome Web Store.
+- Sin Meta, LinkedIn, Runway, Viraliza, checkout, billing, webhooks, cron ni jobs.
+
+Siguiente orden recomendado:
+
+1. Rate limiting durable para endpoints publicos de escritura.
+2. CORS por dominio de endpoint si se confirma compatibilidad con extension y previews.
+3. Observabilidad de latencia por familias de endpoints.
+4. Servicios auxiliares por dominio.
+5. SEO write solo con fixtures y rollback.
+6. Integraciones externas al final.
