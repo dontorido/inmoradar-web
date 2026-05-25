@@ -285,7 +285,6 @@ const els = {
   stats: document.querySelector("[data-admin-stats]"),
   revenueSummary: document.querySelector("[data-revenue-summary]"),
   revenueChart: document.querySelector("[data-revenue-chart]"),
-  dashboardKpis: document.querySelector("[data-dashboard-kpis]"),
   dashboardFrom: document.querySelector("[data-dashboard-from]"),
   dashboardTo: document.querySelector("[data-dashboard-to]"),
   dashboardApply: document.querySelector("[data-dashboard-apply]"),
@@ -1515,11 +1514,6 @@ function renderExtensionUsage(payload) {
   renderDashboardOverview();
 }
 
-function dashboardCount(value, fallback = 0) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
-}
-
 function dashboardCell(value, fallback = "0") {
   if (value === null || value === undefined || value === "") return fallback;
   return escapeHtml(value);
@@ -1527,51 +1521,6 @@ function dashboardCell(value, fallback = "0") {
 
 function dashboardRate(value) {
   return value === null || value === undefined || value === "" ? "-" : formatRate(value);
-}
-
-function renderDashboardKpis() {
-  if (!els.dashboardKpis) return;
-  const extension = state.dashboard.extensionUsage || {};
-  const extensionKpis = extension.kpis || {};
-  const analytics = state.dashboard.analytics || state.analytics.learning || {};
-  const summary = analytics.summary || state.analytics.summary || {};
-  const installCtas = dashboardCount(summary.install_clicks);
-  const chromeStore = dashboardCount(summary.chrome_store_clicks);
-
-  els.dashboardKpis.innerHTML = [
-    stat("Usuarios", dashboardCount(extensionKpis.unique_users ?? extension.unique_users_30d), {
-      id: "dashboard-users",
-      hint: "Extension"
-    }),
-    stat("Nuevos usuarios", dashboardCount(extensionKpis.new_users), {
-      id: "dashboard-new-users",
-      hint: "Primer evento en rango"
-    }),
-    stat("Sesiones", dashboardCount(extensionKpis.sessions ?? extension.sessions_30d), {
-      id: "dashboard-sessions",
-      hint: `${dashboardCount(extensionKpis.sessions_per_user)} por usuario`
-    }),
-    stat("Analisis", dashboardCount(extensionKpis.completed_analyses), {
-      id: "dashboard-analyses",
-      hint: "analysis_completed"
-    }),
-    stat("CTA instalacion", installCtas, {
-      id: "dashboard-install-cta",
-      hint: "Intencion, no instalacion"
-    }),
-    stat("Clic Chrome Store", chromeStore, {
-      id: "dashboard-store-clicks",
-      hint: "Salida hacia store"
-    }),
-    stat("Activacion extension", dashboardCount(extensionKpis.activation_users), {
-      id: "dashboard-extension-activation",
-      hint: "Usuarios con analisis"
-    }),
-    stat("Media sesion", formatDurationOrEmpty(extensionKpis.avg_session_seconds, "-"), {
-      id: "dashboard-avg-session",
-      hint: EXTENSION_USAGE_TIMEZONE
-    })
-  ].join("");
 }
 
 function renderDashboardAcquisition() {
@@ -1663,7 +1612,6 @@ function renderDashboardLandings() {
 }
 
 function renderDashboardOverview() {
-  renderDashboardKpis();
   renderDashboardAcquisition();
   renderDashboardLandings();
 }
