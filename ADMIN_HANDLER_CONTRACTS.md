@@ -236,3 +236,26 @@ Reglas especificas para read-only con calculos:
 - no persistir recalculos;
 - conservar fallback local cuando Supabase no esta configurado;
 - cubrir con tests arrays vacios, datos incompletos y errores Supabase saneados.
+
+## 17. Ejemplo premium read-only
+
+En la fase `feature/admin-handler-premium-readonly` se extrajo `premium/subscriptions` `GET` a `api/_admin/handlers/premium.js`.
+
+Dependencias inyectadas:
+
+- `clampLimit`;
+- `sanitizeSearch`;
+- `supabaseFetch`.
+
+Este handler solo lee filas locales de `premium_subscriptions` y mantiene filtros de `limit`, `status`, `q`, `provider` y `event_name`. No importa clientes externos, no lee secretos y no accede directamente a variables de entorno.
+
+Reglas especificas para read-only cercano a billing:
+
+- no mezclar lectura admin con checkout;
+- no crear portal de cliente ni magic links;
+- no llamar Lemon Squeezy ni proveedores de billing;
+- no procesar webhooks;
+- no enviar emails;
+- no tocar `api/check-premium`;
+- mantener endpoints de billing fuera del router admin hasta una fase dedicada;
+- cubrir con tests que el handler solo consulta `premium_subscriptions` y no abre rutas de efecto externo.

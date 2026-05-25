@@ -10,6 +10,7 @@ const { runSeoLandingGeneration } = require("./_seo/generator");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
 const { createKpiSettingsHandler } = require("./_admin/handlers/kpis");
 const { createOperationsReleaseHandler } = require("./_admin/handlers/operations");
+const { createPremiumHandlers } = require("./_admin/handlers/premium");
 const { generateSocialVideoProject, MUSIC_STYLES, seriesConfig, TOPICS, VISUAL_BACKDROPS } = require("../lib/social-video/generator");
 const { getVideoBrandingConfig } = require("../lib/social-video/branding");
 const {
@@ -228,6 +229,11 @@ const {
 } = createAnalyticsHandlers({
   clampLimit,
   hasSupabaseConfig,
+  supabaseFetch
+});
+const { handlePremiumSubscriptions } = createPremiumHandlers({
+  clampLimit,
+  sanitizeSearch,
   supabaseFetch
 });
 
@@ -543,47 +549,6 @@ async function handleParkingSummary() {
     assessments_recent: assessmentRows,
     recent: assessmentRows.length ? assessmentRows : rows,
     error: result.error || assessmentResult.error || null
-  };
-}
-
-async function handlePremiumSubscriptions(url) {
-  const limit = clampLimit(url.searchParams.get("limit"), 50, 100);
-  const status = String(url.searchParams.get("status") || "").trim().toLowerCase();
-  const q = sanitizeSearch(url.searchParams.get("q"));
-  const provider = sanitizeSearch(url.searchParams.get("provider"));
-  const eventName = sanitizeSearch(url.searchParams.get("event_name"));
-  const params = new URLSearchParams({
-    select:
-      "email,status,renews_at,ends_at,trial_ends_at,provider,provider_customer_id,provider_subscription_id,provider_order_id,product_id,variant_id,event_name,created_at,updated_at",
-    order: "updated_at.desc",
-    limit: String(limit)
-  });
-
-  if (status && status !== "all") params.set("status", `eq.${status}`);
-  if (provider) params.set("provider", `ilike.*${provider}*`);
-  if (eventName) params.set("event_name", `ilike.*${eventName}*`);
-  if (q) {
-    params.set(
-      "or",
-      `(${[
-        `email.ilike.*${q}*`,
-        `status.ilike.*${q}*`,
-        `provider.ilike.*${q}*`,
-        `provider_customer_id.ilike.*${q}*`,
-        `provider_subscription_id.ilike.*${q}*`,
-        `provider_order_id.ilike.*${q}*`,
-        `product_id.ilike.*${q}*`,
-        `variant_id.ilike.*${q}*`,
-        `event_name.ilike.*${q}*`
-      ].join(",")})`
-    );
-  }
-
-  const rows = await supabaseFetch(`premium_subscriptions?${params.toString()}`);
-  return {
-    ok: true,
-    count: Array.isArray(rows) ? rows.length : 0,
-    subscriptions: Array.isArray(rows) ? rows : []
   };
 }
 
@@ -3647,7 +3612,8 @@ module.exports = async function handler(req, res) {
     }
     if (resource === "premium/subscriptions") {
       if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
-      return json(res, 200, await handlePremiumSubscriptions(url));
+      const result = await handlePremiumSubscriptions(url);
+      return json(res, result.status, result.payload);
     }
     if (resource === "seo/landings") {
       if (!["GET", "POST"].includes(req.method)) return json(res, 405, { ok: false, error: "method_not_allowed" });

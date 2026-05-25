@@ -672,13 +672,13 @@ Se migro al router declarativo solo la lectura local segura de Premium:
 
 - `premium/subscriptions` `GET`
 
-No se migro ningun flujo de checkout, portal, webhook, email, Lemon Squeezy ni billing externo. El handler sigue dentro de `api/admin.js`; el router solo delega el metodo read-only.
+No se migro ningun flujo de checkout, portal, webhook, email, Lemon Squeezy ni billing externo. En esa fase el handler siguio dentro de `api/admin.js`; queda extraido despues en `feature/admin-handler-premium-readonly`.
 
 Detalle tecnico:
 
 - `premium/subscriptions` `GET` consulta solo `premium_subscriptions` en Supabase.
 - El recurso no tiene escritura admin equivalente; metodos no GET conservan `405`.
-- No se creo `api/_admin/handlers/premium.js` para evitar mover helpers sensibles de billing en esta fase.
+- No se creo `api/_admin/handlers/premium.js` para evitar mover helpers sensibles de billing en esta fase; se creo despues cuando se confirmo que el handler era lectura local aislada.
 
 Recursos y metodos dejados en legacy/fuera del router:
 
@@ -980,4 +980,39 @@ Prompt recomendado:
 
 ```text
 Continuar en feature/admin-handler-analytics-readonly. Sin deploy y sin tocar produccion. Evaluar la extraccion de `premium/subscriptions` GET a un handler interno solo si se confirma que es lectura local aislada y no toca checkout, portal, Lemon Squeezy, webhooks ni billing externo. No migrar nuevos endpoints ni writes. Mantener auth, URLs, payloads, codigos y saneado de errores. No tocar SEO, Chrome Web Store, Meta, LinkedIn, social-video ni Viraliza. Si aumenta el riesgo, documentar y no extraer. Ejecutar node --check, node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
+```
+
+## 30. Fase realizada - Extraccion handler premium/subscriptions
+
+Estado: realizada en `feature/admin-handler-premium-readonly`.
+
+Se creo:
+
+- `api/_admin/handlers/premium.js`
+
+Se extrajo del monolito:
+
+- `premium/subscriptions` `GET`
+
+No se migraron nuevos endpoints ni writes. No se tocaron checkout, portal de cliente, Lemon Squeezy, webhooks, emails, billing externo, `api/check-premium`, SEO, Chrome, Meta, LinkedIn, social-video, Runway ni Viraliza.
+
+Criterios validados:
+
+- Inyeccion de `clampLimit`, `sanitizeSearch` y `supabaseFetch`.
+- El handler solo consulta `premium_subscriptions`.
+- Auth, service role, CORS y catch comun permanecen en `api/admin.js`.
+- La ruta sigue post-Supabase.
+- Tests cubren payload, arrays vacios, error Supabase saneado y ausencia de rutas de efecto externo.
+
+Orden recomendado:
+
+1. Mini-revision de `summary`, `alerts`, `extension/usage` y `parking/summary` para extraer solo si estan aislados.
+2. Priorizar `alerts` o `parking/summary` si el diff es pequeno.
+3. Mantener `seo/landings` para una fase especifica por cercania a generacion/publicacion.
+4. No migrar nuevos writes hasta cerrar las extracciones read-only simples.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-handler-premium-readonly. Sin deploy y sin tocar produccion. Revisar handlers ya migrados que siguen dentro de api/admin.js (`alerts`, `summary`, `extension/usage`, `parking/summary`) y extraer como maximo uno o dos si son claramente aislados, con factories e inyeccion de dependencias. No migrar nuevos endpoints ni writes. No tocar SEO, Chrome Web Store, billing, Meta, LinkedIn, social-video ni Viraliza. Mantener URLs, payloads, codigos, auth y saneado de errores. Ejecutar node --check, node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
 ```

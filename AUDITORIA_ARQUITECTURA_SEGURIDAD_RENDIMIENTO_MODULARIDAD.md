@@ -947,7 +947,7 @@ Riesgos reducidos:
 
 Riesgos pendientes:
 
-- `handlePremiumSubscriptions` sigue dentro de `api/admin.js`.
+- `handlePremiumSubscriptions` seguia dentro de `api/admin.js` en esta fase; queda extraido despues en `feature/admin-handler-premium-readonly`.
 - Los endpoints Lemon/portal/webhook siguen separados y deben mantenerse con revisiones de seguridad propias.
 - Billing externo no debe entrar al router admin hasta tener contratos y fixtures especificos.
 
@@ -959,7 +959,6 @@ Advertencias:
 
 Que queda dentro de `api/admin.js`:
 
-- `handlePremiumSubscriptions`.
 - Lecturas de revenue y premium usadas por `summary` y `alerts`.
 
 Verificacion de esta evolucion:
@@ -1302,7 +1301,7 @@ Riesgos reducidos:
 
 Riesgos pendientes:
 
-- `premium/subscriptions` sigue con handler dentro de `api/admin.js`.
+- `premium/subscriptions` seguia con handler dentro de `api/admin.js`; queda extraido despues en `feature/admin-handler-premium-readonly`.
 - `seo/landings` sigue dentro del monolito y debe tratarse con cautela por cercania a generacion/publicacion.
 - Integraciones externas y writes sensibles siguen bloqueados hasta fases dedicadas.
 
@@ -1313,6 +1312,53 @@ Verificacion especifica de fase:
 - `node --test tests/admin-router.test.js`: 42 pass, 0 fail.
 - `node --test tests/owned-analytics.test.js`: 16 pass, 0 fail.
 - `node --test tests/*.test.js`: 281 pass, 0 fail.
+
+## Extraccion handler premium/subscriptions read-only
+
+Fecha: 2026-05-25
+Rama: `feature/admin-handler-premium-readonly`
+
+Se extrajo el handler read-only de Premium ya migrado al router:
+
+- `premium/subscriptions` `GET`.
+
+Archivo creado:
+
+- `api/_admin/handlers/premium.js`.
+
+La extraccion mantiene el contrato `{ status, payload }` y conserva el grupo post-Supabase de `api/admin.js`. Auth, service role, CORS, catch comun y saneado de errores siguen fuera del handler.
+
+Dependencias inyectadas:
+
+- `clampLimit`;
+- `sanitizeSearch`;
+- `supabaseFetch`.
+
+Que no se cambio:
+
+- URL, query params, payload y codigos HTTP.
+- Semantica de filtros `limit`, `status`, `q`, `provider` y `event_name`.
+- Metodos no GET, que siguen devolviendo `405`.
+- Ningun flujo de checkout, portal, Lemon Squeezy, webhook, email, billing externo ni `api/check-premium`.
+
+Riesgos reducidos:
+
+- `api/admin.js` pierde la lectura de suscripciones Premium sin acercarse a billing externo.
+- El patron de factory queda validado para un read-only cercano a dominio sensible.
+- Premium local queda separado de checkout/portal/webhooks.
+
+Riesgos pendientes:
+
+- Los endpoints `api/lemonsqueezy-*` y `api/check-premium` siguen fuera del router admin y requieren fases propias.
+- `summary` aun contiene agregados y flags de configuracion Premium/Lemon en `api/admin.js`.
+- `seo/landings` sigue pendiente por proximidad a generacion/publicacion.
+
+Verificacion especifica de fase:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/handlers/premium.js`: OK con Node bundled.
+- `node --test tests/admin-router.test.js`: 43 pass, 0 fail.
+- `node --test tests/*.test.js`: 282 pass, 0 fail.
 - `node --check assets/admin.js`: OK con Node bundled.
 - `node --check api/sitemap.js`: OK con Node bundled.
 - `node --check api/seo-page.js`: OK con Node bundled.

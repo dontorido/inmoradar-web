@@ -3,6 +3,7 @@ const test = require("node:test");
 
 const adminHandler = require("../api/admin");
 const { createAnalyticsHandlers } = require("../api/_admin/handlers/analytics");
+const { createPremiumHandlers } = require("../api/_admin/handlers/premium");
 const {
   createAdminRouter,
   dispatchAdminRoute,
@@ -295,6 +296,30 @@ test("admin analytics handler keeps injected dependencies and local fallback", a
   assert.equal(result.payload.warning, "supabase_not_configured");
   assert.deepEqual(result.payload.pages, []);
   assert.equal(fetched, false);
+});
+
+test("admin premium handler reads local subscriptions without billing side effects", async () => {
+  const paths = [];
+  const { handlePremiumSubscriptions } = createPremiumHandlers({
+    clampLimit: (value, fallback, max) => Math.max(1, Math.min(max, Number.parseInt(String(value || fallback), 10) || fallback)),
+    sanitizeSearch: (value) => String(value || "").trim().toLowerCase().replace(/[%*,()]/g, "").slice(0, 80),
+    supabaseFetch: async (path) => {
+      paths.push(path);
+      return [{ email: "client@example.com", status: "active" }];
+    }
+  });
+
+  const result = await handlePremiumSubscriptions(
+    new URL("https://inmoradar.app/api/admin?resource=premium/subscriptions&status=active&q=Client&provider=lemon&event_name=subscription_created&limit=1")
+  );
+
+  assert.equal(result.status, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.count, 1);
+  assert.equal(result.payload.subscriptions[0].email, "client@example.com");
+  assert.equal(paths.length, 1);
+  assert.match(paths[0], /^premium_subscriptions\?/);
+  assert.doesNotMatch(paths[0], /checkout|portal|webhook|lemonsqueezy/i);
 });
 
 test("admin read-only router preserves summary payload shape", async () => {

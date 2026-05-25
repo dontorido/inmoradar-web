@@ -183,17 +183,15 @@ Siguen dentro de `api/admin.js`:
 
 - `handleSummary`;
 - `handleAlerts`;
-- `handlePremiumSubscriptions`;
 - `handleExtensionUsageSummary`;
 - `handleParkingSummary`;
-- handlers analytics;
 - `handleSeoLandings`;
 - todos los handlers legacy sensibles.
 
 Candidatos a extraccion posterior:
 
-- `premium/subscriptions`, si se mantiene separado de checkout/portal/webhooks.
-- analytics read-only, si se quiere reducir el peso del bloque de analitica.
+- `premium/subscriptions`, si se mantiene separado de checkout/portal/webhooks; queda extraido en `feature/admin-handler-premium-readonly`.
+- analytics read-only, si se quiere reducir el peso del bloque de analitica; queda extraido en `feature/admin-handler-analytics-readonly`.
 
 Bloqueados por riesgo:
 
@@ -257,7 +255,6 @@ Siguen dentro de `api/admin.js`:
 
 - `handleSummary`;
 - `handleAlerts`;
-- `handlePremiumSubscriptions`;
 - `handleExtensionUsageSummary`;
 - `handleParkingSummary`;
 - `handleSeoLandings`;
@@ -273,5 +270,57 @@ Confirmacion de frontera:
 Riesgo residual:
 
 - Los calculos de learning siguen dependiendo de `lib/analytics/learning`; no se cambio su semantica.
-- `premium/subscriptions` puede ser el siguiente candidato de extraccion si se confirma que queda separado de billing externo.
+- `premium/subscriptions` era el siguiente candidato de extraccion y queda extraido en `feature/admin-handler-premium-readonly`.
 - `seo/landings` debe seguir esperando una fase con mas contexto por cercania a generacion/publicacion.
+
+## Extraccion handler premium/subscriptions read-only
+
+Fecha: 2026-05-25
+Rama: `feature/admin-handler-premium-readonly`
+
+Se extrajo `premium/subscriptions` `GET` a `api/_admin/handlers/premium.js` usando un factory con dependencias inyectadas.
+
+Dependencias inyectadas:
+
+- `clampLimit`;
+- `sanitizeSearch`;
+- `supabaseFetch`.
+
+Estado actualizado de handlers ya extraidos:
+
+- `kpis/settings` queda en `api/_admin/handlers/kpis.js`.
+- `operations/releases` queda en `api/_admin/handlers/operations.js`.
+- `analytics/summary`, `analytics/pages` y `analytics/learning` quedan en `api/_admin/handlers/analytics.js`.
+- `premium/subscriptions` queda en `api/_admin/handlers/premium.js`.
+
+Premium/billing fuera de esta fase:
+
+- `api/lemonsqueezy-checkout`;
+- `api/lemonsqueezy-portal`;
+- `api/lemonsqueezy-webhook`;
+- `api/check-premium`;
+- checkout, portal de cliente, magic links, emails, webhooks y billing externo.
+
+Siguen dentro de `api/admin.js`:
+
+- `handleSummary`;
+- `handleAlerts`;
+- `handleExtensionUsageSummary`;
+- `handleParkingSummary`;
+- `handleSeoLandings`;
+- handlers legacy sensibles.
+
+Confirmacion de frontera:
+
+- No se migraron nuevos endpoints.
+- No se tocaron writes.
+- No se llamo Lemon Squeezy ni ningun proveedor externo.
+- No se creo checkout ni portal de cliente.
+- No se procesaron webhooks.
+- No se toco `api/check-premium`.
+
+Riesgo residual:
+
+- `summary` sigue mostrando flags de configuracion Lemon desde `api/admin.js`, sin llamadas externas.
+- Los endpoints reales de billing siguen requiriendo auditoria propia antes de cualquier extraccion.
+- `seo/landings` sigue pendiente por proximidad a generacion/publicacion.
