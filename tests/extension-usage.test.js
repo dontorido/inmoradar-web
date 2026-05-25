@@ -204,7 +204,9 @@ test("extension usage endpoint accepts resource from URL query", async () => {
     {
       SUPABASE_URL: "https://example.supabase.co",
       SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
-      EXTENSION_USAGE_HASH_SECRET: "hash-test"
+      EXTENSION_USAGE_HASH_SECRET: "hash-test",
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined
     },
     async () => {
       global.fetch = async () => ({
@@ -241,7 +243,9 @@ test("extension usage endpoint rejects oversized JSON before storage", async () 
   await withEnv(
     {
       SUPABASE_URL: "https://example.supabase.co",
-      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined
     },
     async () => {
       let called = false;

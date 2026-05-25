@@ -4,6 +4,7 @@ const test = require("node:test");
 const adminHandler = require("../api/admin");
 const extensionVersionHandler = require("../api/extension-version");
 const { requestMetricEvent } = require("../lib/observability/request-metrics");
+const { checkDurableRateLimit } = require("../lib/security/durable-rate-limit");
 const { resetRateLimitStore } = require("../lib/security/rate-limit");
 
 function createJsonResponse() {
@@ -94,7 +95,9 @@ test("extension usage rate limit allows first request and blocks overflow", asyn
       EXTENSION_USAGE_RATE_LIMIT_WINDOW_MS: "60000",
       SUPABASE_URL: "https://example.supabase.co",
       SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
-      EXTENSION_USAGE_HASH_SECRET: "hash-test"
+      EXTENSION_USAGE_HASH_SECRET: "hash-test",
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined
     },
     async () => {
       global.fetch = async () => ({ ok: true, status: 201, text: async () => "" });
@@ -132,6 +135,189 @@ test("extension usage rate limit allows first request and blocks overflow", asyn
       } finally {
         global.fetch = previousFetch;
         resetRateLimitStore();
+      }
+    }
+  );
+});
+
+test("durable rate limit falls back to memory when Upstash is not configured", async () => {
+  resetRateLimitStore();
+  const req = {
+    method: "POST",
+    headers: {
+      "x-forwarded-for": "203.0.113.44",
+      "user-agent": "InmoRadar Extension"
+    }
+  };
+
+  await withEnv({ UPSTASH_REDIS_REST_URL: undefined, UPSTASH_REDIS_REST_TOKEN: undefined }, async () => {
+    const first = await checkDurableRateLimit(req, {
+      scope: "durable_test_missing_env",
+      maxRequests: 1,
+      windowMs: 60000,
+      logErrors: false
+    });
+    const second = await checkDurableRateLimit(req, {
+      scope: "durable_test_missing_env",
+      maxRequests: 1,
+      windowMs: 60000,
+      logErrors: false
+    });
+
+    assert.equal(first.allowed, true);
+    assert.equal(first.durable, false);
+    assert.equal(second.allowed, false);
+    assert.equal(second.durable, false);
+  });
+
+  resetRateLimitStore();
+});
+
+test("durable rate limit uses Upstash REST with hashed keys when configured", async () => {
+  const calls = [];
+  const req = {
+    method: "POST",
+    headers: {
+      "x-forwarded-for": "203.0.113.45",
+      "user-agent": "InmoRadar Extension 1.0.10",
+      host: "inmoradar.app"
+    }
+  };
+
+  await withEnv(
+    {
+      UPSTASH_REDIS_REST_URL: "https://upstash.example",
+      UPSTASH_REDIS_REST_TOKEN: "upstash-token-test",
+      RATE_LIMIT_HASH_SALT: "rate-limit-salt-test"
+    },
+    async () => {
+      const result = await checkDurableRateLimit(req, {
+        scope: "extension_usage",
+        maxRequests: 5,
+        windowMs: 60000,
+        fetch: async (url, options) => {
+          calls.push({ url, options });
+          return {
+            ok: true,
+            status: 200,
+            json: async () => [{ result: 1 }, { result: 1 }, { result: 60 }]
+          };
+        },
+        logErrors: false
+      });
+
+      assert.equal(result.allowed, true);
+      assert.equal(result.durable, true);
+      assert.equal(result.limit, 5);
+      assert.equal(result.remaining, 4);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].url, "https://upstash.example/pipeline");
+
+      const commands = JSON.parse(calls[0].options.body);
+      assert.deepEqual(commands.map((command) => command[0]), ["INCR", "EXPIRE", "TTL"]);
+      const key = commands[0][1];
+      assert.match(key, /^rl:v1:/);
+      assert.doesNotMatch(key, /203\.0\.113\.45|upstash-token-test|rate-limit-salt-test|InmoRadar/i);
+    }
+  );
+});
+
+test("durable rate limit falls back safely when Upstash fails", async () => {
+  resetRateLimitStore();
+  const warnings = [];
+  const req = {
+    method: "POST",
+    headers: {
+      "x-forwarded-for": "203.0.113.46",
+      "user-agent": "InmoRadar Extension"
+    }
+  };
+
+  await withEnv(
+    {
+      UPSTASH_REDIS_REST_URL: "https://upstash.example/sensitive",
+      UPSTASH_REDIS_REST_TOKEN: "upstash-token-secret-value"
+    },
+    async () => {
+      const result = await checkDurableRateLimit(req, {
+        scope: "extension_usage_fallback",
+        maxRequests: 1,
+        windowMs: 60000,
+        fetch: async () => ({
+          ok: false,
+          status: 500,
+          json: async () => [{ error: "token=upstash-token-secret-value" }]
+        }),
+        logger: {
+          warn: (...args) => warnings.push(JSON.stringify(args))
+        }
+      });
+
+      assert.equal(result.allowed, true);
+      assert.equal(result.durable, false);
+      assert.equal(warnings.length, 1);
+      assert.doesNotMatch(warnings.join("\n"), /upstash-token-secret-value|upstash\.example\/sensitive/);
+      assert.match(warnings.join("\n"), /upstash_rate_limit_http_500/);
+    }
+  );
+
+  resetRateLimitStore();
+});
+
+test("extension usage can block from durable Upstash limit without calling Supabase", async () => {
+  const previousFetch = global.fetch;
+  const fetchCalls = [];
+
+  await withEnv(
+    {
+      EXTENSION_USAGE_RATE_LIMIT_MAX: "1",
+      EXTENSION_USAGE_RATE_LIMIT_WINDOW_MS: "60000",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      EXTENSION_USAGE_HASH_SECRET: "hash-test",
+      UPSTASH_REDIS_REST_URL: "https://upstash.example",
+      UPSTASH_REDIS_REST_TOKEN: "upstash-token-test"
+    },
+    async () => {
+      global.fetch = async (url, options) => {
+        fetchCalls.push({ url, options });
+        if (String(url).includes("/pipeline")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => [{ result: 2 }, { result: 0 }, { result: 60 }]
+          };
+        }
+        throw new Error("supabase_should_not_be_called");
+      };
+
+      try {
+        const req = {
+          method: "POST",
+          url: "/api/extension-version?resource=usage",
+          headers: {
+            host: "inmoradar.app",
+            "x-forwarded-for": "203.0.113.47",
+            "user-agent": "Mozilla/5.0 Chrome/124.0"
+          },
+          body: JSON.stringify({
+            event_name: "heartbeat",
+            anonymous_install_id: "install-1",
+            session_id: "session-1",
+            extension_version: "1.0.10"
+          })
+        };
+
+        const response = createJsonResponse();
+        await extensionVersionHandler(req, response.res);
+
+        assert.equal(response.res.statusCode, 429);
+        assert.equal(response.payload().error, "rate_limited");
+        assert.equal(response.res.headers["retry-after"], "60");
+        assert.equal(fetchCalls.length, 1);
+        assert.match(fetchCalls[0].url, /\/pipeline$/);
+      } finally {
+        global.fetch = previousFetch;
       }
     }
   );
