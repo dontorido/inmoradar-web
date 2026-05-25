@@ -3,6 +3,19 @@
 Fecha: 2026-05-25
 Rama: `feature/admin-legacy-inventory-write-plan`
 
+## Estado vigente tras consolidacion
+
+Este documento contiene el plan original y el historial de las dos primeras migraciones write internas. Las notas de cada fase son historicas.
+
+Estado actual de la cadena:
+
+- `kpis/settings` `GET/POST` esta en el router y su handler vive en `api/_admin/handlers/kpis.js`.
+- `operations/releases` `GET/POST` esta en el router y su handler vive en `api/_admin/handlers/operations.js`.
+- `operations/chrome` sigue legacy y fuera de la extraccion.
+- SEO write, social, billing, cron, jobs e integraciones externas siguen fuera.
+
+La recomendacion vigente ya no es migrar otro write: primero consolidar/mergear la cadena actual y despues abordar seguridad/rendimiento/observabilidad.
+
 ## 1. Objetivo
 
 Preparar la siguiente fase de `api/admin.js`: migrar al router declarativo los primeros endpoints de escritura interna de muy bajo riesgo, sin tocar integraciones externas, generacion, publicacion, billing ni procesos cron.
