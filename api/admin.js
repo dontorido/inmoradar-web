@@ -107,6 +107,7 @@ const {
   validatePublishInput: validateMetaPublishInput,
   withUtm
 } = require("../lib/meta/services");
+const { logRequestMetric } = require("../lib/observability/request-metrics");
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at";
 
@@ -3170,8 +3171,8 @@ const ADMIN_SUPABASE_ROUTED_ROUTES = createAdminRouter([
   }
 ]);
 
-module.exports = async function handler(req, res) {
-  if (handleCors(req, res)) return;
+async function handleAdminRequest(req, res) {
+  if (handleCors(req, res, { policy: "admin" })) return;
   const { url, resource } = routeFromRequest(req);
   if (resource === "linkedin/daily" || resource === "linkedin/autopublisher/run") {
     if (!assertAdminOrCron(req, res)) return;
@@ -3309,5 +3310,15 @@ module.exports = async function handler(req, res) {
       error: "admin_request_failed",
       message: String(resource || "").startsWith("meta") ? sanitizeMetaSecretText(error.message || error) : sanitizeErrorMessage(error)
     });
+  }
+}
+
+module.exports = async function handler(req, res) {
+  const startedAt = Date.now();
+  const { resource } = routeFromRequest(req);
+  try {
+    return await handleAdminRequest(req, res);
+  } finally {
+    logRequestMetric(req, res, { route: "api/admin", resource, startedAt });
   }
 };

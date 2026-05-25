@@ -6,13 +6,79 @@ function json(res, status, payload) {
   res.statusCode = status;
   res.setHeader("content-type", "application/json; charset=utf-8");
   res.setHeader("cache-control", "no-store, max-age=0");
-  res.setHeader("access-control-allow-origin", "*");
-  res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
-  res.setHeader("access-control-allow-headers", "authorization,content-type,x-admin-token,x-cron-secret,x-signature,x-event-name");
+  if (!res.__corsHandled) {
+    res.setHeader("access-control-allow-origin", "*");
+    res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+    res.setHeader("access-control-allow-headers", "authorization,content-type,x-admin-token,x-cron-secret,x-signature,x-event-name");
+  }
   res.end(JSON.stringify(payload));
 }
 
-function handleCors(req, res) {
+function requestHeader(req, name) {
+  const headers = req?.headers || {};
+  const lowerName = String(name).toLowerCase();
+  const value =
+    headers[name] ??
+    headers[lowerName] ??
+    Object.entries(headers).find(([key]) => String(key).toLowerCase() === lowerName)?.[1];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizedOrigin(value) {
+  const origin = String(value || "").trim();
+  if (!origin) return "";
+  try {
+    return new URL(origin).origin;
+  } catch {
+    return "";
+  }
+}
+
+function splitOriginList(value) {
+  return String(value || "")
+    .split(",")
+    .map((entry) => normalizedOrigin(entry))
+    .filter(Boolean);
+}
+
+function defaultAdminOrigins(env = process.env) {
+  const origins = [
+    "https://inmoradar.app",
+    "https://www.inmoradar.app",
+    ...splitOriginList(env.ADMIN_CORS_ORIGINS || env.CORS_ALLOWED_ORIGINS)
+  ];
+  if (env.VERCEL_URL) origins.push(`https://${env.VERCEL_URL}`);
+  if (env.VERCEL_BRANCH_URL) origins.push(`https://${env.VERCEL_BRANCH_URL}`);
+  if (env.NODE_ENV !== "production" && env.VERCEL_ENV !== "production") {
+    origins.push("http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000");
+  }
+  return Array.from(new Set(origins.map(normalizedOrigin).filter(Boolean)));
+}
+
+function applyCorsHeaders(req, res, options = {}) {
+  const policy = options.policy || "public";
+  const origin = normalizedOrigin(requestHeader(req, "origin"));
+  const methods = options.methods || "GET,POST,OPTIONS";
+  const headers = options.headers || "authorization,content-type,x-admin-token,x-cron-secret,x-signature,x-event-name";
+
+  res.__corsHandled = true;
+  res.setHeader("access-control-allow-methods", methods);
+  res.setHeader("access-control-allow-headers", headers);
+  res.setHeader("access-control-max-age", "600");
+
+  if (policy === "admin") {
+    if (origin && defaultAdminOrigins(options.env || process.env).includes(origin)) {
+      res.setHeader("access-control-allow-origin", origin);
+      res.setHeader("vary", "Origin");
+    }
+    return;
+  }
+
+  res.setHeader("access-control-allow-origin", options.origin || "*");
+}
+
+function handleCors(req, res, options = {}) {
+  applyCorsHeaders(req, res, options);
   if (req.method !== "OPTIONS") return false;
   json(res, 204, {});
   return true;
@@ -168,7 +234,9 @@ function isPremiumActive(subscription) {
 module.exports = {
   ACTIVE_STATUSES,
   adminTokenFromRequest,
+  applyCorsHeaders,
   assertAdmin,
+  defaultAdminOrigins,
   fetchWithTimeout,
   handleCors,
   hasSupabaseConfig,

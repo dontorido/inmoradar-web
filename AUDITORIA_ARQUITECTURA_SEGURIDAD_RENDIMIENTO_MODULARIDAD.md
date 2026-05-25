@@ -1571,3 +1571,34 @@ Verificacion especifica de fase:
 - `node --test tests/admin-router.test.js`: 41 pass, 0 fail.
 - `node --test tests/*.test.js`: 280 pass, 0 fail.
 - `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.
+## Evolucion posterior: seguridad operacional rate limiting/CORS/observabilidad
+
+Fecha: 2026-05-25
+
+Tras integrar la cadena de router/handlers admin en `main`, se inicio una fase de hardening operacional de bajo riesgo.
+
+Implementado:
+
+- `lib/security/rate-limit.js`: helper de rate limiting en memoria por instancia, con identidad hasheada y sin almacenar IPs crudas.
+- `POST /api/extension-usage`: limite defensivo configurable con `EXTENSION_USAGE_RATE_LIMIT_MAX` y `EXTENSION_USAGE_RATE_LIMIT_WINDOW_MS`.
+- `api/_utils.js`: CORS con politica admin allowlist y compatibilidad publica por defecto.
+- `api/admin.js`: CORS admin mas restrictivo y metricas de request no sensibles.
+- `api/extension-version.js`: metricas de request no sensibles y rate limit para `resource=usage`.
+- `lib/observability/request-metrics.js`: eventos de latencia sin Authorization, cookies, body, tokens, secretos ni passwords.
+
+No implementado en esta fase:
+
+- Rate limiting durable/global.
+- Cambios en checkout, portal, Lemon Squeezy, billing externo o webhooks.
+- Cambios en SEO write, autogeneracion, cron, publicacion, noindex, archive, regenerate o sitemap operativo.
+- Cambios en Chrome Web Store, Meta, LinkedIn, Runway, Viraliza o social-video.
+
+Riesgo residual:
+
+- El rate limit en memoria reduce bursts por instancia, pero no cubre abuso distribuido entre instancias serverless.
+- Contact, waitlist, analytics event y photo condition analysis quedan inventariados para una fase durable.
+- Endurecer billing/social/SEO write requiere fixtures, rollback y contratos especificos.
+
+Tests añadidos:
+
+- `tests/security-operational.test.js` cubre CORS admin, 429 estable, rate limit de extension usage y no exposicion de tokens en metricas.
