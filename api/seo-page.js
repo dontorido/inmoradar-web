@@ -3,7 +3,7 @@ const { googleTagManagerHead, googleTagManagerNoscript } = require("./_seo/analy
 const { getSeedPublishedLanding } = require("./_seo/seedPublished");
 const { buildPrecioMetroCuadradoCiudad } = require("./_seo/priceCity");
 const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../lib/seo/cityGuideTemplates");
-const { escapeHtml, siteUrl, stripHtml } = require("./_seo/text");
+const { canonicalForLanding, escapeHtml, siteUrl, stripHtml } = require("./_seo/text");
 
 function parseSlug(req) {
   const url = new URL(req.url, `https://${req.headers.host || "inmoradar.app"}`);
@@ -44,15 +44,15 @@ function structuredData(landing, canonical) {
     name
   }));
 
+  const category = breadcrumbCategory(landing);
   const graph = [
     {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "InmoRadar", item: siteUrl() },
-        { "@type": "ListItem", position: 2, name: "Precio m²", item: `${siteUrl()}/precio-metro-cuadrado/` },
-        { "@type": "ListItem", position: 3, name: landing.province || landing.autonomous_community || "España" },
-        { "@type": "ListItem", position: 4, name: landing.city, item: canonical }
+        { "@type": "ListItem", position: 2, name: category.name, item: category.url },
+        { "@type": "ListItem", position: 3, name: landing.city || landing.title, item: canonical }
       ]
     },
     {
@@ -105,6 +105,19 @@ function structuredData(landing, canonical) {
   }
 
   return graph.map(jsonLd).join("\n  ");
+}
+
+function breadcrumbCategory(landing) {
+  if (landing.template_type === "rent_city") {
+    return { name: "Precio alquiler", url: `${siteUrl()}/precio-alquiler/` };
+  }
+  if (landing.template_type === "expensive_listing_city") {
+    return { name: "Saber si un piso esta caro", url: `${siteUrl()}/saber-si-piso-esta-caro/` };
+  }
+  if (landing.template_type === "editorial_guide") {
+    return { name: "Guias", url: `${siteUrl()}/guias/` };
+  }
+  return { name: "Precio m2", url: `${siteUrl()}/precio-metro-cuadrado/` };
 }
 
 function ogImageUrl(landing) {
@@ -345,7 +358,7 @@ function normalizeLandingBodyHtml(bodyHtml = "") {
 function renderLandingHtml(landing) {
   const qualityScore = Number(landing.quality_score) || 0;
   const robots = landing.index_status === "index" && landing.status === "published" && qualityScore >= 75 ? "index,follow" : "noindex,follow";
-  const canonical = landing.canonical_url || `${siteUrl()}/${landing.slug}/`;
+  const canonical = canonicalForLanding(landing);
   const dynamicLanding = buildDynamicCityGuideLanding(landing);
   const renderedLanding = dynamicLanding
     ? {
@@ -906,7 +919,7 @@ function renderLandingHtml(landing) {
 }
 
 async function handler(req, res) {
-  if (req.method !== "GET") {
+  if (!["GET", "HEAD"].includes(req.method)) {
     res.statusCode = 405;
     res.setHeader("content-type", "text/plain; charset=utf-8");
     res.end("Method not allowed");
@@ -920,6 +933,10 @@ async function handler(req, res) {
       res.statusCode = 404;
       res.setHeader("content-type", "text/html; charset=utf-8");
       res.setHeader("cache-control", "no-store, max-age=0");
+      if (req.method === "HEAD") {
+        res.end();
+        return;
+      }
       res.end("<!doctype html><html lang=\"es\"><title>No encontrado</title><p>Landing no encontrada.</p></html>");
       return;
     }
@@ -927,6 +944,10 @@ async function handler(req, res) {
     res.statusCode = 200;
     res.setHeader("content-type", "text/html; charset=utf-8");
     res.setHeader("cache-control", landing.status === "published" ? "s-maxage=3600, stale-while-revalidate=86400" : "no-store, max-age=0");
+    if (req.method === "HEAD") {
+      res.end();
+      return;
+    }
     res.end(renderLandingHtml(landing));
   } catch (error) {
     console.error("[seo-page]", error);

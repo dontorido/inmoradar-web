@@ -48,6 +48,8 @@
     { "source": "/precio-metro-cuadrado/:city/", "destination": "/api/seo-page?slug=precio-metro-cuadrado/:city" },
     { "source": "/precio-alquiler/:city", "destination": "/api/seo-page?slug=precio-alquiler/:city" },
     { "source": "/precio-alquiler/:city/", "destination": "/api/seo-page?slug=precio-alquiler/:city" },
+    { "source": "/saber-si-piso-esta-caro", "destination": "/saber-si-piso-esta-caro.html" },
+    { "source": "/saber-si-piso-esta-caro/", "destination": "/saber-si-piso-esta-caro.html" },
     { "source": "/saber-si-piso-esta-caro/:city", "destination": "/api/seo-page?slug=saber-si-piso-esta-caro/:city" },
     { "source": "/saber-si-piso-esta-caro/:city/", "destination": "/api/seo-page?slug=saber-si-piso-esta-caro/:city" },
     { "source": "/guias/:slug", "destination": "/api/seo-page?slug=guias/:slug" },
