@@ -6,7 +6,8 @@ const path = require("node:path");
 const { buildPriceCitySourceData } = require("../api/_seo/marketSources");
 const { buildPriceCityLanding } = require("../api/_seo/priceCity");
 const { calculateSeoLandingQuality } = require("../api/_seo/quality");
-const { runSeoLandingGeneration } = require("../api/_seo/generator");
+const { canPublishNow, runSeoLandingGeneration } = require("../api/_seo/generator");
+const { runSeoContentPublication } = require("../api/_seo/contentPublisher");
 const { buildSeoDailyPolicySnapshot, selectNextSeoContentType } = require("../api/_seo/publishingPolicy");
 const { getSeedPublishedLanding } = require("../api/_seo/seedPublished");
 const { siteUrl } = require("../api/_seo/text");
@@ -250,6 +251,105 @@ test("el generador SEO crea guias editoriales indexables cuando alcanzan calidad
   assert.equal(guide.slug, "guias/antes-de-llamar-por-un-piso");
   assert.ok(guide.quality_score >= 85);
   assert.ok(guide.word_count >= 700);
+});
+
+test("la publicacion SEO operativa selecciona guias cuando falta cuota editorial", async () => {
+  const calls = [];
+  const storage = {
+    async startRun() {
+      return { persisted: false, acquired: true };
+    },
+    async finishRun() {},
+    async fetchRecentPublishedRows() {
+      return [
+        { template_type: "price_city", status: "published", published_at: "2026-05-22T08:00:00.000Z" },
+        { template_type: "rent_city", status: "published", published_at: "2026-05-22T09:00:00.000Z" },
+        { template_type: "editorial_guide", status: "published", published_at: "2026-05-22T10:00:00.000Z" }
+      ];
+    }
+  };
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    storage,
+    config: { enabled: true, dryRun: false },
+    runGeneration: async (options) => {
+      calls.push(options);
+      return {
+        ok: true,
+        mode: "publish",
+        template_type: options.template_type,
+        content_type: "news",
+        generated_count: 1,
+        published_count: 1,
+        results: [
+          {
+            slug: "guias/antes-de-llamar-por-un-piso",
+            template_type: "editorial_guide",
+            quality_score: 94,
+            status: "published",
+            index_status: "index"
+          }
+        ]
+      };
+    }
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].template_type, "editorial_guide");
+  assert.equal(calls[0].dailyPublishLimit, 4);
+  assert.equal(calls[0].maxPublishesPerRun, 1);
+  assert.equal(result.selected_content_type, "news");
+  assert.equal(result.published_news_today, 2);
+  assert.equal(result.published_landings_today, 2);
+  assert.equal(result.results[0].target_path, "/guias/antes-de-llamar-por-un-piso/");
+});
+
+test("la publicacion SEO operativa respeta el cupo diario 2 landings + 2 guias", async () => {
+  let called = false;
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [
+          { template_type: "price_city", status: "published", published_at: "2026-05-22T08:00:00.000Z" },
+          { template_type: "rent_city", status: "published", published_at: "2026-05-22T09:00:00.000Z" },
+          { template_type: "editorial_guide", status: "published", published_at: "2026-05-22T10:00:00.000Z" },
+          { template_type: "editorial_guide", status: "published", published_at: "2026-05-22T11:00:00.000Z" }
+        ];
+      }
+    },
+    config: { enabled: true, dryRun: false },
+    runGeneration: async () => {
+      called = true;
+      return { ok: true, generated_count: 1, published_count: 1, results: [] };
+    }
+  });
+
+  assert.equal(called, false);
+  assert.equal(result.published_count, 0);
+  assert.equal(result.reason, "daily_total_quota_reached");
+  assert.equal(result.skipped_reason, "daily_total_quota_reached");
+});
+
+test("la publicacion SEO exige score editorial minimo antes de publicar", () => {
+  const base = {
+    mode: "publish",
+    autoPublish: true,
+    publishedToday: 0,
+    publishedThisRun: 0,
+    dailyPublishLimit: 4,
+    maxPublishesPerRun: 1
+  };
+
+  assert.equal(canPublishNow({ ...base, quality: { score: 84 } }), false);
+  assert.equal(canPublishNow({ ...base, quality: { score: 85 } }), true);
+  assert.equal(canPublishNow({ ...base, quality: { score: 100 }, publishedToday: 4 }), false);
 });
 test("las landings publicas cargan analitica solo tras consentimiento", () => {
   const html = renderLandingHtml({
