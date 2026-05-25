@@ -4,6 +4,11 @@ const test = require("node:test");
 const adminHandler = require("../api/admin");
 const extensionVersionHandler = require("../api/extension-version");
 const {
+  EXTENSION_INSTALL_EMAIL_TEXT,
+  buildExtensionInstallEmailPayload,
+  shouldNotifyExtensionInstall
+} = require("../api/_extensionInstallEmail");
+const {
   browserFromUserAgent,
   extensionUsageEventFromInput,
   summarizeExtensionUsage
@@ -46,6 +51,20 @@ function createJsonResponse() {
   };
 }
 
+async function invokeExtensionUsage(body, headers = {}) {
+  const { res, payload } = createJsonResponse();
+  await extensionVersionHandler(
+    {
+      method: "POST",
+      url: "/api/extension-version?resource=usage",
+      headers: { host: "inmoradar.app", ...headers },
+      body: JSON.stringify(body)
+    },
+    res
+  );
+  return { res, payload: payload() };
+}
+
 test("extension usage normalizes browser, country and hashes identifiers", () => {
   const event = extensionUsageEventFromInput(
     {
@@ -72,6 +91,37 @@ test("extension usage normalizes browser, country and hashes identifiers", () =>
   assert.equal(event.active_seconds, 95);
   assert.equal(event.anonymous_id_hash.length, 48);
   assert.notEqual(event.anonymous_id_hash, "install-123");
+});
+
+test("extension install email payload conserva el copy solicitado y filtra updates", () => {
+  assert.equal(
+    shouldNotifyExtensionInstall({
+      event_name: "extension_installed",
+      metadata: { reason: "install", has_previous_version: false }
+    }),
+    true
+  );
+  assert.equal(
+    shouldNotifyExtensionInstall({
+      event_name: "extension_installed",
+      metadata: { reason: "update", has_previous_version: true }
+    }),
+    false
+  );
+
+  const payload = buildExtensionInstallEmailPayload({
+    event: { extension_version: "2.0.5" },
+    env: {
+      EXTENSION_INSTALL_EMAIL_TO: "sergio@example.com",
+      RESEND_EXTENSION_INSTALL_EMAIL_FROM: "InmoRadar <avisos@inmoradar.app>"
+    }
+  });
+
+  assert.deepEqual(payload.to, ["sergio@example.com"]);
+  assert.equal(payload.text, EXTENSION_INSTALL_EMAIL_TEXT);
+  assert.match(payload.subject, /instalaci\u00f3n/);
+  assert.match(payload.text, /grid punteado/);
+  assert.match(payload.text, /P\u00edldora superior/);
 });
 
 test("extension usage parses common browser user agents", () => {
@@ -267,6 +317,89 @@ test("extension usage endpoint rejects oversized JSON before storage", async () 
         assert.equal(res.statusCode, 400);
         assert.equal(body.reason, "payload_too_large");
         assert.equal(called, false);
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+});
+
+test("extension usage endpoint envia email en instalaciones reales solamente", async () => {
+  const previousFetch = global.fetch;
+  const requests = [];
+
+  await withEnv(
+    {
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      EXTENSION_USAGE_HASH_SECRET: "hash-test",
+      EXTENSION_USAGE_RATE_LIMIT_MAX: "10000",
+      RESEND_API_KEY: "resend-test",
+      EXTENSION_INSTALL_EMAIL_TO: "sergio@example.com",
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined
+    },
+    async () => {
+      global.fetch = async (url, options = {}) => {
+        requests.push({ url: String(url), options });
+        if (String(url).includes("api.resend.com")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ id: "email-test" }),
+            text: async () => ""
+          };
+        }
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({}),
+          text: async () => ""
+        };
+      };
+
+      try {
+        const install = await invokeExtensionUsage(
+          {
+            event_name: "extension_installed",
+            anonymous_install_id: "install-email-1",
+            session_id: "session-email-1",
+            extension_version: "2.0.5",
+            metadata: { reason: "install", has_previous_version: false }
+          },
+          {
+            "x-forwarded-for": "203.0.113.10",
+            "user-agent": "Mozilla/5.0 Chrome/124.0"
+          }
+        );
+
+        assert.equal(install.res.statusCode, 200);
+        assert.equal(install.payload.accepted, true);
+
+        const emailRequests = requests.filter((request) => request.url.includes("api.resend.com"));
+        assert.equal(emailRequests.length, 1);
+        const emailPayload = JSON.parse(emailRequests[0].options.body);
+        assert.deepEqual(emailPayload.to, ["sergio@example.com"]);
+        assert.equal(emailPayload.text, EXTENSION_INSTALL_EMAIL_TEXT);
+
+        requests.length = 0;
+        const update = await invokeExtensionUsage(
+          {
+            event_name: "extension_installed",
+            anonymous_install_id: "install-email-2",
+            session_id: "session-email-2",
+            extension_version: "2.0.6",
+            metadata: { reason: "update", has_previous_version: true }
+          },
+          {
+            "x-forwarded-for": "203.0.113.11",
+            "user-agent": "Mozilla/5.0 Chrome/124.0"
+          }
+        );
+
+        assert.equal(update.res.statusCode, 200);
+        assert.equal(requests.some((request) => request.url.includes("/extension_usage_events")), true);
+        assert.equal(requests.some((request) => request.url.includes("api.resend.com")), false);
       } finally {
         global.fetch = previousFetch;
       }

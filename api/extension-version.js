@@ -38,21 +38,26 @@ async function handleExtensionUsage(req, res) {
   if (req.method !== "POST") {
     return json(res, 405, { ok: false, error: "method_not_allowed" });
   }
+
   const rateLimit = await checkDurableRateLimit(req, {
     scope: "extension_usage",
     maxRequests: process.env.EXTENSION_USAGE_RATE_LIMIT_MAX || DEFAULT_EXTENSION_USAGE_RATE_LIMIT,
     windowMs: process.env.EXTENSION_USAGE_RATE_LIMIT_WINDOW_MS || DEFAULT_EXTENSION_USAGE_RATE_LIMIT_WINDOW_MS
   });
+
   setRateLimitHeaders(res, rateLimit);
+
   if (!rateLimit.allowed) {
     return json(res, 429, rateLimitPayload(rateLimit));
   }
+
   if (!hasSupabaseConfig()) {
     return json(res, 503, { ok: false, error: "supabase_not_configured" });
   }
 
   let body;
   let event;
+
   try {
     body = await readJsonBody(req);
     event = extensionUsageEventFromInput(body, req.headers || {});
@@ -67,6 +72,7 @@ async function handleExtensionUsage(req, res) {
   }
 
   let shouldNotifyInstall = false;
+
   if (isReliableInstallActivationEvent(event)) {
     try {
       shouldNotifyInstall = !(await hasPriorExtensionUsageEvent({
@@ -107,6 +113,7 @@ async function handleExtensionUsage(req, res) {
 module.exports = async function handler(req, res) {
   const startedAt = Date.now();
   const resource = resourceFromRequest(req) || "version";
+
   try {
     if (handleCors(req, res)) return;
 
