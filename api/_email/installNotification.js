@@ -174,11 +174,12 @@ function earliestInstallRows(rows = []) {
 
 function summarizeInstallMetrics(rows = [], now = new Date()) {
   const safeRows = Array.isArray(rows) ? rows : [];
-  const installs = earliestInstallRows(safeRows);
+  const reliableRows = safeRows.filter(isReliableInstallActivationEvent);
+  const installs = earliestInstallRows(reliableRows);
   const nowMs = now instanceof Date ? now.getTime() : new Date(now).getTime();
   const cutoff7d = nowMs - 7 * DAY_MS;
   const activeUsers7d = new Set(
-    safeRows
+    reliableRows
       .filter((row) => row.anonymous_id_hash && createdMs(row) >= cutoff7d && createdMs(row) <= nowMs)
       .map((row) => row.anonymous_id_hash)
   ).size;
@@ -525,12 +526,18 @@ async function sendInstallNotificationEmail(payload, options = {}) {
 async function hasPriorExtensionUsageEvent({ anonymousIdHash, supabaseFetch }) {
   if (!anonymousIdHash || typeof supabaseFetch !== "function") return true;
   const params = new URLSearchParams({
-    select: "id",
-    limit: "1"
+    select: "event_name",
+    order: "created_at.asc",
+    limit: "100"
   });
   params.set("anonymous_id_hash", `eq.${anonymousIdHash}`);
   const rows = await supabaseFetch(`extension_usage_events?${params.toString()}`);
-  return Array.isArray(rows) && rows.length > 0;
+  return (Array.isArray(rows) ? rows : []).some((row) =>
+    isReliableInstallActivationEvent({
+      event_name: row.event_name,
+      anonymous_id_hash: anonymousIdHash
+    })
+  );
 }
 
 async function loadInstallMetricRows({ supabaseFetch, limit = 10000 }) {

@@ -3,6 +3,7 @@ const test = require("node:test");
 
 const {
   buildInstallNotificationPayload,
+  hasPriorExtensionUsageEvent,
   isReliableInstallActivationEvent,
   notifyReliableInstallActivation,
   renderInstallNotificationEmail,
@@ -68,6 +69,45 @@ test("sourceLabelFromMetadata normaliza canales conocidos sin inventar datos", (
   assert.equal(sourceLabelFromMetadata({ utm: { source: "google", medium: "organic" } }), "SEO / Google");
   assert.equal(sourceLabelFromMetadata({ install_source: "extension" }), "Directo / no atribuido");
   assert.equal(sourceLabelFromMetadata({}), "Directo / no atribuido");
+});
+
+test("summarizeInstallMetrics ignora clicks de intencion como instalaciones", () => {
+  const metrics = summarizeInstallMetrics(
+    [
+      {
+        anonymous_id_hash: "u1",
+        event_name: "install_click",
+        metadata: { install_source: "seo" },
+        created_at: "2026-05-25T08:00:00.000Z"
+      },
+      {
+        anonymous_id_hash: "u1",
+        event_name: "extension_opened",
+        metadata: { install_source: "chrome_web_store" },
+        created_at: "2026-05-25T08:02:00.000Z"
+      }
+    ],
+    new Date("2026-05-25T12:00:00.000Z")
+  );
+
+  assert.equal(metrics.totalInstalls, 1);
+  assert.equal(metrics.installs7d, 1);
+  assert.equal(metrics.activeUsers7d, 1);
+  assert.equal(metrics.topSource, "Chrome Web Store");
+});
+
+test("hasPriorExtensionUsageEvent no bloquea un primer evento fiable por clicks previos", async () => {
+  const withOnlyIntent = await hasPriorExtensionUsageEvent({
+    anonymousIdHash: "hash-1",
+    supabaseFetch: async () => [{ event_name: "install_click" }, { event_name: "seo_cta_click" }]
+  });
+  const withReliableEvent = await hasPriorExtensionUsageEvent({
+    anonymousIdHash: "hash-1",
+    supabaseFetch: async () => [{ event_name: "install_click" }, { event_name: "extension_opened" }]
+  });
+
+  assert.equal(withOnlyIntent, false);
+  assert.equal(withReliableEvent, true);
 });
 
 test("sendInstallNotificationEmail mockea proveedor y devuelve fallo sin lanzar", async () => {
