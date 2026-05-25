@@ -14,6 +14,10 @@ const sitemapHandler = require("../api/sitemap");
 const seoPageHandler = require("../api/seo-page");
 const { renderLandingHtml } = require("../api/seo-page");
 
+function extractJsonLd(html) {
+  return [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => JSON.parse(match[1]));
+}
+
 test("price_city genera una landing de alta calidad cuando hay datos reales, fuente y fecha", async () => {
   const opportunity = {
     keyword: "precio metro cuadrado Logroño",
@@ -291,6 +295,58 @@ test("expensive_listing_city render publico regenera textos visibles con tildes"
   assert.match(html, /@media \(max-width: 560px\)/);
   assert.match(html, /overflow-x: hidden/);
   assert.doesNotMatch(html, /Plantilla antigua sin tildes/);
+});
+
+test("expensive_listing_city genera breadcrumbs JSON-LD sin items intermedios huerfanos", () => {
+  for (const city of ["Granada", "Madrid"]) {
+    const slugCity = city.toLowerCase();
+    const canonical = `https://inmoradar.app/saber-si-piso-esta-caro/${slugCity}/`;
+    const html = renderLandingHtml({
+      slug: `saber-si-piso-esta-caro/${slugCity}`,
+      title: `Como saber si un piso esta caro en ${city}`,
+      meta_title: `Como saber si un piso esta caro en ${city}`,
+      meta_description: "Guia para comparar el precio de un piso antes de contactar.",
+      h1: `Como saber si un piso esta caro en ${city}`,
+      body_html: "<article><h1>Plantilla antigua sin tildes</h1></article>",
+      canonical_url: canonical,
+      city,
+      template_type: "expensive_listing_city",
+      index_status: "index",
+      status: "published",
+      quality_score: 100,
+      source_data_json: {
+        sources: [
+          {
+            operation: "sale",
+            source: "mivau_appraisal",
+            source_url: "https://example.com/venta.csv",
+            period_label: "4T 2025",
+            period_date: "2025-10-01",
+            geo_level: "municipality",
+            price_eur_m2: 2200
+          }
+        ],
+        faq: []
+      }
+    });
+
+    const breadcrumb = extractJsonLd(html).find((entry) => entry["@type"] === "BreadcrumbList");
+    assert.ok(breadcrumb, `BreadcrumbList no encontrado para ${city}`);
+    assert.deepEqual(
+      breadcrumb.itemListElement.map((item) => item.position),
+      [1, 2, 3]
+    );
+    assert.deepEqual(
+      breadcrumb.itemListElement.map((item) => item.name),
+      ["Inicio", "Saber si un piso esta caro", city]
+    );
+
+    for (const item of breadcrumb.itemListElement) {
+      assert.equal(typeof item.item, "string", `Falta item en breadcrumb position ${item.position} para ${city}`);
+      assert.match(item.item, /^https:\/\/inmoradar\.app\//);
+      assert.notEqual(item.name, "Espa\u00f1a");
+    }
+  }
 });
 
 test("siteUrl normaliza www al dominio canonico sin www", () => {
