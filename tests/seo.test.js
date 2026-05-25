@@ -18,6 +18,47 @@ function extractJsonLd(html) {
   return [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => JSON.parse(match[1]));
 }
 
+function qualityFixture(overrides = {}) {
+  const repeatedCityCopy = "Madrid mercado vivienda precio barrio referencia comprador ".repeat(130);
+  const bodyHtml = `
+    <header data-city-specific="true"><h1>Precio del metro cuadrado en Madrid</h1></header>
+    <section data-city-specific="true"><p>${repeatedCityCopy}</p><p><strong>Fuente:</strong> MIVAU. <strong>Fecha del dato:</strong> 4T 2025.</p></section>
+    <section data-city-specific="true"><p>${repeatedCityCopy}</p><a href="/datos">Datos</a><a href="/metodologia">Metodologia</a></section>
+    <section data-city-specific="true"><button>EMPEZAR GRATIS</button></section>
+  `;
+  const landing = {
+    slug: "precio-metro-cuadrado/madrid",
+    title: "Precio del metro cuadrado en Madrid",
+    meta_title: "Precio m2 en Madrid con fuente actualizada",
+    meta_description: "Consulta una referencia de precio por metro cuadrado en Madrid, con fuente, fecha y pautas para comparar anuncios.",
+    h1: "Precio del metro cuadrado en Madrid",
+    body_html: bodyHtml,
+    city: "Madrid",
+    template_type: "price_city",
+    canonical_url: "https://inmoradar.app/precio-metro-cuadrado/madrid/",
+    ...overrides
+  };
+  const sourceData = {
+    hasRealData: true,
+    hasProvincialOnly: false,
+    records: [
+      {
+        source: "mivau_appraisal",
+        source_url: "https://example.com/mivau.csv",
+        period_label: "4T 2025",
+        geo_level: "municipality"
+      }
+    ],
+    faq: [
+      { question: "Uno", answer: "Uno" },
+      { question: "Dos", answer: "Dos" },
+      { question: "Tres", answer: "Tres" },
+      { question: "Cuatro", answer: "Cuatro" }
+    ]
+  };
+  return { landing, sourceData };
+}
+
 test("price_city genera una landing de alta calidad cuando hay datos reales, fuente y fecha", async () => {
   const opportunity = {
     keyword: "precio metro cuadrado Logroño",
@@ -38,6 +79,69 @@ test("price_city genera una landing de alta calidad cuando hay datos reales, fue
   assert.match(landing.body_html, /data-seo-calc-price/);
   assert.match(landing.body_html, /data-seo-calc-area/);
   assert.doesNotMatch(landing.body_html, /precio exacto de calle/i);
+});
+
+test("quality gate acepta CTA actual EMPEZAR GRATIS", () => {
+  const { landing, sourceData } = qualityFixture();
+  const quality = calculateSeoLandingQuality(landing, sourceData);
+
+  assert.ok(quality.score >= 75);
+  assert.ok(quality.signals.includes("CTA claro"));
+  assert.equal(quality.editorial_quality_status, "pass");
+});
+
+test("quality gate penaliza mojibake claro", () => {
+  const fixture = qualityFixture();
+  const quality = calculateSeoLandingQuality(
+    {
+      ...fixture.landing,
+      body_html: `${fixture.landing.body_html}<p>Texto roto \u00c3\u00a1 \u00c3\u00b1 \u00c2\u00a0</p>`
+    },
+    fixture.sourceData
+  );
+
+  assert.ok(quality.penalties.includes("posible mojibake o caracteres rotos"));
+  assert.ok(quality.warnings.some((warning) => /encoding/.test(warning)));
+  assert.equal(quality.technical_indexability_status, "blocked");
+});
+
+test("quality gate penaliza canonical externo o incoherente", () => {
+  const { landing, sourceData } = qualityFixture({
+    canonical_url: "https://example.com/precio-metro-cuadrado/madrid/"
+  });
+  const quality = calculateSeoLandingQuality(landing, sourceData);
+
+  assert.ok(quality.penalties.includes("canonical externo o dominio no canonico"));
+  assert.ok(quality.rejection_reasons.includes("canonical_incoherent"));
+  assert.equal(quality.technical_indexability_status, "blocked");
+});
+
+test("quality gate permite menciones descriptivas a portales de terceros", () => {
+  const { landing, sourceData } = qualityFixture();
+  const quality = calculateSeoLandingQuality(
+    {
+      ...landing,
+      body_html: `${landing.body_html}<p>Tambien sirve para comparar anuncios publicados en Idealista, Fotocasa, Habitaclia y Pisos.com.</p>`
+    },
+    sourceData
+  );
+
+  assert.equal(quality.penalties.includes("uso potencialmente arriesgado de marca de tercero"), false);
+  assert.equal(quality.editorial_quality_status, "pass");
+});
+
+test("quality gate marca riesgo cuando una marca de tercero sugiere oficialidad", () => {
+  const { landing, sourceData } = qualityFixture();
+  const quality = calculateSeoLandingQuality(
+    {
+      ...landing,
+      body_html: `${landing.body_html}<p>InmoRadar es partner oficial de Idealista para analizar anuncios.</p>`
+    },
+    sourceData
+  );
+
+  assert.ok(quality.penalties.includes("uso potencialmente arriesgado de marca de tercero"));
+  assert.equal(quality.editorial_quality_status, "review");
 });
 
 test("price_city queda por debajo de publicación si no hay fuente real", async () => {

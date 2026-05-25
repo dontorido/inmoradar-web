@@ -408,7 +408,7 @@ test("admin seo landings handler keeps filters and pagination read-only", async 
     }),
     clampLimit: (value, fallback, max) => Math.max(1, Math.min(max, Number.parseInt(String(value || fallback), 10) || fallback)),
     clampPage: (value) => Math.max(1, Number.parseInt(String(value || 1), 10) || 1),
-    landingSelect: "id,slug,status,index_status,quality_score,updated_at",
+    landingSelect: "id,slug,status,index_status,quality_score,updated_at,source_data_json",
     safeFetch: async (path) => {
       paths.push(path);
       if (path.startsWith("seo_landing_opportunities?")) return [{ status: "pending", template_type: "price_city" }];
@@ -421,7 +421,22 @@ test("admin seo landings handler keeps filters and pagination read-only", async 
     supabaseFetch: async (path) => {
       paths.push(path);
       return [
-        { id: 3, slug: "landing-3", status: "published", index_status: "index", quality_score: 92 },
+        {
+          id: 3,
+          slug: "landing-3",
+          status: "published",
+          index_status: "index",
+          quality_score: 92,
+          source_data_json: {
+            quality: {
+              signals: ["datos reales disponibles"],
+              penalties: [],
+              warnings: [],
+              technical_indexability_status: "ok",
+              editorial_quality_status: "pass"
+            }
+          }
+        },
         { id: 4, slug: "landing-4", status: "published", index_status: "index", quality_score: 88 },
         { id: 5, slug: "landing-5", status: "published", index_status: "index", quality_score: 80 }
       ];
@@ -442,6 +457,10 @@ test("admin seo landings handler keeps filters and pagination read-only", async 
   assert.equal(result.payload.from, 3);
   assert.equal(result.payload.to, 4);
   assert.equal(result.payload.landings[0].slug, "landing-3");
+  assert.deepEqual(result.payload.landings[0].quality_signals, ["datos reales disponibles"]);
+  assert.equal(result.payload.landings[0].sitemap_status, "included");
+  assert.equal(result.payload.landings[0].sitemap_reason, "published_index_quality_ok");
+  assert.equal(result.payload.landings[0].source_data_json, undefined);
   assert.equal(result.payload.summary.filtered_total, 1);
   assert.equal(result.payload.summary.target_landings_per_day, 2);
   assert.equal(paths.length, 3);

@@ -1067,9 +1067,9 @@ function statusTone(value) {
   if (["degraded"].includes(normalized)) return "warn";
   if (["down"].includes(normalized)) return "bad";
   if (["unknown"].includes(normalized)) return "draft";
-  if (["published", "active", "on_trial", "connected", "manually_published"].includes(normalized)) return "published";
+  if (["published", "active", "on_trial", "connected", "manually_published", "included", "pass", "ok", "indexable"].includes(normalized)) return "published";
   if (["ready", "ready_to_publish", "index", "paid", "scheduled", "pending_review"].includes(normalized)) return "ready";
-  if (["cancelled", "expired", "needs_reauth", "needs_connection", "noindex", "unpaid", "payment_failed", "failed", "error", "disconnected"].includes(normalized)) return "bad";
+  if (["cancelled", "expired", "needs_reauth", "needs_connection", "noindex", "unpaid", "payment_failed", "failed", "error", "disconnected", "excluded", "blocked", "fail"].includes(normalized)) return "bad";
   if (["past_due", "publishing"].includes(normalized)) return "warn";
   if (["draft", "image_pending", "needs_review", "manual", "skipped"].includes(normalized)) return "draft";
   if (["archived"].includes(normalized)) return "muted";
@@ -2198,6 +2198,35 @@ function renderPremium(rows) {
     .join("");
 }
 
+function limitedList(items, limit = 2) {
+  const values = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (values.length <= limit) return values;
+  return [...values.slice(0, limit), `+${values.length - limit} mas`];
+}
+
+function seoQualityLine(label, items, tone = "neutral") {
+  const values = limitedList(items);
+  if (!values.length) return "";
+  return `<div class="admin-seo-quality-line is-${escapeHtml(tone)}"><strong>${escapeHtml(label)}</strong><span>${values.map(escapeHtml).join(" - ")}</span></div>`;
+}
+
+function renderSeoQualityGate(row = {}) {
+  const warnings = [...(row.quality_warnings || []), ...(row.quality_reasons || [])].filter(Boolean);
+  return `
+    <div class="admin-seo-quality">
+      <div class="admin-seo-quality-chips">
+        ${chip(row.sitemap_status || "excluded", statusTone(row.sitemap_status))}
+        ${chip(row.technical_indexability_status || "-", statusTone(row.technical_indexability_status))}
+        ${chip(row.editorial_quality_status || "-", statusTone(row.editorial_quality_status))}
+      </div>
+      ${seoQualityLine("Senales", row.quality_signals, "good")}
+      ${seoQualityLine("Alertas", warnings, "warn")}
+      ${seoQualityLine("Penalizaciones", row.quality_penalties, "bad")}
+      <div class="admin-subtle">Sitemap: ${escapeHtml(row.sitemap_reason || "-")}</div>
+    </div>
+  `;
+}
+
 function renderSeo(payload) {
   const rows = payload.landings || [];
   state.seo.page = Number(payload.page || state.seo.page || 1);
@@ -2207,7 +2236,7 @@ function renderSeo(payload) {
   renderSeoSummary(payload.summary || {}, rows);
 
   if (!rows.length) {
-    els.seoRows.innerHTML = `<tr><td colspan="5">No hay landings con este filtro.</td></tr>`;
+    els.seoRows.innerHTML = `<tr><td colspan="6">No hay landings con este filtro.</td></tr>`;
     renderSeoPagination(payload);
     return;
   }
@@ -2222,7 +2251,8 @@ function renderSeo(payload) {
             <div class="admin-subtle">${escapeHtml(row.slug)} · ${escapeHtml(row.word_count || 0)} palabras</div>
           </td>
           <td>${escapeHtml(row.city || "-")}</td>
-        <td>${chip(Number(row.quality_score || 0).toFixed(0), scoreTone(row.quality_score), "score")}</td>
+          <td>${chip(Number(row.quality_score || 0).toFixed(0), scoreTone(row.quality_score), "score")}</td>
+          <td>${renderSeoQualityGate(row)}</td>
           <td>
             ${chip(row.status, statusTone(row.status))}
             ${chip(row.index_status, statusTone(row.index_status))}
