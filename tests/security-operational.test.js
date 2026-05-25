@@ -3,6 +3,7 @@ const test = require("node:test");
 
 const adminHandler = require("../api/admin");
 const extensionVersionHandler = require("../api/extension-version");
+const marketPriceHandler = require("../api/market-price");
 const { requestMetricEvent } = require("../lib/observability/request-metrics");
 const { checkDurableRateLimit } = require("../lib/security/durable-rate-limit");
 const { resetRateLimitStore } = require("../lib/security/rate-limit");
@@ -316,6 +317,239 @@ test("extension usage can block from durable Upstash limit without calling Supab
         assert.equal(response.res.headers["retry-after"], "60");
         assert.equal(fetchCalls.length, 1);
         assert.match(fetchCalls[0].url, /\/pipeline$/);
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+});
+
+test("analytics event rate limit falls back to memory and blocks before Supabase", async () => {
+  resetRateLimitStore();
+  const previousFetch = global.fetch;
+  const fetchCalls = [];
+
+  await withEnv(
+    {
+      ANALYTICS_EVENT_RATE_LIMIT_MAX: "1",
+      ANALYTICS_EVENT_RATE_LIMIT_WINDOW_MS: "60000",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined
+    },
+    async () => {
+      global.fetch = async (url, options) => {
+        fetchCalls.push({ url, options });
+        return { ok: true, status: 201, text: async () => "" };
+      };
+
+      try {
+        const baseReq = {
+          method: "POST",
+          url: "/api/market-price?resource=owned-analytics-event",
+          headers: {
+            host: "inmoradar.app",
+            "x-forwarded-for": "203.0.113.60",
+            "user-agent": "Mozilla/5.0 Chrome/124.0"
+          },
+          body: ""
+        };
+        const firstReq = {
+          ...baseReq,
+          body: JSON.stringify({
+            event_name: "page_view",
+            anonymous_session_id: "analytics-session-raw",
+            page_path: "/datos"
+          })
+        };
+        const secondReq = {
+          ...baseReq,
+          body: JSON.stringify({
+            event_name: "page_view",
+            anonymous_session_id: "analytics-session-raw",
+            page_path: "/precio-metro-cuadrado/madrid"
+          })
+        };
+
+        const first = createJsonResponse();
+        await marketPriceHandler(firstReq, first.res);
+        assert.equal(first.res.statusCode, 200);
+        assert.equal(first.payload().tracked, true);
+        assert.equal(first.res.headers["x-ratelimit-limit"], "1");
+        assert.equal(first.res.headers["x-ratelimit-remaining"], "0");
+
+        const second = createJsonResponse();
+        await marketPriceHandler(secondReq, second.res);
+        assert.equal(second.res.statusCode, 429);
+        assert.equal(second.payload().error, "rate_limited");
+        assert.equal(second.res.headers["retry-after"], "60");
+        assert.equal(fetchCalls.length, 1);
+      } finally {
+        global.fetch = previousFetch;
+        resetRateLimitStore();
+      }
+    }
+  );
+});
+
+test("analytics event rate limit separates anonymous sessions and falls back to IP user-agent without session", async () => {
+  resetRateLimitStore();
+  const previousFetch = global.fetch;
+  const fetchCalls = [];
+
+  await withEnv(
+    {
+      ANALYTICS_EVENT_RATE_LIMIT_MAX: "1",
+      ANALYTICS_EVENT_RATE_LIMIT_WINDOW_MS: "60000",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined
+    },
+    async () => {
+      global.fetch = async (url, options) => {
+        fetchCalls.push({ url, options });
+        return { ok: true, status: 201, text: async () => "" };
+      };
+
+      try {
+        const baseReq = {
+          method: "POST",
+          url: "/api/market-price?resource=owned-analytics-event",
+          headers: {
+            host: "inmoradar.app",
+            "x-forwarded-for": "203.0.113.62",
+            "user-agent": "Mozilla/5.0 Firefox/126.0"
+          },
+          body: ""
+        };
+
+        const sessionA = createJsonResponse();
+        await marketPriceHandler(
+          {
+            ...baseReq,
+            body: JSON.stringify({
+              event_name: "page_view",
+              anonymous_session_id: "session-a",
+              page_path: "/datos"
+            })
+          },
+          sessionA.res
+        );
+        assert.equal(sessionA.res.statusCode, 200);
+
+        const sessionB = createJsonResponse();
+        await marketPriceHandler(
+          {
+            ...baseReq,
+            body: JSON.stringify({
+              event_name: "page_view",
+              anonymous_session_id: "session-b",
+              page_path: "/datos"
+            })
+          },
+          sessionB.res
+        );
+        assert.equal(sessionB.res.statusCode, 200);
+
+        const noSessionOne = createJsonResponse();
+        await marketPriceHandler(
+          {
+            ...baseReq,
+            body: JSON.stringify({
+              event_name: "page_view",
+              page_path: "/datos"
+            })
+          },
+          noSessionOne.res
+        );
+        assert.equal(noSessionOne.res.statusCode, 200);
+
+        const noSessionTwo = createJsonResponse();
+        await marketPriceHandler(
+          {
+            ...baseReq,
+            body: JSON.stringify({
+              event_name: "page_view",
+              page_path: "/otra-ruta"
+            })
+          },
+          noSessionTwo.res
+        );
+        assert.equal(noSessionTwo.res.statusCode, 429);
+        assert.equal(noSessionTwo.payload().error, "rate_limited");
+        assert.equal(fetchCalls.length, 3);
+      } finally {
+        global.fetch = previousFetch;
+        resetRateLimitStore();
+      }
+    }
+  );
+});
+
+test("analytics event uses Upstash with hashed keys when configured", async () => {
+  const previousFetch = global.fetch;
+  const fetchCalls = [];
+
+  await withEnv(
+    {
+      ANALYTICS_EVENT_RATE_LIMIT_MAX: "5",
+      ANALYTICS_EVENT_RATE_LIMIT_WINDOW_MS: "60000",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      UPSTASH_REDIS_REST_URL: "https://upstash.example",
+      UPSTASH_REDIS_REST_TOKEN: "upstash-token-test",
+      RATE_LIMIT_HASH_SALT: "rate-limit-salt-test"
+    },
+    async () => {
+      global.fetch = async (url, options) => {
+        fetchCalls.push({ url, options });
+        if (String(url).includes("/pipeline")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => [{ result: 1 }, { result: 1 }, { result: 60 }]
+          };
+        }
+        return { ok: true, status: 201, text: async () => "" };
+      };
+
+      try {
+        const req = {
+          method: "POST",
+          url: "/api/market-price?resource=owned-analytics-event",
+          headers: {
+            host: "inmoradar.app",
+            "x-forwarded-for": "203.0.113.61",
+            "user-agent": "Mozilla/5.0 Chrome/124.0"
+          },
+          body: JSON.stringify({
+            event_name: "calculator_used",
+            anonymous_session_id: "analytics-session-secret",
+            page_path: "/precio-metro-cuadrado/madrid",
+            metadata: { token: "metadata-token-secret", price: 240000 }
+          })
+        };
+
+        const response = createJsonResponse();
+        await marketPriceHandler(req, response.res);
+
+        assert.equal(response.res.statusCode, 200);
+        assert.equal(response.payload().tracked, true);
+        assert.equal(response.res.headers["x-ratelimit-limit"], "5");
+        assert.equal(response.res.headers["x-ratelimit-remaining"], "4");
+
+        const pipelineCall = fetchCalls.find((call) => String(call.url).includes("/pipeline"));
+        assert.ok(pipelineCall);
+        const commands = JSON.parse(pipelineCall.options.body);
+        const key = commands[0][1];
+        assert.match(key, /^rl:v1:/);
+        assert.doesNotMatch(
+          key,
+          /203\.0\.113\.61|analytics-session-secret|metadata-token-secret|rate-limit-salt-test|Chrome|precio-metro-cuadrado/i
+        );
+        assert.equal(fetchCalls.length, 2);
       } finally {
         global.fetch = previousFetch;
       }

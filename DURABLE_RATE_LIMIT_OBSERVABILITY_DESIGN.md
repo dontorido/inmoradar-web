@@ -14,6 +14,7 @@ La capa actual ya cubre seguridad operacional inicial:
 Actualizacion de piloto:
 
 - Se implementa un piloto durable solo para `POST /api/extension-usage`.
+- Se extiende despues el mismo patron a `POST /api/analytics/event`.
 - Si `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN` existen, el limite usa Upstash Redis via REST.
 - Si faltan variables o Upstash falla, el flujo cae al rate limiting en memoria ya existente.
 - No se cambia URL, payload normal, query params ni schema.
@@ -25,11 +26,13 @@ Recomendacion:
 
 1. Mantener memoria + logs como fallback.
 2. Validar el piloto durable en `POST /api/extension-usage`.
-3. Si el piloto es estable, extender a `POST /api/contact`, `POST /api/waitlist/browser` y `POST /api/analytics/event`.
-4. Usar Upstash Redis como opcion preferida para endpoints publicos de escritura si se aceptan nuevas credenciales.
-5. Si no se aceptan nuevas credenciales, disenar una tabla Supabase + RPC atomica como segunda opcion, pero implementarla en fase separada con migracion revisada.
-6. Usar Vercel WAF como capa perimetral complementaria si el plan/proyecto lo permite, especialmente para patrones por path/IP antes de llegar a la funcion.
-7. No tocar todavia SEO write, Chrome, Meta, LinkedIn, Runway, Viraliza, checkout, billing, webhooks, cron ni jobs.
+3. Si el piloto es estable, extender primero a `POST /api/analytics/event`.
+4. Despues evaluar `POST /api/waitlist/browser`.
+5. Dejar `POST /api/contact` para una fase posterior para no bloquear leads reales ni notificaciones.
+6. Usar Upstash Redis como opcion preferida para endpoints publicos de escritura si se aceptan nuevas credenciales.
+7. Si no se aceptan nuevas credenciales, disenar una tabla Supabase + RPC atomica como segunda opcion, pero implementarla en fase separada con migracion revisada.
+8. Usar Vercel WAF como capa perimetral complementaria si el plan/proyecto lo permite, especialmente para patrones por path/IP antes de llegar a la funcion.
+9. No tocar todavia SEO write, Chrome, Meta, LinkedIn, Runway, Viraliza, checkout, billing, webhooks, cron ni jobs.
 
 ## 2. Fuentes revisadas
 
@@ -81,9 +84,9 @@ No recomendado ahora:
 | endpoint | metodo | tipo | prioridad | limite inicial recomendado | ventana | key primaria | key secundaria | accion 429 | notas |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `/api/extension-usage` | POST | publico escritura | 1 | 120/min | 60s | IP hash + scope | extension user/session hash si existe | payload actual `rate_limited` | Migrar el limite en memoria a durable sin cambiar payload. |
-| `/api/contact` | POST | publico escritura/email | 1 | 5/10min + 20/dia | 10m/24h | IP hash + normalized email hash | user-agent hash | 429 estable | Evita spam de formulario. No guardar email crudo en rate key. |
-| `/api/waitlist/browser` | POST | publico escritura | 1 | 10/10min + 30/dia | 10m/24h | IP hash + email hash | browser + source | 429 estable | Bajo riesgo y buen candidato. |
-| `/api/analytics/event` | POST | publico escritura | 2 | 120/min | 60s | IP hash + anonymous session hash | page path hash | 429 estable | Cuidado con no bloquear analytics legitima de usuarios reales. |
+| `/api/analytics/event` | POST | publico escritura | 1 | 120/min | 60s | IP hash + User-Agent hash + anonymous session hash si existe | ninguno | 429 estable | Implementado como segunda extension del patron durable. `page_path` no forma parte de la key primaria porque es controlado por cliente. |
+| `/api/waitlist/browser` | POST | publico escritura | 2 | 10/10min + 30/dia | 10m/24h | IP hash + email hash | browser + source | 429 estable | Siguiente candidato si analytics/event queda estable. |
+| `/api/contact` | POST | publico escritura/email | 3 | 5/10min + 20/dia | 10m/24h | IP hash + normalized email hash | user-agent hash | 429 estable | No abordar primero: puede bloquear leads reales y disparar email externo. No guardar email crudo en rate key. |
 | `/api/photo-condition-analysis` | POST | publico coste alto | 2 | 10/h + 30/dia | 1h/24h | IP hash + listing/url hash | premium/subscription hash si aplica | 429 estable | Revisar rate limit existente y coste OpenAI antes de tocar. |
 | `/api/check-premium` | GET/POST | publico lectura sensible | 3 | 30/min | 60s | IP hash + email hash | none | 429 estable | Evita enumeracion suave. Cuidar UX premium. |
 | `/api/saved-properties/email-report` | POST | publico/premium email | 3 | conservar limite diario actual + 10/h | 1h/24h | email hash + subscription hash | IP hash | 429 estable | No cambiar sin fixtures de email. |
@@ -354,11 +357,14 @@ Desactivacion:
 
 ### Fase 2: endpoints publicos escritura de bajo riesgo
 
-Cubrir:
+Estado:
 
-- `/api/contact`
+- `POST /api/analytics/event` implementado como segunda extension del patron durable.
+
+Pendientes:
+
 - `/api/waitlist/browser`
-- `/api/analytics/event`
+- `/api/contact`, solo tras definir limite que no bloquee leads reales
 
 Reglas:
 
@@ -463,3 +469,40 @@ No implementar todavia sin aprobar una de estas dos rutas:
 2. Supabase RPC/table: viable si se evita nuevo proveedor, pero requiere migracion y cuidado con latencia/locks.
 
 Mientras tanto, mantener memoria + logs como defensa inicial y usar los resultados de PR #11 para observar volumen real antes de endurecer limites.
+
+## 17. Analytics event como segunda extension durable
+
+Estado:
+
+- `POST /api/analytics/event` queda protegido con el mismo helper durable que `extension usage`.
+- Ruta real: `api/market-price?resource=owned-analytics-event`.
+- Handler: `lib/analytics/ownedEvents.js`.
+- Scope: `owned_analytics_event`.
+- Limite default: `120/min`.
+- Ventana default: `60s`.
+- Variables opcionales:
+  - `ANALYTICS_EVENT_RATE_LIMIT_MAX`
+  - `ANALYTICS_EVENT_RATE_LIMIT_WINDOW_MS`
+
+Key strategy:
+
+- IP saneada.
+- User-Agent truncado.
+- `anonymous_session_id` saneado si existe.
+- Si falta `anonymous_session_id`, la identidad cae a IP saneada + User-Agent truncado.
+- `page_path` no forma parte de la key primaria porque es controlado por cliente y podria fragmentar el bucket.
+- Todo se hashea dentro de `durable-rate-limit`.
+
+Fallback:
+
+- Upstash si `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN` existen.
+- Memoria si faltan variables.
+- Memoria con log saneado si Upstash falla.
+
+Riesgos pendientes:
+
+- Confirmar en produccion que no hay fallback durable inesperado.
+- Vigilar que el limite no degrade analytics legitima.
+- Usuarios detras de la misma NAT pueden compartir bucket si falta `anonymous_session_id`; `120/min` es suficientemente suave para rollout inicial.
+- Si aparecen `429` legitimos, subir inicialmente a `240/min` antes de endurecer.
+- No extender todavia a `contact` hasta observar este segundo endpoint.
