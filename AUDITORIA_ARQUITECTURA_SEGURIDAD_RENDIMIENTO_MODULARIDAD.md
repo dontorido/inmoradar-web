@@ -973,3 +973,75 @@ Verificacion de esta evolucion:
 - `node --test tests/admin-router.test.js`: 33 pass, 0 fail.
 - `node --test tests/*.test.js`: 272 pass, 0 fail.
 - `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.
+
+## Cierre de fase read-only y frontera hacia write interno
+
+Fecha: 2026-05-25
+Rama: `feature/admin-legacy-inventory-write-plan`
+
+Se reviso el legacy restante de `api/admin.js` despues de migrar los lotes read-only de bajo riesgo. En esta fase no se movio ningun handler adicional: el analisis confirma que no queda un recurso read-only puro, local y fuera de zonas excluidas que convenga migrar de forma generica.
+
+Read-only ya migrado:
+
+- `alerts` `GET`
+- `summary` `GET`
+- `extension/usage` `GET`
+- `parking/summary` `GET`
+- `analytics/summary` `GET`
+- `analytics/pages` `GET`
+- `analytics/learning` `GET`
+- `seo/landings` `GET`
+- `kpis/settings` `GET`
+- `operations/releases` `GET`
+- `premium/subscriptions` `GET`
+
+Read-only que podria parecer migrable pero queda fuera:
+
+- `linkedin` dashboard y settings GET: integracion social sensible.
+- `meta` dashboard/settings GET: integracion social con tokens, paginas y kill switch.
+- `social-video/runway-config` GET: configuracion de proveedor de video y modulo excluido.
+- `social-video/projects` GET: recurso mixto con escritura de estado.
+- `viraliza/performance`, `viraliza/learning` y `viraliza/daily-plan` GET: modulo social/contenido excluido y calculos acoplados.
+- `seo-autogenerate/run` status: comparte recurso con ejecucion cron/generacion.
+
+No se debe migrar aun:
+
+- generacion SEO;
+- publicacion/noindex/archive de landings;
+- cron SEO;
+- Chrome Web Store;
+- billing externo, checkout, portal y webhooks;
+- Meta, LinkedIn, social-video y viraliza;
+- jobs, reparaciones, importaciones y acciones bulk.
+
+Principales zonas de riesgo pendientes:
+
+- SEO write y generacion: impacto publico, sitemap/indexabilidad y contenido.
+- Operaciones Chrome: proveedor externo, publicacion y parcheo de artefactos.
+- Social/Meta/LinkedIn: OAuth, tokens, publicacion y kill switches.
+- Social-video/Runway: llamadas externas, costes y estado de render.
+- Viraliza: contenido/growth y escrituras de modulo aun no aislado.
+
+Frontera clara:
+
+- Router declarativo actual: lectura local estable, sin efectos persistentes ni proveedores.
+- Legacy: escritura, recursos mixtos, integraciones, cron-like, generacion, publicacion y billing.
+
+Proximos pasos:
+
+- Usar `ADMIN_LEGACY_ROUTE_INVENTORY.md` como mapa de lo que queda en `api/admin.js`.
+- Usar `PLAN_PRIMER_LOTE_WRITE_INTERNO.md` para migrar solo el primer write interno de bajo riesgo.
+- Primer candidato recomendado: `kpis/settings` `POST`.
+- Segundo candidato posible, en fase separada o como opcional muy controlado: `operations/releases` `POST`.
+
+Verificacion de esta evolucion:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/router.js`: OK con Node bundled.
+- `node --check assets/admin.js`: OK con Node bundled.
+- `node --check api/sitemap.js`: OK con Node bundled.
+- `node --check api/seo-page.js`: OK con Node bundled.
+- `node --check scripts/serve-static.js`: OK con Node bundled.
+- `node --test tests/admin-router.test.js`: 33 pass, 0 fail.
+- `node --test tests/*.test.js`: 272 pass, 0 fail.
+- `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.

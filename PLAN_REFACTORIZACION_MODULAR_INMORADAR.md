@@ -734,3 +734,71 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-router-premium-readonly. Sin deploy, sin cambios visuales y sin tocar produccion. Revisar si queda algun recurso admin read-only puro sin integraciones externas; si no queda ninguno seguro, documentar el limite y preparar una propuesta para el primer lote write interno de muy bajo riesgo, sin implementarlo todavia. No tocar checkout, portal, billing externo, Meta, LinkedIn, Chrome Web Store, social-video, viraliza ni generacion SEO. Ejecutar node --test tests/*.test.js y git diff --check.
 ```
+
+## 24. Fase realizada - Inventario legacy y frontera write interno
+
+Estado: realizada en `feature/admin-legacy-inventory-write-plan`.
+
+Se cerro la fase read-only generica con dos documentos nuevos:
+
+- `ADMIN_LEGACY_ROUTE_INVENTORY.md`
+- `PLAN_PRIMER_LOTE_WRITE_INTERNO.md`
+
+No se migro ningun endpoint adicional. La revision indica que el read-only seguro restante esta agotado fuera de zonas excluidas. Los GET restantes pertenecen a recursos mixtos, integraciones externas, modulos sociales/contenido o cron/generacion.
+
+Resultado del inventario:
+
+- `seo/*`: queda en legacy salvo `GET seo/landings`; write/generacion requiere fase SEO dedicada.
+- `kpis/settings`: `GET` ya esta en router; `POST` es el primer write interno recomendado.
+- `operations/releases`: `GET` ya esta en router; `POST` es segundo candidato posible si se mantiene separado de Chrome.
+- `operations/chrome`: queda excluido por Chrome Web Store.
+- `premium/subscriptions`: `GET` ya esta en router; metodos no GET conservan `405`.
+- `meta/*` y `linkedin/*`: quedan para fase de integraciones sociales.
+- `social-video/*` y `viraliza/*`: quedan para fases dedicadas.
+
+Orden recomendado posterior:
+
+1. `kpis/settings` `POST` como primer write interno.
+2. `operations/releases` `POST` solo si se confirma que no invoca Chrome ni proveedores.
+3. SEO write controlado, empezando por acciones reversibles y con fixtures completas.
+4. Settings write mas amplios.
+5. Operations write.
+6. Billing externo.
+7. Meta, LinkedIn, social-video, viraliza e integraciones externas al final.
+
+Cuando empezar con write:
+
+- Hay un candidato local, pequeno y testeable.
+- El handler tiene validacion clara.
+- Hay fixture/mocks para exito, body invalido y error Supabase.
+- El rollback es sencillo.
+- No hay proveedor externo.
+- El endpoint no publica ni genera contenido.
+
+Cuando NO empezar con write:
+
+- Si el cambio toca OAuth, tokens, billing, Chrome, Meta, LinkedIn, Runway o webhooks.
+- Si el endpoint puede publicar, generar, borrar, reparar, importar en masa o lanzar cron.
+- Si no se puede conservar payload/codigo exactos.
+- Si no se puede probar sin credenciales reales.
+
+Checklist para cada endpoint write:
+
+- Confirmar resource/action/metodo exactos.
+- Confirmar tabla y columnas afectadas.
+- Confirmar que no hay llamada externa.
+- Confirmar validacion de body.
+- Confirmar payload y codigos legacy.
+- Probar body valido.
+- Probar body invalido.
+- Probar error Supabase saneado.
+- Probar no exposicion de secretos.
+- Probar fallback de metodos no soportados.
+- Mantener auth en `api/admin.js`.
+- Mantener diff pequeno y reversible.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-legacy-inventory-write-plan. Sin deploy, sin cambios visuales y sin tocar produccion. Migrar al router declarativo solo `POST kpis/settings` como primer write interno de bajo riesgo, manteniendo auth, URLs, query params, payloads, codigos HTTP y saneado de errores exactamente iguales. No tocar SEO, Meta, LinkedIn, Chrome Web Store, billing, social-video, viraliza ni otros writes. Anadir tests de router, body valido, body invalido, error Supabase saneado, no secretos y fallback legacy. Ejecutar node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
+```
