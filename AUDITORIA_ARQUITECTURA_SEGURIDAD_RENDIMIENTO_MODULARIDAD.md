@@ -1257,6 +1257,62 @@ Verificacion de esta evolucion:
 - `node --check api/_admin/router.js`: OK con Node bundled.
 - `node --check api/_admin/handlers/kpis.js`: OK con Node bundled.
 - `node --check api/_admin/handlers/operations.js`: OK con Node bundled.
+
+## Extraccion handlers analytics read-only
+
+Fecha: 2026-05-25
+Rama: `feature/admin-handler-analytics-readonly`
+
+Se extrajeron los handlers read-only de analytics ya migrados al router:
+
+- `analytics/summary` `GET`;
+- `analytics/pages` `GET`;
+- `analytics/learning` `GET`.
+
+Archivo creado:
+
+- `api/_admin/handlers/analytics.js`.
+
+La extraccion mantiene el contrato `{ status, payload }` y conserva el grupo pre-Supabase de `api/admin.js`, de modo que el backoffice sigue recibiendo el mismo fallback cuando Supabase no esta configurado.
+
+Dependencias inyectadas:
+
+- `hasSupabaseConfig`;
+- `supabaseFetch`;
+- `clampLimit`.
+
+Dependencias puras importadas por el handler:
+
+- `buildOwnedAnalyticsLearning`;
+- `summarizeOwnedAnalytics`;
+- `summarizePagePerformance`.
+
+Que no se cambio:
+
+- URLs, query params, payloads y codigos HTTP.
+- Auth, CORS, service role y catch/saneado comun.
+- Semantica de KPIs, funnel, intencion de instalacion, ventanas temporales y learning.
+- Ningun write ni endpoint externo.
+
+Riesgos reducidos:
+
+- `api/admin.js` pierde el bloque de carga, ventanas y respuesta de analytics owned.
+- La logica de analytics queda agrupada por modulo y ya no comparte espacio con SEO, Chrome, billing ni social.
+- El patron de factory queda validado tambien para read-only con calculos, no solo para writes internos.
+
+Riesgos pendientes:
+
+- `premium/subscriptions` sigue con handler dentro de `api/admin.js`.
+- `seo/landings` sigue dentro del monolito y debe tratarse con cautela por cercania a generacion/publicacion.
+- Integraciones externas y writes sensibles siguen bloqueados hasta fases dedicadas.
+
+Verificacion especifica de fase:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/handlers/analytics.js`: OK con Node bundled.
+- `node --test tests/admin-router.test.js`: 42 pass, 0 fail.
+- `node --test tests/owned-analytics.test.js`: 16 pass, 0 fail.
+- `node --test tests/*.test.js`: 281 pass, 0 fail.
 - `node --check assets/admin.js`: OK con Node bundled.
 - `node --check api/sitemap.js`: OK con Node bundled.
 - `node --check api/seo-page.js`: OK con Node bundled.

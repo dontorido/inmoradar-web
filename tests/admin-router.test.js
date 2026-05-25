@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const adminHandler = require("../api/admin");
+const { createAnalyticsHandlers } = require("../api/_admin/handlers/analytics");
 const {
   createAdminRouter,
   dispatchAdminRoute,
@@ -270,6 +271,30 @@ test("admin router can register the operations releases write method without wil
   assert.equal(findAdminRoute(routes, { resource: "operations/releases", method: "POST" }).route.resource, "operations/releases");
   assert.equal(findAdminRoute(routes, { resource: "operations/releases", method: "PUT" }), null);
   assert.equal(findAdminRoute(routes, { resource: "operations/chrome", method: "POST" }), null);
+});
+
+test("admin analytics handler keeps injected dependencies and local fallback", async () => {
+  let fetched = false;
+  const { handleOwnedAnalyticsPages } = createAnalyticsHandlers({
+    clampLimit: (value, fallback, max) => Math.max(1, Math.min(max, Number.parseInt(String(value || fallback), 10) || fallback)),
+    hasSupabaseConfig: () => false,
+    supabaseFetch: async () => {
+      fetched = true;
+      return [];
+    }
+  });
+
+  const result = await handleOwnedAnalyticsPages(
+    { method: "GET" },
+    new URL("https://inmoradar.app/api/admin?resource=analytics/pages&days=7")
+  );
+
+  assert.equal(result.status, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.persisted, false);
+  assert.equal(result.payload.warning, "supabase_not_configured");
+  assert.deepEqual(result.payload.pages, []);
+  assert.equal(fetched, false);
 });
 
 test("admin read-only router preserves summary payload shape", async () => {

@@ -944,3 +944,40 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-handler-operations-releases. Sin deploy y sin tocar produccion. Evaluar la siguiente extraccion de handlers ya migrados, priorizando analytics read-only o premium/subscriptions read-only. No migrar nuevos endpoints ni writes. Mantener auth, URLs, payloads, codigos y saneado de errores. No tocar SEO write, Chrome Web Store, billing, Meta, LinkedIn, social-video ni Viraliza. Si se extrae algo, usar factories con dependencias inyectadas y tests existentes/reforzados. Ejecutar node --check, node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
 ```
+
+## 29. Fase realizada - Extraccion handlers analytics read-only
+
+Estado: realizada en `feature/admin-handler-analytics-readonly`.
+
+Se creo:
+
+- `api/_admin/handlers/analytics.js`
+
+Se extrajo del monolito:
+
+- `analytics/summary` `GET`
+- `analytics/pages` `GET`
+- `analytics/learning` `GET`
+
+No se migraron nuevos endpoints ni writes. No se tocaron SEO, premium/billing, operations/chrome, Chrome Web Store, Meta, LinkedIn, social-video, Runway ni Viraliza.
+
+Criterios validados:
+
+- Inyeccion de `hasSupabaseConfig`, `supabaseFetch` y `clampLimit`.
+- Helpers puros de learning importados desde `lib/analytics/learning`.
+- Auth, service role, CORS y catch comun permanecen en `api/admin.js`.
+- La ruta sigue pre-Supabase y conserva fallback sin configuracion.
+- Tests cubren payloads, rangos, arrays vacios, errores Supabase saneados y factory con dependencias inyectadas.
+
+Orden recomendado:
+
+1. Extraer `premium/subscriptions` `GET` solo si queda claramente aislado de checkout, portal, webhooks y billing externo.
+2. Considerar metadatos de rutas si se van a usar en tests o auditoria.
+3. Mantener `seo/landings` para una fase especifica por cercania a generacion/publicacion.
+4. No migrar nuevos writes hasta consolidar handlers ya extraidos.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-handler-analytics-readonly. Sin deploy y sin tocar produccion. Evaluar la extraccion de `premium/subscriptions` GET a un handler interno solo si se confirma que es lectura local aislada y no toca checkout, portal, Lemon Squeezy, webhooks ni billing externo. No migrar nuevos endpoints ni writes. Mantener auth, URLs, payloads, codigos y saneado de errores. No tocar SEO, Chrome Web Store, Meta, LinkedIn, social-video ni Viraliza. Si aumenta el riesgo, documentar y no extraer. Ejecutar node --check, node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
+```

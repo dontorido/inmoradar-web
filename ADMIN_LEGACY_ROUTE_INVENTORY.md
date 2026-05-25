@@ -75,7 +75,7 @@ El objetivo de este documento es dejar inventariado lo que sigue en legacy, clas
 | `viraliza/daily-plan` | plan | `GET` | read-only calculado | si | no | no | si conceptual | medio | Genera plan en memoria; no persiste, pero pertenece a flujo de contenido. | no | viraliza dedicada | No migrar en fase admin generica. |
 | `viraliza/actions` | save action | `POST` | write interno | si | si | no | no | medio | Escritura local de acciones, pero dominio social/producto excluido. | no | viraliza dedicada | Posible candidato mucho mas adelante. |
 | `viraliza` | routine/content | `GET/POST` | mixed/write/generation | si | si en POST | no | si | alto | Mezcla rutina, generacion de contenido y persistencia de resultados. | no | viraliza dedicada | Mantener legacy. |
-| `analytics/*` restante | desconocido | cualquiera | unknown/fallback | no | no | no | no | bajo | No se detectaron recursos analytics legacy explicitos adicionales. | no | ninguna | Los analytics read-only localizados ya estan migrados. |
+| `analytics/*` restante | desconocido | cualquiera | unknown/fallback | no | no | no | no | bajo | No se detectaron recursos analytics legacy explicitos adicionales. | no | ninguna | Los analytics read-only localizados ya estan migrados y extraidos a `api/_admin/handlers/analytics.js`. |
 | `*` | recurso no reconocido | cualquiera | fallback | no | no | no | no | bajo | Devuelve `404 admin_resource_not_found`. | no | ninguna | Mantener como cierre legacy. |
 
 ## Read-only restante
@@ -227,3 +227,51 @@ Riesgo residual:
 
 - El modulo operations extraido solo cubre releases locales.
 - Chrome, publish, upload y status remoto siguen bloqueados hasta fase dedicada.
+
+## Extraccion handlers analytics read-only
+
+Fecha: 2026-05-25
+Rama: `feature/admin-handler-analytics-readonly`
+
+Se extrajeron `analytics/summary`, `analytics/pages` y `analytics/learning` a `api/_admin/handlers/analytics.js` usando un factory con dependencias inyectadas.
+
+Dependencias inyectadas:
+
+- `hasSupabaseConfig`;
+- `supabaseFetch`;
+- `clampLimit`.
+
+Dependencias puras importadas por el handler:
+
+- `buildOwnedAnalyticsLearning`;
+- `summarizeOwnedAnalytics`;
+- `summarizePagePerformance`.
+
+Estado actualizado de handlers ya extraidos:
+
+- `kpis/settings` queda en `api/_admin/handlers/kpis.js`.
+- `operations/releases` queda en `api/_admin/handlers/operations.js`.
+- `analytics/summary`, `analytics/pages` y `analytics/learning` quedan en `api/_admin/handlers/analytics.js`.
+
+Siguen dentro de `api/admin.js`:
+
+- `handleSummary`;
+- `handleAlerts`;
+- `handlePremiumSubscriptions`;
+- `handleExtensionUsageSummary`;
+- `handleParkingSummary`;
+- `handleSeoLandings`;
+- handlers legacy sensibles.
+
+Confirmacion de frontera:
+
+- No se migraron nuevos endpoints.
+- No se tocaron writes.
+- No se tocaron SEO, premium/billing, Chrome, Meta, LinkedIn, social-video, Runway ni Viraliza.
+- La lectura analytics sigue en el grupo pre-Supabase para conservar el fallback cuando Supabase no esta configurado.
+
+Riesgo residual:
+
+- Los calculos de learning siguen dependiendo de `lib/analytics/learning`; no se cambio su semantica.
+- `premium/subscriptions` puede ser el siguiente candidato de extraccion si se confirma que queda separado de billing externo.
+- `seo/landings` debe seguir esperando una fase con mas contexto por cercania a generacion/publicacion.

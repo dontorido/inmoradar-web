@@ -209,3 +209,30 @@ Dependencias puras importadas por el handler:
 - Confirmar con tests que no se invoca ningun proveedor externo.
 - Mantener fuera cualquier action de publicacion/subida.
 - Dejar legacy sensible en `api/admin.js` hasta fase dedicada.
+
+## 16. Ejemplo analytics read-only
+
+En la fase `feature/admin-handler-analytics-readonly` se extrajo `analytics/summary`, `analytics/pages` y `analytics/learning` a `api/_admin/handlers/analytics.js`.
+
+Dependencias inyectadas:
+
+- `hasSupabaseConfig`;
+- `supabaseFetch`;
+- `clampLimit`.
+
+Dependencias puras importadas por el handler:
+
+- `buildOwnedAnalyticsLearning`;
+- `summarizeOwnedAnalytics`;
+- `summarizePagePerformance`.
+
+Este caso valida el contrato para handlers read-only con calculos internos. La extraccion mueve tambien helpers privados de ventana temporal, carga de eventos y agrupaciones porque pertenecen solo a analytics owned. No se movio auth, CORS, service role, catch comun ni saneado de errores.
+
+Reglas especificas para read-only con calculos:
+
+- no cambiar nombres de KPIs ni campos de payload;
+- no cambiar semantica de funnel, instalacion o intencion de instalacion;
+- no modificar ventanas (`days`, `from`, `to`, limites y clamps);
+- no persistir recalculos;
+- conservar fallback local cuando Supabase no esta configurado;
+- cubrir con tests arrays vacios, datos incompletos y errores Supabase saneados.
