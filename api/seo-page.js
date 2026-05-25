@@ -50,7 +50,7 @@ function structuredData(landing, canonical) {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "InmoRadar", item: siteUrl() },
+        { "@type": "ListItem", position: 1, name: "Inicio", item: `${siteUrl()}/` },
         { "@type": "ListItem", position: 2, name: category.name, item: category.url },
         { "@type": "ListItem", position: 3, name: landing.city || landing.title, item: canonical }
       ]
