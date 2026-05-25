@@ -47,7 +47,7 @@ function createJsonResponse() {
 }
 
 function apiPath(url) {
-  return String(url).split("/rest/v1/")[1] || "";
+  return decodeURIComponent(String(url).split("/rest/v1/")[1] || "");
 }
 
 function jsonResponse(rows) {
@@ -74,6 +74,30 @@ function supabaseMockFetch(url) {
       { status: "draft", index_status: "noindex", quality_score: 60 }
     ]);
   }
+  if (path.startsWith("seo_landings?select=id,opportunity_id,slug")) {
+    return jsonResponse([
+      {
+        id: 1,
+        opportunity_id: "opp-1",
+        slug: "precio-metro-cuadrado/logrono",
+        title: "Precio metro cuadrado Logrono",
+        meta_title: "Precio m2 Logrono",
+        city: "Logrono",
+        province: "La Rioja",
+        autonomous_community: "La Rioja",
+        template_type: "price_city",
+        status: "published",
+        index_status: "index",
+        quality_score: 91,
+        word_count: 850,
+        canonical_url: "https://inmoradar.app/precio-metro-cuadrado/logrono/",
+        published_at: "2026-05-24T00:00:00.000Z",
+        last_generated_at: "2026-05-24T00:00:00.000Z",
+        created_at: "2026-05-24T00:00:00.000Z",
+        updated_at: "2026-05-24T00:00:00.000Z"
+      }
+    ]);
+  }
   if (path.startsWith("seo_landings?select=id,slug")) {
     return jsonResponse([{ id: 1, slug: "precio-metro-cuadrado/logrono", title: "Logrono", status: "published" }]);
   }
@@ -91,7 +115,7 @@ function supabaseMockFetch(url) {
   return jsonResponse([]);
 }
 
-async function callAdmin(resource, { method = "GET", query = "", env = {}, fetchImpl = supabaseMockFetch } = {}) {
+async function callAdmin(resource, { method = "GET", query = "", body, env = {}, fetchImpl = supabaseMockFetch } = {}) {
   const previousFetch = global.fetch;
   return withEnv(
     {
@@ -110,6 +134,7 @@ async function callAdmin(resource, { method = "GET", query = "", env = {}, fetch
           url: `/api/admin?resource=${encodeURIComponent(resource)}${query ? `&${query.replace(/^&/, "")}` : ""}`,
           headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" }
         };
+        if (body !== undefined) req.body = body;
         await adminHandler(req, res);
         return { statusCode: res.statusCode, payload: payload() };
       } finally {
@@ -165,6 +190,20 @@ test("admin router preserves method_not_allowed for registered resources", async
   const result = await dispatchAdminRoute(routes, { req: { method: "POST" }, resource: "alerts" });
   assert.equal(result.status, 405);
   assert.deepEqual(result.payload, { ok: false, error: "method_not_allowed" });
+});
+
+test("admin router can fall back on method mismatch for mixed legacy resources", async () => {
+  const routes = createAdminRouter([
+    {
+      resource: "seo/landings",
+      method: "GET",
+      fallbackOnMethodMismatch: true,
+      handler: async () => ({ ok: true })
+    }
+  ]);
+
+  assert.equal(findAdminRoute(routes, { resource: "seo/landings", method: "POST" }), null);
+  assert.equal(await dispatchAdminRoute(routes, { req: { method: "POST" }, resource: "seo/landings" }), null);
 });
 
 test("admin read-only router preserves summary payload shape", async () => {
@@ -263,6 +302,37 @@ test("admin read-only router preserves parking summary payload shape", async () 
   assert.equal(Array.isArray(result.payload.recent), true);
 });
 
+test("admin read-only router preserves seo landings payload shape", async () => {
+  const result = await callAdmin("seo/landings", {
+    query: "limit=1&page=1&status=published"
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.count, 1);
+  assert.equal(result.payload.page, 1);
+  assert.equal(result.payload.page_size, 1);
+  assert.equal(result.payload.has_previous_page, false);
+  assert.equal(Array.isArray(result.payload.landings), true);
+  assert.equal(result.payload.landings[0].slug, "precio-metro-cuadrado/logrono");
+  assert.equal(result.payload.summary.published, 1);
+  assert.equal(result.payload.summary.filtered_total, 1);
+});
+
+test("admin read-only router preserves seo landings empty arrays", async () => {
+  const result = await callAdmin("seo/landings", {
+    fetchImpl: async () => jsonResponse([])
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.count, 0);
+  assert.equal(result.payload.from, 0);
+  assert.equal(result.payload.to, 0);
+  assert.deepEqual(result.payload.landings, []);
+  assert.equal(result.payload.summary.total_landings, 0);
+});
+
 test("admin read-only router preserves method handling around Supabase gate", async () => {
   const alertsPost = await callAdmin("alerts", { method: "POST" });
   const summaryPost = await callAdmin("summary", { method: "POST" });
@@ -278,6 +348,26 @@ test("admin read-only router preserves method handling around Supabase gate", as
   assert.equal(summaryPost.statusCode, 405);
   assert.equal(summaryPostWithoutSupabase.statusCode, 500);
   assert.equal(summaryPostWithoutSupabase.payload.error, "supabase_not_configured");
+});
+
+test("admin seo landings router preserves mixed method legacy fallback", async () => {
+  const postResult = await callAdmin("seo/landings", {
+    method: "POST",
+    body: { slug: "precio-metro-cuadrado/logrono", action: "view" }
+  });
+  const putResult = await callAdmin("seo/landings", { method: "PUT" });
+
+  assert.equal(postResult.statusCode, 400);
+  assert.equal(postResult.payload.error, "invalid_action");
+  assert.equal(putResult.statusCode, 405);
+  assert.deepEqual(putResult.payload, { ok: false, error: "method_not_allowed" });
+});
+
+test("admin seo generation resources remain legacy", async () => {
+  const result = await callAdmin("seo/generate-landings", { method: "GET" });
+
+  assert.equal(result.statusCode, 405);
+  assert.deepEqual(result.payload, { ok: false, error: "method_not_allowed" });
 });
 
 test("admin analytics router preserves method handling before Supabase gate", async () => {
@@ -345,4 +435,28 @@ test("admin analytics router keeps Supabase errors sanitized", async () => {
   assert.equal(result.payload.persisted, false);
   assert.equal(result.payload.warning, "storage_error");
   assert.doesNotMatch(payloadText, /abc123|sb_secret_live/);
+});
+
+test("admin seo landings router keeps Supabase errors sanitized", async () => {
+  const previousConsoleError = console.error;
+  let result;
+  console.error = () => {};
+  try {
+    result = await callAdmin("seo/landings", {
+      fetchImpl: async () => ({
+        ok: false,
+        status: 500,
+        text: async () => "backend leaked access_token=abc123 and sb_secret_live_abcdef"
+      })
+    });
+  } finally {
+    console.error = previousConsoleError;
+  }
+
+  const payloadText = JSON.stringify(result.payload);
+  assert.equal(result.statusCode, 500);
+  assert.equal(result.payload.error, "admin_request_failed");
+  assert.doesNotMatch(payloadText, /abc123|sb_secret_live/);
+  assert.match(payloadText, /access_token=\[redacted\]/);
+  assert.match(payloadText, /\[redacted-secret\]/);
 });

@@ -36,6 +36,7 @@ function findAdminRoute(routes = [], { resource, method } = {}) {
   const requestedMethod = normalizeMethod(method);
   const route = candidates.find((candidate) => candidate.methods.includes(requestedMethod));
   if (!route) {
+    if (candidates.some((candidate) => candidate.fallbackOnMethodMismatch)) return null;
     return {
       status: 405,
       payload: { ok: false, error: "method_not_allowed" }

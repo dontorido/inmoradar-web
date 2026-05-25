@@ -705,3 +705,78 @@ Verificacion de esta evolucion:
 - `node --test tests/owned-analytics.test.js`: 16 pass, 0 fail.
 - `node --test tests/*.test.js`: 255 pass, 0 fail.
 - `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.
+
+## Evolucion posterior: router declarativo SEO read-only
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-seo-readonly`
+
+Se amplio el router declarativo interno para cubrir solo la lectura segura de SEO dentro del admin. La migracion se limito a `GET seo/landings`; no se tocaron generacion, publicacion, autogeneracion, sitemap operativo, cron ni acciones de escritura.
+
+Recursos SEO migrados:
+
+- `seo/landings` `GET`: listado paginado de landings con `limit`, `page`, `status`, resumen SEO y oportunidades. Sigue en el grupo post-Supabase y conserva payload, codigos y query params.
+
+Recursos SEO no migrados:
+
+- `seo/landings` `POST`: acciones `publish`, `noindex`, `archive` y `regenerate`; modifica estado o puede lanzar generacion.
+- `seo/generate-landings`: ejecuta generacion manual, aunque pueda hacerlo en dry-run.
+- `seo-autogenerate/run`: estado y ejecucion comparten recurso; puede lanzar autogeneracion cuando recibe `run=1` o POST, y tambien acepta token cron.
+
+Por que no se migraron:
+
+- SEO mezcla lectura, escritura, publicacion y generacion bajo pocos recursos.
+- `seo/landings` es un recurso mixto: `GET` es lectura, `POST` es escritura. Para conservar comportamiento, el router permite fallback legacy cuando el metodo no coincide en recursos mixtos.
+- `seo-autogenerate/run` tiene una lectura de status, pero comparte la misma entrada con ejecucion cron/admin. Se deja legacy para no acercar el router read-only a procesos automaticos.
+
+Riesgos reducidos:
+
+- El listado SEO read-only deja de depender de una rama manual en el dispatch principal.
+- `POST seo/landings` sigue cayendo al flujo legacy y conserva sus respuestas.
+- `PUT` u otros metodos no soportados siguen devolviendo `405`.
+- Errores de Supabase en `GET seo/landings` siguen saneados por el catch general.
+- Arrays vacios y datos incompletos siguen devolviendo payload estable.
+
+Riesgos pendientes:
+
+- Los handlers SEO siguen dentro de `api/admin.js`.
+- `seo/landings` continua mezclando lectura y escritura en el mismo handler.
+- La autogeneracion SEO sigue teniendo doble modo status/ejecucion en el mismo recurso.
+- Aun no hay un contrato separado para operaciones SEO write con fixtures de payload.
+
+Que queda dentro de `api/admin.js`:
+
+- `handleSeoLandings` completo.
+- `handleSeoLandingAction`.
+- `handleSeoGenerate`.
+- `handleSeoAutogeneration`.
+- Helpers locales para landings, calidad, daily policy y acciones SEO.
+
+Criterios para migrar SEO write en el futuro:
+
+1. Separar primero handlers `GET` y `POST` en funciones explicitas, sin cambiar URL.
+2. Cubrir cada accion con tests de auth, metodo, body invalido, payload de exito y error saneado.
+3. Mantener dry-run por defecto en generacion durante tests.
+4. No ejecutar publicacion real ni integraciones externas.
+5. Mantener kill switches y limites diarios/semanales.
+6. No tocar sitemap ni robots salvo tests de lectura.
+
+Advertencias especificas:
+
+- No mover `seo-autogenerate/run` al router read-only mientras comparta status y ejecucion.
+- No migrar `regenerate` hasta tener fixtures y limites claros.
+- No mezclar esta linea de trabajo con cambios de contenido publico, canonical, robots o sitemap.
+
+Verificacion de esta evolucion:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/router.js`: OK con Node bundled.
+- `node --check assets/admin.js`: OK con Node bundled.
+- `node --check api/sitemap.js`: OK con Node bundled.
+- `node --check api/seo-page.js`: OK con Node bundled.
+- `node --check scripts/serve-static.js`: OK con Node bundled.
+- `api/_admin/handlers/seo.js`: no existe; no se creo en esta fase.
+- `node --test tests/admin-router.test.js`: 22 pass, 0 fail.
+- `node --test tests/seo.test.js`: 17 pass, 0 fail.
+- `node --test tests/*.test.js`: 261 pass, 0 fail.
+- `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.

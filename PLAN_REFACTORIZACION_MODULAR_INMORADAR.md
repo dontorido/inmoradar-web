@@ -458,3 +458,73 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-router-analytics-readonly. Sin deploy, sin cambios visuales y sin tocar produccion. Migrar al router declarativo un lote pequeno de SEO read-only del admin, manteniendo auth, URLs, query params, payloads y codigos. No mover handlers a ficheros nuevos salvo que sea trivial y testeado. No tocar generacion SEO, publicaciones, sitemap ni recursos write. Anadir tests de payload, metodo no permitido, fallback legacy y errores saneados. Ejecutar node --test tests/*.test.js y git diff --check.
 ```
+
+## 16. Fase realizada - Router admin SEO read-only
+
+Estado: realizada en `feature/admin-router-seo-readonly`.
+
+Se migro al router declarativo solo la lectura segura de SEO:
+
+- `seo/landings` `GET`
+
+No se movio ningun recurso que genere, publique, archive, regenere, cambie indexacion, ejecute cron o escriba en Supabase. El handler sigue dentro de `api/admin.js`; el router solo delega el metodo read-only.
+
+Detalle tecnico:
+
+- `seo/landings` es un recurso mixto: `GET` lista landings y `POST` ejecuta acciones.
+- Se anadio soporte de fallback por metodo en `api/_admin/router.js` para que `GET` pueda ir al router y `POST` siga en legacy.
+- El comportamiento de `PUT` y otros metodos no soportados sigue devolviendo `405` desde el flujo legacy.
+- No se creo `api/_admin/handlers/seo.js` para evitar arrastrar helpers SEO y acciones write.
+
+Recursos SEO dejados en legacy:
+
+- `seo/landings` `POST`
+- `seo/generate-landings`
+- `seo-autogenerate/run`
+
+Tests anadidos o reforzados:
+
+- Router con fallback por metodo para recursos mixtos.
+- Payload shape de `GET seo/landings`.
+- Arrays vacios en `GET seo/landings`.
+- `POST seo/landings` sigue en legacy.
+- `PUT seo/landings` mantiene `405`.
+- `seo/generate-landings` sigue en legacy.
+- Errores Supabase saneados en `GET seo/landings`.
+
+Verificacion:
+
+- `node --test tests/admin-router.test.js`: 22 pass, 0 fail.
+- `node --test tests/seo.test.js`: 17 pass, 0 fail.
+- `node --test tests/*.test.js`: 261 pass, 0 fail.
+- `git diff --check`: OK; solo avisos CRLF de Git en Windows.
+
+## 17. Siguiente fase recomendada
+
+Siguiente lote prudente:
+
+- `kpis/settings` read-only, si se separa claramente `GET` de escritura.
+- `operations/releases` read-only, si `GET` puede migrarse sin capturar acciones de publicacion o Chrome.
+
+Orden posterior recomendado:
+
+1. Settings/KPIs read-only.
+2. Operations read-only.
+3. SEO write de bajo riesgo, solo despues de separar handlers y fixtures.
+4. Recursos write con efectos internos.
+5. Integraciones externas.
+6. Meta/social al final.
+
+Criterios para la siguiente fase:
+
+- Mantener fallback legacy para recursos mixtos.
+- No migrar `POST` hasta tener tests de body invalido y payload de error.
+- No mover integraciones externas.
+- No tocar UI ni textos.
+- Confirmar que los metodos no soportados conservan codigos actuales.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-router-seo-readonly. Sin deploy, sin cambios visuales y sin tocar produccion. Migrar al router declarativo un lote pequeno de settings/KPIs read-only u operations read-only, manteniendo auth, URLs, query params, payloads y codigos. Si un recurso mezcla GET y POST, usar fallback legacy por metodo y migrar solo GET. No tocar escritura, publicacion, Chrome Web Store, Meta, LinkedIn ni generacion SEO. Anadir tests de payload, metodo no permitido, fallback legacy y errores saneados. Ejecutar node --test tests/*.test.js y git diff --check.
+```

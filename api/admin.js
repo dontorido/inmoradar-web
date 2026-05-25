@@ -3940,6 +3940,12 @@ const ADMIN_SUPABASE_READ_ONLY_ROUTES = createAdminRouter([
     resource: "parking/summary",
     method: "GET",
     handler: () => handleParkingSummary()
+  },
+  {
+    resource: "seo/landings",
+    method: "GET",
+    fallbackOnMethodMismatch: true,
+    handler: ({ req, url }) => handleSeoLandings(req, url)
   }
 ]);
 
