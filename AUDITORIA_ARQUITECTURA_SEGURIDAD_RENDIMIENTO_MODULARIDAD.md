@@ -1204,9 +1204,64 @@ Verificacion de esta evolucion:
 - `node --check api/sitemap.js`: OK con Node bundled.
 - `node --check api/seo-page.js`: OK con Node bundled.
 - `node --check scripts/serve-static.js`: OK con Node bundled.
-- `node --test tests/admin-router.test.js`: 41 pass, 0 fail.
-- `node --test tests/*.test.js`: 280 pass, 0 fail.
+- `node --test tests/*.test.js`: 284 pass, 0 fail.
 - `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.
+
+## Extraccion handler seo/landings GET read-only
+
+Fecha: 2026-05-25
+Rama: `feature/admin-handler-seo-landings-readonly`
+
+Se extrajo solo la lectura `seo/landings` `GET` ya migrada al router:
+
+- `seo/landings` `GET`.
+
+Archivo creado:
+
+- `api/_admin/handlers/seo.js`.
+
+La extraccion mantiene el contrato `{ status, payload }`, conserva `fallbackOnMethodMismatch` y deja todo metodo no GET en legacy.
+
+Dependencias inyectadas:
+
+- `buildSeoDailyPolicySnapshot`;
+- `clampLimit`;
+- `clampPage`;
+- `landingSelect`;
+- `safeFetch`;
+- `seoDailyTargets`;
+- `supabaseFetch`.
+
+Que no se cambio:
+
+- URL, query params, payload y codigos HTTP.
+- Filtro `status`, paginacion `page`, limite `limit` y offset.
+- `LANDING_SELECT`, orden `updated_at.desc` y calculo de `has_next_page`.
+- Summary de estados SEO, indexabilidad, oportunidades, calidad media y cuota diaria.
+- `POST seo/landings`.
+- `seo/generate-landings`.
+- `seo-autogenerate/run`.
+- Generacion, publicacion, noindex, archive, regenerate, sitemap operativo, news, cron y jobs.
+- `summary`, `alerts`, `api/sitemap.js` y `api/seo-page.js`.
+
+Riesgos reducidos:
+
+- `api/admin.js` pierde el ultimo handler read-only SEO ya enrutable sin tocar acciones con efectos publicos.
+- La frontera GET/POST queda mas explicita: lectura en handler dedicado, escritura/generacion en legacy.
+- Los tests cubren filtros, paginacion, payload, fallback de POST y errores saneados.
+
+Riesgos pendientes:
+
+- `summary` y `alerts` siguen dentro de `api/admin.js`.
+- SEO write sigue fuera por riesgo publico y necesita fase propia.
+
+Verificacion especifica de fase:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/handlers/seo.js`: OK con Node bundled.
+- `node --test tests/admin-router.test.js`: 46 pass, 0 fail.
+- `node --test tests/seo.test.js`: 17 pass, 0 fail.
+- `node --test tests/*.test.js`: 285 pass, 0 fail.
 
 ## Extraccion handler operations/releases
 

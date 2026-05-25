@@ -286,7 +286,7 @@ Criterio para no extraer:
 - el handler cruza varios dominios (`summary`);
 - el handler dispara checks operativos de otros modulos (`alerts`);
 - el handler tiene muchas funciones de ventana/series y conviene fase propia (`extension/usage`);
-- el recurso esta cerca de generacion/publicacion (`seo/landings`).
+- el recurso esta cerca de generacion/publicacion y exige fase dedicada (`seo/landings`).
 
 ## 19. Ejemplo extension/usage dedicado
 
@@ -313,3 +313,28 @@ Criterio para handlers read-only grandes:
 - importar solo helpers puros de dominio;
 - no compartir refactors con el endpoint publico `/api/extension-usage`;
 - reforzar tests de ventanas, usuarios conocidos, errores y payload estable.
+
+## 20. Ejemplo SEO read-only con frontera write
+
+En la fase `feature/admin-handler-seo-landings-readonly` se extrajo `seo/landings` `GET` a `api/_admin/handlers/seo.js`.
+
+Dependencias inyectadas:
+
+- `buildSeoDailyPolicySnapshot`;
+- `clampLimit`;
+- `clampPage`;
+- `landingSelect`;
+- `safeFetch`;
+- `seoDailyTargets`;
+- `supabaseFetch`.
+
+Este handler es read-only, pero esta pegado a acciones SEO con efectos publicos. La regla aplicada es separar solo el `GET` ya registrado en router y dejar en legacy cualquier `POST`, generacion, publicacion, noindex, archive, regenerate, sitemap operativo, news, cron o autogeneracion.
+
+Criterio para handlers cercanos a escritura/generacion:
+
+- extraer solo si el metodo de lectura esta claramente aislado;
+- mantener `fallbackOnMethodMismatch` para que writes sigan en legacy;
+- no importar generadores, publicadores, cron ni integraciones externas;
+- inyectar las dependencias de lectura en lugar de mover helpers compartidos de escritura;
+- reforzar tests de filtros, paginacion, errores saneados y fallback legacy de writes;
+- no mezclar GET y POST en el mismo movimiento si el POST tiene efectos publicos.

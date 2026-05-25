@@ -406,3 +406,48 @@ Riesgo residual:
 
 - `summary` y `alerts` siguen dentro de `api/admin.js` por mezcla de dominios.
 - `seo/landings` sigue pendiente para fase separada con contexto SEO.
+
+## Extraccion handler seo/landings GET read-only
+
+Fecha: 2026-05-25
+Rama: `feature/admin-handler-seo-landings-readonly`
+
+Se extrajo solo `seo/landings` `GET` a `api/_admin/handlers/seo.js` usando un factory con dependencias inyectadas.
+
+Dependencias inyectadas:
+
+- `buildSeoDailyPolicySnapshot`;
+- `clampLimit`;
+- `clampPage`;
+- `landingSelect`;
+- `safeFetch`;
+- `seoDailyTargets`;
+- `supabaseFetch`.
+
+Confirmacion funcional:
+
+- Conserva filtros `status`, `limit` y `page`.
+- Conserva `LANDING_SELECT`, orden `updated_at.desc`, offset y `has_next_page`.
+- Conserva summary de estados, indexabilidad, calidad media, oportunidades pendientes y snapshot diario.
+- Conserva payload vacio cuando Supabase devuelve arrays vacios.
+- Conserva errores saneados por el catch comun de `api/admin.js`.
+
+Permanece en legacy sensible:
+
+- `POST seo/landings` con `publish`, `noindex`, `archive` y `regenerate`.
+- `seo/generate-landings`.
+- `seo-autogenerate/run`.
+- Cualquier generacion, publicacion, noindex/archive/regenerate, sitemap operativo, news, cron o job SEO.
+
+No tocado:
+
+- `summary`.
+- `alerts`.
+- `api/sitemap.js`.
+- `api/seo-page.js`.
+- Generadores, publicadores, Meta, LinkedIn, Chrome Web Store, billing e integraciones externas.
+
+Riesgo residual:
+
+- `summary` y `alerts` siguen dentro de `api/admin.js` por mezcla de dominios.
+- SEO write sigue siendo una frontera de alto riesgo y requiere fase propia con fixtures y rollback.

@@ -3,6 +3,7 @@ const { createAdminRouter, dispatchAdminRoute } = require("./_admin/router");
 const { createAnalyticsHandlers } = require("./_admin/handlers/analytics");
 const { createCoreHandlers } = require("./_admin/handlers/core");
 const { createExtensionUsageHandlers } = require("./_admin/handlers/extension-usage");
+const { createSeoHandlers } = require("./_admin/handlers/seo");
 const {
   buildSeoAutogenerationOperationalAlerts,
   getSeoAutogenerationStatus,
@@ -240,6 +241,15 @@ const { handleParkingSummary } = createCoreHandlers({
 });
 const { handleExtensionUsageSummary } = createExtensionUsageHandlers({
   clampLimit,
+  supabaseFetch
+});
+const { handleSeoLandings: handleSeoLandingsReadOnly } = createSeoHandlers({
+  buildSeoDailyPolicySnapshot,
+  clampLimit,
+  clampPage,
+  landingSelect: LANDING_SELECT,
+  safeFetch,
+  seoDailyTargets: SEO_DAILY_TARGETS,
   supabaseFetch
 });
 
@@ -779,102 +789,7 @@ async function handleSeoLandings(req, url) {
     return handleSeoLandingAction(await readJsonBody(req));
   }
 
-  const pageSize = clampLimit(url.searchParams.get("limit"), 10, 50);
-  const page = clampPage(url.searchParams.get("page"));
-  const offset = (page - 1) * pageSize;
-  const status = String(url.searchParams.get("status") || "").trim().toLowerCase();
-  const params = new URLSearchParams({
-    select: LANDING_SELECT,
-    order: "updated_at.desc",
-    limit: String(pageSize + 1),
-    offset: String(offset)
-  });
-  if (status && status !== "all") params.set("status", `eq.${status}`);
-
-  const summaryParams = new URLSearchParams({
-    select: "status,index_status,quality_score,template_type,published_at,updated_at,last_generated_at",
-    limit: "5000"
-  });
-  const opportunitiesParams = new URLSearchParams({
-    select: "status,template_type",
-    limit: "5000"
-  });
-  const [rows, summaryRows, opportunityRows] = await Promise.all([
-    supabaseFetch(`seo_landings?${params.toString()}`),
-    safeFetch(`seo_landings?${summaryParams.toString()}`),
-    safeFetch(`seo_landing_opportunities?${opportunitiesParams.toString()}`)
-  ]);
-  const allRows = Array.isArray(rows) ? rows : [];
-  const hasNextPage = allRows.length > pageSize;
-  const landings = allRows.slice(0, pageSize);
-  const summary = buildSeoLandingsSummary(summaryRows, opportunityRows, status);
-  return {
-    status: 200,
-    payload: {
-      ok: true,
-      count: landings.length,
-      page,
-      page_size: pageSize,
-      has_next_page: hasNextPage,
-      has_previous_page: page > 1,
-      from: landings.length ? offset + 1 : 0,
-      to: offset + landings.length,
-      summary,
-      landings
-    }
-  };
-}
-
-function buildSeoLandingsSummary(rows = [], opportunities = [], activeStatus = "all") {
-  const landings = Array.isArray(rows) ? rows : [];
-  const statusCounts = landings.reduce((acc, row) => {
-    const key = String(row.status || "unknown").toLowerCase();
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
-  const indexCounts = landings.reduce((acc, row) => {
-    const key = String(row.index_status || "unknown").toLowerCase();
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
-  const scores = landings
-    .map((row) => Number(row.quality_score || 0))
-    .filter((score) => Number.isFinite(score) && score > 0);
-  const filteredTotal =
-    activeStatus && activeStatus !== "all"
-      ? landings.filter((row) => String(row.status || "").toLowerCase() === activeStatus).length
-      : landings.length;
-  const pendingLandings =
-    (statusCounts.draft || 0) + (statusCounts.needs_review || 0) + (statusCounts.ready_to_publish || 0);
-  const pendingOpportunities = (Array.isArray(opportunities) ? opportunities : []).filter((row) =>
-    ["pending", "generating", "draft", "needs_review"].includes(String(row.status || "").toLowerCase())
-  ).length;
-  const dailyPolicy = buildSeoDailyPolicySnapshot(landings);
-
-  return {
-    total_landings: landings.length,
-    filtered_total: filteredTotal,
-    published: statusCounts.published || 0,
-    ready_to_publish: statusCounts.ready_to_publish || 0,
-    needs_review: statusCounts.needs_review || 0,
-    draft: statusCounts.draft || 0,
-    noindex: landings.filter(
-      (row) =>
-        String(row.index_status || "").toLowerCase() === "noindex" ||
-        String(row.status || "").toLowerCase() === "noindex"
-    ).length,
-    indexable: indexCounts.index || 0,
-    pending_landings: pendingLandings,
-    pending_opportunities: pendingOpportunities,
-    published_landings_today: dailyPolicy.published_landings_today,
-    published_news_today: dailyPolicy.published_news_today,
-    target_landings_per_day: SEO_DAILY_TARGETS.landings,
-    target_news_per_day: SEO_DAILY_TARGETS.news,
-    seo_daily_status: dailyPolicy.published_landings_today >= SEO_DAILY_TARGETS.landings && dailyPolicy.published_news_today >= SEO_DAILY_TARGETS.news ? "complete" : "pending",
-    average_quality_score: scores.length
-      ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
-      : 0
-  };
+  return handleSeoLandingsReadOnly(url);
 }
 
 async function handleSeoGenerate(req) {
@@ -3239,7 +3154,7 @@ const ADMIN_SUPABASE_ROUTED_ROUTES = createAdminRouter([
     resource: "seo/landings",
     method: "GET",
     fallbackOnMethodMismatch: true,
-    handler: ({ req, url }) => handleSeoLandings(req, url)
+    handler: ({ url }) => handleSeoLandingsReadOnly(url)
   },
   {
     resource: "kpis/settings",

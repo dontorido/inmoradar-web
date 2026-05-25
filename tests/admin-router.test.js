@@ -6,6 +6,7 @@ const { createAnalyticsHandlers } = require("../api/_admin/handlers/analytics");
 const { createCoreHandlers } = require("../api/_admin/handlers/core");
 const { createExtensionUsageHandlers } = require("../api/_admin/handlers/extension-usage");
 const { createPremiumHandlers } = require("../api/_admin/handlers/premium");
+const { createSeoHandlers } = require("../api/_admin/handlers/seo");
 const {
   createAdminRouter,
   dispatchAdminRoute,
@@ -396,6 +397,62 @@ test("admin extension usage handler keeps window filters and known users", async
   assert.match(paths[0], /created_at=gte\./);
   assert.match(paths[0], /created_at=lte\./);
   assert.match(paths[1], /created_at=lt\./);
+});
+
+test("admin seo landings handler keeps filters and pagination read-only", async () => {
+  const paths = [];
+  const { handleSeoLandings } = createSeoHandlers({
+    buildSeoDailyPolicySnapshot: () => ({
+      published_landings_today: 1,
+      published_news_today: 0
+    }),
+    clampLimit: (value, fallback, max) => Math.max(1, Math.min(max, Number.parseInt(String(value || fallback), 10) || fallback)),
+    clampPage: (value) => Math.max(1, Number.parseInt(String(value || 1), 10) || 1),
+    landingSelect: "id,slug,status,index_status,quality_score,updated_at",
+    safeFetch: async (path) => {
+      paths.push(path);
+      if (path.startsWith("seo_landing_opportunities?")) return [{ status: "pending", template_type: "price_city" }];
+      return [
+        { status: "published", index_status: "index", quality_score: 90, template_type: "price_city" },
+        { status: "draft", index_status: "noindex", quality_score: 60, template_type: "guide_city" }
+      ];
+    },
+    seoDailyTargets: { landings: 2, news: 2 },
+    supabaseFetch: async (path) => {
+      paths.push(path);
+      return [
+        { id: 3, slug: "landing-3", status: "published", index_status: "index", quality_score: 92 },
+        { id: 4, slug: "landing-4", status: "published", index_status: "index", quality_score: 88 },
+        { id: 5, slug: "landing-5", status: "published", index_status: "index", quality_score: 80 }
+      ];
+    }
+  });
+
+  const result = await handleSeoLandings(
+    new URL("https://inmoradar.app/api/admin?resource=seo/landings&limit=2&page=2&status=published")
+  );
+
+  assert.equal(result.status, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.count, 2);
+  assert.equal(result.payload.page, 2);
+  assert.equal(result.payload.page_size, 2);
+  assert.equal(result.payload.has_next_page, true);
+  assert.equal(result.payload.has_previous_page, true);
+  assert.equal(result.payload.from, 3);
+  assert.equal(result.payload.to, 4);
+  assert.equal(result.payload.landings[0].slug, "landing-3");
+  assert.equal(result.payload.summary.filtered_total, 1);
+  assert.equal(result.payload.summary.target_landings_per_day, 2);
+  assert.equal(paths.length, 3);
+  assert.ok(paths[0].startsWith("seo_landings?"));
+  assert.match(paths[0], /limit=3/);
+  assert.match(paths[0], /offset=2/);
+  assert.match(paths[0], /status=eq\.published/);
+  assert.ok(paths[1].startsWith("seo_landings?"));
+  assert.ok(paths[2].startsWith("seo_landing_opportunities?"));
+  assert.ok(paths.every((path) => /^(seo_landings|seo_landing_opportunities)\?/.test(path)));
+  assert.ok(paths.every((path) => !/generate-landings|seo-autogenerate|sitemap/i.test(path)));
 });
 
 test("admin read-only router preserves summary payload shape", async () => {

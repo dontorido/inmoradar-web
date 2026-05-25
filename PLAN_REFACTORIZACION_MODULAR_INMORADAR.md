@@ -1094,3 +1094,38 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-handler-extension-usage. Sin deploy y sin tocar produccion. Preparar una fase especifica para analizar `seo/landings GET` como handler extraible solo si puede separarse claramente de `POST seo/landings`, generacion, publish/noindex/archive/regenerate y autogeneracion. No migrar nuevos endpoints ni writes. Mantener auth, URLs, payloads, codigos y saneado de errores. Si la frontera GET/POST no queda limpia, documentar y no extraer. Ejecutar node --check, node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
 ```
+
+## 33. Fase realizada - Extraccion handler seo/landings GET
+
+Estado: realizada en `feature/admin-handler-seo-landings-readonly`.
+
+Se creo:
+
+- `api/_admin/handlers/seo.js`
+
+Se extrajo del monolito:
+
+- `seo/landings` `GET`
+
+No se migraron nuevos endpoints ni writes. No se tocaron `POST seo/landings`, `seo/generate-landings`, `seo-autogenerate/run`, publish/noindex/archive/regenerate, sitemap operativo, news, cron, jobs, `summary`, `alerts`, Chrome, billing, social ni integraciones externas.
+
+Criterios validados:
+
+- Factory con dependencias inyectadas para lectura SEO.
+- Filtros, paginacion, limites, payload y summary se mantienen.
+- `fallbackOnMethodMismatch` conserva POST y metodos no GET en legacy.
+- `api/admin.js` mantiene auth, service role, CORS y catch comun.
+- Tests cubren payload, filtros, paginacion, POST legacy, generacion legacy y errores Supabase saneados.
+
+Orden recomendado:
+
+1. Pausa tecnica breve: ya solo quedan `summary` y `alerts` como read-only internos pendientes.
+2. No extraer `summary` sin dividir antes sus agregados por dominio.
+3. No extraer `alerts` sin separar mantenimiento nocturno, SEO autogeneration, waitlist, premium y Viraliza.
+4. No entrar todavia en SEO write salvo fase dedicada con fixtures, rollback y criterios de aceptacion estrictos.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-handler-seo-landings-readonly. Sin deploy y sin tocar produccion. Hacer una pausa tecnica de cierre de read-only: inventariar que queda dentro de api/admin.js tras extraer analytics, premium, parking, extension/usage y seo/landings GET; confirmar que solo summary, alerts y legacy sensible siguen dentro; proponer si conviene extraer servicios auxiliares por dominio antes de tocar writes SEO. No migrar endpoints nuevos ni writes. Ejecutar node --check, node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
+```
