@@ -287,3 +287,29 @@ Criterio para no extraer:
 - el handler dispara checks operativos de otros modulos (`alerts`);
 - el handler tiene muchas funciones de ventana/series y conviene fase propia (`extension/usage`);
 - el recurso esta cerca de generacion/publicacion (`seo/landings`).
+
+## 19. Ejemplo extension/usage dedicado
+
+En la fase `feature/admin-handler-extension-usage` se extrajo `extension/usage` `GET` a `api/_admin/handlers/extension-usage.js`.
+
+Dependencias inyectadas:
+
+- `clampLimit`;
+- `supabaseFetch`.
+
+Dependencias puras importadas por el handler:
+
+- `DEFAULT_USAGE_TIME_ZONE`;
+- `safeTimeZone`;
+- `summarizeExtensionUsage`.
+
+Este handler es read-only, pero demasiado grande para `core.js`: contiene ventanas por preset, rangos `from/to`, normalizacion de zona horaria, consulta de usuarios conocidos antes del rango, payload vacio y series de uso. La regla aplicada es crear handler dedicado cuando el bloque es autocontenido pero voluminoso.
+
+Criterio para handlers read-only grandes:
+
+- mover el bloque completo, no partir helpers a medias;
+- mantener queries, limites y defaults identicos;
+- inyectar solo dependencias de runtime admin;
+- importar solo helpers puros de dominio;
+- no compartir refactors con el endpoint publico `/api/extension-usage`;
+- reforzar tests de ventanas, usuarios conocidos, errores y payload estable.

@@ -1148,8 +1148,7 @@ Verificacion de esta evolucion:
 - `node --check api/sitemap.js`: OK con Node bundled.
 - `node --check api/seo-page.js`: OK con Node bundled.
 - `node --check scripts/serve-static.js`: OK con Node bundled.
-- `node --test tests/admin-router.test.js`: 41 pass, 0 fail.
-- `node --test tests/*.test.js`: 280 pass, 0 fail.
+- `node --test tests/*.test.js`: 284 pass, 0 fail.
 - `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.
 
 ## Pausa tecnica: contratos y extraccion de handlers
@@ -1408,7 +1407,7 @@ Riesgos reducidos:
 
 Riesgos pendientes:
 
-- `alerts`, `summary` y `extension/usage` siguen dentro de `api/admin.js`.
+- Al cierre de esa fase, `alerts`, `summary` y `extension/usage` seguian dentro de `api/admin.js`; `extension/usage` se extrae en la fase dedicada posterior.
 - `seo/landings` requiere una fase separada con fixtures y analisis de su frontera GET/POST.
 
 Verificacion especifica de fase:
@@ -1417,6 +1416,60 @@ Verificacion especifica de fase:
 - `node --check api/_admin/handlers/core.js`: OK con Node bundled.
 - `node --test tests/admin-router.test.js`: 44 pass, 0 fail.
 - `node --test tests/*.test.js`: 283 pass, 0 fail.
+
+## Extraccion handler extension/usage
+
+Fecha: 2026-05-25
+Rama: `feature/admin-handler-extension-usage`
+
+Se extrajo el handler read-only de uso de extension ya migrado al router:
+
+- `extension/usage` `GET`.
+
+Archivo creado:
+
+- `api/_admin/handlers/extension-usage.js`.
+
+La extraccion mueve el bloque completo de ventanas, zona horaria, usuarios conocidos, fallback vacio y resumen de uso. Se mantiene el contrato `{ status, payload }` y el grupo post-Supabase de `api/admin.js`.
+
+Dependencias inyectadas:
+
+- `clampLimit`;
+- `supabaseFetch`.
+
+Dependencias puras importadas por el handler:
+
+- `DEFAULT_USAGE_TIME_ZONE`;
+- `safeTimeZone`;
+- `summarizeExtensionUsage`.
+
+Que no se cambio:
+
+- URL, query params, payload y codigos HTTP.
+- Presets `24h`, `7d`, `30d`, `month`, `all`.
+- Rango `from/from_date` y `to/to_date`.
+- Semantica de `timezone`/`tz`.
+- Consulta de usuarios conocidos antes del rango.
+- Calculo de KPIs, breakdowns y series.
+- Endpoint publico `/api/extension-usage`.
+- `summary`, `alerts`, `seo/landings`, writes e integraciones externas.
+
+Riesgos reducidos:
+
+- `api/admin.js` pierde el bloque read-only mas grande que quedaba fuera de SEO.
+- `core.js` no se convierte en cajon de sastre; extension usage tiene handler dedicado.
+- La logica de ventanas y series queda encapsulada en un modulo admin propio.
+
+Riesgos pendientes:
+
+- `summary` y `alerts` siguen dentro de `api/admin.js` por mezclar varios dominios.
+- `seo/landings` sigue pendiente para una fase SEO separada por su frontera GET/POST.
+
+Verificacion especifica de fase:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/handlers/extension-usage.js`: OK con Node bundled.
+- `node --test tests/admin-router.test.js`: 45 pass, 0 fail.
 - `node --check assets/admin.js`: OK con Node bundled.
 - `node --check api/sitemap.js`: OK con Node bundled.
 - `node --check api/seo-page.js`: OK con Node bundled.

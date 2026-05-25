@@ -4,6 +4,7 @@ const test = require("node:test");
 const adminHandler = require("../api/admin");
 const { createAnalyticsHandlers } = require("../api/_admin/handlers/analytics");
 const { createCoreHandlers } = require("../api/_admin/handlers/core");
+const { createExtensionUsageHandlers } = require("../api/_admin/handlers/extension-usage");
 const { createPremiumHandlers } = require("../api/_admin/handlers/premium");
 const {
   createAdminRouter,
@@ -352,6 +353,49 @@ test("admin core parking handler keeps injected local reads", async () => {
   assert.deepEqual(result.payload.by_label, { medio: 1 });
   assert.equal(paths.length, 2);
   assert.ok(paths.every((path) => /^parking_(difficulty_cache|assessments)\?/.test(path)));
+});
+
+test("admin extension usage handler keeps window filters and known users", async () => {
+  const paths = [];
+  const { handleExtensionUsageSummary } = createExtensionUsageHandlers({
+    clampLimit: (value, fallback, max) => Math.max(1, Math.min(max, Number.parseInt(String(value || fallback), 10) || fallback)),
+    supabaseFetch: async (path) => {
+      paths.push(path);
+      if (path.includes("created_at=lt.")) return [{ anonymous_id_hash: "known-user" }];
+      return [
+        {
+          event_name: "analysis_completed",
+          anonymous_id_hash: "known-user",
+          session_id_hash: "session-1",
+          browser_name: "chrome",
+          browser_version: "124",
+          platform: "win",
+          country: "ES",
+          extension_version: "1.0.0",
+          duration_seconds: 20,
+          active_seconds: 20,
+          created_at: "2026-05-20T10:00:00.000Z"
+        }
+      ];
+    }
+  });
+
+  const result = await handleExtensionUsageSummary(
+    new URL("https://inmoradar.app/api/admin?resource=extension/usage&from=2026-05-20&to=2026-05-20&timezone=Europe/Madrid&limit=1")
+  );
+
+  assert.equal(result.status, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.window_mode, "date_range");
+  assert.equal(result.payload.window_preset, "custom");
+  assert.equal(result.payload.event_limit, 1);
+  assert.equal(result.payload.result_limited, true);
+  assert.equal(paths.length, 2);
+  assert.ok(paths[0].startsWith("extension_usage_events?"));
+  assert.ok(paths[1].startsWith("extension_usage_events?"));
+  assert.match(paths[0], /created_at=gte\./);
+  assert.match(paths[0], /created_at=lte\./);
+  assert.match(paths[1], /created_at=lt\./);
 });
 
 test("admin read-only router preserves summary payload shape", async () => {

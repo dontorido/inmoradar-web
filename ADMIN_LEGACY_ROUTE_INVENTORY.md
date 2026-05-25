@@ -293,6 +293,7 @@ Estado actualizado de handlers ya extraidos:
 - `analytics/summary`, `analytics/pages` y `analytics/learning` quedan en `api/_admin/handlers/analytics.js`.
 - `premium/subscriptions` queda en `api/_admin/handlers/premium.js`.
 - `parking/summary` queda en `api/_admin/handlers/core.js`.
+- `extension/usage` queda en `api/_admin/handlers/extension-usage.js`.
 
 Premium/billing fuera de esta fase:
 
@@ -306,7 +307,6 @@ Siguen dentro de `api/admin.js`:
 
 - `handleSummary`;
 - `handleAlerts`;
-- `handleExtensionUsageSummary`;
 - `handleSeoLandings`;
 - handlers legacy sensibles.
 
@@ -363,6 +363,46 @@ Confirmacion de frontera:
 
 Riesgo residual:
 
-- `api/admin.js` sigue conteniendo `alerts`, `summary`, `extension/usage`, `seo/landings` y handlers legacy sensibles.
-- `extension/usage` es el siguiente candidato tecnico si se acepta una extraccion mas grande pero autocontenida.
+- Tras la mini-revision, `api/admin.js` seguia conteniendo `alerts`, `summary`, `extension/usage`, `seo/landings` y handlers legacy sensibles.
+- `extension/usage` se resolvio despues como extraccion dedicada en `feature/admin-handler-extension-usage`.
 - `summary` y `alerts` requieren una decision de arquitectura por mezclar varios dominios.
+
+## Extraccion handler extension/usage
+
+Fecha: 2026-05-25
+Rama: `feature/admin-handler-extension-usage`
+
+Se extrajo `extension/usage` `GET` a `api/_admin/handlers/extension-usage.js` usando un factory con dependencias inyectadas.
+
+Dependencias inyectadas:
+
+- `clampLimit`;
+- `supabaseFetch`.
+
+Dependencias puras importadas por el handler:
+
+- `DEFAULT_USAGE_TIME_ZONE`;
+- `safeTimeZone`;
+- `summarizeExtensionUsage`.
+
+Confirmacion funcional:
+
+- Conserva presets `24h`, `7d`, `30d`, `month` y `all`.
+- Conserva rango explicito `from/from_date` y `to/to_date`.
+- Conserva `timezone`/`tz` y fallback a `Europe/Madrid`.
+- Conserva limite por defecto `10000` y maximo `20000`.
+- Conserva consulta de usuarios conocidos antes del rango.
+- Conserva payload vacio si falla Supabase.
+
+No tocado:
+
+- `/api/extension-usage` publico.
+- `summary`.
+- `alerts`.
+- `seo/landings` `GET`.
+- Writes e integraciones externas.
+
+Riesgo residual:
+
+- `summary` y `alerts` siguen dentro de `api/admin.js` por mezcla de dominios.
+- `seo/landings` sigue pendiente para fase separada con contexto SEO.

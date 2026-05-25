@@ -1058,3 +1058,39 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-handler-core-readonly-review. Sin deploy y sin tocar produccion. Evaluar extraccion dedicada de `extension/usage` a un handler interno solo si puede moverse como bloque autocontenido con sus helpers de ventanas, series y usuarios conocidos, inyectando `supabaseFetch` y `clampLimit` y manteniendo payloads exactos. No migrar nuevos endpoints ni writes. No tocar SEO, Chrome, billing, Meta, LinkedIn, social-video ni Viraliza. Si el diff se vuelve demasiado amplio, documentar y no extraer. Ejecutar node --check, node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
 ```
+
+## 32. Fase realizada - Extraccion handler extension/usage
+
+Estado: realizada en `feature/admin-handler-extension-usage`.
+
+Se creo:
+
+- `api/_admin/handlers/extension-usage.js`
+
+Se extrajo del monolito:
+
+- `extension/usage` `GET`
+
+No se migraron nuevos endpoints ni writes. No se tocaron `summary`, `alerts`, `seo/landings`, `/api/extension-usage`, SEO, Chrome, billing, social ni integraciones externas.
+
+Criterios validados:
+
+- Inyeccion de `clampLimit` y `supabaseFetch`.
+- Helpers puros de uso de extension importados desde `lib/extension-usage/metrics`.
+- Presets, rangos, zona horaria, limite, usuarios conocidos y payload vacio se mantienen.
+- Auth, service role, CORS y catch comun permanecen en `api/admin.js`.
+- La ruta sigue post-Supabase.
+- Tests cubren payload, ventanas, usuarios conocidos, errores Supabase y endpoint publico intacto por suite global.
+
+Orden recomendado:
+
+1. Pausar extracciones core: solo quedan `summary`, `alerts` y `seo/landings`.
+2. Evaluar `seo/landings GET` en fase separada con fixtures y frontera GET/POST.
+3. No extraer `summary` ni `alerts` sin dividir primero servicios por dominio.
+4. Mantener writes sensibles e integraciones externas fuera.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-handler-extension-usage. Sin deploy y sin tocar produccion. Preparar una fase especifica para analizar `seo/landings GET` como handler extraible solo si puede separarse claramente de `POST seo/landings`, generacion, publish/noindex/archive/regenerate y autogeneracion. No migrar nuevos endpoints ni writes. Mantener auth, URLs, payloads, codigos y saneado de errores. Si la frontera GET/POST no queda limpia, documentar y no extraer. Ejecutar node --check, node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
+```
