@@ -1045,3 +1045,52 @@ Verificacion de esta evolucion:
 - `node --test tests/admin-router.test.js`: 33 pass, 0 fail.
 - `node --test tests/*.test.js`: 272 pass, 0 fail.
 - `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.
+
+## Evolucion posterior: primer write interno kpis/settings
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-kpis-settings-write`
+
+Se migro `POST kpis/settings` al router declarativo como primer write interno de bajo riesgo. El cambio conserva `handleKpiSettings(req)` en `api/admin.js` y mueve solo el dispatch, manteniendo auth, Supabase service role, payloads, codigos y saneado de errores en el mismo flujo.
+
+Por que era buen primer candidato:
+
+- escritura local en `kpi_settings`;
+- sin APIs externas;
+- sin publicacion ni generacion;
+- sin billing;
+- sin integraciones sociales;
+- sin Chrome Web Store;
+- body pequeno y validacion existente mediante `coerceKpiSettings`;
+- rollback sencillo revirtiendo el commit o restaurando la fila anterior.
+
+Riesgos mitigados:
+
+- El router ya no es solo read-only y queda probado con un write interno acotado.
+- `POST kpis/settings` no abre rutas write genericas ni wildcards.
+- JSON mal formado y errores Supabase siguen saneados.
+- Campos desconocidos mantienen la semantica de coercion/ignorados.
+- Metodos no soportados conservan `405`.
+
+Riesgos pendientes:
+
+- `saveKpiSettings` sigue dentro de `api/admin.js`.
+- `operations/releases POST` sigue en legacy.
+- SEO write, Chrome, billing, Meta, LinkedIn, social-video y Viraliza siguen fuera del router write.
+
+Frontera con writes peligrosos:
+
+- No migrar generacion SEO, publicacion/noindex/archive, cron, Chrome, billing ni integraciones sociales en el mismo lote.
+- El siguiente write debe ser unico, local, testeable y sin proveedores.
+
+Verificacion de esta evolucion:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/router.js`: OK con Node bundled.
+- `node --check assets/admin.js`: OK con Node bundled.
+- `node --check api/sitemap.js`: OK con Node bundled.
+- `node --check api/seo-page.js`: OK con Node bundled.
+- `node --check scripts/serve-static.js`: OK con Node bundled.
+- `node --test tests/admin-router.test.js`: 37 pass, 0 fail.
+- `node --test tests/*.test.js`: 276 pass, 0 fail.
+- `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.

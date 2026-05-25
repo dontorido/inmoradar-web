@@ -802,3 +802,40 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-legacy-inventory-write-plan. Sin deploy, sin cambios visuales y sin tocar produccion. Migrar al router declarativo solo `POST kpis/settings` como primer write interno de bajo riesgo, manteniendo auth, URLs, query params, payloads, codigos HTTP y saneado de errores exactamente iguales. No tocar SEO, Meta, LinkedIn, Chrome Web Store, billing, social-video, viraliza ni otros writes. Anadir tests de router, body valido, body invalido, error Supabase saneado, no secretos y fallback legacy. Ejecutar node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
 ```
+
+## 25. Fase realizada - Primer write interno kpis/settings
+
+Estado: realizada en `feature/admin-router-kpis-settings-write`.
+
+Se migro al router declarativo solo:
+
+- `kpis/settings` `POST`
+
+No se migro ningun otro write. `operations/releases POST` queda como siguiente candidato posible, pero separado para no mezclar dos escrituras en el primer paso.
+
+Detalle tecnico:
+
+- El router registra `kpis/settings` con metodos `GET` y `POST`.
+- `fallbackOnMethodMismatch` se mantiene para que metodos no soportados conserven el flujo legacy y `405`.
+- El handler sigue dentro de `api/admin.js`.
+- Auth, service role, payload, codigos y catch comun no se movieron.
+
+Criterios para el siguiente write:
+
+- Un solo endpoint por fase si es el segundo write.
+- Escritura local y pequena.
+- Sin proveedor externo.
+- Sin publicacion, generacion, cron ni jobs.
+- Body validado y fixtures claras.
+- Error Supabase saneado.
+- No exposicion de secretos.
+
+Siguiente fase recomendada:
+
+- `operations/releases` `POST`, solo si se confirma y prueba que no toca `operations/chrome`, no llama Chrome Web Store y solo crea artefactos locales.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-router-kpis-settings-write. Sin deploy, sin produccion y sin tocar integraciones externas. Migrar al router declarativo solo `POST operations/releases` si se confirma que es escritura local pura en `release_artifacts`, sin llamar `operations/chrome` ni Chrome Web Store. Mantener auth, URLs, payloads, codigos y saneado de errores. No tocar SEO, billing, Meta, LinkedIn, social-video, Viraliza ni otros writes. Anadir tests de body valido, body invalido, error Supabase saneado, ausencia de llamadas Chrome y metodos no soportados. Ejecutar node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
+```

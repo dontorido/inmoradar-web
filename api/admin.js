@@ -3925,7 +3925,7 @@ const ADMIN_PRE_SUPABASE_READ_ONLY_ROUTES = createAdminRouter([
   }
 ]);
 
-const ADMIN_SUPABASE_READ_ONLY_ROUTES = createAdminRouter([
+const ADMIN_SUPABASE_ROUTED_ROUTES = createAdminRouter([
   {
     resource: "summary",
     method: "GET",
@@ -3954,7 +3954,7 @@ const ADMIN_SUPABASE_READ_ONLY_ROUTES = createAdminRouter([
   },
   {
     resource: "kpis/settings",
-    method: "GET",
+    method: ["GET", "POST"],
     fallbackOnMethodMismatch: true,
     handler: ({ req }) => handleKpiSettings(req)
   },
@@ -4007,9 +4007,9 @@ module.exports = async function handler(req, res) {
     if (!hasSupabaseConfig()) {
       return json(res, 500, { ok: false, error: "supabase_not_configured" });
     }
-    const supabaseReadOnly = await dispatchAdminRoute(ADMIN_SUPABASE_READ_ONLY_ROUTES, { req, url, resource });
-    if (supabaseReadOnly) {
-      return json(res, supabaseReadOnly.status, supabaseReadOnly.payload);
+    const supabaseRouted = await dispatchAdminRoute(ADMIN_SUPABASE_ROUTED_ROUTES, { req, url, resource });
+    if (supabaseRouted) {
+      return json(res, supabaseRouted.status, supabaseRouted.payload);
     }
     if (resource === "premium/subscriptions") {
       if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });

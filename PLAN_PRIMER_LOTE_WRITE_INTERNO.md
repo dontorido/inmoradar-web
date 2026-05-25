@@ -9,6 +9,37 @@ Preparar la siguiente fase de `api/admin.js`: migrar al router declarativo los p
 
 Este documento no implementa la migracion. Define candidatos reales, criterios, pruebas y un prompt de ejecucion para que la siguiente fase sea pequena, reversible y verificable.
 
+## Resultado de la primera migracion write
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-kpis-settings-write`
+
+Se ejecuto el primer lote con un unico endpoint:
+
+- `kpis/settings` `POST`
+
+Decision tecnica:
+
+- Se registro `POST` junto a `GET` en el router declarativo.
+- Se mantuvo el handler `handleKpiSettings(req)` en `api/admin.js` para evitar mover helpers acoplados.
+- Se renombro el grupo de rutas Supabase a una denominacion no limitada a read-only.
+- No se migro `operations/releases POST`.
+- No se tocaron SEO, operations/chrome, billing, Meta, LinkedIn, social-video, Viraliza ni integraciones externas.
+
+Validaciones cubiertas:
+
+- body valido con campos conocidos y desconocidos;
+- body vacio;
+- JSON mal formado;
+- error Supabase durante upsert;
+- metodo no soportado;
+- ausencia de tokens/secrets en errores;
+- no apertura de otros recursos write.
+
+Rollback:
+
+- Revertir el commit de esta fase devuelve `POST kpis/settings` al branch legacy sin cambios de datos ni schema.
+
 ## 2. Criterios de inclusion
 
 Un endpoint write puede entrar en el primer lote solo si cumple todo:
@@ -47,7 +78,7 @@ Quedan fuera del primer lote:
 
 | candidato | metodo | que escribe | tabla afectada | validaciones necesarias | rollback posible | tests necesarios | riesgo | recomendacion |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `kpis/settings` | `POST` | Configuracion de KPIs internos. | `kpi_settings` | Body JSON valido, coercion existente, rangos permitidos, objeto pequeno. | Restaurar fila previa o valores por defecto. | Exito, body invalido, Supabase error saneado, no secretos, metodo no soportado, fallback GET intacto. | bajo | Primer candidato recomendado. |
+| `kpis/settings` | `POST` | Configuracion de KPIs internos. | `kpi_settings` | Body JSON valido, coercion existente, rangos permitidos, objeto pequeno. | Restaurar fila previa o valores por defecto. | Exito, body invalido, Supabase error saneado, no secretos, metodo no soportado, fallback GET intacto. | bajo | Migrado como primer write interno. |
 | `operations/releases` | `POST` | Artefacto local de release. | `release_artifacts` | `target`, `version`, `title`, `channel`, `status`, `artifact_kind`, `connector_target`, tamano/sha si aplica. | Borrar fila creada o volver a estado anterior si se usa update futuro. | Exito local, body invalido, Supabase error saneado, no llamada Chrome, GET intacto. | bajo-medio | Segundo candidato, solo si se separa claramente de `operations/chrome`. |
 | `viraliza/actions` | `POST` | Accion local de Viraliza. | tablas de acciones Viraliza | Validar creador/accion/fecha/estado. | Borrar accion creada. | Exito, body invalido, arrays vacios, error saneado. | medio | No recomendado en primer lote por estar en modulo social excluido. |
 | `viraliza/creators` | `POST` | Creador Viraliza. | tablas de creators Viraliza | Validar handle, plataforma, campos numericos y duplicados. | Borrar o restaurar creador. | Exito, duplicados, payload grande, error saneado. | medio | No recomendado; requiere fase Viraliza dedicada. |
@@ -61,13 +92,13 @@ Quedan fuera del primer lote:
 
 Primer lote recomendado:
 
-1. `kpis/settings` `POST`
+1. `kpis/settings` `POST` - completado.
 
-Opcional, solo si la fase anterior queda limpia y el diff sigue pequeno:
+Siguiente candidato posible, solo si una fase posterior quiere avanzar otro write interno:
 
-2. `operations/releases` `POST`
+1. `operations/releases` `POST`
 
-No incluir mas de dos endpoints. Si se quiere maximizar prudencia, migrar solo `kpis/settings` y dejar `operations/releases` como segunda fase write.
+No mezclarlo automaticamente con mas cambios: `operations/releases POST` debe ser su propia fase o quedar como unico endpoint adicional, con pruebas que confirmen que no toca `operations/chrome`.
 
 ## 6. Estrategia tecnica
 

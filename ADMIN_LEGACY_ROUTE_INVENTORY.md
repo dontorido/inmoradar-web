@@ -25,6 +25,7 @@ El objetivo de este documento es dejar inventariado lo que sigue en legacy, clas
 - `analytics/learning` `GET`
 - `seo/landings` `GET`
 - `kpis/settings` `GET`
+- `kpis/settings` `POST`
 - `operations/releases` `GET`
 - `premium/subscriptions` `GET`
 
@@ -39,7 +40,7 @@ El objetivo de este documento es dejar inventariado lo que sigue en legacy, clas
 | `seo/landings` | `regenerate` | `POST` | generation/write | si | si | no | si | alto | Regenera contenido y persiste cambios. | no | fase SEO especifica | Mantener legacy hasta aislar generador y contratos de calidad. |
 | `seo/generate-landings` | generacion | `POST` | generation/write | si | si | no | si | alto | Lanza generacion de landings; puede crear o modificar contenido. | no | fase SEO generacion | Fuera del primer write interno. |
 | `seo-autogenerate/run` | status/run | `GET/POST` | mixed/cron-like | si | si en run | no | si | critico | El mismo recurso cubre estado y ejecucion, acepta cron/admin y puede lanzar autogeneracion. | no | fase cron SEO separada | Aunque hay lectura de estado, el recurso es demasiado delicado para esta fase. |
-| `kpis/settings` | save | `POST` | write interno | si | si | no | no | bajo | Escritura local pequena de configuracion KPI, con validacion acotada. | si | primer lote write interno | Mejor candidato inicial. Mantener `GET` en router y `POST` legacy hasta siguiente fase. |
+| `kpis/settings` | save | `POST` | write interno migrado | si | si | no | no | bajo | Escritura local pequena de configuracion KPI, con validacion acotada. | migrado | primer write interno completado | Migrado al router en `feature/admin-router-kpis-settings-write`; conserva handler, payload y codigos. |
 | `operations/releases` | create artifact | `POST` | write interno | si | si | no | no | bajo-medio | Crea artefacto local en `release_artifacts`; no debe confundirse con Chrome. | si | segundo write interno o lote 1 si se limita | Requiere probar que no llama proveedores ni publica. |
 | `operations/chrome` | status/upload/publish | `POST` | external/write | si | si | si | si | critico | Puede consultar, subir o publicar en Chrome Web Store y parchear artefactos. | no | integraciones externas al final | No ejecutar en tests reales. |
 | `linkedin` | dashboard | `GET` | read-only sensible | si | no | no | no | medio | Lectura de configuracion/tokens en dominio social excluido. | no | integraciones sociales | No migrar en fase admin generica. |
@@ -94,3 +95,26 @@ La frontera segura actual queda asi:
 - Legacy: escrituras, recursos mixtos, cron-like, generacion, publicacion, billing, OAuth, proveedores externos y modulos sociales.
 
 El siguiente paso no debe ser otro barrido read-only generico. Debe ser un primer lote write interno muy pequeno, empezando por el endpoint con menor superficie de dano y mejores validaciones.
+
+## Primer write interno migrado
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-kpis-settings-write`
+
+Se migro solo `POST kpis/settings` al router declarativo. El handler sigue siendo `handleKpiSettings(req)` dentro de `api/admin.js`; el cambio es de dispatch, no de semantica.
+
+Cobertura anadida:
+
+- El router puede registrar `GET` y `POST` para `kpis/settings` sin wildcard.
+- `POST kpis/settings` con body valido conserva upsert local en `kpi_settings`.
+- Body vacio se trata como `{}` y devuelve defaults/coercion como antes.
+- JSON mal formado devuelve error saneado por el catch admin comun.
+- Error Supabase durante el upsert devuelve `500 admin_request_failed` saneado.
+- `PUT kpis/settings` conserva `405 method_not_allowed`.
+- Recursos write no relacionados siguen en legacy.
+
+Riesgo residual:
+
+- `saveKpiSettings` sigue dentro de `api/admin.js`.
+- La escritura depende de `coerceKpiSettings`; no se cambio su contrato.
+- `operations/releases POST` sigue en legacy para no mezclar dos writes en la primera fase.

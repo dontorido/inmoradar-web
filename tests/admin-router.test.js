@@ -242,6 +242,21 @@ test("admin router can fall back on method mismatch for mixed legacy resources",
   assert.equal(await dispatchAdminRoute(routes, { req: { method: "POST" }, resource: "seo/landings" }), null);
 });
 
+test("admin router can register the kpis settings write method without wildcards", async () => {
+  const routes = createAdminRouter([
+    {
+      resource: "kpis/settings",
+      method: ["GET", "POST"],
+      fallbackOnMethodMismatch: true,
+      handler: async () => ({ ok: true })
+    }
+  ]);
+
+  assert.equal(findAdminRoute(routes, { resource: "kpis/settings", method: "POST" }).route.resource, "kpis/settings");
+  assert.equal(findAdminRoute(routes, { resource: "kpis/settings", method: "PUT" }), null);
+  assert.equal(findAdminRoute(routes, { resource: "kpis/other", method: "POST" }), null);
+});
+
 test("admin read-only router preserves summary payload shape", async () => {
   const result = await callAdmin("summary");
 
@@ -476,19 +491,89 @@ test("admin seo generation resources remain legacy", async () => {
   assert.deepEqual(result.payload, { ok: false, error: "method_not_allowed" });
 });
 
-test("admin kpi settings router preserves mixed method legacy fallback", async () => {
+test("admin kpi settings router handles POST write and preserves unsupported method fallback", async () => {
+  const captured = {};
+  const kpiSettingsPostFetch = async (url, options = {}) => {
+    const path = apiPath(url);
+    if (path.startsWith("kpi_settings?on_conflict=id")) {
+      captured.path = path;
+      captured.method = options.method;
+      captured.headers = options.headers;
+      captured.rows = JSON.parse(options.body);
+      return jsonResponse([
+        {
+          id: "default",
+          schema_version: 1,
+          settings_json: captured.rows[0].settings_json,
+          updated_at: "2026-05-25T10:00:00.000Z"
+        }
+      ]);
+    }
+    if (path.startsWith("kpi_settings?")) return jsonResponse([]);
+    return supabaseMockFetch(url, options);
+  };
+
   const postResult = await callAdmin("kpis/settings", {
     method: "POST",
-    body: { settings: { model: { mode: "strict" } } }
+    body: {
+      settings: {
+        model: { mode: "aggressive", show_confidence: false },
+        property_score: { weights: { price: 55 } },
+        unknown_group: { ignored: true }
+      }
+    },
+    fetchImpl: kpiSettingsPostFetch
   });
   const putResult = await callAdmin("kpis/settings", { method: "PUT" });
 
   assert.equal(postResult.statusCode, 200);
   assert.equal(postResult.payload.ok, true);
   assert.equal(postResult.payload.schema_version, 1);
+  assert.equal(postResult.payload.settings.model.mode, "aggressive");
+  assert.equal(postResult.payload.settings.model.show_confidence, false);
+  assert.equal(postResult.payload.settings.property_score.weights.price, 55);
+  assert.equal(postResult.payload.settings.unknown_group, undefined);
+  assert.equal(postResult.payload.updated_at, "2026-05-25T10:00:00.000Z");
   assert.equal(typeof postResult.payload.settings, "object");
+  assert.equal(captured.path, "kpi_settings?on_conflict=id");
+  assert.equal(captured.method, "POST");
+  assert.equal(captured.headers.Prefer, "resolution=merge-duplicates,return=representation");
+  assert.equal(captured.rows[0].id, "default");
+  assert.equal(captured.rows[0].updated_by, "backoffice");
   assert.equal(putResult.statusCode, 405);
   assert.deepEqual(putResult.payload, { ok: false, error: "method_not_allowed" });
+});
+
+test("admin kpi settings router handles empty POST body like legacy", async () => {
+  const result = await callAdmin("kpis/settings", {
+    method: "POST",
+    body: ""
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.schema_version, 1);
+  assert.equal(typeof result.payload.settings, "object");
+  assert.equal(result.payload.settings.model.mode, "balanced");
+});
+
+test("admin kpi settings router keeps malformed JSON errors sanitized", async () => {
+  const previousConsoleError = console.error;
+  let result;
+  console.error = () => {};
+  try {
+    result = await callAdmin("kpis/settings", {
+      method: "POST",
+      body: "{\"settings\":"
+    });
+  } finally {
+    console.error = previousConsoleError;
+  }
+
+  const payloadText = JSON.stringify(result.payload);
+  assert.equal(result.statusCode, 500);
+  assert.equal(result.payload.error, "admin_request_failed");
+  assert.doesNotMatch(payloadText, /service-role-test|admin-test-token|cron-test-token/);
 });
 
 test("admin operations releases router preserves mixed method legacy fallback", async () => {
@@ -620,6 +705,38 @@ test("admin kpi settings router keeps Supabase errors sanitized", async () => {
   assert.equal(result.statusCode, 200);
   assert.equal(result.payload.ok, true);
   assert.equal(result.payload.table_missing, false);
+  assert.doesNotMatch(payloadText, /abc123|sb_secret_live/);
+  assert.match(payloadText, /access_token=\[redacted\]/);
+  assert.match(payloadText, /\[redacted-secret\]/);
+});
+
+test("admin kpi settings POST keeps Supabase errors sanitized", async () => {
+  const previousConsoleError = console.error;
+  let result;
+  console.error = () => {};
+  try {
+    result = await callAdmin("kpis/settings", {
+      method: "POST",
+      body: { settings: { model: { mode: "conservative" } } },
+      fetchImpl: async (url) => {
+        const path = apiPath(url);
+        if (path.startsWith("kpi_settings?on_conflict=id")) {
+          return {
+            ok: false,
+            status: 500,
+            text: async () => "backend leaked access_token=abc123 and sb_secret_live_abcdef"
+          };
+        }
+        return jsonResponse([]);
+      }
+    });
+  } finally {
+    console.error = previousConsoleError;
+  }
+
+  const payloadText = JSON.stringify(result.payload);
+  assert.equal(result.statusCode, 500);
+  assert.equal(result.payload.error, "admin_request_failed");
   assert.doesNotMatch(payloadText, /abc123|sb_secret_live/);
   assert.match(payloadText, /access_token=\[redacted\]/);
   assert.match(payloadText, /\[redacted-secret\]/);
