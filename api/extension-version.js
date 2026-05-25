@@ -1,4 +1,9 @@
 const { handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
+const {
+  hasPriorExtensionUsageEvent,
+  isReliableInstallActivationEvent,
+  notifyReliableInstallActivation
+} = require("./_email/installNotification");
 const { logRequestMetric } = require("../lib/observability/request-metrics");
 const { extensionUsageEventFromInput } = require("../lib/extension-usage/metrics");
 const { checkDurableRateLimit } = require("../lib/security/durable-rate-limit");
@@ -46,14 +51,11 @@ async function handleExtensionUsage(req, res) {
     return json(res, 503, { ok: false, error: "supabase_not_configured" });
   }
 
+  let body;
+  let event;
   try {
-    const body = await readJsonBody(req);
-    const event = extensionUsageEventFromInput(body, req.headers || {});
-    await supabaseFetch("extension_usage_events", {
-      method: "POST",
-      body: JSON.stringify(event)
-    });
-    return json(res, 200, { ok: true, accepted: true });
+    body = await readJsonBody(req);
+    event = extensionUsageEventFromInput(body, req.headers || {});
   } catch (error) {
     const invalidPayload = error.message === "payload_too_large" ? "payload_too_large" : "invalid_json";
     return json(res, 400, {
@@ -63,6 +65,43 @@ async function handleExtensionUsage(req, res) {
       message: "Payload invalido."
     });
   }
+
+  let shouldNotifyInstall = false;
+  if (isReliableInstallActivationEvent(event)) {
+    try {
+      shouldNotifyInstall = !(await hasPriorExtensionUsageEvent({
+        anonymousIdHash: event.anonymous_id_hash,
+        supabaseFetch
+      }));
+    } catch (error) {
+      console.warn("[extension-usage] Install notification dedupe check failed", error.message);
+    }
+  }
+
+  try {
+    await supabaseFetch("extension_usage_events", {
+      method: "POST",
+      body: JSON.stringify(event)
+    });
+  } catch (error) {
+    return json(res, 400, {
+      ok: false,
+      error: "extension_usage_event_rejected",
+      reason: "storage_failed",
+      message: "No se ha podido guardar el evento."
+    });
+  }
+
+  if (shouldNotifyInstall) {
+    const eventCreatedAt = new Date().toISOString();
+    await notifyReliableInstallActivation({
+      event,
+      eventCreatedAt,
+      supabaseFetch
+    });
+  }
+
+  return json(res, 200, { ok: true, accepted: true });
 }
 
 module.exports = async function handler(req, res) {

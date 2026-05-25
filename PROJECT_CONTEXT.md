@@ -19,7 +19,7 @@ El backoffice vive en `admin.html` y esta protegido por `ADMIN_IMPORT_TOKEN`. Ag
 - Backend: funciones serverless CommonJS en `api/*.js`, pensadas para Vercel.
 - Base de datos: Supabase via REST, usando `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` desde backend.
 - Pagos: Lemon Squeezy para checkout, portal y webhooks de suscripcion.
-- Email: Cloudflare Email Service para informes Premium y portal; Resend aparece como opcion para contacto.
+- Email: Cloudflare Email Service para informes Premium, portal y notificaciones internas; Resend aparece como opcion para contacto y avisos de instalacion.
 - IA/video: Runway para clips de video; OpenAI Responses con vision para analisis visual de fotos.
 - Datos externos: Overpass/OpenStreetMap, Nominatim, Photon, fuentes publicas de precio.
 - Tests: `node:test` nativo de Node, sin framework externo.
@@ -35,6 +35,7 @@ El backoffice vive en `admin.html` y esta protegido por `ADMIN_IMPORT_TOKEN`. Ag
 - `api/_kpi/`: esquema y defaults de KPIs.
 - `api/_parking/`: calculo, senales, cache, Overpass y adaptadores municipales para parking.
 - `api/_photo/`: analisis visual de fotos con modelo de vision y cache.
+- `api/_email/`: plantillas y envio de emails internos transaccionales, incluida la notificacion de nueva instalacion real de la extension.
 - `api/_reports/`: construccion del email de comparativa de inmuebles guardados.
 - `api/_seo/`: generador, autogeneracion, calidad, textos, fuentes de mercado y render SEO.
 - `api/cron/`: cron serverless de publicacion SEO.
@@ -82,7 +83,7 @@ Rutas limpias definidas en `vercel.json` y `scripts/serve-static.js`: `/`, `/que
 
 - `GET /api/health`: estado de API, Supabase, tablas principales, Lemon Squeezy y Cloudflare Email.
 - `GET /api/extension-version`: version minima y ultima de la extension.
-- `POST /api/extension-usage`: rewrite a `api/extension-version.js?resource=usage`; guarda eventos anonimos de uso de extension.
+- `POST /api/extension-usage`: rewrite a `api/extension-version.js?resource=usage`; guarda eventos anonimos de uso de extension y envia un email interno de nueva instalacion solo en el primer evento fiable de un `anonymous_id_hash`, no en clicks web de descarga.
 - `GET /api/check-premium?email=...`: comprueba si un email tiene Premium activo en Supabase.
 - `POST /api/check-premium`: comprueba Premium por body.
 - `POST /api/saved-properties/email-report`: rewrite a `api/check-premium.js?resource=saved-properties-email-report`; envia informe Premium de inmuebles guardados por Cloudflare Email.
@@ -332,6 +333,7 @@ Notas actuales:
 Archivos:
 
 - `database/owned-analytics-events.sql`: tabla `owned_analytics_events`, indices y RLS sin politicas publicas de escritura.
+- `api/_email/installNotification.js`: render HTML/texto y envio de la notificacion interna de nueva instalacion de extension.
 - `lib/analytics/ownedEvents.js`: validacion, saneado y guardado best-effort de eventos anonimos.
 - `lib/analytics/learning.js`: resumen por pagina, scoring y recomendaciones de contenido.
 - `assets/app.js`: genera `anonymous_session_id`, mantiene GTM/dataLayer y envia eventos no bloqueantes a `/api/analytics/event`.
@@ -343,6 +345,8 @@ Archivos:
 Eventos permitidos: `page_view`, `install_click`, `chrome_store_click`, `waitlist_open`, `waitlist_submit`, `premium_click`, `checkout_start`, `checkout_created`, `checkout_error`, `seo_cta_click`, `guide_cta_click` y `article_cta_click`.
 
 Privacidad: no se guarda IP, email, user agent completo ni datos de pago en `owned_analytics_events`. La metadata elimina claves sensibles y valores con formato email. El tracking es best-effort y no bloquea navegacion ni checkout.
+
+Notificacion de instalacion: los clicks/intencion del funnel propio se mantienen en `owned_analytics_events`; el email interno sale solo desde la ingesta real de `extension_usage_events` cuando no hay eventos previos para el mismo `anonymous_id_hash`. El email usa metricas agregadas anonimas, fuente estimada si existe en metadata/UTM y fallback `No disponible` cuando no hay dato.
 
 Uso del aprendizaje: el BackOffice detecta paginas, templates, ciudades y temas con mejor tasa de instalacion o checkout, y propone repetir contenidos ganadores o mejorar CTAs de paginas con trafico sin conversion.
 
@@ -365,8 +369,11 @@ Solo nombres detectados o documentados; no incluir valores:
 - `CLOUDFLARE_CONTACT_EMAIL_FROM`
 - `CLOUDFLARE_EMAIL_API_TOKEN`
 - `CLOUDFLARE_EMAIL_FROM`
+- `CLOUDFLARE_INSTALL_NOTIFICATION_EMAIL_FROM`
 - `CRON_SECRET`
+- `EMAIL_TO_INSTALL_NOTIFICATIONS`
 - `EXTENSION_USAGE_HASH_SECRET`
+- `INSTALL_NOTIFICATION_DASHBOARD_URL`
 - `LEMONSQUEEZY_API_KEY`
 - `LEMONSQUEEZY_STORE_ID`
 - `LEMONSQUEEZY_TEST_MODE`
@@ -380,6 +387,7 @@ Solo nombres detectados o documentados; no incluir valores:
 - `RESEND_API_KEY`
 - `RESEND_CONTACT_EMAIL_FROM`
 - `RESEND_EMAIL_FROM`
+- `RESEND_INSTALL_NOTIFICATION_EMAIL_FROM`
 - `RUNWAY_API_SECRET`
 - `RUNWAY_DAILY_BUDGET_USD`
 - `RUNWAY_DEFAULT_DURATION_SECONDS`

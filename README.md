@@ -18,6 +18,8 @@ Web estatica publica para InmoRadar.
 - `api/lemonsqueezy-checkout.js`: crea checkouts y abre el Customer Portal de Lemon Squeezy en modo prueba o produccion sin exponer la API key.
 - `api/lemonsqueezy-webhook.js`: webhook preparado para sincronizar suscripciones de Lemon Squeezy.
 - `api/check-premium.js?resource=saved-properties-email-report`: envio Premium de comparativa de inmuebles guardados por Cloudflare Email Service.
+- `api/extension-version.js?resource=usage`: ingesta anonima de uso real de la extension; dispara la notificacion interna de nueva instalacion solo en el primer evento fiable de un `anonymous_id_hash`.
+- `api/_email/installNotification.js`: plantilla HTML y envio interno de nuevas instalaciones por Resend o Cloudflare Email Service.
 - `lib/browser-waitlist.js`: logica de lista de espera para Opera, Firefox y Safari. La ruta publica `/api/waitlist/browser` reescribe internamente a `api/market-price.js?resource=browser-waitlist` para no anadir otra serverless function en Vercel Hobby.
 - `admin.html`, `assets/admin.js` y `assets/admin.css`: backoffice protegido por `ADMIN_IMPORT_TOKEN`.
 - `api/admin.js`: backoffice API compacta para Premium, SEO, KPIs, Parking y estado de integraciones. Se usa una sola serverless function para respetar el limite de Vercel Hobby.
@@ -102,6 +104,8 @@ LEMONSQUEEZY_WEBHOOK_SECRET=
 CLOUDFLARE_ACCOUNT_ID=
 CLOUDFLARE_EMAIL_API_TOKEN=
 CLOUDFLARE_EMAIL_FROM=hola@inmoradar.app
+EMAIL_TO_INSTALL_NOTIFICATIONS=hola@inmoradar.app
+INSTALL_NOTIFICATION_DASHBOARD_URL=https://www.inmoradar.app/admin
 ADMIN_IMPORT_TOKEN=
 CRON_SECRET=
 PUBLIC_SITE_URL=https://inmoradar.app
@@ -216,6 +220,21 @@ GET /api/admin?resource=analytics/learning
 ```
 
 El BackOffice muestra en Ventas > Funnel y SEO Performance el ranking de paginas, ciudades, temas, templates y recomendaciones para orientar futuros contenidos.
+
+## Email interno de nueva instalacion
+
+La notificacion de nueva instalacion no sale del click web al CTA. Se dispara desde `POST /api/extension-usage` cuando llega el primer evento real de la extension para un `anonymous_id_hash` nuevo. Los eventos de intencion como `install_click`, `chrome_store_click`, `seo_cta_click`, `guide_cta_click` o `article_cta_click` quedan separados y no disparan el email.
+
+El email se envia a `EMAIL_TO_INSTALL_NOTIFICATIONS` o, si no existe, a `hola@inmoradar.app`. Reutiliza `RESEND_API_KEY` si esta configurado; si no, usa Cloudflare Email Service con `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_EMAIL_API_TOKEN` y `CLOUDFLARE_EMAIL_FROM`. Opcionales:
+
+```text
+EMAIL_TO_INSTALL_NOTIFICATIONS=hola@inmoradar.app
+INSTALL_NOTIFICATION_DASHBOARD_URL=https://www.inmoradar.app/admin
+RESEND_INSTALL_NOTIFICATION_EMAIL_FROM=InmoRadar <noreply@inmoradar.app>
+CLOUDFLARE_INSTALL_NOTIFICATION_EMAIL_FROM=noreply@inmoradar.app
+```
+
+Si el proveedor de email falla, el evento de uso ya guardado no se revierte ni se bloquea la respuesta de la API; queda un warning en logs sin IP, email de usuario ni user-agent completo.
 ## Viraliza con cuentas reales
 
 Viraliza sigue siendo human-in-the-loop: no hace scraping, no sigue cuentas, no publica comentarios y no envia DMs automaticamente. El BackOffice solo propone acciones para que el usuario revise y ejecute manualmente.
