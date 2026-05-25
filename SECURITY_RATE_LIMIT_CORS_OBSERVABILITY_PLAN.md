@@ -11,6 +11,7 @@ Cambios implementados:
 - Helper de rate limiting en memoria en `lib/security/rate-limit.js`.
 - Rate limit defensivo para `POST /api/extension-usage` via `api/extension-version.js?resource=usage`.
 - Piloto durable opcional para el mismo flujo mediante `lib/security/durable-rate-limit.js`.
+- Rate limit durable/fallback para `POST /api/analytics/event` via `api/market-price?resource=owned-analytics-event`.
 - CORS admin mas estricto para `api/admin.js`, con allowlist de origen.
 - Helper de observabilidad no sensible en `lib/observability/request-metrics.js`.
 - Logs de latencia no sensibles en `api/admin.js` y `api/extension-version.js`.
@@ -18,9 +19,9 @@ Cambios implementados:
 
 Cambios no implementados:
 
-- No se anadio infraestructura durable externa.
+- No se anadio proveedor nuevo ni credenciales nuevas en codigo; se reutiliza el helper durable existente.
 - No se modificaron SEO write, Chrome Web Store, Meta, LinkedIn, Runway, Viraliza, checkout, billing, webhooks, cron ni jobs.
-- No se cambiaron URLs ni payloads salvo el nuevo error `429 rate_limited` cuando `extension/usage` supera el limite.
+- No se cambiaron URLs ni payloads normales; solo aparece el error `429 rate_limited` cuando `extension/usage` o `analytics/event` superan el limite.
 
 ## 2. Limitaciones importantes
 
@@ -44,7 +45,7 @@ Para una proteccion global se recomienda una fase posterior con almacenamiento c
 | `/api/extension-version` | GET | publico | no | no | bajo | bajo | bajo | no | no necesario ahora | publico | si | si, logs |
 | `/api/contact` | POST | publico | no | si | medio | bajo | alto | email opcional | fase futura | publico | si | no, documentado |
 | `/api/waitlist/browser` | POST | publico | no | si | medio | bajo | medio | no | fase futura | publico | si | no, documentado |
-| `/api/analytics/event` | POST | publico | no | si | medio | bajo | bajo | no | fase futura | publico | si | no, documentado |
+| `/api/analytics/event` | POST | publico | no | si | medio | bajo | bajo | no | 120/min por identidad anonima + IP hash | publico | si | si, rate limit durable/fallback |
 | `/api/photo-condition-analysis` | POST | publico | no | si/cache | alto | alto | bajo | OpenAI | revisar rate limit existente antes de tocar | publico | si | no, documentado |
 | `/api/saved-properties/email-report` | POST | publico premium | email/subscripcion | si | medio | medio | alto | Cloudflare Email | ya tiene limite diario por email; durable futuro | publico | si | no, dominio email |
 | `/api/check-premium` | GET/POST | publico | email | no/lectura | medio | bajo | bajo | no | fase futura si hay abuso | publico | si | no |
@@ -75,6 +76,8 @@ Configuracion:
 
 - `EXTENSION_USAGE_RATE_LIMIT_MAX`, default `120`.
 - `EXTENSION_USAGE_RATE_LIMIT_WINDOW_MS`, default `60000`.
+- `ANALYTICS_EVENT_RATE_LIMIT_MAX`, default `120`.
+- `ANALYTICS_EVENT_RATE_LIMIT_WINDOW_MS`, default `60000`.
 - `UPSTASH_REDIS_REST_URL`, opcional para piloto durable.
 - `UPSTASH_REDIS_REST_TOKEN`, opcional para piloto durable.
 
@@ -83,6 +86,7 @@ Fallback:
 - Sin variables Upstash: memoria.
 - Error/timeout/respuesta invalida de Upstash: memoria + log saneado.
 - El payload normal de `extension usage` no cambia.
+- El payload normal de `analytics/event` no cambia.
 - El payload `429` se mantiene estable.
 
 Respuesta nueva ante abuso:
@@ -190,7 +194,8 @@ Cobertura:
 ## 8. Riesgos pendientes
 
 - Rate limit no es durable/global.
-- Contact, waitlist y analytics event siguen sin limitador comun en esta fase.
+- Contact y waitlist siguen sin limitador comun en esta fase.
+- Analytics event ya esta cubierto, pero debe observarse antes de extender a un tercer endpoint.
 - Photo condition analysis debe revisarse en una fase propia por coste OpenAI.
 - Billing, checkout, webhooks y portal necesitan fixtures antes de endurecer.
 - SEO write, cron y autogeneracion siguen fuera.
@@ -208,9 +213,9 @@ Objetivo:
 Extender el piloto durable validado de extension usage a endpoints publicos de escritura de bajo riesgo usando la misma estrategia de privacidad, fallback y tests, sin tocar SEO write, billing, Chrome, Meta, LinkedIn, Runway, Viraliza ni webhooks.
 
 Prioridad:
-1. /api/contact
+1. /api/analytics/event
 2. /api/waitlist/browser
-3. /api/analytics/event
+3. /api/contact, solo cuando se defina un limite que no bloquee leads reales
 4. /api/photo-condition-analysis, solo con analisis de coste y fixtures
 5. Mantener /api/extension-usage como referencia del patron durable
 
@@ -220,3 +225,38 @@ Reglas:
 - No guardar IPs crudas; hashear identidades.
 - Tests de limite permitido, bloqueo, reset, CORS y logs saneados.
 ```
+
+## 10. Analytics event como segunda extension durable
+
+Estado:
+
+- `POST /api/analytics/event` queda cubierto por rate limiting durable/fallback.
+- Ruta real: `api/market-price?resource=owned-analytics-event`.
+- Handler: `lib/analytics/ownedEvents.js`.
+- Scope: `owned_analytics_event`.
+- Limite default: `120/min`.
+- Ventana default: `60s`.
+
+Key strategy:
+
+- IP saneada.
+- User-Agent truncado.
+- `anonymous_session_id` saneado si existe.
+- `page_path` saneado.
+- Todo se hashea antes de persistir en Upstash.
+
+Fallback:
+
+- Usa Upstash si las variables estan configuradas.
+- Usa memoria si faltan variables.
+- Usa memoria con log saneado si Upstash falla.
+
+Siguiente candidato:
+
+- `POST /api/waitlist/browser`, despues de observar `analytics/event`.
+
+No extender todavia a:
+
+- `POST /api/contact`, por riesgo de bloquear leads reales y porque puede disparar email externo.
+- `POST /api/photo-condition-analysis`, por coste OpenAI.
+- SEO write, Chrome, Meta, LinkedIn, Runway, Viraliza, billing, webhooks, cron ni jobs.
