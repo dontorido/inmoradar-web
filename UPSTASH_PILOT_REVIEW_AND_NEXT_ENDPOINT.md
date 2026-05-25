@@ -70,12 +70,14 @@ La identidad se compone con datos disponibles del request y payload, y se hashea
 - IP saneada.
 - User-Agent truncado.
 - `anonymous_session_id` saneado si existe.
-- `page_path` saneado.
+- Si falta `anonymous_session_id`, la identidad cae a IP saneada + User-Agent truncado.
+- `page_path` no forma parte de la key primaria porque es controlado por cliente y podria fragmentar el bucket.
 
 No se persisten en keys:
 
 - IP cruda.
 - `anonymous_session_id` crudo.
+- `page_path` crudo.
 - URL completa.
 - User-Agent completo.
 - Tokens.
@@ -111,6 +113,8 @@ Cobertura:
 
 - Confirmar manualmente en Upstash que production usa durable y no fallback.
 - Vigilar que el limite no degrade analytics legitima.
+- Usuarios detras de la misma NAT pueden compartir bucket si falta `anonymous_session_id`; `120/min` es suficientemente suave para rollout inicial.
+- Si aparecen `429` legitimos, subir inicialmente a `240/min` antes de endurecer.
 - Mantener `contact` y `waitlist/browser` fuera hasta observar volumen real de este segundo endpoint.
 
 ## Siguiente endpoint candidato

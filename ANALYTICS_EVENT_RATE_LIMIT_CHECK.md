@@ -30,12 +30,14 @@ La identidad se pasa al helper durable y se hashea antes de persistir:
 - IP saneada desde headers/proxy.
 - User-Agent truncado.
 - `anonymous_session_id` saneado si existe.
-- `page_path` saneado.
+- Si falta `anonymous_session_id`, la identidad cae a IP saneada + User-Agent truncado.
+- `page_path` no forma parte de la key primaria porque es controlado por cliente y podria fragmentar el bucket.
 
 No se guardan en keys:
 
 - IP cruda.
 - `anonymous_session_id` crudo.
+- `page_path` crudo.
 - URL completa.
 - User-Agent completo.
 - Tokens.
@@ -149,10 +151,15 @@ Cobertura:
 - Bloqueo `429`.
 - Headers rate limit.
 - Supabase no se llama cuando bloquea.
+- Dos eventos con misma IP, User-Agent y `anonymous_session_id`, pero distinto `page_path`, consumen el mismo bucket.
+- Dos eventos con distinta `anonymous_session_id` separan bucket.
+- Si falta `anonymous_session_id`, el bucket cae a IP + User-Agent.
 - Keys sin IP cruda, session id crudo, token, salt ni page path crudo.
 
 ## Riesgos pendientes
 
 - Confirmar en produccion que Upstash durable se usa realmente y no fallback memoria.
 - Vigilar que el limite no degrade analytics legitima.
+- Usuarios detras de la misma NAT pueden compartir bucket si falta `anonymous_session_id`; `120/min` es suficientemente suave para rollout inicial.
+- Si aparecen `429` legitimos, subir inicialmente a `240/min` antes de endurecer.
 - No extender aun a `contact` ni `waitlist/browser` hasta observar el segundo endpoint.

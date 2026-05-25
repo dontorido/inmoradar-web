@@ -242,7 +242,8 @@ Key strategy:
 - IP saneada.
 - User-Agent truncado.
 - `anonymous_session_id` saneado si existe.
-- `page_path` saneado.
+- Si falta `anonymous_session_id`, la identidad cae a IP saneada + User-Agent truncado.
+- `page_path` no forma parte de la key primaria porque es controlado por cliente y podria fragmentar el bucket.
 - Todo se hashea antes de persistir en Upstash.
 
 Fallback:
@@ -260,3 +261,8 @@ No extender todavia a:
 - `POST /api/contact`, por riesgo de bloquear leads reales y porque puede disparar email externo.
 - `POST /api/photo-condition-analysis`, por coste OpenAI.
 - SEO write, Chrome, Meta, LinkedIn, Runway, Viraliza, billing, webhooks, cron ni jobs.
+
+Riesgo residual:
+
+- Usuarios detras de la misma NAT pueden compartir bucket si falta `anonymous_session_id`; `120/min` es suficientemente suave para rollout inicial.
+- Si aparecen `429` legitimos, subir inicialmente a `240/min` antes de endurecer.

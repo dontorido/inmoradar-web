@@ -345,7 +345,7 @@ test("analytics event rate limit falls back to memory and blocks before Supabase
       };
 
       try {
-        const req = {
+        const baseReq = {
           method: "POST",
           url: "/api/market-price?resource=owned-analytics-event",
           headers: {
@@ -353,26 +353,133 @@ test("analytics event rate limit falls back to memory and blocks before Supabase
             "x-forwarded-for": "203.0.113.60",
             "user-agent": "Mozilla/5.0 Chrome/124.0"
           },
+          body: ""
+        };
+        const firstReq = {
+          ...baseReq,
           body: JSON.stringify({
             event_name: "page_view",
             anonymous_session_id: "analytics-session-raw",
             page_path: "/datos"
           })
         };
+        const secondReq = {
+          ...baseReq,
+          body: JSON.stringify({
+            event_name: "page_view",
+            anonymous_session_id: "analytics-session-raw",
+            page_path: "/precio-metro-cuadrado/madrid"
+          })
+        };
 
         const first = createJsonResponse();
-        await marketPriceHandler(req, first.res);
+        await marketPriceHandler(firstReq, first.res);
         assert.equal(first.res.statusCode, 200);
         assert.equal(first.payload().tracked, true);
         assert.equal(first.res.headers["x-ratelimit-limit"], "1");
         assert.equal(first.res.headers["x-ratelimit-remaining"], "0");
 
         const second = createJsonResponse();
-        await marketPriceHandler(req, second.res);
+        await marketPriceHandler(secondReq, second.res);
         assert.equal(second.res.statusCode, 429);
         assert.equal(second.payload().error, "rate_limited");
         assert.equal(second.res.headers["retry-after"], "60");
         assert.equal(fetchCalls.length, 1);
+      } finally {
+        global.fetch = previousFetch;
+        resetRateLimitStore();
+      }
+    }
+  );
+});
+
+test("analytics event rate limit separates anonymous sessions and falls back to IP user-agent without session", async () => {
+  resetRateLimitStore();
+  const previousFetch = global.fetch;
+  const fetchCalls = [];
+
+  await withEnv(
+    {
+      ANALYTICS_EVENT_RATE_LIMIT_MAX: "1",
+      ANALYTICS_EVENT_RATE_LIMIT_WINDOW_MS: "60000",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined
+    },
+    async () => {
+      global.fetch = async (url, options) => {
+        fetchCalls.push({ url, options });
+        return { ok: true, status: 201, text: async () => "" };
+      };
+
+      try {
+        const baseReq = {
+          method: "POST",
+          url: "/api/market-price?resource=owned-analytics-event",
+          headers: {
+            host: "inmoradar.app",
+            "x-forwarded-for": "203.0.113.62",
+            "user-agent": "Mozilla/5.0 Firefox/126.0"
+          },
+          body: ""
+        };
+
+        const sessionA = createJsonResponse();
+        await marketPriceHandler(
+          {
+            ...baseReq,
+            body: JSON.stringify({
+              event_name: "page_view",
+              anonymous_session_id: "session-a",
+              page_path: "/datos"
+            })
+          },
+          sessionA.res
+        );
+        assert.equal(sessionA.res.statusCode, 200);
+
+        const sessionB = createJsonResponse();
+        await marketPriceHandler(
+          {
+            ...baseReq,
+            body: JSON.stringify({
+              event_name: "page_view",
+              anonymous_session_id: "session-b",
+              page_path: "/datos"
+            })
+          },
+          sessionB.res
+        );
+        assert.equal(sessionB.res.statusCode, 200);
+
+        const noSessionOne = createJsonResponse();
+        await marketPriceHandler(
+          {
+            ...baseReq,
+            body: JSON.stringify({
+              event_name: "page_view",
+              page_path: "/datos"
+            })
+          },
+          noSessionOne.res
+        );
+        assert.equal(noSessionOne.res.statusCode, 200);
+
+        const noSessionTwo = createJsonResponse();
+        await marketPriceHandler(
+          {
+            ...baseReq,
+            body: JSON.stringify({
+              event_name: "page_view",
+              page_path: "/otra-ruta"
+            })
+          },
+          noSessionTwo.res
+        );
+        assert.equal(noSessionTwo.res.statusCode, 429);
+        assert.equal(noSessionTwo.payload().error, "rate_limited");
+        assert.equal(fetchCalls.length, 3);
       } finally {
         global.fetch = previousFetch;
         resetRateLimitStore();

@@ -84,7 +84,7 @@ No recomendado ahora:
 | endpoint | metodo | tipo | prioridad | limite inicial recomendado | ventana | key primaria | key secundaria | accion 429 | notas |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `/api/extension-usage` | POST | publico escritura | 1 | 120/min | 60s | IP hash + scope | extension user/session hash si existe | payload actual `rate_limited` | Migrar el limite en memoria a durable sin cambiar payload. |
-| `/api/analytics/event` | POST | publico escritura | 1 | 120/min | 60s | IP hash + anonymous session hash | page path hash | 429 estable | Implementado como segunda extension del patron durable. Cuidado con no bloquear analytics legitima de usuarios reales. |
+| `/api/analytics/event` | POST | publico escritura | 1 | 120/min | 60s | IP hash + User-Agent hash + anonymous session hash si existe | ninguno | 429 estable | Implementado como segunda extension del patron durable. `page_path` no forma parte de la key primaria porque es controlado por cliente. |
 | `/api/waitlist/browser` | POST | publico escritura | 2 | 10/10min + 30/dia | 10m/24h | IP hash + email hash | browser + source | 429 estable | Siguiente candidato si analytics/event queda estable. |
 | `/api/contact` | POST | publico escritura/email | 3 | 5/10min + 20/dia | 10m/24h | IP hash + normalized email hash | user-agent hash | 429 estable | No abordar primero: puede bloquear leads reales y disparar email externo. No guardar email crudo en rate key. |
 | `/api/photo-condition-analysis` | POST | publico coste alto | 2 | 10/h + 30/dia | 1h/24h | IP hash + listing/url hash | premium/subscription hash si aplica | 429 estable | Revisar rate limit existente y coste OpenAI antes de tocar. |
@@ -489,7 +489,8 @@ Key strategy:
 - IP saneada.
 - User-Agent truncado.
 - `anonymous_session_id` saneado si existe.
-- `page_path` saneado.
+- Si falta `anonymous_session_id`, la identidad cae a IP saneada + User-Agent truncado.
+- `page_path` no forma parte de la key primaria porque es controlado por cliente y podria fragmentar el bucket.
 - Todo se hashea dentro de `durable-rate-limit`.
 
 Fallback:
@@ -502,4 +503,6 @@ Riesgos pendientes:
 
 - Confirmar en produccion que no hay fallback durable inesperado.
 - Vigilar que el limite no degrade analytics legitima.
+- Usuarios detras de la misma NAT pueden compartir bucket si falta `anonymous_session_id`; `120/min` es suficientemente suave para rollout inicial.
+- Si aparecen `429` legitimos, subir inicialmente a `240/min` antes de endurecer.
 - No extender todavia a `contact` hasta observar este segundo endpoint.
