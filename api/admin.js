@@ -3946,6 +3946,12 @@ const ADMIN_SUPABASE_READ_ONLY_ROUTES = createAdminRouter([
     method: "GET",
     fallbackOnMethodMismatch: true,
     handler: ({ req, url }) => handleSeoLandings(req, url)
+  },
+  {
+    resource: "kpis/settings",
+    method: "GET",
+    fallbackOnMethodMismatch: true,
+    handler: ({ req }) => handleKpiSettings(req)
   }
 ]);
 

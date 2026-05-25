@@ -333,6 +333,20 @@ test("admin read-only router preserves seo landings empty arrays", async () => {
   assert.equal(result.payload.summary.total_landings, 0);
 });
 
+test("admin read-only router preserves kpi settings payload shape", async () => {
+  const result = await callAdmin("kpis/settings");
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.schema_version, 1);
+  assert.ok(Array.isArray(result.payload.schema));
+  assert.equal(typeof result.payload.defaults, "object");
+  assert.equal(typeof result.payload.settings, "object");
+  assert.equal(result.payload.updated_at, null);
+  assert.equal(result.payload.table_missing, false);
+  assert.equal(result.payload.error, null);
+});
+
 test("admin read-only router preserves method handling around Supabase gate", async () => {
   const alertsPost = await callAdmin("alerts", { method: "POST" });
   const summaryPost = await callAdmin("summary", { method: "POST" });
@@ -370,6 +384,21 @@ test("admin seo generation resources remain legacy", async () => {
   assert.deepEqual(result.payload, { ok: false, error: "method_not_allowed" });
 });
 
+test("admin kpi settings router preserves mixed method legacy fallback", async () => {
+  const postResult = await callAdmin("kpis/settings", {
+    method: "POST",
+    body: { settings: { model: { mode: "strict" } } }
+  });
+  const putResult = await callAdmin("kpis/settings", { method: "PUT" });
+
+  assert.equal(postResult.statusCode, 200);
+  assert.equal(postResult.payload.ok, true);
+  assert.equal(postResult.payload.schema_version, 1);
+  assert.equal(typeof postResult.payload.settings, "object");
+  assert.equal(putResult.statusCode, 405);
+  assert.deepEqual(putResult.payload, { ok: false, error: "method_not_allowed" });
+});
+
 test("admin analytics router preserves method handling before Supabase gate", async () => {
   const summaryPostWithoutSupabase = await callAdmin("analytics/summary", {
     method: "POST",
@@ -384,12 +413,12 @@ test("admin analytics router preserves method handling before Supabase gate", as
 });
 
 test("admin legacy resources still fall back after read-only router", async () => {
-  const result = await callAdmin("kpis/settings");
+  const result = await callAdmin("premium/subscriptions");
 
   assert.equal(result.statusCode, 200);
   assert.equal(result.payload.ok, true);
-  assert.equal(result.payload.schema_version, 1);
-  assert.ok(Array.isArray(result.payload.schema));
+  assert.equal(result.payload.count, 1);
+  assert.ok(Array.isArray(result.payload.subscriptions));
 });
 
 test("admin analytics routes not registered in router still fall back to legacy flow", async () => {
@@ -456,6 +485,24 @@ test("admin seo landings router keeps Supabase errors sanitized", async () => {
   const payloadText = JSON.stringify(result.payload);
   assert.equal(result.statusCode, 500);
   assert.equal(result.payload.error, "admin_request_failed");
+  assert.doesNotMatch(payloadText, /abc123|sb_secret_live/);
+  assert.match(payloadText, /access_token=\[redacted\]/);
+  assert.match(payloadText, /\[redacted-secret\]/);
+});
+
+test("admin kpi settings router keeps Supabase errors sanitized", async () => {
+  const result = await callAdmin("kpis/settings", {
+    fetchImpl: async () => ({
+      ok: false,
+      status: 500,
+      text: async () => "backend leaked access_token=abc123 and sb_secret_live_abcdef"
+    })
+  });
+
+  const payloadText = JSON.stringify(result.payload);
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.table_missing, false);
   assert.doesNotMatch(payloadText, /abc123|sb_secret_live/);
   assert.match(payloadText, /access_token=\[redacted\]/);
   assert.match(payloadText, /\[redacted-secret\]/);

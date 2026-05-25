@@ -528,3 +528,70 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-router-seo-readonly. Sin deploy, sin cambios visuales y sin tocar produccion. Migrar al router declarativo un lote pequeno de settings/KPIs read-only u operations read-only, manteniendo auth, URLs, query params, payloads y codigos. Si un recurso mezcla GET y POST, usar fallback legacy por metodo y migrar solo GET. No tocar escritura, publicacion, Chrome Web Store, Meta, LinkedIn ni generacion SEO. Anadir tests de payload, metodo no permitido, fallback legacy y errores saneados. Ejecutar node --test tests/*.test.js y git diff --check.
 ```
+
+## 18. Fase realizada - Router admin settings/KPIs read-only
+
+Estado: realizada en `feature/admin-router-settings-kpis-readonly`.
+
+Se migro al router declarativo solo la lectura segura de KPIs/settings:
+
+- `kpis/settings` `GET`
+
+No se migro ninguna escritura ni ningun setting de integraciones externas. El handler sigue dentro de `api/admin.js`; el router solo delega el metodo read-only.
+
+Detalle tecnico:
+
+- `kpis/settings` es un recurso mixto: `GET` lee schema/defaults/settings y `POST` guarda configuracion.
+- Se reutiliza `fallbackOnMethodMismatch` para que `POST` siga en legacy.
+- `PUT/PATCH/DELETE` conservan `405` desde el handler legacy.
+- No se creo `api/_admin/handlers/kpis.js` ni `api/_admin/handlers/settings.js` para evitar mover helpers compartidos en esta fase.
+
+Recursos y metodos dejados en legacy:
+
+- `kpis/settings` `POST`
+- `linkedin/settings`
+- `meta/settings`
+- Settings ligados a social-video/Runway
+
+Tests anadidos o reforzados:
+
+- Payload shape de `GET kpis/settings`.
+- Fallback legacy para `POST kpis/settings`.
+- `PUT kpis/settings` mantiene `405`.
+- Errores Supabase saneados en `GET kpis/settings`.
+- Recurso legacy alternativo sigue cayendo fuera del router.
+
+Verificacion:
+
+- `node --test tests/admin-router.test.js`: 25 pass, 0 fail.
+- `node --test tests/*.test.js`: 264 pass, 0 fail.
+- `git diff --check`: OK; solo avisos CRLF de Git en Windows.
+
+## 19. Siguiente fase recomendada
+
+Siguiente lote prudente:
+
+- `operations/releases` read-only, si se migra solo `GET` y se deja `POST` en legacy.
+- `premium/subscriptions` read-only, si se quiere reducir dispatch manual sin tocar billing ni portal.
+
+Orden posterior recomendado:
+
+1. Operations read-only.
+2. Premium/subscriptions read-only.
+3. SEO write de muy bajo riesgo.
+4. Settings write.
+5. Operations write.
+6. Integraciones externas al final.
+
+Criterios para continuar:
+
+- Mantener `fallbackOnMethodMismatch` en recursos mixtos.
+- No migrar acciones que publiquen, suban artefactos o llamen Chrome Web Store.
+- No tocar billing ni portales de cliente si se migra premium.
+- Anadir tests de payload, metodo no permitido y error saneado.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-router-settings-kpis-readonly. Sin deploy, sin cambios visuales y sin tocar produccion. Migrar al router declarativo un lote pequeno de operations read-only o premium/subscriptions read-only, manteniendo auth, URLs, query params, payloads y codigos. Si un recurso mezcla GET y POST, usar fallback legacy por metodo y migrar solo GET. No tocar escritura, publicacion, Chrome Web Store, billing externo, Meta, LinkedIn ni generacion SEO. Anadir tests de payload, metodo no permitido, fallback legacy y errores saneados. Ejecutar node --test tests/*.test.js y git diff --check.
+```

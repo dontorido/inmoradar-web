@@ -780,3 +780,72 @@ Verificacion de esta evolucion:
 - `node --test tests/seo.test.js`: 17 pass, 0 fail.
 - `node --test tests/*.test.js`: 261 pass, 0 fail.
 - `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.
+
+## Evolucion posterior: router declarativo settings/KPIs read-only
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-settings-kpis-readonly`
+
+Se amplio el router declarativo para cubrir la lectura segura de configuracion KPI. La migracion se limito a `GET kpis/settings`; no se tocaron guardado de settings, activacion de modulos, recalculos persistentes ni integraciones externas.
+
+Recursos migrados:
+
+- `kpis/settings` `GET`: devuelve schema, defaults, settings normalizados, `updated_at`, `table_missing` y `error`. Sigue en el grupo post-Supabase y conserva payload/codigos.
+
+Recursos no migrados:
+
+- `kpis/settings` `POST`: guarda configuracion en `kpi_settings` y actualiza `updated_at`.
+- `linkedin/settings`: mezcla lectura y escritura dentro de una integracion externa.
+- `meta/settings`: mezcla lectura y escritura dentro de una integracion externa.
+- Settings de Runway/social-video: forman parte de generacion de video y presupuesto/coste.
+
+Metodos mantenidos en legacy:
+
+- `POST kpis/settings`: sigue cayendo al flujo legacy.
+- `PUT/PATCH/DELETE kpis/settings`: siguen devolviendo `405` desde el handler legacy.
+
+Riesgos reducidos:
+
+- Otra rama manual de dispatch read-only sale del flujo principal de `api/admin.js`.
+- El router ya cubre un recurso mixto adicional sin capturar escritura.
+- Errores de Supabase en lectura KPI siguen saneados antes de llegar al payload.
+- Ausencia de fila o tabla mantiene defaults y payload estable.
+
+Riesgos pendientes:
+
+- `handleKpiSettings`, `readKpiSettings` y `saveKpiSettings` siguen dentro de `api/admin.js`.
+- `kpis/settings` mantiene GET y POST en el mismo handler.
+- Los settings de LinkedIn y Meta siguen legacy por prudencia.
+- Aun no hay contrato comun para handlers de configuracion.
+
+Que queda dentro de `api/admin.js`:
+
+- Lectura y escritura de `kpi_settings`.
+- Lectura/escritura de settings de LinkedIn y Meta.
+- Settings de operaciones y video ligados a acciones con efectos externos.
+
+Cuando migrar escritura de settings:
+
+1. Separar helpers `read` y `save` en modulo dedicado con tests.
+2. Cubrir `POST` con body invalido, coercion, payload de error y payload de exito.
+3. Probar que no se exponen secretos en errores.
+4. Confirmar que `updated_at` y `updated_by` se conservan.
+5. Mantener fallback legacy hasta cubrir todos los metodos.
+
+Advertencias:
+
+- No mover settings de Meta/LinkedIn mientras convivan con autopublishing y OAuth.
+- No mover settings de video si puede alterar costes o proveedor externo.
+- No cambiar defaults KPI sin una tarea funcional explicita.
+
+Verificacion de esta evolucion:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/router.js`: OK con Node bundled.
+- `node --check assets/admin.js`: OK con Node bundled.
+- `node --check api/sitemap.js`: OK con Node bundled.
+- `node --check api/seo-page.js`: OK con Node bundled.
+- `node --check scripts/serve-static.js`: OK con Node bundled.
+- `node --test tests/admin-router.test.js`: 25 pass, 0 fail.
+- `node --test tests/*.test.js`: 264 pass, 0 fail.
+- `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.
