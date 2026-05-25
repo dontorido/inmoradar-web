@@ -1094,3 +1094,61 @@ Verificacion de esta evolucion:
 - `node --test tests/admin-router.test.js`: 37 pass, 0 fail.
 - `node --test tests/*.test.js`: 276 pass, 0 fail.
 - `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.
+
+## Evolucion posterior: segundo write interno operations/releases
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-operations-releases-write`
+
+Se migro `POST operations/releases` al router declarativo como segundo write interno de bajo riesgo. El cambio conserva `handleReleaseArtifacts(req, url)` en `api/admin.js` y mueve solo el dispatch, manteniendo auth, service role, payloads, codigos y saneado de errores en el mismo flujo.
+
+Por que era candidato aceptable:
+
+- escritura local en `release_artifacts`;
+- validacion/normalizacion existente con `normalizeReleaseArtifactInput`;
+- no llama Chrome Web Store;
+- no sube paquetes;
+- no publica releases externamente;
+- no toca `operations/chrome`;
+- no genera binarios ni modifica ZIPs;
+- rollback sencillo revirtiendo el commit o borrando/restaurando la fila creada.
+
+Por que `operations/chrome` sigue fuera:
+
+- puede llamar Chrome Web Store;
+- puede consultar status remoto;
+- puede subir paquetes;
+- puede enviar a revision/publicacion;
+- puede parchear artefactos como resultado de una accion externa;
+- requiere credenciales, fixtures y guardas especificas de proveedor.
+
+Riesgos mitigados:
+
+- El segundo write interno queda probado sin abrir wildcards.
+- `operations/releases POST` no invoca Chrome ni Google APIs.
+- Body vacio, campos obligatorios ausentes, JSON mal formado y errores Supabase siguen saneados.
+- `PUT operations/releases` conserva `405`.
+- `operations/chrome` conserva legacy y comportamiento propio.
+
+Riesgos pendientes:
+
+- `handleReleaseArtifacts` sigue dentro de `api/admin.js`.
+- `operations/chrome` sigue siendo una zona critica legacy.
+- SEO write, billing, Meta, LinkedIn, social-video y Viraliza siguen fuera del router write.
+
+Frontera con writes peligrosos:
+
+- No migrar Chrome, SEO publish/noindex/archive/regenerate, billing, OAuth, Runway ni social en el mismo patron sin fase dedicada.
+- Despues de dos writes internos, conviene pausar y evaluar extraccion de handlers/contratos antes de seguir.
+
+Verificacion de esta evolucion:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/router.js`: OK con Node bundled.
+- `node --check assets/admin.js`: OK con Node bundled.
+- `node --check api/sitemap.js`: OK con Node bundled.
+- `node --check api/seo-page.js`: OK con Node bundled.
+- `node --check scripts/serve-static.js`: OK con Node bundled.
+- `node --test tests/admin-router.test.js`: 41 pass, 0 fail.
+- `node --test tests/*.test.js`: 280 pass, 0 fail.
+- `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.

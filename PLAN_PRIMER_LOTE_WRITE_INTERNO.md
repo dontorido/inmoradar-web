@@ -40,6 +40,44 @@ Rollback:
 
 - Revertir el commit de esta fase devuelve `POST kpis/settings` al branch legacy sin cambios de datos ni schema.
 
+## Resultado de la segunda migracion write
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-operations-releases-write`
+
+Se ejecuto el segundo write interno con un unico endpoint:
+
+- `operations/releases` `POST`
+
+Decision tecnica:
+
+- Se registro `POST` junto a `GET` en el router declarativo para `operations/releases`.
+- Se mantuvo el handler `handleReleaseArtifacts(req, url)` en `api/admin.js`.
+- No se migro ni se toco `operations/chrome`.
+- No se llamo Chrome Web Store ni ninguna API externa.
+- No se tocaron ZIPs, artefactos binarios ni archivos de distribucion.
+
+Validaciones cubiertas:
+
+- body valido;
+- body vacio;
+- campos obligatorios ausentes;
+- JSON mal formado;
+- campos desconocidos ignorados por normalizacion;
+- error Supabase durante insert;
+- metodo no soportado;
+- ausencia de tokens/secrets en errores;
+- ausencia de llamadas Chrome/Google APIs;
+- `operations/chrome` fuera del nuevo write handler.
+
+Rollback:
+
+- Revertir el commit de esta fase devuelve `POST operations/releases` al branch legacy sin cambios de schema.
+
+Pausa tecnica recomendada:
+
+- Tras migrar dos writes internos, conviene revisar si el siguiente paso debe ser extraer handlers acotados fuera de `api/admin.js` en vez de seguir sumando writes al router.
+
 ## 2. Criterios de inclusion
 
 Un endpoint write puede entrar en el primer lote solo si cumple todo:
@@ -79,7 +117,7 @@ Quedan fuera del primer lote:
 | candidato | metodo | que escribe | tabla afectada | validaciones necesarias | rollback posible | tests necesarios | riesgo | recomendacion |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `kpis/settings` | `POST` | Configuracion de KPIs internos. | `kpi_settings` | Body JSON valido, coercion existente, rangos permitidos, objeto pequeno. | Restaurar fila previa o valores por defecto. | Exito, body invalido, Supabase error saneado, no secretos, metodo no soportado, fallback GET intacto. | bajo | Migrado como primer write interno. |
-| `operations/releases` | `POST` | Artefacto local de release. | `release_artifacts` | `target`, `version`, `title`, `channel`, `status`, `artifact_kind`, `connector_target`, tamano/sha si aplica. | Borrar fila creada o volver a estado anterior si se usa update futuro. | Exito local, body invalido, Supabase error saneado, no llamada Chrome, GET intacto. | bajo-medio | Segundo candidato, solo si se separa claramente de `operations/chrome`. |
+| `operations/releases` | `POST` | Artefacto local de release. | `release_artifacts` | `target`, `version`, `title`, `channel`, `status`, `artifact_kind`, `connector_target`, tamano/sha si aplica. | Borrar fila creada o volver a estado anterior si se usa update futuro. | Exito local, body invalido, Supabase error saneado, no llamada Chrome, GET intacto. | bajo-medio | Migrado como segundo write interno; `operations/chrome` sigue fuera. |
 | `viraliza/actions` | `POST` | Accion local de Viraliza. | tablas de acciones Viraliza | Validar creador/accion/fecha/estado. | Borrar accion creada. | Exito, body invalido, arrays vacios, error saneado. | medio | No recomendado en primer lote por estar en modulo social excluido. |
 | `viraliza/creators` | `POST` | Creador Viraliza. | tablas de creators Viraliza | Validar handle, plataforma, campos numericos y duplicados. | Borrar o restaurar creador. | Exito, duplicados, payload grande, error saneado. | medio | No recomendado; requiere fase Viraliza dedicada. |
 | `viraliza/creators/import` | `POST` | Importacion masiva de creadores. | tablas de creators Viraliza | Limite de filas, validacion por item, reporte parcial. | Complejo si hay upsert parcial. | Bulk parcial, limites, errores por fila. | medio-alto | Excluir del primer lote. |
@@ -94,11 +132,11 @@ Primer lote recomendado:
 
 1. `kpis/settings` `POST` - completado.
 
-Siguiente candidato posible, solo si una fase posterior quiere avanzar otro write interno:
+Segundo write completado:
 
-1. `operations/releases` `POST`
+1. `operations/releases` `POST` - completado.
 
-No mezclarlo automaticamente con mas cambios: `operations/releases POST` debe ser su propia fase o quedar como unico endpoint adicional, con pruebas que confirmen que no toca `operations/chrome`.
+No avanzar automaticamente a mas writes: el siguiente paso recomendado es una pausa tecnica para decidir si extraer handlers y contratos antes de tocar SEO write, operations/chrome o integraciones.
 
 ## 6. Estrategia tecnica
 

@@ -3960,7 +3960,7 @@ const ADMIN_SUPABASE_ROUTED_ROUTES = createAdminRouter([
   },
   {
     resource: "operations/releases",
-    method: "GET",
+    method: ["GET", "POST"],
     fallbackOnMethodMismatch: true,
     handler: ({ req, url }) => handleReleaseArtifacts(req, url)
   }

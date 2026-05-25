@@ -839,3 +839,38 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-router-kpis-settings-write. Sin deploy, sin produccion y sin tocar integraciones externas. Migrar al router declarativo solo `POST operations/releases` si se confirma que es escritura local pura en `release_artifacts`, sin llamar `operations/chrome` ni Chrome Web Store. Mantener auth, URLs, payloads, codigos y saneado de errores. No tocar SEO, billing, Meta, LinkedIn, social-video, Viraliza ni otros writes. Anadir tests de body valido, body invalido, error Supabase saneado, ausencia de llamadas Chrome y metodos no soportados. Ejecutar node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
 ```
+
+## 26. Fase realizada - Segundo write interno operations/releases
+
+Estado: realizada en `feature/admin-router-operations-releases-write`.
+
+Se migro al router declarativo solo:
+
+- `operations/releases` `POST`
+
+No se migro `operations/chrome`. El endpoint de Chrome queda completo en legacy porque puede consultar/subir/publicar contra Chrome Web Store y parchear artefactos desde acciones externas.
+
+Detalle tecnico:
+
+- El router registra `operations/releases` con metodos `GET` y `POST`.
+- `fallbackOnMethodMismatch` mantiene metodos no soportados en el flujo legacy y conserva `405`.
+- El handler sigue dentro de `api/admin.js`.
+- Auth, service role, payload, codigos y catch comun no se movieron.
+- El write confirmado solo inserta en `release_artifacts`.
+
+Criterios para el siguiente paso:
+
+- No seguir migrando writes de mayor riesgo sin pausa tecnica.
+- Revisar si conviene extraer handlers pequenos fuera de `api/admin.js`.
+- Definir contratos para writes antes de tocar SEO, Chrome o integraciones.
+- Mantener proveedores externos al final.
+
+Siguiente fase recomendada:
+
+- Pausa tecnica de consolidacion: revisar `api/admin.js`, decidir si extraer `kpis/settings` y `operations/releases` a handlers internos acotados, y definir metadatos/contratos de rutas antes de nuevos writes.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-router-operations-releases-write. Sin deploy, sin produccion y sin tocar integraciones externas. Hacer una pausa tecnica de consolidacion del router admin: revisar si conviene extraer handlers internos ya migrados (`kpis/settings` y `operations/releases`) fuera de `api/admin.js`, proponer contratos/metadatos de rutas y documentar el siguiente orden. No migrar nuevos endpoints write, no tocar SEO, Chrome Web Store, billing, Meta, LinkedIn, social-video ni Viraliza. Si se implementa algo, que sea una extraccion pequena y testeada sin cambio de comportamiento. Ejecutar node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
+```

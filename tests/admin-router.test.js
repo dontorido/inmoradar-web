@@ -257,6 +257,21 @@ test("admin router can register the kpis settings write method without wildcards
   assert.equal(findAdminRoute(routes, { resource: "kpis/other", method: "POST" }), null);
 });
 
+test("admin router can register the operations releases write method without wildcards", async () => {
+  const routes = createAdminRouter([
+    {
+      resource: "operations/releases",
+      method: ["GET", "POST"],
+      fallbackOnMethodMismatch: true,
+      handler: async () => ({ ok: true })
+    }
+  ]);
+
+  assert.equal(findAdminRoute(routes, { resource: "operations/releases", method: "POST" }).route.resource, "operations/releases");
+  assert.equal(findAdminRoute(routes, { resource: "operations/releases", method: "PUT" }), null);
+  assert.equal(findAdminRoute(routes, { resource: "operations/chrome", method: "POST" }), null);
+});
+
 test("admin read-only router preserves summary payload shape", async () => {
   const result = await callAdmin("summary");
 
@@ -576,29 +591,120 @@ test("admin kpi settings router keeps malformed JSON errors sanitized", async ()
   assert.doesNotMatch(payloadText, /service-role-test|admin-test-token|cron-test-token/);
 });
 
-test("admin operations releases router preserves mixed method legacy fallback", async () => {
+test("admin operations releases router handles POST write and preserves unsupported method fallback", async () => {
+  const captured = { urls: [] };
+  const releasePostFetch = async (url, options = {}) => {
+    captured.urls.push(String(url));
+    const path = apiPath(url);
+    if (path === "release_artifacts") {
+      captured.method = options.method;
+      captured.headers = options.headers;
+      captured.artifact = JSON.parse(options.body);
+      return jsonResponse([
+        {
+          id: "artifact-created",
+          ...captured.artifact,
+          created_at: "2026-05-25T10:00:00.000Z"
+        }
+      ]);
+    }
+    if (path.startsWith("release_artifacts?select")) return jsonResponse([]);
+    return supabaseMockFetch(url, options);
+  };
+
   const postResult = await callAdmin("operations/releases", {
     method: "POST",
     body: {
       target: "web",
       version: "1.0.0",
-      title: "Web release"
-    }
+      title: "Web release",
+      channel: "production",
+      status: "ready",
+      artifact_kind: "release_notes",
+      file_size_bytes: "2048",
+      sha256: "b".repeat(64),
+      unknown_field: "ignored"
+    },
+    fetchImpl: releasePostFetch
   });
   const putResult = await callAdmin("operations/releases", { method: "PUT" });
 
   assert.equal(postResult.statusCode, 200);
   assert.equal(postResult.payload.ok, true);
   assert.equal(postResult.payload.artifact.id, "artifact-created");
+  assert.equal(postResult.payload.artifact.version, "1.0.0");
+  assert.equal(postResult.payload.artifact.channel, "production");
+  assert.equal(postResult.payload.artifact.status, "ready");
+  assert.equal(postResult.payload.artifact.artifact_kind, "release_notes");
+  assert.equal(postResult.payload.artifact.file_size_bytes, 2048);
+  assert.equal(postResult.payload.artifact.sha256, "b".repeat(64));
+  assert.equal(postResult.payload.artifact.unknown_field, undefined);
+  assert.equal(postResult.payload.artifact.created_by, "backoffice");
+  assert.equal(typeof postResult.payload.connectors, "object");
+  assert.equal(captured.method, "POST");
+  assert.equal(captured.headers.prefer, "return=representation");
+  assert.equal(captured.artifact.target, "web");
+  assert.equal(captured.urls.some((url) => /chromewebstore|googleapis/i.test(url)), false);
   assert.equal(putResult.statusCode, 405);
   assert.deepEqual(putResult.payload, { ok: false, error: "method_not_allowed" });
 });
 
+test("admin operations releases router handles empty and invalid POST body like legacy", async () => {
+  const previousConsoleError = console.error;
+  let emptyBodyResult;
+  let missingTitleResult;
+  console.error = () => {};
+  try {
+    emptyBodyResult = await callAdmin("operations/releases", {
+      method: "POST",
+      body: ""
+    });
+    missingTitleResult = await callAdmin("operations/releases", {
+      method: "POST",
+      body: { version: "1.0.0" }
+    });
+  } finally {
+    console.error = previousConsoleError;
+  }
+
+  assert.equal(emptyBodyResult.statusCode, 500);
+  assert.equal(emptyBodyResult.payload.error, "admin_request_failed");
+  assert.match(JSON.stringify(emptyBodyResult.payload), /release_version_required/);
+  assert.equal(missingTitleResult.statusCode, 500);
+  assert.equal(missingTitleResult.payload.error, "admin_request_failed");
+  assert.match(JSON.stringify(missingTitleResult.payload), /release_title_required/);
+});
+
+test("admin operations releases router keeps malformed JSON errors sanitized", async () => {
+  const previousConsoleError = console.error;
+  let result;
+  console.error = () => {};
+  try {
+    result = await callAdmin("operations/releases", {
+      method: "POST",
+      body: "{\"version\":"
+    });
+  } finally {
+    console.error = previousConsoleError;
+  }
+
+  const payloadText = JSON.stringify(result.payload);
+  assert.equal(result.statusCode, 500);
+  assert.equal(result.payload.error, "admin_request_failed");
+  assert.doesNotMatch(payloadText, /service-role-test|admin-test-token|cron-test-token/);
+});
+
 test("admin operations action resources remain legacy", async () => {
   const result = await callAdmin("operations/chrome", { method: "GET" });
+  const postResult = await callAdmin("operations/chrome", {
+    method: "POST",
+    body: { action: "status" }
+  });
 
   assert.equal(result.statusCode, 405);
   assert.deepEqual(result.payload, { ok: false, error: "method_not_allowed" });
+  assert.equal(postResult.statusCode, 400);
+  assert.equal(postResult.payload.error, "chrome_webstore_not_configured");
 });
 
 test("admin analytics router preserves method handling before Supabase gate", async () => {
@@ -755,6 +861,42 @@ test("admin operations releases router keeps Supabase errors sanitized", async (
   assert.equal(result.statusCode, 200);
   assert.equal(result.payload.ok, true);
   assert.equal(result.payload.table_missing, false);
+  assert.doesNotMatch(payloadText, /abc123|sb_secret_live/);
+  assert.match(payloadText, /access_token=\[redacted\]/);
+  assert.match(payloadText, /\[redacted-secret\]/);
+});
+
+test("admin operations releases POST keeps Supabase errors sanitized", async () => {
+  const previousConsoleError = console.error;
+  let result;
+  console.error = () => {};
+  try {
+    result = await callAdmin("operations/releases", {
+      method: "POST",
+      body: {
+        target: "web",
+        version: "1.0.0",
+        title: "Web release"
+      },
+      fetchImpl: async (url) => {
+        const path = apiPath(url);
+        if (path === "release_artifacts") {
+          return {
+            ok: false,
+            status: 500,
+            text: async () => "backend leaked access_token=abc123 and sb_secret_live_abcdef"
+          };
+        }
+        return jsonResponse([]);
+      }
+    });
+  } finally {
+    console.error = previousConsoleError;
+  }
+
+  const payloadText = JSON.stringify(result.payload);
+  assert.equal(result.statusCode, 500);
+  assert.equal(result.payload.error, "admin_request_failed");
   assert.doesNotMatch(payloadText, /abc123|sb_secret_live/);
   assert.match(payloadText, /access_token=\[redacted\]/);
   assert.match(payloadText, /\[redacted-secret\]/);

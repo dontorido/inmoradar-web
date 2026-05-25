@@ -27,6 +27,7 @@ El objetivo de este documento es dejar inventariado lo que sigue en legacy, clas
 - `kpis/settings` `GET`
 - `kpis/settings` `POST`
 - `operations/releases` `GET`
+- `operations/releases` `POST`
 - `premium/subscriptions` `GET`
 
 ## Inventario legacy detectado
@@ -41,7 +42,7 @@ El objetivo de este documento es dejar inventariado lo que sigue en legacy, clas
 | `seo/generate-landings` | generacion | `POST` | generation/write | si | si | no | si | alto | Lanza generacion de landings; puede crear o modificar contenido. | no | fase SEO generacion | Fuera del primer write interno. |
 | `seo-autogenerate/run` | status/run | `GET/POST` | mixed/cron-like | si | si en run | no | si | critico | El mismo recurso cubre estado y ejecucion, acepta cron/admin y puede lanzar autogeneracion. | no | fase cron SEO separada | Aunque hay lectura de estado, el recurso es demasiado delicado para esta fase. |
 | `kpis/settings` | save | `POST` | write interno migrado | si | si | no | no | bajo | Escritura local pequena de configuracion KPI, con validacion acotada. | migrado | primer write interno completado | Migrado al router en `feature/admin-router-kpis-settings-write`; conserva handler, payload y codigos. |
-| `operations/releases` | create artifact | `POST` | write interno | si | si | no | no | bajo-medio | Crea artefacto local en `release_artifacts`; no debe confundirse con Chrome. | si | segundo write interno o lote 1 si se limita | Requiere probar que no llama proveedores ni publica. |
+| `operations/releases` | create artifact | `POST` | write interno migrado | si | si | no | no | bajo-medio | Crea artefacto local en `release_artifacts`; no llama Chrome ni proveedores. | migrado | segundo write interno completado | Migrado al router en `feature/admin-router-operations-releases-write`; `operations/chrome` sigue fuera. |
 | `operations/chrome` | status/upload/publish | `POST` | external/write | si | si | si | si | critico | Puede consultar, subir o publicar en Chrome Web Store y parchear artefactos. | no | integraciones externas al final | No ejecutar en tests reales. |
 | `linkedin` | dashboard | `GET` | read-only sensible | si | no | no | no | medio | Lectura de configuracion/tokens en dominio social excluido. | no | integraciones sociales | No migrar en fase admin generica. |
 | `linkedin/connect` | oauth url | `GET` | external/oauth | no | no | no | no | medio | Construye flujo OAuth y scopes; dominio sensible. | no | integraciones sociales | Mantener junto al resto de LinkedIn. |
@@ -117,4 +118,39 @@ Riesgo residual:
 
 - `saveKpiSettings` sigue dentro de `api/admin.js`.
 - La escritura depende de `coerceKpiSettings`; no se cambio su contrato.
-- `operations/releases POST` sigue en legacy para no mezclar dos writes en la primera fase.
+- `operations/releases POST` quedo fuera de la primera fase write y se migro despues como segundo write interno.
+
+## Segundo write interno migrado
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-operations-releases-write`
+
+Se migro solo `POST operations/releases` al router declarativo. El handler sigue siendo `handleReleaseArtifacts(req, url)` dentro de `api/admin.js`; el cambio es de dispatch, no de semantica.
+
+Confirmacion de seguridad:
+
+- Es escritura local en `release_artifacts`.
+- Usa `normalizeReleaseArtifactInput`.
+- Hace `supabaseFetch("release_artifacts", { method: "POST" })`.
+- No llama `handleChromeOperation`.
+- No llama `chromeFetch`.
+- No sube paquetes.
+- No publica en Chrome Web Store.
+- No modifica ZIPs ni archivos de distribucion.
+
+Cobertura anadida:
+
+- El router puede registrar `GET` y `POST` para `operations/releases` sin wildcard.
+- `POST operations/releases` con body valido conserva payload y artefacto creado.
+- Campos desconocidos siguen ignorados por normalizacion.
+- Body vacio y campos obligatorios ausentes conservan error controlado por el catch admin comun.
+- JSON mal formado devuelve error saneado.
+- Error Supabase durante insert devuelve `500 admin_request_failed` saneado.
+- `PUT operations/releases` conserva `405 method_not_allowed`.
+- `operations/chrome` sigue fuera del router de releases.
+
+Riesgo residual:
+
+- `handleReleaseArtifacts` sigue dentro de `api/admin.js`.
+- `operations/chrome` sigue en legacy completo y debe quedarse fuera hasta una fase de integraciones externas.
+- Ya hay dos writes internos migrados; conviene pausar y evaluar extraccion de handlers antes de abordar writes con mas efectos.
