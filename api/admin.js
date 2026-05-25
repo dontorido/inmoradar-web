@@ -7,12 +7,7 @@ const {
 } = require("./_seo/autogeneration");
 const { runSeoLandingGeneration } = require("./_seo/generator");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
-const {
-  KPI_SCHEMA_VERSION,
-  KPI_SETTINGS_SCHEMA,
-  coerceKpiSettings,
-  defaultKpiSettings
-} = require("./_kpi/settings");
+const { createKpiSettingsHandler } = require("./_admin/handlers/kpis");
 const { generateSocialVideoProject, MUSIC_STYLES, seriesConfig, TOPICS, VISUAL_BACKDROPS } = require("../lib/social-video/generator");
 const { getVideoBrandingConfig } = require("../lib/social-video/branding");
 const {
@@ -179,6 +174,8 @@ async function readJsonBody(req) {
   if (!raw) return {};
   return JSON.parse(raw);
 }
+
+const handleKpiSettings = createKpiSettingsHandler({ readJsonBody, supabaseFetch });
 
 function clampLimit(value, fallback = 50, max = 100) {
   const parsed = Number.parseInt(String(value || fallback), 10);
@@ -1553,85 +1550,6 @@ async function handleSeoAutogeneration(req, url) {
   const result = await runSeoAutogeneration({ requestSource, config });
   return { status: result.ok === false ? 500 : 200, payload: result };
 }
-
-async function readKpiSettings() {
-  try {
-    const rows = await supabaseFetch(
-      "kpi_settings?id=eq.default&select=id,schema_version,settings_json,updated_at&limit=1"
-    );
-    const row = Array.isArray(rows) ? rows[0] || null : null;
-    return {
-      ok: true,
-      row,
-      settings: coerceKpiSettings(row?.settings_json || {}),
-      updated_at: row?.updated_at || null,
-      table_missing: false,
-      error: null
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      row: null,
-      settings: defaultKpiSettings(),
-      updated_at: null,
-      table_missing: /kpi_settings/.test(error.message),
-      error: error.message
-    };
-  }
-}
-
-async function saveKpiSettings(body) {
-  const settings = coerceKpiSettings(body.settings || body.values || {});
-  const now = new Date().toISOString();
-  const rows = await supabaseFetch("kpi_settings?on_conflict=id", {
-    method: "POST",
-    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-    body: JSON.stringify([
-      {
-        id: "default",
-        schema_version: KPI_SCHEMA_VERSION,
-        settings_json: settings,
-        updated_by: "backoffice",
-        updated_at: now
-      }
-    ])
-  });
-  const row = Array.isArray(rows) ? rows[0] || null : null;
-  return {
-    ok: true,
-    schema_version: KPI_SCHEMA_VERSION,
-    schema: KPI_SETTINGS_SCHEMA,
-    defaults: defaultKpiSettings(),
-    settings: coerceKpiSettings(row?.settings_json || settings),
-    updated_at: row?.updated_at || now
-  };
-}
-
-async function handleKpiSettings(req) {
-  if (req.method === "GET") {
-    const result = await readKpiSettings();
-    return {
-      status: 200,
-      payload: {
-        ok: true,
-        schema_version: KPI_SCHEMA_VERSION,
-        schema: KPI_SETTINGS_SCHEMA,
-        defaults: defaultKpiSettings(),
-        settings: result.settings,
-        updated_at: result.updated_at,
-        table_missing: result.table_missing,
-        error: result.error
-      }
-    };
-  }
-
-  if (req.method === "POST") {
-    return { status: 200, payload: await saveKpiSettings(await readJsonBody(req)) };
-  }
-
-  return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
-}
-
 
 function parseJsonMaybe(value, fallback = null) {
   if (value == null) return fallback;

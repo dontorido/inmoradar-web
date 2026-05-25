@@ -78,6 +78,29 @@ Pausa tecnica recomendada:
 
 - Tras migrar dos writes internos, conviene revisar si el siguiente paso debe ser extraer handlers acotados fuera de `api/admin.js` en vez de seguir sumando writes al router.
 
+## Resultado de la pausa tecnica de handlers
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-handler-contracts`
+
+Decision:
+
+- No migrar nuevos writes.
+- Definir contrato de handlers en `ADMIN_HANDLER_CONTRACTS.md`.
+- Extraer solo `kpis/settings` como prueba segura.
+- Mantener `operations/releases` dentro de `api/admin.js` por ahora.
+
+Motivo:
+
+- `kpis/settings` tiene dependencias pequenas y claras.
+- `operations/releases` es local, pero arrastra `safeFetch`, `clampLimit` y conectores; extraerlo merece fase propia.
+- Los siguientes writes ya entran en zonas con mas efecto operativo o externo.
+
+Recomendacion:
+
+- Antes de seguir con writes, consolidar los contratos del router y decidir si extraer `operations/releases` o analytics read-only.
+- No pasar todavia a SEO write, Chrome, Meta, LinkedIn, billing, social-video ni Viraliza.
+
 ## 2. Criterios de inclusion
 
 Un endpoint write puede entrar en el primer lote solo si cumple todo:

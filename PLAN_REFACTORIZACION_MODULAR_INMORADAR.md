@@ -874,3 +874,39 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-router-operations-releases-write. Sin deploy, sin produccion y sin tocar integraciones externas. Hacer una pausa tecnica de consolidacion del router admin: revisar si conviene extraer handlers internos ya migrados (`kpis/settings` y `operations/releases`) fuera de `api/admin.js`, proponer contratos/metadatos de rutas y documentar el siguiente orden. No migrar nuevos endpoints write, no tocar SEO, Chrome Web Store, billing, Meta, LinkedIn, social-video ni Viraliza. Si se implementa algo, que sea una extraccion pequena y testeada sin cambio de comportamiento. Ejecutar node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
 ```
+
+## 27. Fase realizada - Pausa tecnica de contratos y handlers
+
+Estado: realizada en `feature/admin-router-handler-contracts`.
+
+Se creo:
+
+- `ADMIN_HANDLER_CONTRACTS.md`
+- `api/_admin/handlers/kpis.js`
+
+Se extrajo del monolito:
+
+- `kpis/settings` `GET/POST`
+
+No se migraron nuevos endpoints ni nuevos writes.
+
+Criterios para seguir:
+
+- Extraer solo handlers ya cubiertos por tests.
+- Preferir factories con dependencias inyectadas.
+- No mover auth ni service role.
+- Mantener `{ status, payload }`.
+- No tocar dominios sensibles.
+
+Orden recomendado:
+
+1. Extraer `operations/releases` en fase separada si se define una inyeccion limpia de `safeFetch`/`clampLimit`.
+2. Extraer analytics read-only si se busca reducir tamano del archivo sin tocar writes.
+3. Evaluar metadatos de rutas solo si se van a usar en tests o auditoria.
+4. Mantener SEO write, Chrome, billing y social al final.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-router-handler-contracts. Sin deploy y sin tocar produccion. Extraer `operations/releases` a un handler interno solo si se puede inyectar `safeFetch`, `supabaseFetch`, `readJsonBody` y `clampLimit` sin tocar `operations/chrome` ni Chrome Web Store. No migrar nuevos endpoints. Mantener URLs, payloads, codigos, auth y tests. Si aumenta el riesgo, documentar y no extraer. Ejecutar node --check, node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
+```

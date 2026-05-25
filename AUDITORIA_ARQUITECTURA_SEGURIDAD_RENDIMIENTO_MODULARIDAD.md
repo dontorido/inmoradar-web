@@ -1152,3 +1152,60 @@ Verificacion de esta evolucion:
 - `node --test tests/admin-router.test.js`: 41 pass, 0 fail.
 - `node --test tests/*.test.js`: 280 pass, 0 fail.
 - `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.
+
+## Pausa tecnica: contratos y extraccion de handlers
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-handler-contracts`
+
+Se definio un contrato interno documentado para handlers admin en `ADMIN_HANDLER_CONTRACTS.md` y se extrajo solo `kpis/settings` a `api/_admin/handlers/kpis.js`.
+
+Contrato adoptado:
+
+- `api/admin.js` mantiene auth, CORS, Supabase gate y catch comun.
+- El router pasa `{ req, url, resource }`.
+- Los handlers devuelven `{ status, payload }`.
+- Dependencias sensibles se inyectan por factory cuando se extrae un handler.
+- No hay wildcards ni routes genericas para writes.
+- Los errores siguen saneados por el catch comun.
+
+Extraccion realizada:
+
+- `kpis/settings` `GET/POST`.
+
+Por que fue segura:
+
+- depende solo de `readJsonBody`, `supabaseFetch` y `api/_kpi/settings`;
+- no toca SEO, Chrome, billing ni integraciones;
+- mantiene payloads y codigos;
+- esta cubierta por tests de GET, POST, body vacio, JSON mal formado, error Supabase y no secretos.
+
+No se extrajo todavia:
+
+- `operations/releases`, porque requiere decidir como inyectar `safeFetch`, `clampLimit` y conectores de operaciones sin mezclarlo con Chrome.
+- analytics, premium y summary, porque no eran necesarios para validar el contrato.
+
+Riesgos reducidos:
+
+- Primer handler write queda fuera del monolito.
+- El patron de factory evita dependencias circulares.
+- Se documentan reglas para nuevos handlers y writes.
+
+Riesgos pendientes:
+
+- `api/admin.js` sigue conteniendo muchos handlers.
+- `operations/releases` sigue dentro.
+- Zonas sensibles siguen legacy y no deben tocarse sin fase dedicada.
+
+Verificacion de esta evolucion:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/router.js`: OK con Node bundled.
+- `node --check api/_admin/handlers/kpis.js`: OK con Node bundled.
+- `node --check assets/admin.js`: OK con Node bundled.
+- `node --check api/sitemap.js`: OK con Node bundled.
+- `node --check api/seo-page.js`: OK con Node bundled.
+- `node --check scripts/serve-static.js`: OK con Node bundled.
+- `node --test tests/admin-router.test.js`: 41 pass, 0 fail.
+- `node --test tests/*.test.js`: 280 pass, 0 fail.
+- `git diff --check`: OK; solo avisos de CRLF propios de Git en Windows.

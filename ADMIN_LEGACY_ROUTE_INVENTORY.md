@@ -41,7 +41,7 @@ El objetivo de este documento es dejar inventariado lo que sigue en legacy, clas
 | `seo/landings` | `regenerate` | `POST` | generation/write | si | si | no | si | alto | Regenera contenido y persiste cambios. | no | fase SEO especifica | Mantener legacy hasta aislar generador y contratos de calidad. |
 | `seo/generate-landings` | generacion | `POST` | generation/write | si | si | no | si | alto | Lanza generacion de landings; puede crear o modificar contenido. | no | fase SEO generacion | Fuera del primer write interno. |
 | `seo-autogenerate/run` | status/run | `GET/POST` | mixed/cron-like | si | si en run | no | si | critico | El mismo recurso cubre estado y ejecucion, acepta cron/admin y puede lanzar autogeneracion. | no | fase cron SEO separada | Aunque hay lectura de estado, el recurso es demasiado delicado para esta fase. |
-| `kpis/settings` | save | `POST` | write interno migrado | si | si | no | no | bajo | Escritura local pequena de configuracion KPI, con validacion acotada. | migrado | primer write interno completado | Migrado al router en `feature/admin-router-kpis-settings-write`; conserva handler, payload y codigos. |
+| `kpis/settings` | save | `POST` | write interno migrado | si | si | no | no | bajo | Escritura local pequena de configuracion KPI, con validacion acotada. | migrado | primer write interno completado | Migrado al router en `feature/admin-router-kpis-settings-write`; handler extraido a `api/_admin/handlers/kpis.js` en la pausa tecnica. |
 | `operations/releases` | create artifact | `POST` | write interno migrado | si | si | no | no | bajo-medio | Crea artefacto local en `release_artifacts`; no llama Chrome ni proveedores. | migrado | segundo write interno completado | Migrado al router en `feature/admin-router-operations-releases-write`; `operations/chrome` sigue fuera. |
 | `operations/chrome` | status/upload/publish | `POST` | external/write | si | si | si | si | critico | Puede consultar, subir o publicar en Chrome Web Store y parchear artefactos. | no | integraciones externas al final | No ejecutar en tests reales. |
 | `linkedin` | dashboard | `GET` | read-only sensible | si | no | no | no | medio | Lectura de configuracion/tokens en dominio social excluido. | no | integraciones sociales | No migrar en fase admin generica. |
@@ -154,3 +154,51 @@ Riesgo residual:
 - `handleReleaseArtifacts` sigue dentro de `api/admin.js`.
 - `operations/chrome` sigue en legacy completo y debe quedarse fuera hasta una fase de integraciones externas.
 - Ya hay dos writes internos migrados; conviene pausar y evaluar extraccion de handlers antes de abordar writes con mas efectos.
+
+## Pausa tecnica de handlers
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-handler-contracts`
+
+Handlers ya registrados en el router:
+
+- `alerts`
+- `summary`
+- `extension/usage`
+- `parking/summary`
+- `analytics/summary`
+- `analytics/pages`
+- `analytics/learning`
+- `seo/landings` `GET`
+- `kpis/settings` `GET/POST`
+- `operations/releases` `GET/POST`
+- `premium/subscriptions` `GET`
+
+Extraccion realizada:
+
+- `kpis/settings` queda en `api/_admin/handlers/kpis.js`.
+
+Siguen dentro de `api/admin.js`:
+
+- `handleReleaseArtifacts`;
+- `handleSummary`;
+- `handleAlerts`;
+- `handlePremiumSubscriptions`;
+- `handleExtensionUsageSummary`;
+- `handleParkingSummary`;
+- handlers analytics;
+- `handleSeoLandings`;
+- todos los handlers legacy sensibles.
+
+Candidatos a extraccion posterior:
+
+- `operations/releases`, si se inyectan `safeFetch`, `clampLimit` y `supabaseFetch` sin mover Chrome.
+- `premium/subscriptions`, si se mantiene separado de checkout/portal/webhooks.
+- analytics read-only, si se quiere reducir el peso del bloque de analitica.
+
+Bloqueados por riesgo:
+
+- `operations/chrome`;
+- SEO write/generacion/autogeneracion;
+- Meta, LinkedIn, social-video, Runway y Viraliza;
+- billing externo, checkout, portal y webhooks.
