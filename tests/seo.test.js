@@ -9,6 +9,7 @@ const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { runSeoLandingGeneration } = require("../api/_seo/generator");
 const { buildSeoDailyPolicySnapshot, selectNextSeoContentType } = require("../api/_seo/publishingPolicy");
 const { getSeedPublishedLanding } = require("../api/_seo/seedPublished");
+const { siteUrl } = require("../api/_seo/text");
 const sitemapHandler = require("../api/sitemap");
 const seoPageHandler = require("../api/seo-page");
 const { renderLandingHtml } = require("../api/seo-page");
@@ -283,9 +284,29 @@ test("expensive_listing_city render publico regenera textos visibles con tildes"
   assert.match(html, /Guía práctica para comparar el precio/);
   assert.match(html, /Señales que conviene revisar/);
   assert.match(html, /index,follow/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/inmoradar\.app\/saber-si-piso-esta-caro\/granada\/">/);
+  assert.match(html, /"@type":"BreadcrumbList"/);
+  assert.doesNotMatch(html, /position":4/);
+  assert.doesNotMatch(html, /<link rel="canonical" href="https:\/\/www\.inmoradar\.app\//);
   assert.match(html, /@media \(max-width: 560px\)/);
   assert.match(html, /overflow-x: hidden/);
   assert.doesNotMatch(html, /Plantilla antigua sin tildes/);
+});
+
+test("siteUrl normaliza www al dominio canonico sin www", () => {
+  const previousUrl = process.env.PUBLIC_SITE_URL;
+  const previousSiteUrl = process.env.SITE_URL;
+  process.env.PUBLIC_SITE_URL = "https://www.inmoradar.app";
+  delete process.env.SITE_URL;
+
+  try {
+    assert.equal(siteUrl(), "https://inmoradar.app");
+  } finally {
+    if (previousUrl === undefined) delete process.env.PUBLIC_SITE_URL;
+    else process.env.PUBLIC_SITE_URL = previousUrl;
+    if (previousSiteUrl === undefined) delete process.env.SITE_URL;
+    else process.env.SITE_URL = previousSiteUrl;
+  }
 });
 
 test("sitemap consulta solo landings publicadas indexables y con quality_score suficiente", async () => {
@@ -335,6 +356,89 @@ test("sitemap consulta solo landings publicadas indexables y con quality_score s
   assert.equal(params.get("quality_score"), "gte.75");
 });
 
+test("sitemap publica solo URLs canonicas sin www e incluye indice de analisis de precio", async () => {
+  const previousUrl = process.env.PUBLIC_SITE_URL;
+  const previousSiteUrl = process.env.SITE_URL;
+  process.env.PUBLIC_SITE_URL = "https://www.inmoradar.app";
+  delete process.env.SITE_URL;
+
+  const req = {
+    method: "GET",
+    url: "/api/sitemap.xml",
+    headers: { host: "inmoradar.app" }
+  };
+  const chunks = [];
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+
+  try {
+    await sitemapHandler(req, res);
+  } finally {
+    if (previousUrl === undefined) delete process.env.PUBLIC_SITE_URL;
+    else process.env.PUBLIC_SITE_URL = previousUrl;
+    if (previousSiteUrl === undefined) delete process.env.SITE_URL;
+    else process.env.SITE_URL = previousSiteUrl;
+  }
+
+  const xml = chunks.join("");
+  assert.equal(res.statusCode, 200);
+  assert.match(xml, /<loc>https:\/\/inmoradar\.app\/saber-si-piso-esta-caro\/<\/loc>/);
+  assert.doesNotMatch(xml, /<loc>https:\/\/www\.inmoradar\.app\//);
+  assert.doesNotMatch(xml, /<loc>http:\/\//);
+});
+
+test("sitemap y landings SEO aceptan HEAD para comprobaciones HTTP", async () => {
+  const sitemapReq = {
+    method: "HEAD",
+    url: "/api/sitemap.xml",
+    headers: { host: "inmoradar.app" }
+  };
+  const sitemapChunks = [];
+  const sitemapRes = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) sitemapChunks.push(String(chunk));
+    }
+  };
+
+  await sitemapHandler(sitemapReq, sitemapRes);
+  assert.equal(sitemapRes.statusCode, 200);
+  assert.equal(sitemapChunks.join(""), "");
+
+  const pageReq = {
+    method: "HEAD",
+    url: "/api/seo-page?slug=precio-metro-cuadrado/logrono",
+    headers: { host: "inmoradar.app" }
+  };
+  const pageChunks = [];
+  const pageRes = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) pageChunks.push(String(chunk));
+    }
+  };
+
+  await seoPageHandler(pageReq, pageRes);
+  assert.equal(pageRes.statusCode, 200);
+  assert.equal(pageChunks.join(""), "");
+});
+
 test("la home tiene seccion Noticias con enlaces a publicaciones", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 
@@ -344,10 +448,49 @@ test("la home tiene seccion Noticias con enlaces a publicaciones", () => {
   assert.match(html, /data-news-track/);
   assert.match(html, /Noticias/);
   assert.match(html, /data-articles-grid/);
+  assert.match(html, /id="guias-precio-ciudad"/);
+  assert.match(html, /\/saber-si-piso-esta-caro\/madrid\//);
+  assert.match(html, /\/saber-si-piso-esta-caro\/granada\//);
 
   const script = fs.readFileSync(path.join(__dirname, "..", "assets", "app.js"), "utf8");
   assert.match(script, /precio-metro-cuadrado-madrid/);
   assert.match(script, /articleCard/);
+});
+
+test("la pagina indice de saber si un piso esta caro es indexable y enlaza ciudades", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "saber-si-piso-esta-caro.html"), "utf8");
+
+  assert.match(html, /<meta name="robots" content="index,follow">/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/inmoradar\.app\/saber-si-piso-esta-caro\/">/);
+  assert.match(html, /\/saber-si-piso-esta-caro\/madrid\//);
+  assert.match(html, /\/saber-si-piso-esta-caro\/barcelona\//);
+  assert.match(html, /\/saber-si-piso-esta-caro\/valencia\//);
+  assert.match(html, /\/saber-si-piso-esta-caro\/sevilla\//);
+  assert.match(html, /\/saber-si-piso-esta-caro\/granada\//);
+});
+
+test("las paginas estaticas del sitemap tienen canonical explicito sin www", () => {
+  const pages = [
+    ["index.html", "https://inmoradar.app/"],
+    ["que-analiza.html", "https://inmoradar.app/que-analiza"],
+    ["datos.html", "https://inmoradar.app/datos"],
+    ["metodologia.html", "https://inmoradar.app/metodologia"],
+    ["noticias.html", "https://inmoradar.app/noticias"],
+    ["premium.html", "https://inmoradar.app/premium"],
+    ["clientes.html", "https://inmoradar.app/clientes"],
+    ["faq.html", "https://inmoradar.app/faq"],
+    ["contacto.html", "https://inmoradar.app/contacto"],
+    ["privacidad.html", "https://inmoradar.app/privacidad"],
+    ["terminos.html", "https://inmoradar.app/terminos"],
+    ["saber-si-piso-esta-caro.html", "https://inmoradar.app/saber-si-piso-esta-caro/"]
+  ];
+
+  for (const [file, canonical] of pages) {
+    const html = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
+    assert.match(html, new RegExp(`<link rel="canonical" href="${canonical.replace(/\//g, "\\/")}">`));
+    assert.match(html, /<meta name="robots" content="index,follow">/);
+    assert.doesNotMatch(html, /https:\/\/www\.inmoradar\.app/);
+  }
 });
 
 test("el endpoint de noticias publica landings publicadas e indexables", async () => {
@@ -384,16 +527,19 @@ test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () 
   const localServer = fs.readFileSync(path.join(__dirname, "..", "scripts", "serve-static.js"), "utf8");
 
   assert.match(vercel, /precio-alquiler\/:city/);
+  assert.match(vercel, /"source": "\/saber-si-piso-esta-caro\/?"/);
   assert.match(vercel, /saber-si-piso-esta-caro\/:city/);
   assert.match(vercel, /guias\/:slug/);
   assert.match(vercel, /"source": "\/datos"/);
   assert.match(vercel, /"source": "\/noticias\/:slug"/);
   assert.match(redirects, /precio-alquiler\/:city/);
+  assert.match(redirects, /\/saber-si-piso-esta-caro \/saber-si-piso-esta-caro\.html/);
   assert.match(redirects, /saber-si-piso-esta-caro\/:city/);
   assert.match(redirects, /guias\/:slug/);
   assert.match(redirects, /\/datos \/datos\.html/);
   assert.match(redirects, /\/noticias\/:slug \/article\.html/);
   assert.match(localServer, /precio-alquiler/);
+  assert.match(localServer, /saber-si-piso-esta-caro\.html/);
   assert.match(localServer, /saber-si-piso-esta-caro/);
   assert.match(localServer, /guias/);
   assert.match(localServer, /\/datos\.html/);

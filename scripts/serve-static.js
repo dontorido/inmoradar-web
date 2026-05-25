@@ -62,6 +62,8 @@ const rewrites = {
   "/backoffice/marketing/viraliza": "/admin.html",
   "/backoffice/marketing/linkedin": "/admin.html",
   "/backoffice/marketing/meta": "/admin.html",
+  "/saber-si-piso-esta-caro": "/saber-si-piso-esta-caro.html",
+  "/saber-si-piso-esta-caro/": "/saber-si-piso-esta-caro.html",
   "/que-analiza": "/que-analiza.html",
   "/datos": "/datos.html",
   "/metodologia": "/metodologia.html",

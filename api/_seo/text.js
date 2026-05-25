@@ -62,14 +62,33 @@ function formatNumber(value, decimals = 0) {
 }
 
 function siteUrl() {
-  return String(process.env.PUBLIC_SITE_URL || process.env.SITE_URL || "https://inmoradar.app").replace(/\/+$/, "");
+  const configured = String(process.env.PUBLIC_SITE_URL || process.env.SITE_URL || "https://inmoradar.app").replace(/\/+$/, "");
+  return /^https?:\/\/www\.inmoradar\.app$/i.test(configured) ? "https://inmoradar.app" : configured;
 }
 
-function canonicalForSlug(slug) {
-  return `${siteUrl()}/${String(slug || "").replace(/^\/+|\/+$/g, "")}/`;
+function canonicalForSlug(slug, baseUrl = siteUrl()) {
+  return `${String(baseUrl || siteUrl()).replace(/\/+$/, "")}/${String(slug || "").replace(/^\/+|\/+$/g, "")}/`;
+}
+
+function canonicalForLanding(landing, baseUrl = siteUrl()) {
+  const slug = String(landing?.slug || "").replace(/^\/+|\/+$/g, "");
+  const fallback = canonicalForSlug(slug, baseUrl);
+  const configured = String(landing?.canonical_url || "").trim();
+  if (!configured) return fallback;
+
+  try {
+    const configuredUrl = new URL(configured);
+    const configuredPath = configuredUrl.pathname.replace(/^\/+|\/+$/g, "");
+    if (configuredPath === slug) return fallback;
+  } catch (_) {
+    return fallback;
+  }
+
+  return configured;
 }
 
 module.exports = {
+  canonicalForLanding,
   canonicalForSlug,
   countWords,
   displayName,

@@ -1053,6 +1053,12 @@ h3 {
 }
 .article-card:not(.large) h3 { font-size: 26px; }
 .article-card p { color: var(--muted); line-height: 1.45; }
+.seo-guide-card {
+  color: inherit;
+  min-height: 230px;
+  text-decoration: none;
+}
+.seo-guide-card .article-meta { justify-content: flex-start; }
 .article-meta {
   display: flex;
   justify-content: space-between;

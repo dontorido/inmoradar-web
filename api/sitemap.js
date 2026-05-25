@@ -13,7 +13,8 @@ const STATIC_PATHS = [
   "/faq",
   "/contacto",
   "/privacidad",
-  "/terminos"
+  "/terminos",
+  "/saber-si-piso-esta-caro/"
 ];
 
 async function fetchPublishedLandings() {
@@ -95,7 +96,7 @@ function newsItem(landing) {
 }
 
 module.exports = async function handler(req, res) {
-  if (req.method !== "GET") {
+  if (!["GET", "HEAD"].includes(req.method)) {
     res.statusCode = 405;
     res.setHeader("content-type", "text/plain; charset=utf-8");
     res.end("Method not allowed");
@@ -110,6 +111,10 @@ module.exports = async function handler(req, res) {
       res.statusCode = 200;
       res.setHeader("content-type", "application/json; charset=utf-8");
       res.setHeader("cache-control", "no-store, max-age=0");
+      if (req.method === "HEAD") {
+        res.end();
+        return;
+      }
       res.end(JSON.stringify({ ok: true, latest_limit: 5, news: landings.slice(0, 60).map(newsItem) }));
       return;
     }
@@ -128,6 +133,10 @@ ${entries.join("\n")}
     res.statusCode = 200;
     res.setHeader("content-type", "application/xml; charset=utf-8");
     res.setHeader("cache-control", "s-maxage=3600, stale-while-revalidate=86400");
+    if (req.method === "HEAD") {
+      res.end();
+      return;
+    }
     res.end(xml);
   } catch (error) {
     console.error("[sitemap]", error);
