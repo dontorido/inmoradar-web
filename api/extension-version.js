@@ -1,7 +1,8 @@
 const { handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
 const { logRequestMetric } = require("../lib/observability/request-metrics");
 const { extensionUsageEventFromInput } = require("../lib/extension-usage/metrics");
-const { checkRateLimit, rateLimitPayload, setRateLimitHeaders } = require("../lib/security/rate-limit");
+const { checkDurableRateLimit } = require("../lib/security/durable-rate-limit");
+const { rateLimitPayload, setRateLimitHeaders } = require("../lib/security/rate-limit");
 
 const MAX_EXTENSION_USAGE_BODY_BYTES = 16 * 1024;
 const DEFAULT_EXTENSION_USAGE_RATE_LIMIT = 120;
@@ -32,7 +33,7 @@ async function handleExtensionUsage(req, res) {
   if (req.method !== "POST") {
     return json(res, 405, { ok: false, error: "method_not_allowed" });
   }
-  const rateLimit = checkRateLimit(req, {
+  const rateLimit = await checkDurableRateLimit(req, {
     scope: "extension_usage",
     maxRequests: process.env.EXTENSION_USAGE_RATE_LIMIT_MAX || DEFAULT_EXTENSION_USAGE_RATE_LIMIT,
     windowMs: process.env.EXTENSION_USAGE_RATE_LIMIT_WINDOW_MS || DEFAULT_EXTENSION_USAGE_RATE_LIMIT_WINDOW_MS

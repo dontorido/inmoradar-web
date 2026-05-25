@@ -10,6 +10,7 @@ Cambios implementados:
 
 - Helper de rate limiting en memoria en `lib/security/rate-limit.js`.
 - Rate limit defensivo para `POST /api/extension-usage` via `api/extension-version.js?resource=usage`.
+- Piloto durable opcional para el mismo flujo mediante `lib/security/durable-rate-limit.js`.
 - CORS admin mas estricto para `api/admin.js`, con allowlist de origen.
 - Helper de observabilidad no sensible en `lib/observability/request-metrics.js`.
 - Logs de latencia no sensibles en `api/admin.js` y `api/extension-version.js`.
@@ -23,7 +24,14 @@ Cambios no implementados:
 
 ## 2. Limitaciones importantes
 
-El rate limit implementado es en memoria y por instancia serverless. Reduce abusos basicos y bursts por instancia, pero no debe presentarse como rate limiting global/durable.
+El rate limit base es en memoria y por instancia serverless. Reduce abusos basicos y bursts por instancia, pero no debe presentarse como rate limiting global/durable.
+
+El piloto durable para `extension usage` usa Upstash Redis solo si existen:
+
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
+
+Si faltan variables o Upstash falla, el helper cae automaticamente al rate limit en memoria. No se exponen URL/token ni errores internos al cliente.
 
 Para una proteccion global se recomienda una fase posterior con almacenamiento compartido, por ejemplo Supabase, Upstash o una capa edge/Vercel dedicada.
 
@@ -67,6 +75,15 @@ Configuracion:
 
 - `EXTENSION_USAGE_RATE_LIMIT_MAX`, default `120`.
 - `EXTENSION_USAGE_RATE_LIMIT_WINDOW_MS`, default `60000`.
+- `UPSTASH_REDIS_REST_URL`, opcional para piloto durable.
+- `UPSTASH_REDIS_REST_TOKEN`, opcional para piloto durable.
+
+Fallback:
+
+- Sin variables Upstash: memoria.
+- Error/timeout/respuesta invalida de Upstash: memoria + log saneado.
+- El payload normal de `extension usage` no cambia.
+- El payload `429` se mantiene estable.
 
 Respuesta nueva ante abuso:
 
@@ -185,17 +202,17 @@ Prompt recomendado:
 
 ```text
 Nombre del chat/tarea:
-Rate limiting durable endpoints publicos escritura InmoRadar
+Extender rate limiting durable a endpoints publicos de escritura InmoRadar
 
 Objetivo:
-Disenar e implementar rate limiting durable para endpoints publicos de escritura usando infraestructura compartida segura, sin tocar SEO write, billing, Chrome, Meta, LinkedIn, Runway, Viraliza ni webhooks.
+Extender el piloto durable validado de extension usage a endpoints publicos de escritura de bajo riesgo usando la misma estrategia de privacidad, fallback y tests, sin tocar SEO write, billing, Chrome, Meta, LinkedIn, Runway, Viraliza ni webhooks.
 
 Prioridad:
 1. /api/contact
 2. /api/waitlist/browser
 3. /api/analytics/event
 4. /api/photo-condition-analysis, solo con analisis de coste y fixtures
-5. /api/extension-usage migrando de memoria a durable
+5. Mantener /api/extension-usage como referencia del patron durable
 
 Reglas:
 - No cambiar URLs ni payloads salvo 429 documentado.

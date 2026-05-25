@@ -11,16 +11,25 @@ La capa actual ya cubre seguridad operacional inicial:
 - Logs de latencia no sensibles en `api/admin.js` y `api/extension-version.js`.
 - Tests dedicados en `tests/security-operational.test.js`.
 
+Actualizacion de piloto:
+
+- Se implementa un piloto durable solo para `POST /api/extension-usage`.
+- Si `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN` existen, el limite usa Upstash Redis via REST.
+- Si faltan variables o Upstash falla, el flujo cae al rate limiting en memoria ya existente.
+- No se cambia URL, payload normal, query params ni schema.
+- No se toca SEO write, Chrome, Meta, LinkedIn, Runway, Viraliza, checkout, billing, webhooks, cron ni jobs.
+
 La limitacion principal sigue siendo que el rate limit en memoria es por instancia serverless. Sirve como freno defensivo de bajo coste, pero no es global ni durable entre instancias.
 
 Recomendacion:
 
-1. Mantener memoria + logs como fallback temporal.
-2. Implementar rate limiting durable primero en `POST /api/extension-usage`, `POST /api/contact`, `POST /api/waitlist/browser` y `POST /api/analytics/event`.
-3. Usar Upstash Redis como opcion preferida si se acepta nueva infraestructura/credenciales.
-4. Si no se aceptan nuevas credenciales, disenar una tabla Supabase + RPC atomica como segunda opcion, pero implementarla en fase separada con migracion revisada.
-5. Usar Vercel WAF como capa perimetral complementaria si el plan/proyecto lo permite, especialmente para patrones por path/IP antes de llegar a la funcion.
-6. No tocar todavia SEO write, Chrome, Meta, LinkedIn, Runway, Viraliza, checkout, billing, webhooks, cron ni jobs.
+1. Mantener memoria + logs como fallback.
+2. Validar el piloto durable en `POST /api/extension-usage`.
+3. Si el piloto es estable, extender a `POST /api/contact`, `POST /api/waitlist/browser` y `POST /api/analytics/event`.
+4. Usar Upstash Redis como opcion preferida para endpoints publicos de escritura si se aceptan nuevas credenciales.
+5. Si no se aceptan nuevas credenciales, disenar una tabla Supabase + RPC atomica como segunda opcion, pero implementarla en fase separada con migracion revisada.
+6. Usar Vercel WAF como capa perimetral complementaria si el plan/proyecto lo permite, especialmente para patrones por path/IP antes de llegar a la funcion.
+7. No tocar todavia SEO write, Chrome, Meta, LinkedIn, Runway, Viraliza, checkout, billing, webhooks, cron ni jobs.
 
 ## 2. Fuentes revisadas
 
@@ -312,18 +321,19 @@ Regresion:
 
 Objetivo:
 
-- Crear interfaz `RateLimitStore`.
+- Crear helper durable para rate limiting.
 - Mantener memoria como fallback.
 - Anadir store Upstash solo si existen env vars.
 - No exigir credenciales en local/test.
-- Migrar `extension usage` al helper durable con fallback memoria.
+- Migrar solo `extension usage` al helper durable con fallback memoria.
+- No hacer llamadas reales a Upstash en tests.
 
 Archivos posibles:
 
 - `lib/security/rate-limit.js`
-- `lib/security/rate-limit-store-memory.js`
-- `lib/security/rate-limit-store-upstash.js`
+- `lib/security/durable-rate-limit.js`
 - `tests/security-rate-limit-store.test.js`
+- `tests/security-operational.test.js`
 
 Sin tocar:
 
@@ -331,6 +341,16 @@ Sin tocar:
 - Billing.
 - Webhooks.
 - Integraciones.
+
+Variables de activacion:
+
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
+
+Desactivacion:
+
+- Quitar cualquiera de esas dos variables para volver a memoria.
+- Si Upstash devuelve error, timeout o respuesta invalida, el helper cae automaticamente a memoria y registra un aviso saneado.
 
 ### Fase 2: endpoints publicos escritura de bajo riesgo
 
