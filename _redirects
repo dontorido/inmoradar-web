@@ -16,6 +16,8 @@
 /precio-metro-cuadrado/:city/ /api/seo-page?slug=precio-metro-cuadrado/:city 200
 /precio-alquiler/:city /api/seo-page?slug=precio-alquiler/:city 200
 /precio-alquiler/:city/ /api/seo-page?slug=precio-alquiler/:city 200
+/saber-si-piso-esta-caro /saber-si-piso-esta-caro.html 200
+/saber-si-piso-esta-caro/ /saber-si-piso-esta-caro.html 200
 /saber-si-piso-esta-caro/:city /api/seo-page?slug=saber-si-piso-esta-caro/:city 200
 /saber-si-piso-esta-caro/:city/ /api/seo-page?slug=saber-si-piso-esta-caro/:city 200
 /guias/:slug /api/seo-page?slug=guias/:slug 200

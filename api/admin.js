@@ -1,4 +1,9 @@
-const { assertAdmin, fetchWithTimeout, handleCors, hasSupabaseConfig, json, readRawBody, supabaseFetch } = require("./_utils");
+const { assertAdmin, fetchWithTimeout, handleCors, hasSupabaseConfig, json, readRawBody, sanitizeErrorMessage, supabaseFetch } = require("./_utils");
+const { createAdminRouter, dispatchAdminRoute } = require("./_admin/router");
+const { createAnalyticsHandlers } = require("./_admin/handlers/analytics");
+const { createCoreHandlers } = require("./_admin/handlers/core");
+const { createExtensionUsageHandlers } = require("./_admin/handlers/extension-usage");
+const { createSeoHandlers } = require("./_admin/handlers/seo");
 const {
   buildSeoAutogenerationOperationalAlerts,
   getSeoAutogenerationStatus,
@@ -6,12 +11,9 @@ const {
 } = require("./_seo/autogeneration");
 const { runSeoLandingGeneration } = require("./_seo/generator");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
-const {
-  KPI_SCHEMA_VERSION,
-  KPI_SETTINGS_SCHEMA,
-  coerceKpiSettings,
-  defaultKpiSettings
-} = require("./_kpi/settings");
+const { createKpiSettingsHandler } = require("./_admin/handlers/kpis");
+const { createOperationsReleaseHandler } = require("./_admin/handlers/operations");
+const { createPremiumHandlers } = require("./_admin/handlers/premium");
 const { generateSocialVideoProject, MUSIC_STYLES, seriesConfig, TOPICS, VISUAL_BACKDROPS } = require("../lib/social-video/generator");
 const { getVideoBrandingConfig } = require("../lib/social-video/branding");
 const {
@@ -29,13 +31,7 @@ const {
   runwayRequestSummary,
   runwaySettings
 } = require("../lib/social-video/runway");
-const { summarizeExtensionUsage } = require("../lib/extension-usage/metrics");
 const { buildRevenueEventFromLemonPayload, summarizeMonthlyRevenue } = require("../lib/sales/revenue");
-const {
-  normalizeReleaseArtifactInput,
-  normalizeReleaseTarget,
-  releaseConnectors
-} = require("../lib/operations/releases");
 const { loadNightlyMaintenanceAlerts } = require("../lib/operations/nightlyMaintenanceAlerts");
 const {
   chromeWebStoreConfig,
@@ -61,12 +57,6 @@ const {
   analyzeWeeklyLearning,
   recommendNextActions
 } = require("../lib/viraliza/engine");
-const {
-  buildOwnedAnalyticsLearning,
-  summarizeOwnedAnalytics,
-  summarizePagePerformance
-} = require("../lib/analytics/learning");
-
 const {
   MANUAL_MODE_NOTICE,
   LINKEDIN_COMPANY_URL,
@@ -117,8 +107,9 @@ const {
   validatePublishInput: validateMetaPublishInput,
   withUtm
 } = require("../lib/meta/services");
+const { logRequestMetric } = require("../lib/observability/request-metrics");
 const LANDING_SELECT =
-  "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at";
+  "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at,source_data_json";
 
 function requestHeader(req, name) {
   const headers = req.headers || {};
@@ -175,6 +166,8 @@ async function readJsonBody(req) {
   return JSON.parse(raw);
 }
 
+const handleKpiSettings = createKpiSettingsHandler({ readJsonBody, supabaseFetch });
+
 function clampLimit(value, fallback = 50, max = 100) {
   const parsed = Number.parseInt(String(value || fallback), 10);
   if (!Number.isFinite(parsed)) return fallback;
@@ -218,9 +211,48 @@ async function safeFetch(path, fallback = []) {
     const rows = await supabaseFetch(path);
     return Array.isArray(rows) ? rows : fallback;
   } catch (error) {
-    return { error: error.message, rows: fallback };
+    return { error: sanitizeErrorMessage(error), rows: fallback };
   }
 }
+
+const handleReleaseArtifacts = createOperationsReleaseHandler({
+  clampLimit,
+  readJsonBody,
+  safeFetch,
+  supabaseFetch
+});
+const {
+  handleOwnedAnalyticsLearning,
+  handleOwnedAnalyticsPages,
+  handleOwnedAnalyticsSummary
+} = createAnalyticsHandlers({
+  clampLimit,
+  hasSupabaseConfig,
+  supabaseFetch
+});
+const { handlePremiumSubscriptions } = createPremiumHandlers({
+  clampLimit,
+  sanitizeSearch,
+  supabaseFetch
+});
+const { handleParkingSummary } = createCoreHandlers({
+  average,
+  countBy,
+  safeFetch
+});
+const { handleExtensionUsageSummary } = createExtensionUsageHandlers({
+  clampLimit,
+  supabaseFetch
+});
+const { handleSeoLandings: handleSeoLandingsReadOnly } = createSeoHandlers({
+  buildSeoDailyPolicySnapshot,
+  clampLimit,
+  clampPage,
+  landingSelect: LANDING_SELECT,
+  safeFetch,
+  seoDailyTargets: SEO_DAILY_TARGETS,
+  supabaseFetch
+});
 
 function safeRows(result) {
   return Array.isArray(result) ? result : result?.rows || [];
@@ -507,357 +539,6 @@ async function handleSummary() {
   };
 }
 
-async function handleParkingSummary() {
-  const [result, assessmentResult] = await Promise.all([
-    safeFetch(
-      "parking_difficulty_cache?select=id,geohash,city,radius_m,perspective,score,label,confidence_score,calculated_at,expires_at&order=calculated_at.desc&limit=100"
-    ),
-    safeFetch(
-      "parking_assessments?select=id,source_url,address_text,street,zone_name,district,municipality,profile,overall_score,overall_label,confidence_score,confidence_label,status,last_checked_at&order=last_checked_at.desc&limit=100"
-    )
-  ]);
-  const rows = Array.isArray(result) ? result : result.rows;
-  const assessmentRows = Array.isArray(assessmentResult) ? assessmentResult : assessmentResult.rows;
-  const validRows = rows.filter((row) => !row.expires_at || new Date(row.expires_at).getTime() > Date.now());
-
-  return {
-    ok: true,
-    generated_at: new Date().toISOString(),
-    total_cache_rows: rows.length,
-    valid_cache_rows: validRows.length,
-    expired_cache_rows: rows.length - validRows.length,
-    average_score: average(validRows, "score"),
-    average_confidence: average(validRows, "confidence_score"),
-    by_label: countBy(validRows, "label"),
-    by_perspective: countBy(validRows, "perspective"),
-    assessments_total: assessmentRows.length,
-    assessments_recent: assessmentRows,
-    recent: assessmentRows.length ? assessmentRows : rows,
-    error: result.error || assessmentResult.error || null
-  };
-}
-
-async function handlePremiumSubscriptions(url) {
-  const limit = clampLimit(url.searchParams.get("limit"), 50, 100);
-  const status = String(url.searchParams.get("status") || "").trim().toLowerCase();
-  const q = sanitizeSearch(url.searchParams.get("q"));
-  const provider = sanitizeSearch(url.searchParams.get("provider"));
-  const eventName = sanitizeSearch(url.searchParams.get("event_name"));
-  const params = new URLSearchParams({
-    select:
-      "email,status,renews_at,ends_at,trial_ends_at,provider,provider_customer_id,provider_subscription_id,provider_order_id,product_id,variant_id,event_name,created_at,updated_at",
-    order: "updated_at.desc",
-    limit: String(limit)
-  });
-
-  if (status && status !== "all") params.set("status", `eq.${status}`);
-  if (provider) params.set("provider", `ilike.*${provider}*`);
-  if (eventName) params.set("event_name", `ilike.*${eventName}*`);
-  if (q) {
-    params.set(
-      "or",
-      `(${[
-        `email.ilike.*${q}*`,
-        `status.ilike.*${q}*`,
-        `provider.ilike.*${q}*`,
-        `provider_customer_id.ilike.*${q}*`,
-        `provider_subscription_id.ilike.*${q}*`,
-        `provider_order_id.ilike.*${q}*`,
-        `product_id.ilike.*${q}*`,
-        `variant_id.ilike.*${q}*`,
-        `event_name.ilike.*${q}*`
-      ].join(",")})`
-    );
-  }
-
-  const rows = await supabaseFetch(`premium_subscriptions?${params.toString()}`);
-  return {
-    ok: true,
-    count: Array.isArray(rows) ? rows.length : 0,
-    subscriptions: Array.isArray(rows) ? rows : []
-  };
-}
-
-async function handleExtensionUsageSummary() {
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const params = new URLSearchParams({
-    select:
-      "event_name,anonymous_id_hash,session_id_hash,browser_name,browser_version,platform,country,extension_version,duration_seconds,active_seconds,created_at",
-    created_at: `gte.${since}`,
-    order: "created_at.desc",
-    limit: "5000"
-  });
-
-  try {
-    const rows = await supabaseFetch(`extension_usage_events?${params.toString()}`);
-    return {
-      ok: true,
-      generated_at: new Date().toISOString(),
-      window_days: 30,
-      ...summarizeExtensionUsage(Array.isArray(rows) ? rows : [])
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      generated_at: new Date().toISOString(),
-      window_days: 30,
-      total_events: 0,
-      unique_users_30d: 0,
-      active_users_7d: 0,
-      active_users_24h: 0,
-      sessions_30d: 0,
-      active_seconds_30d: 0,
-      average_session_seconds: 0,
-      by_browser: [],
-      by_country: [],
-      by_extension_version: [],
-      by_event_name: [],
-      table_missing: /extension_usage_events/.test(error.message),
-      error: error.message
-    };
-  }
-}
-
-const OWNED_ANALYTICS_WINDOW_DAYS = new Set([1, 7, 30, 90]);
-const OWNED_ANALYTICS_MAX_WINDOW_DAYS = 90;
-const OWNED_ANALYTICS_DAY_MS = 24 * 60 * 60 * 1000;
-
-function ownedAnalyticsWindowDays(url) {
-  const parsed = Number.parseInt(String(url.searchParams.get("days") || "7"), 10);
-  return OWNED_ANALYTICS_WINDOW_DAYS.has(parsed) ? parsed : 7;
-}
-
-function parseOwnedAnalyticsDate(value, endOfDay = false) {
-  const raw = String(value || "").trim();
-  if (!raw) return null;
-
-  const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (dateOnly) {
-    const suffix = endOfDay ? "T23:59:59.999Z" : "T00:00:00.000Z";
-    const date = new Date(`${raw}${suffix}`);
-    return Number.isNaN(date.getTime()) ? null : date;
-  }
-
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return null;
-  if (!endOfDay || /T/.test(raw)) return date;
-  date.setUTCHours(23, 59, 59, 999);
-  return date;
-}
-
-function dateOnly(value) {
-  return value.toISOString().slice(0, 10);
-}
-
-function ownedAnalyticsWindow(url, now = new Date()) {
-  const fromParam = url.searchParams.get("from") || url.searchParams.get("from_date");
-  const toParam = url.searchParams.get("to") || url.searchParams.get("to_date");
-  const from = parseOwnedAnalyticsDate(fromParam);
-  const to = parseOwnedAnalyticsDate(toParam, true);
-
-  if (fromParam || toParam) {
-    if (from && to) {
-      let windowStart = from;
-      let windowEnd = to;
-      if (windowStart > windowEnd) [windowStart, windowEnd] = [windowEnd, windowStart];
-
-      const windowEndDayStart = new Date(Date.UTC(windowEnd.getUTCFullYear(), windowEnd.getUTCMonth(), windowEnd.getUTCDate()));
-      const earliest = new Date(windowEndDayStart.getTime() - (OWNED_ANALYTICS_MAX_WINDOW_DAYS - 1) * OWNED_ANALYTICS_DAY_MS);
-      const clamped = windowStart < earliest;
-      if (clamped) windowStart = earliest;
-      const windowMs = Math.max(OWNED_ANALYTICS_DAY_MS, windowEnd.getTime() - windowStart.getTime());
-      const windowDays = Math.min(OWNED_ANALYTICS_MAX_WINDOW_DAYS, Math.max(1, Math.ceil(windowMs / OWNED_ANALYTICS_DAY_MS)));
-
-      return {
-        mode: "date_range",
-        start: windowStart.toISOString(),
-        end: windowEnd.toISOString(),
-        from_date: dateOnly(windowStart),
-        to_date: dateOnly(windowEnd),
-        days: windowDays,
-        hours: windowDays * 24,
-        clamped
-      };
-    }
-  }
-
-  const days = ownedAnalyticsWindowDays(url);
-  const end = now;
-  const start = new Date(end.getTime() - days * OWNED_ANALYTICS_DAY_MS);
-  return {
-    mode: "rolling_days",
-    start: start.toISOString(),
-    end: end.toISOString(),
-    from_date: dateOnly(start),
-    to_date: dateOnly(end),
-    days,
-    hours: days * 24,
-    clamped: false
-  };
-}
-
-async function loadOwnedAnalyticsEvents(url) {
-  const window = ownedAnalyticsWindow(url);
-  if (!hasSupabaseConfig()) {
-    return {
-      ok: false,
-      table_missing: false,
-      reason: "supabase_not_configured",
-      generated_at: new Date().toISOString(),
-      window_days: window.days,
-      window_hours: window.hours,
-      window_mode: window.mode,
-      window_from_date: window.from_date,
-      window_to_date: window.to_date,
-      window_start: window.start,
-      window_end: window.end,
-      window_clamped: window.clamped,
-      events: []
-    };
-  }
-
-  const limit = clampLimit(url.searchParams.get("limit"), 5000, 10000);
-  const params = new URLSearchParams({
-    select: "event_name,anonymous_session_id,page_path,page_url,page_type,content_type,template_type,slug,city,topic,source,referrer,utm,browser,device_type,metadata,occurred_at,created_at",
-    order: "occurred_at.desc",
-    limit: String(limit)
-  });
-  params.append("occurred_at", `gte.${window.start}`);
-  params.append("occurred_at", `lte.${window.end}`);
-
-  try {
-    const rows = await supabaseFetch(`owned_analytics_events?${params.toString()}`);
-    return {
-      ok: true,
-      table_missing: false,
-      generated_at: new Date().toISOString(),
-      window_days: window.days,
-      window_hours: window.hours,
-      window_mode: window.mode,
-      window_from_date: window.from_date,
-      window_to_date: window.to_date,
-      window_start: window.start,
-      window_end: window.end,
-      window_clamped: window.clamped,
-      events: Array.isArray(rows) ? rows : []
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      table_missing: /owned_analytics_events/i.test(error.message),
-      reason: "storage_error",
-      error: error.message,
-      generated_at: new Date().toISOString(),
-      window_days: window.days,
-      window_hours: window.hours,
-      window_mode: window.mode,
-      window_from_date: window.from_date,
-      window_to_date: window.to_date,
-      window_start: window.start,
-      window_end: window.end,
-      window_clamped: window.clamped,
-      events: []
-    };
-  }
-}
-
-function analyticsGroup(rows, key, limit = 8) {
-  const groups = (rows || []).reduce((acc, row) => {
-    const label = String(row[key] || "unknown");
-    if (!acc[label]) acc[label] = { label, count: 0, install_clicks: 0, checkout_created: 0 };
-    acc[label].count += 1;
-    if (["install_click", "chrome_store_click", "seo_cta_click", "guide_cta_click", "article_cta_click"].includes(row.event_name)) acc[label].install_clicks += 1;
-    if (row.event_name === "checkout_created") acc[label].checkout_created += 1;
-    return acc;
-  }, {});
-  return Object.values(groups)
-    .sort((a, b) => b.install_clicks - a.install_clicks || b.checkout_created - a.checkout_created || b.count - a.count || a.label.localeCompare(b.label))
-    .slice(0, limit);
-}
-
-async function handleOwnedAnalyticsSummary(req, url) {
-  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
-  const result = await loadOwnedAnalyticsEvents(url);
-  const events = result.events || [];
-  const pages = summarizePagePerformance(events);
-  const learning = buildOwnedAnalyticsLearning(events);
-  return {
-    status: 200,
-    payload: {
-      ok: true,
-      generated_at: result.generated_at || new Date().toISOString(),
-      persisted: Boolean(result.ok),
-      table_missing: Boolean(result.table_missing),
-      warning: result.ok ? "" : result.reason || result.error || "analytics_unavailable",
-      window_days: result.window_days,
-      window_hours: result.window_hours,
-      window_mode: result.window_mode,
-      window_from_date: result.window_from_date,
-      window_to_date: result.window_to_date,
-      window_start: result.window_start,
-      window_end: result.window_end,
-      window_clamped: Boolean(result.window_clamped),
-      summary: summarizeOwnedAnalytics(events),
-      top_pages: pages.slice(0, 10),
-      top_cities: analyticsGroup(events, "city"),
-      top_templates: analyticsGroup(events, "template_type"),
-      top_topics: analyticsGroup(events, "topic"),
-      high_interaction_low_install: learning.high_interaction_low_install,
-      calculator_install_pages: learning.calculator_install_pages,
-      calculator_low_conversion: learning.calculator_low_conversion,
-      recommendations: learning.recommendations
-    }
-  };
-}
-
-async function handleOwnedAnalyticsPages(req, url) {
-  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
-  const result = await loadOwnedAnalyticsEvents(url);
-  const pages = summarizePagePerformance(result.events || []);
-  const limit = clampLimit(url.searchParams.get("page_limit"), 50, 100);
-  return {
-    status: 200,
-    payload: {
-      ok: true,
-      persisted: Boolean(result.ok),
-      table_missing: Boolean(result.table_missing),
-      warning: result.ok ? "" : result.reason || result.error || "analytics_unavailable",
-      window_days: result.window_days,
-      window_hours: result.window_hours,
-      window_mode: result.window_mode,
-      window_from_date: result.window_from_date,
-      window_to_date: result.window_to_date,
-      window_start: result.window_start,
-      window_end: result.window_end,
-      window_clamped: Boolean(result.window_clamped),
-      pages: pages.slice(0, limit)
-    }
-  };
-}
-
-async function handleOwnedAnalyticsLearning(req, url) {
-  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
-  const result = await loadOwnedAnalyticsEvents(url);
-  const learning = buildOwnedAnalyticsLearning(result.events || []);
-  return {
-    status: 200,
-    payload: {
-      ok: true,
-      persisted: Boolean(result.ok),
-      table_missing: Boolean(result.table_missing),
-      warning: result.ok ? "" : result.reason || result.error || "analytics_unavailable",
-      window_days: result.window_days,
-      window_hours: result.window_hours,
-      window_mode: result.window_mode,
-      window_from_date: result.window_from_date,
-      window_to_date: result.window_to_date,
-      window_start: result.window_start,
-      window_end: result.window_end,
-      window_clamped: Boolean(result.window_clamped),
-      ...learning
-    }
-  };
-}
 async function fetchLanding(slug) {
   const rows = await supabaseFetch(
     `seo_landings?slug=eq.${encodeURIComponent(slug)}&select=${LANDING_SELECT}&limit=1`
@@ -937,57 +618,6 @@ async function handleSeoLandingAction(body) {
     autoPublish: false
   });
   return { status: 200, payload: { ok: true, action, result } };
-}
-
-async function handleReleaseArtifacts(req, url) {
-  if (req.method === "GET") {
-    const rawTarget = url.searchParams.get("target");
-    const target = rawTarget ? normalizeReleaseTarget(rawTarget) : "";
-    const limit = clampLimit(url.searchParams.get("limit"), 50, 100);
-    const params = new URLSearchParams({
-      select:
-        "id,target,version,title,channel,status,artifact_kind,connector_target,file_name,mime_type,file_size_bytes,sha256,storage_path,notes,created_at,updated_at",
-      order: "created_at.desc",
-      limit: String(limit)
-    });
-    if (target) params.set("target", `eq.${target}`);
-    const result = await safeFetch(`release_artifacts?${params.toString()}`);
-    const rows = Array.isArray(result) ? result : result.rows;
-    return {
-      status: 200,
-      payload: {
-        ok: true,
-        target: target || "all",
-        artifacts: rows,
-        connectors: releaseConnectors(),
-        table_missing: !Array.isArray(result) && /release_artifacts/.test(result.error || ""),
-        error: Array.isArray(result) ? null : result.error || null
-      }
-    };
-  }
-
-  if (req.method !== "POST") {
-    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
-  }
-
-  const input = await readJsonBody(req);
-  const artifact = normalizeReleaseArtifactInput(input);
-  const rows = await supabaseFetch("release_artifacts", {
-    method: "POST",
-    headers: {
-      prefer: "return=representation"
-    },
-    body: JSON.stringify(artifact)
-  });
-
-  return {
-    status: 200,
-    payload: {
-      ok: true,
-      artifact: Array.isArray(rows) ? rows[0] : artifact,
-      connectors: releaseConnectors()
-    }
-  };
 }
 
 function chromeFetch(url, options = {}) {
@@ -1160,102 +790,7 @@ async function handleSeoLandings(req, url) {
     return handleSeoLandingAction(await readJsonBody(req));
   }
 
-  const pageSize = clampLimit(url.searchParams.get("limit"), 10, 50);
-  const page = clampPage(url.searchParams.get("page"));
-  const offset = (page - 1) * pageSize;
-  const status = String(url.searchParams.get("status") || "").trim().toLowerCase();
-  const params = new URLSearchParams({
-    select: LANDING_SELECT,
-    order: "updated_at.desc",
-    limit: String(pageSize + 1),
-    offset: String(offset)
-  });
-  if (status && status !== "all") params.set("status", `eq.${status}`);
-
-  const summaryParams = new URLSearchParams({
-    select: "status,index_status,quality_score,template_type,published_at,updated_at,last_generated_at",
-    limit: "5000"
-  });
-  const opportunitiesParams = new URLSearchParams({
-    select: "status,template_type",
-    limit: "5000"
-  });
-  const [rows, summaryRows, opportunityRows] = await Promise.all([
-    supabaseFetch(`seo_landings?${params.toString()}`),
-    safeFetch(`seo_landings?${summaryParams.toString()}`),
-    safeFetch(`seo_landing_opportunities?${opportunitiesParams.toString()}`)
-  ]);
-  const allRows = Array.isArray(rows) ? rows : [];
-  const hasNextPage = allRows.length > pageSize;
-  const landings = allRows.slice(0, pageSize);
-  const summary = buildSeoLandingsSummary(summaryRows, opportunityRows, status);
-  return {
-    status: 200,
-    payload: {
-      ok: true,
-      count: landings.length,
-      page,
-      page_size: pageSize,
-      has_next_page: hasNextPage,
-      has_previous_page: page > 1,
-      from: landings.length ? offset + 1 : 0,
-      to: offset + landings.length,
-      summary,
-      landings
-    }
-  };
-}
-
-function buildSeoLandingsSummary(rows = [], opportunities = [], activeStatus = "all") {
-  const landings = Array.isArray(rows) ? rows : [];
-  const statusCounts = landings.reduce((acc, row) => {
-    const key = String(row.status || "unknown").toLowerCase();
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
-  const indexCounts = landings.reduce((acc, row) => {
-    const key = String(row.index_status || "unknown").toLowerCase();
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
-  const scores = landings
-    .map((row) => Number(row.quality_score || 0))
-    .filter((score) => Number.isFinite(score) && score > 0);
-  const filteredTotal =
-    activeStatus && activeStatus !== "all"
-      ? landings.filter((row) => String(row.status || "").toLowerCase() === activeStatus).length
-      : landings.length;
-  const pendingLandings =
-    (statusCounts.draft || 0) + (statusCounts.needs_review || 0) + (statusCounts.ready_to_publish || 0);
-  const pendingOpportunities = (Array.isArray(opportunities) ? opportunities : []).filter((row) =>
-    ["pending", "generating", "draft", "needs_review"].includes(String(row.status || "").toLowerCase())
-  ).length;
-  const dailyPolicy = buildSeoDailyPolicySnapshot(landings);
-
-  return {
-    total_landings: landings.length,
-    filtered_total: filteredTotal,
-    published: statusCounts.published || 0,
-    ready_to_publish: statusCounts.ready_to_publish || 0,
-    needs_review: statusCounts.needs_review || 0,
-    draft: statusCounts.draft || 0,
-    noindex: landings.filter(
-      (row) =>
-        String(row.index_status || "").toLowerCase() === "noindex" ||
-        String(row.status || "").toLowerCase() === "noindex"
-    ).length,
-    indexable: indexCounts.index || 0,
-    pending_landings: pendingLandings,
-    pending_opportunities: pendingOpportunities,
-    published_landings_today: dailyPolicy.published_landings_today,
-    published_news_today: dailyPolicy.published_news_today,
-    target_landings_per_day: SEO_DAILY_TARGETS.landings,
-    target_news_per_day: SEO_DAILY_TARGETS.news,
-    seo_daily_status: dailyPolicy.published_landings_today >= SEO_DAILY_TARGETS.landings && dailyPolicy.published_news_today >= SEO_DAILY_TARGETS.news ? "complete" : "pending",
-    average_quality_score: scores.length
-      ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
-      : 0
-  };
+  return handleSeoLandingsReadOnly(url);
 }
 
 async function handleSeoGenerate(req) {
@@ -1302,85 +837,6 @@ async function handleSeoAutogeneration(req, url) {
   const result = await runSeoAutogeneration({ requestSource, config });
   return { status: result.ok === false ? 500 : 200, payload: result };
 }
-
-async function readKpiSettings() {
-  try {
-    const rows = await supabaseFetch(
-      "kpi_settings?id=eq.default&select=id,schema_version,settings_json,updated_at&limit=1"
-    );
-    const row = Array.isArray(rows) ? rows[0] || null : null;
-    return {
-      ok: true,
-      row,
-      settings: coerceKpiSettings(row?.settings_json || {}),
-      updated_at: row?.updated_at || null,
-      table_missing: false,
-      error: null
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      row: null,
-      settings: defaultKpiSettings(),
-      updated_at: null,
-      table_missing: /kpi_settings/.test(error.message),
-      error: error.message
-    };
-  }
-}
-
-async function saveKpiSettings(body) {
-  const settings = coerceKpiSettings(body.settings || body.values || {});
-  const now = new Date().toISOString();
-  const rows = await supabaseFetch("kpi_settings?on_conflict=id", {
-    method: "POST",
-    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-    body: JSON.stringify([
-      {
-        id: "default",
-        schema_version: KPI_SCHEMA_VERSION,
-        settings_json: settings,
-        updated_by: "backoffice",
-        updated_at: now
-      }
-    ])
-  });
-  const row = Array.isArray(rows) ? rows[0] || null : null;
-  return {
-    ok: true,
-    schema_version: KPI_SCHEMA_VERSION,
-    schema: KPI_SETTINGS_SCHEMA,
-    defaults: defaultKpiSettings(),
-    settings: coerceKpiSettings(row?.settings_json || settings),
-    updated_at: row?.updated_at || now
-  };
-}
-
-async function handleKpiSettings(req) {
-  if (req.method === "GET") {
-    const result = await readKpiSettings();
-    return {
-      status: 200,
-      payload: {
-        ok: true,
-        schema_version: KPI_SCHEMA_VERSION,
-        schema: KPI_SETTINGS_SCHEMA,
-        defaults: defaultKpiSettings(),
-        settings: result.settings,
-        updated_at: result.updated_at,
-        table_missing: result.table_missing,
-        error: result.error
-      }
-    };
-  }
-
-  if (req.method === "POST") {
-    return { status: 200, payload: await saveKpiSettings(await readJsonBody(req)) };
-  }
-
-  return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
-}
-
 
 function parseJsonMaybe(value, fallback = null) {
   if (value == null) return fallback;
@@ -3651,8 +3107,72 @@ async function handleViraliza(req, url) {
   return { status: 400, payload: { ok: false, error: "viraliza_unknown_action" } };
 }
 
-module.exports = async function handler(req, res) {
-  if (handleCors(req, res)) return;
+const ADMIN_PRE_SUPABASE_READ_ONLY_ROUTES = createAdminRouter([
+  {
+    resource: "alerts",
+    method: "GET",
+    handler: () => handleAlerts()
+  },
+  {
+    resource: "analytics/summary",
+    method: "GET",
+    handler: ({ req, url }) => handleOwnedAnalyticsSummary(req, url)
+  },
+  {
+    resource: "analytics/pages",
+    method: "GET",
+    handler: ({ req, url }) => handleOwnedAnalyticsPages(req, url)
+  },
+  {
+    resource: "analytics/learning",
+    method: "GET",
+    handler: ({ req, url }) => handleOwnedAnalyticsLearning(req, url)
+  }
+]);
+
+const ADMIN_SUPABASE_ROUTED_ROUTES = createAdminRouter([
+  {
+    resource: "summary",
+    method: "GET",
+    handler: () => handleSummary()
+  },
+  {
+    resource: "premium/subscriptions",
+    method: "GET",
+    handler: ({ url }) => handlePremiumSubscriptions(url)
+  },
+  {
+    resource: "extension/usage",
+    method: "GET",
+    handler: ({ url }) => handleExtensionUsageSummary(url)
+  },
+  {
+    resource: "parking/summary",
+    method: "GET",
+    handler: () => handleParkingSummary()
+  },
+  {
+    resource: "seo/landings",
+    method: "GET",
+    fallbackOnMethodMismatch: true,
+    handler: ({ url }) => handleSeoLandingsReadOnly(url)
+  },
+  {
+    resource: "kpis/settings",
+    method: ["GET", "POST"],
+    fallbackOnMethodMismatch: true,
+    handler: ({ req }) => handleKpiSettings(req)
+  },
+  {
+    resource: "operations/releases",
+    method: ["GET", "POST"],
+    fallbackOnMethodMismatch: true,
+    handler: ({ req, url }) => handleReleaseArtifacts(req, url)
+  }
+]);
+
+async function handleAdminRequest(req, res) {
+  if (handleCors(req, res, { policy: "admin" })) return;
   const { url, resource } = routeFromRequest(req);
   if (resource === "linkedin/daily" || resource === "linkedin/autopublisher/run") {
     if (!assertAdminOrCron(req, res)) return;
@@ -3660,7 +3180,7 @@ module.exports = async function handler(req, res) {
       const result = await handleLinkedIn(req, url, resource);
       return json(res, result.status, result.payload);
     } catch (error) {
-      return json(res, 500, { ok: false, error: "linkedin_daily_failed", message: String(error.message || error).slice(0, 500) });
+      return json(res, 500, { ok: false, error: "linkedin_daily_failed", message: sanitizeErrorMessage(error, 500) });
     }
   }
   if (resource === "meta/daily" || resource === "meta/autopublisher/run") {
@@ -3678,43 +3198,28 @@ module.exports = async function handler(req, res) {
       const result = await handleSeoAutogeneration(req, url);
       return json(res, result.status, result.payload);
     } catch (error) {
-      return json(res, 500, { ok: false, error: "seo_autogeneration_failed", message: String(error.message || error).slice(0, 500) });
+      return json(res, 500, { ok: false, error: "seo_autogeneration_failed", message: sanitizeErrorMessage(error, 500) });
     }
   }
 
   if (!assertAdmin(req, res)) return;
 
   try {
-    if (resource === "alerts") {
-      if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
-      return json(res, 200, await handleAlerts());
-    }
-    if (resource === "analytics/summary") {
-      const result = await handleOwnedAnalyticsSummary(req, url);
-      return json(res, result.status, result.payload);
-    }
-    if (resource === "analytics/pages") {
-      const result = await handleOwnedAnalyticsPages(req, url);
-      return json(res, result.status, result.payload);
-    }
-    if (resource === "analytics/learning") {
-      const result = await handleOwnedAnalyticsLearning(req, url);
-      return json(res, result.status, result.payload);
+    const preSupabaseReadOnly = await dispatchAdminRoute(ADMIN_PRE_SUPABASE_READ_ONLY_ROUTES, { req, url, resource });
+    if (preSupabaseReadOnly) {
+      return json(res, preSupabaseReadOnly.status, preSupabaseReadOnly.payload);
     }
     if (!hasSupabaseConfig()) {
       return json(res, 500, { ok: false, error: "supabase_not_configured" });
     }
-    if (resource === "summary") {
-      if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
-      return json(res, 200, await handleSummary());
+    const supabaseRouted = await dispatchAdminRoute(ADMIN_SUPABASE_ROUTED_ROUTES, { req, url, resource });
+    if (supabaseRouted) {
+      return json(res, supabaseRouted.status, supabaseRouted.payload);
     }
     if (resource === "premium/subscriptions") {
       if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
-      return json(res, 200, await handlePremiumSubscriptions(url));
-    }
-    if (resource === "extension/usage") {
-      if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
-      return json(res, 200, await handleExtensionUsageSummary());
+      const result = await handlePremiumSubscriptions(url);
+      return json(res, result.status, result.payload);
     }
     if (resource === "seo/landings") {
       if (!["GET", "POST"].includes(req.method)) return json(res, 405, { ok: false, error: "method_not_allowed" });
@@ -3736,10 +3241,6 @@ module.exports = async function handler(req, res) {
     if (resource === "kpis/settings") {
       const result = await handleKpiSettings(req);
       return json(res, result.status, result.payload);
-    }
-    if (resource === "parking/summary") {
-      if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
-      return json(res, 200, await handleParkingSummary());
     }
     if (resource === "operations/releases") {
       const result = await handleReleaseArtifacts(req, url);
@@ -3802,12 +3303,22 @@ module.exports = async function handler(req, res) {
     if (String(resource || "").startsWith("meta")) {
       console.error("[admin]", resource, sanitizeMetaSecretText(error.message || error));
     } else {
-      console.error("[admin]", resource, error);
+      console.error("[admin]", resource, sanitizeErrorMessage(error));
     }
     return json(res, 500, {
       ok: false,
       error: "admin_request_failed",
-      message: String(resource || "").startsWith("meta") ? sanitizeMetaSecretText(error.message || error) : error.message
+      message: String(resource || "").startsWith("meta") ? sanitizeMetaSecretText(error.message || error) : sanitizeErrorMessage(error)
     });
+  }
+}
+
+module.exports = async function handler(req, res) {
+  const startedAt = Date.now();
+  const { resource } = routeFromRequest(req);
+  try {
+    return await handleAdminRequest(req, res);
+  } finally {
+    logRequestMetric(req, res, { route: "api/admin", resource, startedAt });
   }
 };

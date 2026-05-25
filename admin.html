@@ -49,7 +49,7 @@
           <h1>Backoffice</h1>
         </div>
         <div class="admin-tabs admin-main-menu" aria-label="Secciones del backoffice">
-          <button class="admin-tab active" type="button" data-admin-section-button="ventas" data-testid="admin-tab-ventas" aria-pressed="true">Ventas</button>
+          <button class="admin-tab active" type="button" data-admin-section-button="ventas" data-testid="admin-tab-ventas" aria-pressed="true">Dashboard</button>
           <button class="admin-tab" type="button" data-admin-section-button="marketing" data-testid="admin-tab-marketing" aria-pressed="false">Marketing</button>
           <button class="admin-tab" type="button" data-admin-section-button="kpis" data-testid="admin-tab-kpis" aria-pressed="false">KPIs</button>
           <button class="admin-tab" type="button" data-admin-section-button="operaciones" data-testid="admin-tab-operaciones" aria-pressed="false">Operaciones</button>
@@ -62,10 +62,39 @@
       <p class="admin-status" id="admin-live-status" data-admin-live-status></p>
 
       <section class="admin-view" id="ventas-premium" data-admin-view="ventas">
+        <article class="admin-panel admin-dashboard-hero">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Dashboard</span>
+              <h2>Dashboard</h2>
+              <p class="admin-panel-sub">Visi&oacute;n general de adquisici&oacute;n, uso de extensi&oacute;n y rendimiento SEO.</p>
+            </div>
+            <div class="admin-view-toolbar admin-dashboard-toolbar" data-dashboard-filters>
+              <label class="admin-range-control">
+                <span>Desde</span>
+                <input type="date" data-dashboard-from>
+              </label>
+              <label class="admin-range-control">
+                <span>Hasta</span>
+                <input type="date" data-dashboard-to>
+              </label>
+              <button class="admin-button tiny" type="button" data-dashboard-apply>Aplicar</button>
+              <div class="admin-dashboard-presets" aria-label="Rangos rapidos">
+                <button class="admin-button tiny ghost" type="button" data-dashboard-preset="today">Hoy</button>
+                <button class="admin-button tiny ghost" type="button" data-dashboard-preset="7d">7d</button>
+                <button class="admin-button tiny ghost" type="button" data-dashboard-preset="30d">30d</button>
+              </div>
+            </div>
+            <p class="admin-extension-range-feedback" data-dashboard-range-feedback></p>
+          </div>
+        </article>
+
+        <section class="admin-stat-grid compact admin-dashboard-kpis" data-dashboard-kpis></section>
+
         <article class="admin-panel admin-ops-panel">
           <div class="admin-panel-head">
             <div>
-              <span class="admin-kicker muted">Ventas</span>
+              <span class="admin-kicker muted">Premium</span>
               <h2>Resumen Premium</h2>
               <p class="admin-panel-sub">Estado comercial de Premium: total, activas, pruebas, impagos y bajas para revisar la salud de ingresos.</p>
             </div>
@@ -93,8 +122,32 @@
               <p class="admin-panel-sub">Usuarios activos, sesiones, navegadores, países y tiempo de uso medidos con eventos anónimos de la extensión.</p>
             </div>
           </div>
+          <p class="admin-extension-range-feedback" data-extension-range-feedback></p>
           <section class="admin-stat-grid compact" data-extension-stats></section>
           <div class="admin-extension-breakdown" data-extension-breakdown></div>
+          <div class="admin-extension-timeseries" data-extension-timeseries></div>
+        </article>
+
+        <article class="admin-panel admin-dashboard-acquisition-panel">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">Adquisici&oacute;n</span>
+              <h2>Adquisici&oacute;n por fuente</h2>
+              <p class="admin-panel-sub">Origen de tr&aacute;fico y se&ntilde;ales de instalaci&oacute;n registradas por anal&iacute;tica propia.</p>
+            </div>
+          </div>
+          <div class="admin-table-wrap admin-dashboard-table" data-dashboard-acquisition></div>
+        </article>
+
+        <article class="admin-panel admin-dashboard-landings-panel">
+          <div class="admin-panel-head">
+            <div>
+              <span class="admin-kicker muted">SEO</span>
+              <h2>Rendimiento por landing</h2>
+              <p class="admin-panel-sub">P&aacute;ginas con visitas, CTA y clics hacia Chrome Store dentro del rango seleccionado.</p>
+            </div>
+          </div>
+          <div class="admin-table-wrap admin-dashboard-table" data-dashboard-landings></div>
         </article>
 
         <article class="admin-panel">
@@ -261,6 +314,7 @@
                     <th>Landing</th>
                     <th>Ciudad</th>
                     <th>Score</th>
+                    <th>Quality gate</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                   </tr>

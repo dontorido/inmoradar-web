@@ -9,9 +9,55 @@ const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { runSeoLandingGeneration } = require("../api/_seo/generator");
 const { buildSeoDailyPolicySnapshot, selectNextSeoContentType } = require("../api/_seo/publishingPolicy");
 const { getSeedPublishedLanding } = require("../api/_seo/seedPublished");
+const { siteUrl } = require("../api/_seo/text");
 const sitemapHandler = require("../api/sitemap");
 const seoPageHandler = require("../api/seo-page");
 const { renderLandingHtml } = require("../api/seo-page");
+
+function extractJsonLd(html) {
+  return [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => JSON.parse(match[1]));
+}
+
+function qualityFixture(overrides = {}) {
+  const repeatedCityCopy = "Madrid mercado vivienda precio barrio referencia comprador ".repeat(130);
+  const bodyHtml = `
+    <header data-city-specific="true"><h1>Precio del metro cuadrado en Madrid</h1></header>
+    <section data-city-specific="true"><p>${repeatedCityCopy}</p><p><strong>Fuente:</strong> MIVAU. <strong>Fecha del dato:</strong> 4T 2025.</p></section>
+    <section data-city-specific="true"><p>${repeatedCityCopy}</p><a href="/datos">Datos</a><a href="/metodologia">Metodologia</a></section>
+    <section data-city-specific="true"><button>EMPEZAR GRATIS</button></section>
+  `;
+  const landing = {
+    slug: "precio-metro-cuadrado/madrid",
+    title: "Precio del metro cuadrado en Madrid",
+    meta_title: "Precio m2 en Madrid con fuente actualizada",
+    meta_description: "Consulta una referencia de precio por metro cuadrado en Madrid, con fuente, fecha y pautas para comparar anuncios.",
+    h1: "Precio del metro cuadrado en Madrid",
+    body_html: bodyHtml,
+    city: "Madrid",
+    template_type: "price_city",
+    canonical_url: "https://inmoradar.app/precio-metro-cuadrado/madrid/",
+    ...overrides
+  };
+  const sourceData = {
+    hasRealData: true,
+    hasProvincialOnly: false,
+    records: [
+      {
+        source: "mivau_appraisal",
+        source_url: "https://example.com/mivau.csv",
+        period_label: "4T 2025",
+        geo_level: "municipality"
+      }
+    ],
+    faq: [
+      { question: "Uno", answer: "Uno" },
+      { question: "Dos", answer: "Dos" },
+      { question: "Tres", answer: "Tres" },
+      { question: "Cuatro", answer: "Cuatro" }
+    ]
+  };
+  return { landing, sourceData };
+}
 
 test("price_city genera una landing de alta calidad cuando hay datos reales, fuente y fecha", async () => {
   const opportunity = {
@@ -33,6 +79,69 @@ test("price_city genera una landing de alta calidad cuando hay datos reales, fue
   assert.match(landing.body_html, /data-seo-calc-price/);
   assert.match(landing.body_html, /data-seo-calc-area/);
   assert.doesNotMatch(landing.body_html, /precio exacto de calle/i);
+});
+
+test("quality gate acepta CTA actual EMPEZAR GRATIS", () => {
+  const { landing, sourceData } = qualityFixture();
+  const quality = calculateSeoLandingQuality(landing, sourceData);
+
+  assert.ok(quality.score >= 75);
+  assert.ok(quality.signals.includes("CTA claro"));
+  assert.equal(quality.editorial_quality_status, "pass");
+});
+
+test("quality gate penaliza mojibake claro", () => {
+  const fixture = qualityFixture();
+  const quality = calculateSeoLandingQuality(
+    {
+      ...fixture.landing,
+      body_html: `${fixture.landing.body_html}<p>Texto roto \u00c3\u00a1 \u00c3\u00b1 \u00c2\u00a0</p>`
+    },
+    fixture.sourceData
+  );
+
+  assert.ok(quality.penalties.includes("posible mojibake o caracteres rotos"));
+  assert.ok(quality.warnings.some((warning) => /encoding/.test(warning)));
+  assert.equal(quality.technical_indexability_status, "blocked");
+});
+
+test("quality gate penaliza canonical externo o incoherente", () => {
+  const { landing, sourceData } = qualityFixture({
+    canonical_url: "https://example.com/precio-metro-cuadrado/madrid/"
+  });
+  const quality = calculateSeoLandingQuality(landing, sourceData);
+
+  assert.ok(quality.penalties.includes("canonical externo o dominio no canonico"));
+  assert.ok(quality.rejection_reasons.includes("canonical_incoherent"));
+  assert.equal(quality.technical_indexability_status, "blocked");
+});
+
+test("quality gate permite menciones descriptivas a portales de terceros", () => {
+  const { landing, sourceData } = qualityFixture();
+  const quality = calculateSeoLandingQuality(
+    {
+      ...landing,
+      body_html: `${landing.body_html}<p>Tambien sirve para comparar anuncios publicados en Idealista, Fotocasa, Habitaclia y Pisos.com.</p>`
+    },
+    sourceData
+  );
+
+  assert.equal(quality.penalties.includes("uso potencialmente arriesgado de marca de tercero"), false);
+  assert.equal(quality.editorial_quality_status, "pass");
+});
+
+test("quality gate marca riesgo cuando una marca de tercero sugiere oficialidad", () => {
+  const { landing, sourceData } = qualityFixture();
+  const quality = calculateSeoLandingQuality(
+    {
+      ...landing,
+      body_html: `${landing.body_html}<p>InmoRadar es partner oficial de Idealista para analizar anuncios.</p>`
+    },
+    sourceData
+  );
+
+  assert.ok(quality.penalties.includes("uso potencialmente arriesgado de marca de tercero"));
+  assert.equal(quality.editorial_quality_status, "review");
 });
 
 test("price_city queda por debajo de publicación si no hay fuente real", async () => {
@@ -283,9 +392,81 @@ test("expensive_listing_city render publico regenera textos visibles con tildes"
   assert.match(html, /Guía práctica para comparar el precio/);
   assert.match(html, /Señales que conviene revisar/);
   assert.match(html, /index,follow/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/inmoradar\.app\/saber-si-piso-esta-caro\/granada\/">/);
+  assert.match(html, /"@type":"BreadcrumbList"/);
+  assert.doesNotMatch(html, /position":4/);
+  assert.doesNotMatch(html, /<link rel="canonical" href="https:\/\/www\.inmoradar\.app\//);
   assert.match(html, /@media \(max-width: 560px\)/);
   assert.match(html, /overflow-x: hidden/);
   assert.doesNotMatch(html, /Plantilla antigua sin tildes/);
+});
+
+test("expensive_listing_city genera breadcrumbs JSON-LD sin items intermedios huerfanos", () => {
+  for (const city of ["Granada", "Madrid"]) {
+    const slugCity = city.toLowerCase();
+    const canonical = `https://inmoradar.app/saber-si-piso-esta-caro/${slugCity}/`;
+    const html = renderLandingHtml({
+      slug: `saber-si-piso-esta-caro/${slugCity}`,
+      title: `Como saber si un piso esta caro en ${city}`,
+      meta_title: `Como saber si un piso esta caro en ${city}`,
+      meta_description: "Guia para comparar el precio de un piso antes de contactar.",
+      h1: `Como saber si un piso esta caro en ${city}`,
+      body_html: "<article><h1>Plantilla antigua sin tildes</h1></article>",
+      canonical_url: canonical,
+      city,
+      template_type: "expensive_listing_city",
+      index_status: "index",
+      status: "published",
+      quality_score: 100,
+      source_data_json: {
+        sources: [
+          {
+            operation: "sale",
+            source: "mivau_appraisal",
+            source_url: "https://example.com/venta.csv",
+            period_label: "4T 2025",
+            period_date: "2025-10-01",
+            geo_level: "municipality",
+            price_eur_m2: 2200
+          }
+        ],
+        faq: []
+      }
+    });
+
+    const breadcrumb = extractJsonLd(html).find((entry) => entry["@type"] === "BreadcrumbList");
+    assert.ok(breadcrumb, `BreadcrumbList no encontrado para ${city}`);
+    assert.deepEqual(
+      breadcrumb.itemListElement.map((item) => item.position),
+      [1, 2, 3]
+    );
+    assert.deepEqual(
+      breadcrumb.itemListElement.map((item) => item.name),
+      ["Inicio", "Saber si un piso esta caro", city]
+    );
+
+    for (const item of breadcrumb.itemListElement) {
+      assert.equal(typeof item.item, "string", `Falta item en breadcrumb position ${item.position} para ${city}`);
+      assert.match(item.item, /^https:\/\/inmoradar\.app\//);
+      assert.notEqual(item.name, "Espa\u00f1a");
+    }
+  }
+});
+
+test("siteUrl normaliza www al dominio canonico sin www", () => {
+  const previousUrl = process.env.PUBLIC_SITE_URL;
+  const previousSiteUrl = process.env.SITE_URL;
+  process.env.PUBLIC_SITE_URL = "https://www.inmoradar.app";
+  delete process.env.SITE_URL;
+
+  try {
+    assert.equal(siteUrl(), "https://inmoradar.app");
+  } finally {
+    if (previousUrl === undefined) delete process.env.PUBLIC_SITE_URL;
+    else process.env.PUBLIC_SITE_URL = previousUrl;
+    if (previousSiteUrl === undefined) delete process.env.SITE_URL;
+    else process.env.SITE_URL = previousSiteUrl;
+  }
 });
 
 test("sitemap consulta solo landings publicadas indexables y con quality_score suficiente", async () => {
@@ -335,6 +516,89 @@ test("sitemap consulta solo landings publicadas indexables y con quality_score s
   assert.equal(params.get("quality_score"), "gte.75");
 });
 
+test("sitemap publica solo URLs canonicas sin www y mantiene indice editorial fuera del sitemap", async () => {
+  const previousUrl = process.env.PUBLIC_SITE_URL;
+  const previousSiteUrl = process.env.SITE_URL;
+  process.env.PUBLIC_SITE_URL = "https://www.inmoradar.app";
+  delete process.env.SITE_URL;
+
+  const req = {
+    method: "GET",
+    url: "/api/sitemap.xml",
+    headers: { host: "inmoradar.app" }
+  };
+  const chunks = [];
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+
+  try {
+    await sitemapHandler(req, res);
+  } finally {
+    if (previousUrl === undefined) delete process.env.PUBLIC_SITE_URL;
+    else process.env.PUBLIC_SITE_URL = previousUrl;
+    if (previousSiteUrl === undefined) delete process.env.SITE_URL;
+    else process.env.SITE_URL = previousSiteUrl;
+  }
+
+  const xml = chunks.join("");
+  assert.equal(res.statusCode, 200);
+  assert.doesNotMatch(xml, /<loc>https:\/\/inmoradar\.app\/saber-si-piso-esta-caro\/<\/loc>/);
+  assert.doesNotMatch(xml, /<loc>https:\/\/www\.inmoradar\.app\//);
+  assert.doesNotMatch(xml, /<loc>http:\/\//);
+});
+
+test("sitemap y landings SEO aceptan HEAD para comprobaciones HTTP", async () => {
+  const sitemapReq = {
+    method: "HEAD",
+    url: "/api/sitemap.xml",
+    headers: { host: "inmoradar.app" }
+  };
+  const sitemapChunks = [];
+  const sitemapRes = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) sitemapChunks.push(String(chunk));
+    }
+  };
+
+  await sitemapHandler(sitemapReq, sitemapRes);
+  assert.equal(sitemapRes.statusCode, 200);
+  assert.equal(sitemapChunks.join(""), "");
+
+  const pageReq = {
+    method: "HEAD",
+    url: "/api/seo-page?slug=precio-metro-cuadrado/logrono",
+    headers: { host: "inmoradar.app" }
+  };
+  const pageChunks = [];
+  const pageRes = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) pageChunks.push(String(chunk));
+    }
+  };
+
+  await seoPageHandler(pageReq, pageRes);
+  assert.equal(pageRes.statusCode, 200);
+  assert.equal(pageChunks.join(""), "");
+});
+
 test("la home tiene seccion Noticias con enlaces a publicaciones", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 
@@ -344,10 +608,49 @@ test("la home tiene seccion Noticias con enlaces a publicaciones", () => {
   assert.match(html, /data-news-track/);
   assert.match(html, /Noticias/);
   assert.match(html, /data-articles-grid/);
+  assert.match(html, /id="guias-precio-ciudad"/);
+  assert.match(html, /\/saber-si-piso-esta-caro\/madrid\//);
+  assert.match(html, /\/saber-si-piso-esta-caro\/granada\//);
 
   const script = fs.readFileSync(path.join(__dirname, "..", "assets", "app.js"), "utf8");
   assert.match(script, /precio-metro-cuadrado-madrid/);
   assert.match(script, /articleCard/);
+});
+
+test("la pagina indice de saber si un piso esta caro es indexable y enlaza ciudades", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "saber-si-piso-esta-caro.html"), "utf8");
+
+  assert.match(html, /<meta name="robots" content="index,follow">/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/inmoradar\.app\/saber-si-piso-esta-caro\/">/);
+  assert.match(html, /\/saber-si-piso-esta-caro\/madrid\//);
+  assert.match(html, /\/saber-si-piso-esta-caro\/barcelona\//);
+  assert.match(html, /\/saber-si-piso-esta-caro\/valencia\//);
+  assert.match(html, /\/saber-si-piso-esta-caro\/sevilla\//);
+  assert.match(html, /\/saber-si-piso-esta-caro\/granada\//);
+});
+
+test("las paginas estaticas del sitemap tienen canonical explicito sin www", () => {
+  const pages = [
+    ["index.html", "https://inmoradar.app/"],
+    ["que-analiza.html", "https://inmoradar.app/que-analiza"],
+    ["datos.html", "https://inmoradar.app/datos"],
+    ["metodologia.html", "https://inmoradar.app/metodologia"],
+    ["noticias.html", "https://inmoradar.app/noticias"],
+    ["premium.html", "https://inmoradar.app/premium"],
+    ["clientes.html", "https://inmoradar.app/clientes"],
+    ["faq.html", "https://inmoradar.app/faq"],
+    ["contacto.html", "https://inmoradar.app/contacto"],
+    ["privacidad.html", "https://inmoradar.app/privacidad"],
+    ["terminos.html", "https://inmoradar.app/terminos"],
+    ["saber-si-piso-esta-caro.html", "https://inmoradar.app/saber-si-piso-esta-caro/"]
+  ];
+
+  for (const [file, canonical] of pages) {
+    const html = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
+    assert.match(html, new RegExp(`<link rel="canonical" href="${canonical.replace(/\//g, "\\/")}">`));
+    assert.match(html, /<meta name="robots" content="index,follow">/);
+    assert.doesNotMatch(html, /https:\/\/www\.inmoradar\.app/);
+  }
 });
 
 test("el endpoint de noticias publica landings publicadas e indexables", async () => {
@@ -384,16 +687,19 @@ test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () 
   const localServer = fs.readFileSync(path.join(__dirname, "..", "scripts", "serve-static.js"), "utf8");
 
   assert.match(vercel, /precio-alquiler\/:city/);
+  assert.match(vercel, /"source": "\/saber-si-piso-esta-caro\/?"/);
   assert.match(vercel, /saber-si-piso-esta-caro\/:city/);
   assert.match(vercel, /guias\/:slug/);
   assert.match(vercel, /"source": "\/datos"/);
   assert.match(vercel, /"source": "\/noticias\/:slug"/);
   assert.match(redirects, /precio-alquiler\/:city/);
+  assert.match(redirects, /\/saber-si-piso-esta-caro \/saber-si-piso-esta-caro\.html/);
   assert.match(redirects, /saber-si-piso-esta-caro\/:city/);
   assert.match(redirects, /guias\/:slug/);
   assert.match(redirects, /\/datos \/datos\.html/);
   assert.match(redirects, /\/noticias\/:slug \/article\.html/);
   assert.match(localServer, /precio-alquiler/);
+  assert.match(localServer, /saber-si-piso-esta-caro\.html/);
   assert.match(localServer, /saber-si-piso-esta-caro/);
   assert.match(localServer, /guias/);
   assert.match(localServer, /\/datos\.html/);

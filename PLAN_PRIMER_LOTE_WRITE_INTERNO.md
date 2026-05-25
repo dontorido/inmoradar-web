@@ -1,0 +1,296 @@
+# Plan primer lote write interno admin
+
+Fecha: 2026-05-25
+Rama: `feature/admin-legacy-inventory-write-plan`
+
+## Estado vigente tras consolidacion
+
+Este documento contiene el plan original y el historial de las dos primeras migraciones write internas. Las notas de cada fase son historicas.
+
+Estado actual de la cadena:
+
+- `kpis/settings` `GET/POST` esta en el router y su handler vive en `api/_admin/handlers/kpis.js`.
+- `operations/releases` `GET/POST` esta en el router y su handler vive en `api/_admin/handlers/operations.js`.
+- `operations/chrome` sigue legacy y fuera de la extraccion.
+- SEO write, social, billing, cron, jobs e integraciones externas siguen fuera.
+
+La recomendacion vigente ya no es migrar otro write: primero consolidar/mergear la cadena actual y despues abordar seguridad/rendimiento/observabilidad.
+
+## 1. Objetivo
+
+Preparar la siguiente fase de `api/admin.js`: migrar al router declarativo los primeros endpoints de escritura interna de muy bajo riesgo, sin tocar integraciones externas, generacion, publicacion, billing ni procesos cron.
+
+Este documento no implementa la migracion. Define candidatos reales, criterios, pruebas y un prompt de ejecucion para que la siguiente fase sea pequena, reversible y verificable.
+
+## Resultado de la primera migracion write
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-kpis-settings-write`
+
+Se ejecuto el primer lote con un unico endpoint:
+
+- `kpis/settings` `POST`
+
+Decision tecnica:
+
+- Se registro `POST` junto a `GET` en el router declarativo.
+- Se mantuvo el handler `handleKpiSettings(req)` en `api/admin.js` para evitar mover helpers acoplados.
+- Se renombro el grupo de rutas Supabase a una denominacion no limitada a read-only.
+- No se migro `operations/releases POST`.
+- No se tocaron SEO, operations/chrome, billing, Meta, LinkedIn, social-video, Viraliza ni integraciones externas.
+
+Validaciones cubiertas:
+
+- body valido con campos conocidos y desconocidos;
+- body vacio;
+- JSON mal formado;
+- error Supabase durante upsert;
+- metodo no soportado;
+- ausencia de tokens/secrets en errores;
+- no apertura de otros recursos write.
+
+Rollback:
+
+- Revertir el commit de esta fase devuelve `POST kpis/settings` al branch legacy sin cambios de datos ni schema.
+
+## Resultado de la segunda migracion write
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-operations-releases-write`
+
+Se ejecuto el segundo write interno con un unico endpoint:
+
+- `operations/releases` `POST`
+
+Decision tecnica:
+
+- Se registro `POST` junto a `GET` en el router declarativo para `operations/releases`.
+- Se mantuvo el handler `handleReleaseArtifacts(req, url)` en `api/admin.js`.
+- No se migro ni se toco `operations/chrome`.
+- No se llamo Chrome Web Store ni ninguna API externa.
+- No se tocaron ZIPs, artefactos binarios ni archivos de distribucion.
+
+Validaciones cubiertas:
+
+- body valido;
+- body vacio;
+- campos obligatorios ausentes;
+- JSON mal formado;
+- campos desconocidos ignorados por normalizacion;
+- error Supabase durante insert;
+- metodo no soportado;
+- ausencia de tokens/secrets en errores;
+- ausencia de llamadas Chrome/Google APIs;
+- `operations/chrome` fuera del nuevo write handler.
+
+Rollback:
+
+- Revertir el commit de esta fase devuelve `POST operations/releases` al branch legacy sin cambios de schema.
+
+Pausa tecnica recomendada:
+
+- Tras migrar dos writes internos, conviene revisar si el siguiente paso debe ser extraer handlers acotados fuera de `api/admin.js` en vez de seguir sumando writes al router.
+
+## Resultado de la pausa tecnica de handlers
+
+Fecha: 2026-05-25
+Rama: `feature/admin-router-handler-contracts`
+
+Decision:
+
+- No migrar nuevos writes.
+- Definir contrato de handlers en `ADMIN_HANDLER_CONTRACTS.md`.
+- Extraer solo `kpis/settings` como prueba segura.
+- Mantener `operations/releases` dentro de `api/admin.js` por ahora.
+
+Motivo:
+
+- `kpis/settings` tiene dependencias pequenas y claras.
+- `operations/releases` es local, pero arrastra `safeFetch`, `clampLimit` y conectores; extraerlo merece fase propia.
+- Los siguientes writes ya entran en zonas con mas efecto operativo o externo.
+
+Recomendacion:
+
+- Antes de seguir con writes, consolidar los contratos del router y decidir si extraer `operations/releases` o analytics read-only.
+- No pasar todavia a SEO write, Chrome, Meta, LinkedIn, billing, social-video ni Viraliza.
+
+## Resultado de extraccion operations/releases
+
+Fecha: 2026-05-25
+Rama: `feature/admin-handler-operations-releases`
+
+Decision:
+
+- Se extrajo `operations/releases` `GET/POST` a `api/_admin/handlers/operations.js`.
+- No se migraron nuevos writes.
+- No se toco `operations/chrome`.
+- No se importo ni llamo Chrome Web Store.
+
+Dependencias inyectadas:
+
+- `safeFetch`;
+- `supabaseFetch`;
+- `readJsonBody`;
+- `clampLimit`.
+
+Recomendacion:
+
+- No seguir con writes de mayor riesgo todavia.
+- Siguiente paso prudente: extraer analytics read-only o premium read-only si se busca reducir `api/admin.js` sin tocar efectos externos.
+- Mantener SEO write, Chrome, Meta, LinkedIn, billing, social-video y Viraliza bloqueados.
+
+## 2. Criterios de inclusion
+
+Un endpoint write puede entrar en el primer lote solo si cumple todo:
+
+- escritura local en Supabase;
+- sin APIs externas;
+- sin publicacion publica;
+- sin generacion irreversible;
+- sin billing;
+- sin Chrome Web Store;
+- sin Meta, LinkedIn, social-video ni viraliza;
+- idempotente o casi idempotente;
+- rollback sencillo con el valor anterior o borrado de fila;
+- payload pequeno;
+- validacion clara;
+- tests faciles con mocks de Supabase;
+- sin cambios visuales ni funcionales visibles.
+
+## 3. Criterios de exclusion
+
+Quedan fuera del primer lote:
+
+- generacion SEO;
+- publicacion, noindex o archive con efectos publicos;
+- billing, checkout, portal y webhooks;
+- integraciones sociales;
+- Chrome Web Store;
+- operaciones de limpieza, reparacion o publicacion;
+- jobs y cron;
+- borrados;
+- cambios masivos;
+- cualquier endpoint que llame proveedores externos;
+- cualquier endpoint que pueda exponer secretos en errores.
+
+## 4. Candidatos reales detectados
+
+| candidato | metodo | que escribe | tabla afectada | validaciones necesarias | rollback posible | tests necesarios | riesgo | recomendacion |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `kpis/settings` | `POST` | Configuracion de KPIs internos. | `kpi_settings` | Body JSON valido, coercion existente, rangos permitidos, objeto pequeno. | Restaurar fila previa o valores por defecto. | Exito, body invalido, Supabase error saneado, no secretos, metodo no soportado, fallback GET intacto. | bajo | Migrado como primer write interno. |
+| `operations/releases` | `POST` | Artefacto local de release. | `release_artifacts` | `target`, `version`, `title`, `channel`, `status`, `artifact_kind`, `connector_target`, tamano/sha si aplica. | Borrar fila creada o volver a estado anterior si se usa update futuro. | Exito local, body invalido, Supabase error saneado, no llamada Chrome, GET intacto. | bajo-medio | Migrado como segundo write interno; `operations/chrome` sigue fuera. |
+| `viraliza/actions` | `POST` | Accion local de Viraliza. | tablas de acciones Viraliza | Validar creador/accion/fecha/estado. | Borrar accion creada. | Exito, body invalido, arrays vacios, error saneado. | medio | No recomendado en primer lote por estar en modulo social excluido. |
+| `viraliza/creators` | `POST` | Creador Viraliza. | tablas de creators Viraliza | Validar handle, plataforma, campos numericos y duplicados. | Borrar o restaurar creador. | Exito, duplicados, payload grande, error saneado. | medio | No recomendado; requiere fase Viraliza dedicada. |
+| `viraliza/creators/import` | `POST` | Importacion masiva de creadores. | tablas de creators Viraliza | Limite de filas, validacion por item, reporte parcial. | Complejo si hay upsert parcial. | Bulk parcial, limites, errores por fila. | medio-alto | Excluir del primer lote. |
+| `social-video/projects` | `POST` | Estado de proyecto social-video. | tablas social-video | Validar id/status, transiciones permitidas. | Restaurar estado previo. | Transicion valida/invalida, no proveedor externo. | medio | Excluir por dominio social-video. |
+| `seo/landings` | `POST archive/noindex/publish` | Estado publico/indexabilidad de landings. | `seo_landings` | Validar accion, id, estado previo, efectos sitemap. | Restaurar estado previo. | Fixtures SEO completas, sitemap/robots/canonical. | alto | No primer lote. Fase SEO write controlado. |
+| `linkedin/settings` | `POST` | Settings LinkedIn. | tablas social settings | Validar settings y no secretos. | Restaurar fila previa. | Kill switch, no tokens, error saneado. | medio-alto | Excluir por integracion social. |
+| `meta/settings` | `POST` | Settings Meta/autopost. | tablas social settings | Validar kill switch y nunca activar autopost por accidente. | Restaurar fila previa. | Kill switch, no tokens, no `META_AUTOPOST_ENABLED`. | alto | Excluir hasta fase Meta dedicada. |
+
+## 5. Recomendacion de primer lote
+
+Primer lote recomendado:
+
+1. `kpis/settings` `POST` - completado.
+
+Segundo write completado:
+
+1. `operations/releases` `POST` - completado.
+
+No avanzar automaticamente a mas writes: el siguiente paso recomendado es una pausa tecnica para decidir si extraer handlers y contratos antes de tocar SEO write, operations/chrome o integraciones.
+
+## 6. Estrategia tecnica
+
+- Mantener auth y permisos en `api/admin.js`.
+- Mantener el handler original donde este si extraerlo aumenta el diff.
+- Registrar la ruta write en `api/_admin/router.js` con el mismo resource y metodo.
+- Mantener `fallbackOnMethodMismatch` cuando convivan `GET` y `POST`.
+- No mover service role ni variables sensibles.
+- No cambiar payloads, status ni mensajes esperados.
+- No introducir metadatos de riesgo en el router todavia, salvo que se haga en una fase separada.
+
+## 7. Tests necesarios para el primer write
+
+Para `kpis/settings` `POST`:
+
+- el router encuentra `POST kpis/settings`;
+- `GET kpis/settings` sigue funcionando como antes;
+- body invalido devuelve el mismo error/codigo que legacy;
+- body valido conserva payload y status;
+- error Supabase se sanea;
+- no se exponen tokens, service role ni secretos;
+- metodos no soportados mantienen comportamiento actual;
+- recursos legacy no relacionados siguen cayendo a legacy;
+- `node --test tests/admin-router.test.js`;
+- `node --test tests/*.test.js`;
+- `git diff --check`.
+
+Para `operations/releases` `POST`, si se incluye:
+
+- el router encuentra `POST operations/releases`;
+- `GET operations/releases` sigue funcionando como antes;
+- no se invoca `operations/chrome`;
+- body invalido conserva error/codigo;
+- error Supabase se sanea;
+- payload creado conserva estructura.
+
+## 8. Revision del router
+
+El router actual soporta bien recursos mixtos mediante `fallbackOnMethodMismatch`. La cobertura existente prueba que un recurso registrado como `GET` puede dejar `POST` en legacy sin capturarlo por error.
+
+Metadatos posibles para una fase posterior:
+
+- `readOnly: true`
+- `writes: true`
+- `external: false`
+- `risk: "low" | "medium" | "high" | "critical"`
+- `owner: "kpis" | "operations" | "seo" | "social"`
+
+Recomendacion: no anadirlos en el primer write si no son necesarios para el dispatch. Primero migrar un write pequeno; despues, si el registro empieza a crecer, introducir metadatos con tests del contrato.
+
+## 9. Prompt recomendado para la siguiente fase
+
+```text
+Nombre del chat/tarea:
+Refactor seguro api/admin.js - Primer write interno kpis/settings InmoRadar
+
+Contexto:
+Venimos del cierre read-only y del inventario legacy en feature/admin-legacy-inventory-write-plan. No queda read-only puro fuera de zonas excluidas. El primer write interno recomendado es `kpis/settings` POST.
+
+Objetivo:
+Migrar al router declarativo interno solo `POST kpis/settings`, manteniendo `GET kpis/settings`, URLs, query params, payloads, codigos HTTP, auth y saneado de errores exactamente iguales.
+
+Reglas:
+- No deploy.
+- No merge a main.
+- No tocar produccion ni credenciales reales.
+- No tocar SEO, Meta, LinkedIn, social-video, viraliza, billing, Chrome Web Store ni integraciones externas.
+- No cambiar base de datos ni ejecutar migraciones.
+- No migrar otros writes.
+- No cambiar diseno ni textos.
+
+Implementacion:
+1. Crear rama encima de feature/admin-legacy-inventory-write-plan.
+2. Leer `api/admin.js`, `api/_admin/router.js`, `tests/admin-router.test.js`, `ADMIN_LEGACY_ROUTE_INVENTORY.md` y `PLAN_PRIMER_LOTE_WRITE_INTERNO.md`.
+3. Localizar `handleKpiSettings`.
+4. Registrar `POST kpis/settings` en el router con el patron existente.
+5. Mantener auth en `api/admin.js`.
+6. Mantener el handler en `api/admin.js` si extraerlo aumenta el riesgo.
+7. Conservar fallback para metodos no soportados.
+8. No tocar `operations/releases` salvo documentacion.
+
+Tests:
+- Router encuentra `POST kpis/settings`.
+- `GET kpis/settings` sigue funcionando.
+- Body valido conserva payload.
+- Body invalido conserva codigo/error.
+- Error Supabase se sanea.
+- No se exponen tokens/secrets.
+- Recursos no migrados siguen en legacy.
+- `node --test tests/admin-router.test.js`.
+- `node --test tests/*.test.js`.
+- `git diff --check`.
+
+Commit:
+Refactor admin KPI settings write routing
+```

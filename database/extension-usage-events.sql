@@ -21,6 +21,12 @@ create index if not exists extension_usage_events_created_at_idx
 create index if not exists extension_usage_events_anonymous_idx
   on public.extension_usage_events (anonymous_id_hash, created_at desc);
 
+create index if not exists extension_usage_events_session_idx
+  on public.extension_usage_events (session_id_hash, created_at desc);
+
+create index if not exists extension_usage_events_event_name_idx
+  on public.extension_usage_events (event_name, created_at desc);
+
 create index if not exists extension_usage_events_browser_idx
   on public.extension_usage_events (browser_name, created_at desc);
 

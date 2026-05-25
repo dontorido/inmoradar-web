@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const adminHandler = require("../api/admin");
+const { analyticsSourceGroups } = require("../api/_admin/handlers/analytics");
 const {
   buildOwnedAnalyticsEvent,
   cleanEventName,
@@ -214,6 +215,30 @@ test("summarizeOwnedAnalytics calcula ratios de conversion", () => {
   assert.equal(summary.scroll_depth_90, 1);
   assert.equal(summary.install_click_rate, 100);
   assert.equal(summary.checkout_created_rate, 100);
+});
+
+test("analyticsSourceGroups agrega adquisicion por fuente sin inventar activaciones", () => {
+  const rows = [
+    { event_name: "page_view", anonymous_session_id: "s1", source: "web", utm: { source: "Google", medium: "Organic", campaign: "Piso Caro" } },
+    { event_name: "seo_cta_click", anonymous_session_id: "s1", source: "web", utm: { source: "google", medium: "organic", campaign: "piso caro" } },
+    { event_name: "chrome_store_click", anonymous_session_id: "s2", source: "web", utm: { source: "google", medium: "organic", campaign: "piso caro" } },
+    { event_name: "page_view", anonymous_session_id: "s3", referrer: "https://example.com" }
+  ];
+
+  const groups = analyticsSourceGroups(rows);
+  const google = groups.find((group) => group.source === "google");
+  const referral = groups.find((group) => group.source === "referral");
+
+  assert.equal(google.medium, "organic");
+  assert.equal(google.campaign, "piso-caro");
+  assert.equal(google.users, 2);
+  assert.equal(google.sessions, 2);
+  assert.equal(google.cta_installation, 1);
+  assert.equal(google.chrome_store_clicks, 1);
+  assert.equal(google.activations, null);
+  assert.equal(google.analyses, null);
+  assert.equal(google.visit_to_cta_rate, 100);
+  assert.equal(referral.medium, "referral");
 });
 
 test("summarizePagePerformance ordena paginas por resultado", () => {

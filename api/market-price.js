@@ -1499,13 +1499,13 @@ async function handler(req, res) {
     }
 
     if (resource === "browser-waitlist") {
-      const result = await browserWaitlistPayload(req);
+      const result = await browserWaitlistPayload(req, res);
       json(res, result.status, result.body);
       return;
     }
 
     if (resource === "owned-analytics-event") {
-      const result = await ownedAnalyticsEventPayload(req);
+      const result = await ownedAnalyticsEventPayload(req, res);
       json(res, result.status, result.body);
       return;
     }

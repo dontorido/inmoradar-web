@@ -1,4 +1,4 @@
-const { hasSupabaseConfig, supabaseFetch } = require("../_utils");
+const { hasSupabaseConfig, sanitizeErrorMessage, supabaseFetch } = require("../_utils");
 const { buildPriceCitySourceData } = require("./marketSources");
 const { buildPriceCityLanding } = require("./priceCity");
 const { calculateSeoLandingQuality } = require("./quality");
@@ -15,10 +15,7 @@ const ALLOWED_AUTOGENERATION_TEMPLATE_TYPES = ["price_city", "expensive_listing_
 const ALLOWED_TEMPLATE_SET = new Set(ALLOWED_AUTOGENERATION_TEMPLATE_TYPES);
 
 function safeError(error) {
-  return String(error?.message || error || "unknown_error")
-    .replace(/eyJ[a-zA-Z0-9._-]+/g, "[redacted-jwt]")
-    .replace(/sb_secret_[a-zA-Z0-9._-]+/g, "[redacted-secret]")
-    .slice(0, 500);
+  return sanitizeErrorMessage(error, 500);
 }
 
 function parseBoolean(value, fallback) {
@@ -506,6 +503,12 @@ function resultFor({ opportunity, landing, status, reason, score, quality, sourc
     reason,
     final_score: score?.final_score ?? null,
     quality_score: quality?.score ?? null,
+    quality_signals: quality?.signals || [],
+    quality_penalties: quality?.penalties || [],
+    quality_warnings: quality?.warnings || [],
+    quality_reasons: quality?.rejection_reasons || [],
+    technical_indexability_status: quality?.technical_indexability_status || null,
+    editorial_quality_status: quality?.editorial_quality_status || null,
     data_quality_score: score?.data_quality_score ?? null,
     uniqueness_score: score?.uniqueness_score ?? null,
     seo_opportunity_score: score?.seo_opportunity_score ?? null,
