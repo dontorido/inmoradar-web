@@ -1,4 +1,4 @@
-const { hasSupabaseConfig, supabaseFetch } = require("../_utils");
+const { hasSupabaseConfig, sanitizeErrorMessage, supabaseFetch } = require("../_utils");
 const { buildPriceCitySourceData } = require("./marketSources");
 const { buildPriceCityLanding } = require("./priceCity");
 const { calculateSeoLandingQuality } = require("./quality");
@@ -15,10 +15,7 @@ const ALLOWED_AUTOGENERATION_TEMPLATE_TYPES = ["price_city", "expensive_listing_
 const ALLOWED_TEMPLATE_SET = new Set(ALLOWED_AUTOGENERATION_TEMPLATE_TYPES);
 
 function safeError(error) {
-  return String(error?.message || error || "unknown_error")
-    .replace(/eyJ[a-zA-Z0-9._-]+/g, "[redacted-jwt]")
-    .replace(/sb_secret_[a-zA-Z0-9._-]+/g, "[redacted-secret]")
-    .slice(0, 500);
+  return sanitizeErrorMessage(error, 500);
 }
 
 function parseBoolean(value, fallback) {

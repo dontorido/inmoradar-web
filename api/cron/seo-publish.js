@@ -1,4 +1,4 @@
-const { hasSupabaseConfig, json, supabaseFetch } = require("../_utils");
+const { hasSupabaseConfig, json, sanitizeErrorMessage, supabaseFetch } = require("../_utils");
 const { runSeoLandingGeneration } = require("../_seo/generator");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("../_seo/publishingPolicy");
 
@@ -24,10 +24,7 @@ function assertCron(req, res) {
 }
 
 function safeError(error) {
-  return String(error?.message || error || "unknown_error")
-    .replace(/eyJ[a-zA-Z0-9._-]+/g, "[redacted-jwt]")
-    .replace(/sb_secret_[a-zA-Z0-9._-]+/g, "[redacted-secret]")
-    .slice(0, 500);
+  return sanitizeErrorMessage(error, 500);
 }
 
 function cronRunKey(date = new Date()) {
@@ -226,7 +223,7 @@ module.exports = async function handler(req, res) {
     return json(res, 500, {
       ok: false,
       error: "seo_cron_failed",
-      message: error.message
+      message: safeError(error)
     });
   }
 };

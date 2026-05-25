@@ -1,11 +1,8 @@
-const { hasSupabaseConfig, json, supabaseFetch } = require("./_utils");
+const { hasSupabaseConfig, json, sanitizeErrorMessage, supabaseFetch } = require("./_utils");
 const statusHandler = require("./_status");
 
 function safeError(error) {
-  return String(error?.message || error || "unknown_error")
-    .replace(/eyJ[a-zA-Z0-9._-]+/g, "[redacted-jwt]")
-    .replace(/sb_secret_[a-zA-Z0-9._-]+/g, "[redacted-secret]")
-    .slice(0, 240);
+  return sanitizeErrorMessage(error, 240);
 }
 
 function isProductionRuntime() {

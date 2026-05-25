@@ -18,6 +18,21 @@ function handleCors(req, res) {
   return true;
 }
 
+function sanitizeErrorMessage(error, maxLength = 500) {
+  return String(error?.message || error || "unknown_error")
+    .replace(/(access_token=)[^&\s]+/gi, "$1[redacted]")
+    .replace(/(refresh_token=)[^&\s]+/gi, "$1[redacted]")
+    .replace(/(client_secret=)[^&\s]+/gi, "$1[redacted]")
+    .replace(/(api[_-]?key=)[^&\s]+/gi, "$1[redacted]")
+    .replace(/(apikey=)[^&\s]+/gi, "$1[redacted]")
+    .replace(/(authorization:\s*bearer\s+)[^\s]+/gi, "$1[redacted]")
+    .replace(/(bearer\s+)[^\s]+/gi, "$1[redacted]")
+    .replace(/eyJ[a-zA-Z0-9._-]+/g, "[redacted-jwt]")
+    .replace(/sb_secret_[a-zA-Z0-9._-]+/g, "[redacted-secret]")
+    .replace(/\b[A-Za-z0-9_-]{96,}\b/g, "[redacted-token]")
+    .slice(0, maxLength);
+}
+
 async function fetchWithTimeout(url, options = {}) {
   const timeoutMs = Number(options.timeoutMs || process.env.API_FETCH_TIMEOUT_MS || 10000);
   const controller = new AbortController();
@@ -129,7 +144,7 @@ async function supabaseFetch(path, options = {}) {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Supabase ${response.status}: ${text}`);
+    throw new Error(sanitizeErrorMessage(`Supabase ${response.status}: ${text}`));
   }
 
   if (response.status === 204) return null;
@@ -162,6 +177,7 @@ module.exports = {
   json,
   normalizeEmail,
   readRawBody,
+  sanitizeErrorMessage,
   supabaseFetch,
   verifyLemonSignature
 };
