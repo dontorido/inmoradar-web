@@ -298,7 +298,6 @@ const els = {
   seoAutogenSummary: document.querySelector("[data-seo-autogen-summary]"),
   seoAutogenRuns: document.querySelector("[data-seo-autogen-runs]"),
   seoAutogenRun: document.querySelector("[data-seo-autogen-run]"),
-  seoAutogenDryRun: document.querySelector("[data-seo-autogen-dry-run]"),
   seoAutogenNote: document.querySelector("[data-seo-autogen-note]"),
   linkedinRefresh: document.querySelector("[data-linkedin-refresh]"),
   linkedinTest: document.querySelector("[data-linkedin-test]"),
@@ -2065,7 +2064,7 @@ function renderSeoAutogeneration(payload = {}) {
   const lastRun = payload.last_run || null;
   const lastResult = lastRun?.result_json || {};
   const enabledLabel = config.enabled ? "Activo" : "Inactivo";
-  const dryRunLabel = config.dry_run ? "Dry run" : "Publicacion real";
+  const dryRunLabel = config.dry_run ? "Simulacion" : "Publicacion real";
   const runCount = Number(limits.published_this_run || 0);
   const runLimit = Number(limits.max_per_run || 1);
   const dayCount = Number(limits.published_last_24h || 0);
@@ -5697,7 +5696,7 @@ async function runSeoAutogeneration(dryRun = false) {
     return;
   }
   if (result.would_publish_count) {
-    showStatus(`Dry run OK: publicaria ${first.target_path || "pagina SEO"} - score ${first.final_score || 0}`, "neutral");
+    showStatus(`Simulacion OK: publicaria ${first.target_path || "pagina SEO"} - score ${first.final_score || 0}`, "neutral");
     return;
   }
   showStatus(`Autogeneracion sin publicacion: ${first.reason || result.reason || "sin candidato elegible"}`, "neutral");
@@ -5810,9 +5809,6 @@ els.seoGenerate.addEventListener("click", () => runSeoGeneration("generate").cat
 els.seoPublish.addEventListener("click", () => runSeoGeneration("publish").catch((error) => showStatus(error.message, "bad")));
 if (els.seoAutogenRun) {
   els.seoAutogenRun.addEventListener("click", () => runSeoAutogeneration(false).catch((error) => showStatus(error.message, "bad")));
-}
-if (els.seoAutogenDryRun) {
-  els.seoAutogenDryRun.addEventListener("click", () => runSeoAutogeneration(true).catch((error) => showStatus(error.message, "bad")));
 }
 if (els.linkedinRefresh) {
   els.linkedinRefresh.addEventListener("click", () => loadLinkedIn().catch((error) => showStatus(error.message, "bad")));
