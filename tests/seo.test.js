@@ -356,7 +356,7 @@ test("sitemap consulta solo landings publicadas indexables y con quality_score s
   assert.equal(params.get("quality_score"), "gte.75");
 });
 
-test("sitemap publica solo URLs canonicas sin www e incluye indice de analisis de precio", async () => {
+test("sitemap publica solo URLs canonicas sin www y mantiene indice editorial fuera del sitemap", async () => {
   const previousUrl = process.env.PUBLIC_SITE_URL;
   const previousSiteUrl = process.env.SITE_URL;
   process.env.PUBLIC_SITE_URL = "https://www.inmoradar.app";
@@ -390,7 +390,7 @@ test("sitemap publica solo URLs canonicas sin www e incluye indice de analisis d
 
   const xml = chunks.join("");
   assert.equal(res.statusCode, 200);
-  assert.match(xml, /<loc>https:\/\/inmoradar\.app\/saber-si-piso-esta-caro\/<\/loc>/);
+  assert.doesNotMatch(xml, /<loc>https:\/\/inmoradar\.app\/saber-si-piso-esta-caro\/<\/loc>/);
   assert.doesNotMatch(xml, /<loc>https:\/\/www\.inmoradar\.app\//);
   assert.doesNotMatch(xml, /<loc>http:\/\//);
 });

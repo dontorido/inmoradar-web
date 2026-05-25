@@ -48,7 +48,7 @@ Produccion pre-deploy:
 Cambio local:
 
 - El sitemap sigue generando URLs `https://inmoradar.app/...`.
-- Se anade `/saber-si-piso-esta-caro/` al sitemap porque ahora existe una pagina editorial indexable y enlazada internamente.
+- Se mantiene el sitemap en 51 URLs. `/saber-si-piso-esta-caro/` queda como pagina editorial indexable y rastreable por enlaces internos, pero fuera del sitemap para no cambiar el recuento procesado por Search Console en esta correccion minima.
 - `siteUrl()` normaliza `PUBLIC_SITE_URL=https://www.inmoradar.app` a `https://inmoradar.app`, para no emitir sitemap/canonical con `www` aunque el entorno este mal configurado.
 
 ## Estado de robots.txt
@@ -159,7 +159,7 @@ Todas las landings revisadas tienen canonical apex y `index,follow`.
 
 ## Landings excluidas del sitemap
 
-`/saber-si-piso-esta-caro/` estaba excluida porque no existia y devolvia 404. Ahora se crea como pagina editorial indice y se incluye en sitemap.
+`/saber-si-piso-esta-caro/` estaba excluida porque no existia y devolvia 404. Ahora se crea como pagina editorial indice, pero se mantiene fuera del sitemap para conservar las 51 URLs ya procesadas por Search Console.
 
 `/extension-chrome-inmobiliaria/` sigue excluida y devuelve 404. No se corrige en esta rama porque no esta en sitemap y tocar esa ruta podria mezclarse con alcance de extension/marketing.
 
@@ -202,7 +202,7 @@ Cambio:
 - Breadcrumb JSON-LD de landings simplificado y validable.
 - Canonical/meta robots en home y paginas estaticas del sitemap.
 - Creacion de `/saber-si-piso-esta-caro/`.
-- Inclusion de `/saber-si-piso-esta-caro/` en sitemap y rewrites.
+- Rewrites para `/saber-si-piso-esta-caro/`; el sitemap conserva 51 URLs.
 - Bloque editorial de enlazado interno en home.
 
 ## Archivos tocados
@@ -259,7 +259,6 @@ Nota: se uso el Node empaquetado en Codex porque `node.exe` del PATH de Windows 
 - Tras cambiar el dominio principal, comprobar que `https://inmoradar.app/*` devuelve 200 directo y que `https://www.inmoradar.app/*` redirige 301/308 a apex.
 - `/extension-chrome-inmobiliaria/` sigue 404; no esta en sitemap. Decidir si se elimina de comunicaciones externas o se crea una redireccion editorial.
 - Las familias `/precio-metro-cuadrado/`, `/precio-alquiler/` y `/guias/` siguen sin pagina indice; no se tocaron para mantener alcance minimo.
-- El sitemap pasara de 51 a 52 URLs al incluir `/saber-si-piso-esta-caro/`.
 
 ## Que revisar despues en Google Search Console
 

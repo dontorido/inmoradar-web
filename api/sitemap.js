@@ -13,8 +13,7 @@ const STATIC_PATHS = [
   "/faq",
   "/contacto",
   "/privacidad",
-  "/terminos",
-  "/saber-si-piso-esta-caro/"
+  "/terminos"
 ];
 
 async function fetchPublishedLandings() {
