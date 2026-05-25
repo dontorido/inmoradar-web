@@ -85,7 +85,7 @@ No recomendado ahora:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `/api/extension-usage` | POST | publico escritura | 1 | 120/min | 60s | IP hash + scope | extension user/session hash si existe | payload actual `rate_limited` | Migrar el limite en memoria a durable sin cambiar payload. |
 | `/api/analytics/event` | POST | publico escritura | 1 | 120/min | 60s | IP hash + User-Agent hash + anonymous session hash si existe | ninguno | 429 estable | Implementado como segunda extension del patron durable. `page_path` no forma parte de la key primaria porque es controlado por cliente. |
-| `/api/waitlist/browser` | POST | publico escritura | 2 | 10/10min + 30/dia | 10m/24h | IP hash + email hash | browser + source | 429 estable | Siguiente candidato si analytics/event queda estable. |
+| `/api/waitlist/browser` | POST | publico escritura | 2 | 10/min | 60s | IP + UA + email normalizado + IDs anonimos, todo hasheado | page/referrer/campaign excluidos de la key | 429 estable | Cubierto como tercera extension durable. |
 | `/api/contact` | POST | publico escritura/email | 3 | 5/10min + 20/dia | 10m/24h | IP hash + normalized email hash | user-agent hash | 429 estable | No abordar primero: puede bloquear leads reales y disparar email externo. No guardar email crudo en rate key. |
 | `/api/photo-condition-analysis` | POST | publico coste alto | 2 | 10/h + 30/dia | 1h/24h | IP hash + listing/url hash | premium/subscription hash si aplica | 429 estable | Revisar rate limit existente y coste OpenAI antes de tocar. |
 | `/api/check-premium` | GET/POST | publico lectura sensible | 3 | 30/min | 60s | IP hash + email hash | none | 429 estable | Evita enumeracion suave. Cuidar UX premium. |
@@ -505,4 +505,41 @@ Riesgos pendientes:
 - Vigilar que el limite no degrade analytics legitima.
 - Usuarios detras de la misma NAT pueden compartir bucket si falta `anonymous_session_id`; `120/min` es suficientemente suave para rollout inicial.
 - Si aparecen `429` legitimos, subir inicialmente a `240/min` antes de endurecer.
-- No extender todavia a `contact` hasta observar este segundo endpoint.
+- No extender todavia a `contact` hasta observar este tercer endpoint y definir un limite que no bloquee leads reales.
+
+## 18. Waitlist browser como tercera extension durable
+
+Estado:
+
+- `POST /api/waitlist/browser` queda protegido con el helper durable ya usado en `extension usage` y `analytics/event`.
+- Ruta real: `api/market-price?resource=browser-waitlist`.
+- Handler: `lib/browser-waitlist.js`.
+- Scope: `browser_waitlist`.
+- Limite default: `10/min`.
+- Ventana default: `60s`.
+- Variables opcionales:
+  - `WAITLIST_BROWSER_RATE_LIMIT_MAX`
+  - `WAITLIST_BROWSER_RATE_LIMIT_WINDOW_MS`
+
+Key strategy:
+
+- IP saneada.
+- User-Agent truncado.
+- Email normalizado con `trim + lowercase`.
+- `anonymous_session_id` saneado si existe.
+- `anonymous_install_id` saneado si existe.
+- `page`, `page_path`, URL, referrer y campaign no forman parte de la key primaria porque son controlables por cliente y podrian fragmentar buckets.
+- Todo se hashea dentro de `durable-rate-limit`; no se persiste email en claro.
+
+Fallback:
+
+- Upstash si `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN` existen.
+- Memoria si faltan variables.
+- Memoria con log saneado si Upstash falla.
+
+Riesgos pendientes:
+
+- Observar que `10/min` no bloquea usuarios legitimos en formularios reales.
+- Usuarios detras de NAT pueden compartir bucket si no hay identificadores anonimos y usan el mismo email.
+- Si aparecen falsos positivos, subir temporalmente el limite antes de endurecer.
+- Mantener `contact` fuera hasta definir un limite que no perjudique leads reales ni emails.
