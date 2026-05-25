@@ -184,7 +184,7 @@ Siguen dentro de `api/admin.js`:
 - `handleSummary`;
 - `handleAlerts`;
 - `handleExtensionUsageSummary`;
-- `handleParkingSummary`;
+- `handleParkingSummary` quedaba dentro en esta fase; se extrae despues en `feature/admin-handler-core-readonly-review`;
 - `handleSeoLandings`;
 - todos los handlers legacy sensibles.
 
@@ -256,7 +256,7 @@ Siguen dentro de `api/admin.js`:
 - `handleSummary`;
 - `handleAlerts`;
 - `handleExtensionUsageSummary`;
-- `handleParkingSummary`;
+- `handleParkingSummary` quedaba dentro en esta fase; se extrae despues en `feature/admin-handler-core-readonly-review`;
 - `handleSeoLandings`;
 - handlers legacy sensibles.
 
@@ -292,6 +292,7 @@ Estado actualizado de handlers ya extraidos:
 - `operations/releases` queda en `api/_admin/handlers/operations.js`.
 - `analytics/summary`, `analytics/pages` y `analytics/learning` quedan en `api/_admin/handlers/analytics.js`.
 - `premium/subscriptions` queda en `api/_admin/handlers/premium.js`.
+- `parking/summary` queda en `api/_admin/handlers/core.js`.
 
 Premium/billing fuera de esta fase:
 
@@ -306,7 +307,6 @@ Siguen dentro de `api/admin.js`:
 - `handleSummary`;
 - `handleAlerts`;
 - `handleExtensionUsageSummary`;
-- `handleParkingSummary`;
 - `handleSeoLandings`;
 - handlers legacy sensibles.
 
@@ -324,3 +324,45 @@ Riesgo residual:
 - `summary` sigue mostrando flags de configuracion Lemon desde `api/admin.js`, sin llamadas externas.
 - Los endpoints reales de billing siguen requiriendo auditoria propia antes de cualquier extraccion.
 - `seo/landings` sigue pendiente por proximidad a generacion/publicacion.
+
+## Mini-revision handlers core read-only
+
+Fecha: 2026-05-25
+Rama: `feature/admin-handler-core-readonly-review`
+
+Se revisaron los handlers core read-only ya migrados al router:
+
+- `alerts`;
+- `summary`;
+- `extension/usage`;
+- `parking/summary`.
+
+Extraccion realizada:
+
+- `parking/summary` `GET` se extrajo a `api/_admin/handlers/core.js`.
+
+Dependencias inyectadas:
+
+- `safeFetch`;
+- `average`;
+- `countBy`.
+
+No extraidos:
+
+- `alerts`: cruza mantenimiento nocturno, estado de autogeneracion SEO, Supabase, waitlist, premium y Viraliza. Aunque es read-only, no es un handler pequeno.
+- `summary`: agrega premium/revenue, SEO, oportunidades, parking y flags de configuracion Lemon. Requiere una fase de summary propia si se decide extraer.
+- `extension/usage`: es read-only y no llama integraciones externas, pero arrastra un bloque amplio de helpers de ventana temporal, series y usuarios conocidos. Conviene una fase dedicada si se quiere moverlo.
+- `seo/landings` `GET`: no se toco; sigue pendiente para fase separada por cercania a generacion/publicacion y recurso mixto con `POST`.
+
+Confirmacion de frontera:
+
+- No se migraron nuevos endpoints.
+- No se tocaron writes.
+- No se tocaron SEO, Chrome, billing, social ni integraciones externas.
+- El router sigue registrando solo recursos existentes.
+
+Riesgo residual:
+
+- `api/admin.js` sigue conteniendo `alerts`, `summary`, `extension/usage`, `seo/landings` y handlers legacy sensibles.
+- `extension/usage` es el siguiente candidato tecnico si se acepta una extraccion mas grande pero autocontenida.
+- `summary` y `alerts` requieren una decision de arquitectura por mezclar varios dominios.

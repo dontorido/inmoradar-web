@@ -1016,3 +1016,45 @@ Prompt recomendado:
 ```text
 Continuar en feature/admin-handler-premium-readonly. Sin deploy y sin tocar produccion. Revisar handlers ya migrados que siguen dentro de api/admin.js (`alerts`, `summary`, `extension/usage`, `parking/summary`) y extraer como maximo uno o dos si son claramente aislados, con factories e inyeccion de dependencias. No migrar nuevos endpoints ni writes. No tocar SEO, Chrome Web Store, billing, Meta, LinkedIn, social-video ni Viraliza. Mantener URLs, payloads, codigos, auth y saneado de errores. Ejecutar node --check, node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
 ```
+
+## 31. Fase realizada - Mini-revision handlers core read-only
+
+Estado: realizada en `feature/admin-handler-core-readonly-review`.
+
+Se creo:
+
+- `api/_admin/handlers/core.js`
+
+Se extrajo del monolito:
+
+- `parking/summary` `GET`
+
+No se migraron nuevos endpoints ni writes. No se tocaron SEO, Chrome, billing, social ni integraciones externas.
+
+Criterios validados:
+
+- Inyeccion de `safeFetch`, `average` y `countBy`.
+- El handler solo consulta `parking_difficulty_cache` y `parking_assessments`.
+- Auth, service role, CORS y catch comun permanecen en `api/admin.js`.
+- La ruta sigue post-Supabase.
+- Tests cubren payload y dependencias inyectadas.
+
+Candidatos revisados y no extraidos:
+
+- `alerts`: demasiado acoplado a SEO autogeneration, mantenimiento nocturno, waitlist, premium y Viraliza.
+- `summary`: mezcla demasiados dominios y flags de configuracion.
+- `extension/usage`: autocontenido, pero grande; conviene fase propia si se decide moverlo.
+- `seo/landings` `GET`: no se toco y debe ir en fase separada.
+
+Orden recomendado:
+
+1. Extraer `extension/usage` en una fase dedicada si se acepta mover el bloque completo de ventanas/series.
+2. Dejar `alerts` y `summary` hasta decidir si se dividen en servicios por dominio.
+3. Preparar una fase especifica para `seo/landings GET`, con cuidado por el recurso mixto y acciones `POST`.
+4. Mantener todos los writes sensibles e integraciones externas fuera.
+
+Prompt recomendado:
+
+```text
+Continuar en feature/admin-handler-core-readonly-review. Sin deploy y sin tocar produccion. Evaluar extraccion dedicada de `extension/usage` a un handler interno solo si puede moverse como bloque autocontenido con sus helpers de ventanas, series y usuarios conocidos, inyectando `supabaseFetch` y `clampLimit` y manteniendo payloads exactos. No migrar nuevos endpoints ni writes. No tocar SEO, Chrome, billing, Meta, LinkedIn, social-video ni Viraliza. Si el diff se vuelve demasiado amplio, documentar y no extraer. Ejecutar node --check, node --test tests/admin-router.test.js, node --test tests/*.test.js y git diff --check.
+```

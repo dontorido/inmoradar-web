@@ -1359,6 +1359,64 @@ Verificacion especifica de fase:
 - `node --check api/_admin/handlers/premium.js`: OK con Node bundled.
 - `node --test tests/admin-router.test.js`: 43 pass, 0 fail.
 - `node --test tests/*.test.js`: 282 pass, 0 fail.
+
+## Mini-revision handlers core read-only
+
+Fecha: 2026-05-25
+Rama: `feature/admin-handler-core-readonly-review`
+
+Se revisaron los handlers core read-only que ya estaban migrados al router y seguian dentro de `api/admin.js`.
+
+Candidatos revisados:
+
+- `alerts`;
+- `summary`;
+- `extension/usage`;
+- `parking/summary`.
+
+Extraccion realizada:
+
+- `parking/summary` `GET` a `api/_admin/handlers/core.js`.
+
+Dependencias inyectadas:
+
+- `safeFetch`;
+- `average`;
+- `countBy`.
+
+Por que `parking/summary` era el candidato adecuado:
+
+- solo hace lecturas locales de Supabase;
+- no llama APIs externas;
+- no escribe ni recalcula de forma persistente;
+- usa agregados simples;
+- ya tenia tests de payload;
+- el diff queda pequeno y reversible.
+
+Candidatos no extraidos:
+
+- `alerts`: mezcla mantenimiento nocturno, SEO autogeneration, waitlist, premium y Viraliza.
+- `summary`: agrega premium/revenue, SEO, oportunidades, parking y flags Lemon.
+- `extension/usage`: es read-only, pero mueve muchas funciones de ventanas/series y merece fase propia.
+- `seo/landings` `GET`: no se toco por ser recurso mixto cercano a generacion/publicacion.
+
+Riesgos reducidos:
+
+- `api/admin.js` pierde otro handler read-only local sin tocar writes ni integraciones.
+- El archivo `api/_admin/handlers/core.js` queda como destino para handlers pequenos y claramente aislados.
+- El criterio de no extraer handlers demasiado acoplados queda documentado.
+
+Riesgos pendientes:
+
+- `alerts`, `summary` y `extension/usage` siguen dentro de `api/admin.js`.
+- `seo/landings` requiere una fase separada con fixtures y analisis de su frontera GET/POST.
+
+Verificacion especifica de fase:
+
+- `node --check api/admin.js`: OK con Node bundled.
+- `node --check api/_admin/handlers/core.js`: OK con Node bundled.
+- `node --test tests/admin-router.test.js`: 44 pass, 0 fail.
+- `node --test tests/*.test.js`: 283 pass, 0 fail.
 - `node --check assets/admin.js`: OK con Node bundled.
 - `node --check api/sitemap.js`: OK con Node bundled.
 - `node --check api/seo-page.js`: OK con Node bundled.

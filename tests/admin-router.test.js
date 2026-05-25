@@ -3,6 +3,7 @@ const test = require("node:test");
 
 const adminHandler = require("../api/admin");
 const { createAnalyticsHandlers } = require("../api/_admin/handlers/analytics");
+const { createCoreHandlers } = require("../api/_admin/handlers/core");
 const { createPremiumHandlers } = require("../api/_admin/handlers/premium");
 const {
   createAdminRouter,
@@ -320,6 +321,37 @@ test("admin premium handler reads local subscriptions without billing side effec
   assert.equal(paths.length, 1);
   assert.match(paths[0], /^premium_subscriptions\?/);
   assert.doesNotMatch(paths[0], /checkout|portal|webhook|lemonsqueezy/i);
+});
+
+test("admin core parking handler keeps injected local reads", async () => {
+  const paths = [];
+  const { handleParkingSummary } = createCoreHandlers({
+    average: (rows, key) => {
+      const values = rows.map((row) => Number(row[key])).filter(Number.isFinite);
+      return values.length ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 100) / 100 : 0;
+    },
+    countBy: (rows, key) =>
+      rows.reduce((acc, row) => {
+        const value = String(row[key] || "unknown");
+        acc[value] = (acc[value] || 0) + 1;
+        return acc;
+      }, {}),
+    safeFetch: async (path) => {
+      paths.push(path);
+      if (path.startsWith("parking_assessments?")) return [];
+      return [{ score: 72, label: "medio", confidence_score: 0.8, perspective: "visitor", expires_at: null }];
+    }
+  });
+
+  const result = await handleParkingSummary();
+
+  assert.equal(result.status, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.total_cache_rows, 1);
+  assert.equal(result.payload.valid_cache_rows, 1);
+  assert.deepEqual(result.payload.by_label, { medio: 1 });
+  assert.equal(paths.length, 2);
+  assert.ok(paths.every((path) => /^parking_(difficulty_cache|assessments)\?/.test(path)));
 });
 
 test("admin read-only router preserves summary payload shape", async () => {

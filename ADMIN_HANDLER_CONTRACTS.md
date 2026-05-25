@@ -259,3 +259,31 @@ Reglas especificas para read-only cercano a billing:
 - no tocar `api/check-premium`;
 - mantener endpoints de billing fuera del router admin hasta una fase dedicada;
 - cubrir con tests que el handler solo consulta `premium_subscriptions` y no abre rutas de efecto externo.
+
+## 18. Ejemplo core read-only pequeño
+
+En la fase `feature/admin-handler-core-readonly-review` se extrajo `parking/summary` `GET` a `api/_admin/handlers/core.js`.
+
+Dependencias inyectadas:
+
+- `safeFetch`;
+- `average`;
+- `countBy`.
+
+Este caso representa el limite sano para handlers core pequenos: dos lecturas locales, agregados simples y payload estable. No importa conectores externos, no accede a `process.env`, no mueve auth/CORS/service role y no toca rutas relacionadas.
+
+Criterio para extraer handlers pequenos:
+
+- la logica cabe en una factory acotada;
+- las dependencias son pocas y nombrables;
+- no arrastra configuracion de producto ni integraciones;
+- no mezcla dominios;
+- no requiere mover helpers compartidos grandes;
+- tiene tests de payload y de dependencias inyectadas.
+
+Criterio para no extraer:
+
+- el handler cruza varios dominios (`summary`);
+- el handler dispara checks operativos de otros modulos (`alerts`);
+- el handler tiene muchas funciones de ventana/series y conviene fase propia (`extension/usage`);
+- el recurso esta cerca de generacion/publicacion (`seo/landings`).
