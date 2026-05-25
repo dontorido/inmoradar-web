@@ -566,6 +566,7 @@ async function runSeoLandingGeneration(options = {}) {
 }
 
 module.exports = {
+  canPublishNow,
   DEFAULT_SEED_OPPORTUNITIES,
   runSeoLandingGeneration
 };

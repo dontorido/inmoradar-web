@@ -5,10 +5,9 @@ const { createCoreHandlers } = require("./_admin/handlers/core");
 const { createExtensionUsageHandlers } = require("./_admin/handlers/extension-usage");
 const { createSeoHandlers } = require("./_admin/handlers/seo");
 const {
-  buildSeoAutogenerationOperationalAlerts,
-  getSeoAutogenerationStatus,
-  runSeoAutogeneration
+  buildSeoAutogenerationOperationalAlerts
 } = require("./_seo/autogeneration");
+const { getSeoContentPublicationStatus, runSeoContentPublication } = require("./_seo/contentPublisher");
 const { runSeoLandingGeneration } = require("./_seo/generator");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
 const { createKpiSettingsHandler } = require("./_admin/handlers/kpis");
@@ -309,7 +308,7 @@ async function handleAlerts() {
   const viralSince = recentSinceIso(168);
   const encodedViralSince = encodeURIComponent(viralSince);
   try {
-    const seoAutogenerationStatus = await getSeoAutogenerationStatus();
+    const seoAutogenerationStatus = await getSeoContentPublicationStatus();
     alerts.push(...buildSeoAutogenerationOperationalAlerts(seoAutogenerationStatus, { now: generatedAt }));
   } catch (error) {
     alerts.push({
@@ -823,7 +822,7 @@ function dryRunOverrideFromRequest(req, url, body) {
 
 async function handleSeoAutogeneration(req, url) {
   if (req.method === "GET" && isAdminTokenRequest(req) && url.searchParams.get("run") !== "1") {
-    return { status: 200, payload: await getSeoAutogenerationStatus() };
+    return { status: 200, payload: await getSeoContentPublicationStatus() };
   }
   if (!["GET", "POST"].includes(req.method)) {
     return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
@@ -834,7 +833,7 @@ async function handleSeoAutogeneration(req, url) {
   const config = {};
   if (typeof dryRun === "boolean") config.dryRun = dryRun;
   const requestSource = isCronTokenRequest(req) && !isAdminTokenRequest(req) ? "cron" : "admin";
-  const result = await runSeoAutogeneration({ requestSource, config });
+  const result = await runSeoContentPublication({ requestSource, config });
   return { status: result.ok === false ? 500 : 200, payload: result };
 }
 

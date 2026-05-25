@@ -2338,6 +2338,10 @@ function renderSeoAutogeneration(payload = {}) {
   const dayLimit = Number(limits.max_per_day || 3);
   const weekCount = Number(limits.published_last_7d || 0);
   const weekLimit = Number(limits.max_per_week || 10);
+  const landingsToday = Number(payload.published_landings_today ?? payload.daily_policy?.published_landings_today ?? 0);
+  const newsToday = Number(payload.published_news_today ?? payload.daily_policy?.published_news_today ?? 0);
+  const targetLandings = Number(payload.target_landings_per_day || config.target_landings_per_day || 2);
+  const targetNews = Number(payload.target_news_per_day || config.target_news_per_day || 2);
 
   els.seoAutogenSummary.innerHTML = [
     seoAutogenCard("Estado", enabledLabel, { badge: true, tone: config.enabled ? "good" : "muted", hint: "Kill switch" }),
@@ -2352,7 +2356,7 @@ function renderSeoAutogeneration(payload = {}) {
 
   if (els.seoAutogenNote) {
     els.seoAutogenNote.textContent = config.enabled
-      ? `Alcance: precio m2 ciudad y saber si un piso está caro por ciudad. Pausa con SEO_AUTOGENERATION_ENABLED=false. Último resultado: ${lastResult.reason || lastRun?.status || "sin datos"}.`
+      ? `Alcance: landings y guias editoriales. Objetivo diario: ${landingsToday}/${targetLandings} landings y ${newsToday}/${targetNews} guias. Pausa con SEO_AUTOGENERATION_ENABLED=false. Ultimo resultado: ${lastResult.reason || lastRun?.status || "sin datos"}.`
       : "Kill switch activo: SEO_AUTOGENERATION_ENABLED=false.";
   }
 
@@ -2370,7 +2374,15 @@ function renderSeoAutogeneration(payload = {}) {
       const detail =
         items
           .slice(0, 3)
-          .map((item) => [item.target_path, item.reason || item.status, item.final_score ? `score ${item.final_score}` : ""].filter(Boolean).join(" · "))
+          .map((item) =>
+            [
+              item.target_path || (item.slug ? `/${String(item.slug).replace(/^\/+|\/+$/g, "")}/` : ""),
+              item.reason || item.status,
+              item.final_score || item.quality_score ? `score ${item.final_score || item.quality_score}` : ""
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          )
           .join(" | ") || result.reason;
       return `
         <tr>
@@ -5967,12 +5979,14 @@ async function runSeoAutogeneration(dryRun = false) {
   });
   await Promise.allSettled([loadSeo(), loadSeoAutogeneration()]);
   const first = result.results?.[0] || {};
+  const firstPath = first.target_path || (first.slug ? `/${String(first.slug).replace(/^\/+|\/+$/g, "")}/` : "contenido SEO");
+  const firstScore = first.final_score || first.quality_score || 0;
   if (result.published_count) {
-    showStatus(`Autogeneracion publicada: ${first.target_path || "pagina SEO"} - score ${first.final_score || 0}`, "good");
+    showStatus(`Autogeneracion publicada: ${firstPath} - score ${firstScore}`, "good");
     return;
   }
   if (result.would_publish_count) {
-    showStatus(`Simulacion OK: publicaria ${first.target_path || "pagina SEO"} - score ${first.final_score || 0}`, "neutral");
+    showStatus(`Simulacion OK: publicaria ${firstPath} - score ${firstScore}`, "neutral");
     return;
   }
   showStatus(`Autogeneracion sin publicacion: ${first.reason || result.reason || "sin candidato elegible"}`, "neutral");
