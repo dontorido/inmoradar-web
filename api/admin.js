@@ -81,7 +81,6 @@ const {
   validatePublishInput
 } = require("../lib/linkedin/services");
 const {
-  META_REQUIRED_SCOPES,
   META_MANUAL_MODE_NOTICE,
   META_PLATFORMS,
   buildAuthorizationUrl: buildMetaAuthorizationUrl,
@@ -113,6 +112,8 @@ const {
   buildInstagramOrganicTestPost,
   decodeOrganicOAuthState,
   encodeOrganicOAuthState,
+  metaOrganicOAuthScopes,
+  normalizeOAuthTarget,
   validateMetaOrganicEnv
 } = require("../lib/meta/organic");
 const { logRequestMetric } = require("../lib/observability/request-metrics");
@@ -1718,22 +1719,35 @@ function selectedMetaPageFromPages(pages = [], env = process.env) {
   return pages.length === 1 ? pages[0] : null;
 }
 
-async function saveDetectedMetaOrganicConnection(token, pages = []) {
+async function saveDetectedMetaOrganicConnection(token, pages = [], target = "instagram") {
+  const currentState = await readMetaConnectionState();
+  const current = currentState.connection || {};
+  const normalizedTarget = normalizeOAuthTarget(target);
   const page = selectedMetaPageFromPages(pages);
   const instagram = page?.instagram_business_account || null;
   const config = metaConfig(process.env);
   const pageMissingReason = config.facebookPageId && !page ? "meta_configured_page_not_found" : "meta_page_selection_required";
+  const instagramAccountId = instagram?.id || current.instagram_business_account_id || config.instagramBusinessAccountId || null;
+  const facebookPageId = page?.id || current.facebook_page_id || null;
+  const facebookPageName = page?.name || current.facebook_page_name || null;
+  const mergedScopes = [...new Set([...(Array.isArray(current.scopes) ? current.scopes : []), ...(Array.isArray(token.scopes) ? token.scopes : [])])];
+  const hasPageToken = page?.access_token || current.page_access_token_encrypted;
+  const connected = normalizedTarget === "facebook"
+    ? Boolean(facebookPageId && hasPageToken)
+    : Boolean(instagramAccountId && token.access_token);
   const connection = await saveMetaConnection({
-    status: page?.access_token ? "connected" : "needs_page",
-    facebook_page_id: page?.id || null,
-    facebook_page_name: page?.name || null,
-    instagram_business_account_id: instagram?.id || config.instagramBusinessAccountId || null,
-    access_token_encrypted: encryptMetaToken(page?.access_token || token.access_token),
-    user_access_token_encrypted: encryptMetaToken(token.access_token),
-    page_access_token_encrypted: page?.access_token ? encryptMetaToken(page.access_token) : null,
+    status: connected ? "connected" : normalizedTarget === "facebook" ? "needs_page" : "needs_instagram",
+    facebook_page_id: facebookPageId,
+    facebook_page_name: facebookPageName,
+    instagram_business_account_id: instagramAccountId,
+    access_token_encrypted: current.access_token_encrypted || encryptMetaToken(token.access_token),
+    user_access_token_encrypted: normalizedTarget === "facebook"
+      ? current.user_access_token_encrypted || encryptMetaToken(token.access_token)
+      : encryptMetaToken(token.access_token),
+    page_access_token_encrypted: page?.access_token ? encryptMetaToken(page.access_token) : current.page_access_token_encrypted || null,
     token_expires_at: token.token_expires_at,
-    scopes: token.scopes,
-    last_error: page?.access_token ? (instagram?.id || config.instagramBusinessAccountId ? null : "missing_instagram_business_account_id") : pageMissingReason
+    scopes: mergedScopes,
+    last_error: connected ? null : normalizedTarget === "facebook" ? pageMissingReason : "missing_instagram_business_account_id"
   });
   return { connection, page };
 }
@@ -1851,6 +1865,13 @@ async function loadMetaAccessToken(connection) {
   const encrypted = connection?.page_access_token_encrypted || connection?.access_token_encrypted;
   const accessToken = decryptMetaToken(encrypted);
   if (!accessToken) throw new Error("meta_access_token_missing");
+  return accessToken;
+}
+
+async function loadMetaInstagramAccessToken(connection) {
+  const encrypted = connection?.user_access_token_encrypted || connection?.access_token_encrypted;
+  const accessToken = decryptMetaToken(encrypted);
+  if (!accessToken) throw new Error("meta_instagram_access_token_missing");
   return accessToken;
 }
 
@@ -2169,11 +2190,14 @@ async function handleMetaOrganicOAuthStart(req, res, url) {
     return json(res, 500, { ok: false, error: "meta_oauth_not_configured", missing: envStatus.missing });
   }
   const returnTo = url.searchParams.get("return_to") || "/backoffice/marketing/meta";
-  const state = encodeOrganicOAuthState({ returnTo });
-  const result = buildMetaAuthorizationUrl({ state, scopes: META_REQUIRED_SCOPES });
+  const target = normalizeOAuthTarget(url.searchParams.get("target") || url.searchParams.get("platform") || "instagram");
+  const scopes = metaOrganicOAuthScopes({ target, env: process.env });
+  const state = encodeOrganicOAuthState({ returnTo, target });
+  console.log(`[Meta Organic OAuth] target=${target} scope=${scopes.join(",")}`);
+  const result = buildMetaAuthorizationUrl({ state, scopes });
   if (url.searchParams.get("format") === "json") {
     if (!assertAdmin(req, res)) return;
-    return json(res, 200, { ok: true, ...result, redirect_uri: envStatus.redirect_uri });
+    return json(res, 200, { ok: true, ...result, target, redirect_uri: envStatus.redirect_uri });
   }
   return redirect(res, result.url);
 }
@@ -2203,17 +2227,20 @@ async function handleMetaOrganicOAuthCallback(req, res, url) {
   }
 
   try {
+    const target = normalizeOAuthTarget(state.target || "instagram");
     const token = await exchangeMetaAuthorizationCode({ code });
     let pages = [];
-    try {
-      pages = await fetchManagedPages({ userAccessToken: token.access_token });
-    } catch (error) {
-      pages = [];
+    if (target !== "instagram") {
+      try {
+        pages = await fetchManagedPages({ userAccessToken: token.access_token });
+      } catch (error) {
+        pages = [];
+      }
     }
-    const { connection, page } = await saveDetectedMetaOrganicConnection(token, pages);
+    const { connection, page } = await saveDetectedMetaOrganicConnection(token, pages, target);
     const summary = summarizeMetaConnection(connection, process.env);
     return redirect(res, relativeWithQuery(state.returnTo, {
-      meta_oauth: page?.access_token ? "connected" : "needs_page",
+      meta_oauth: target === "facebook" ? (page?.access_token ? "connected" : "needs_page") : "connected",
       meta_status: summary.status
     }));
   } catch (error) {
@@ -2246,9 +2273,10 @@ async function handleMetaOrganicPublishTest(req, platform) {
   const payload = platform === "facebook" ? buildFacebookOrganicTestPost(process.env) : buildInstagramOrganicTestPost(process.env);
 
   try {
-    const accessToken = await loadMetaAccessToken(connection);
     if (platform === "facebook" && !pageId) throw new Error("meta_facebook_page_id_missing");
+    if (platform === "facebook" && !connection.page_access_token_encrypted) throw new Error("meta_facebook_page_access_token_missing");
     if (platform === "instagram" && !instagramAccountId) throw new Error("meta_instagram_business_account_id_missing");
+    const accessToken = platform === "instagram" ? await loadMetaInstagramAccessToken(connection) : await loadMetaAccessToken(connection);
     const result = await publishMetaToPlatform({
       platform,
       accessToken,

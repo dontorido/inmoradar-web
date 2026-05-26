@@ -1,7 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const adminHandler = require("../api/admin");
 
 const {
+  META_FACEBOOK_PAGE_SCOPES,
   META_POST_STATUSES,
   META_REQUIRED_SCOPES,
   buildAuthorizationUrl,
@@ -27,6 +29,7 @@ const {
   decodeOrganicOAuthState,
   encodeOrganicOAuthState,
   maskSecret,
+  metaOrganicOAuthScopes,
   validateMetaOrganicEnv
 } = require("../lib/meta/organic");
 
@@ -48,11 +51,60 @@ const validConnection = {
   facebook_page_id: "123",
   facebook_page_name: "InmoRadar",
   instagram_business_account_id: "456",
-  scopes: META_REQUIRED_SCOPES,
+  scopes: [...META_REQUIRED_SCOPES, ...META_FACEBOOK_PAGE_SCOPES],
   access_token_encrypted: "encrypted-token",
   page_access_token_encrypted: "encrypted-page-token",
   token_expires_at: new Date(Date.now() + 3600_000).toISOString()
 };
+
+async function withEnv(patch, callback) {
+  const previous = new Map();
+  for (const key of Object.keys(patch)) {
+    previous.set(key, process.env[key]);
+    if (patch[key] === undefined) delete process.env[key];
+    else process.env[key] = patch[key];
+  }
+  try {
+    return await callback();
+  } finally {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+function createJsonResponse() {
+  const chunks = [];
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[String(name).toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+  return {
+    res,
+    payload() {
+      return JSON.parse(chunks.join("") || "{}");
+    }
+  };
+}
+
+async function callMetaOAuthStart(query = "", env = validEnv) {
+  return withEnv({ ADMIN_IMPORT_TOKEN: "admin-test-token", ...env }, async () => {
+    const { res, payload } = createJsonResponse();
+    await adminHandler({
+      method: "GET",
+      url: `/api/admin?resource=meta/oauth/start&format=json${query ? `&${query.replace(/^&/, "")}` : ""}`,
+      headers: { authorization: "Bearer admin-test-token", host: "www.inmoradar.app" }
+    }, res);
+    return { statusCode: res.statusCode, payload: payload() };
+  });
+}
 
 const expensiveLanding = {
   slug: "saber-si-piso-esta-caro/granada",
@@ -105,7 +157,6 @@ test("no publica si falta conexion", () => {
 
 test("no publica si faltan permisos Meta", () => {
   const missing = missingRequiredScopes(["pages_show_list"]);
-  assert.ok(missing.includes("pages_manage_posts"));
   assert.ok(missing.includes("instagram_business_content_publish"));
   const decision = shouldRunAutopublisher({
     posts: [],
@@ -225,7 +276,8 @@ test("Instagram requiere imagen publica", async () => {
 test("OAuth Meta genera URL con permisos esperados", () => {
   const { url, scopes } = buildAuthorizationUrl({ state: "state", env: validEnv });
   assert.match(url, /facebook\.com\/v23\.0\/dialog\/oauth/);
-  assert.ok(scopes.includes("pages_manage_posts"));
+  assert.equal(scopes.includes("pages_manage_posts"), false);
+  assert.ok(scopes.includes("instagram_business_basic"));
   assert.ok(scopes.includes("instagram_business_content_publish"));
   assert.ok(url.includes(encodeURIComponent("https://www.inmoradar.app/api/meta/oauth/callback")));
 });
@@ -312,6 +364,37 @@ test("firma state OAuth organico sin exponer secretos", () => {
   const decoded = decodeOrganicOAuthState(state, validEnv, { now: 1770000000000 });
   assert.equal(decoded.returnTo, "/backoffice/marketing/meta");
   assert.equal(decoded.nonce, "nonce");
+  assert.equal(decoded.target, "instagram");
   assert.equal(maskSecret("abc123456789xyz"), "abc123...9xyz");
   assert.throws(() => decodeOrganicOAuthState(`${state}x`, validEnv, { now: 1770000000000 }), /meta_oauth_state_invalid/);
+});
+
+test("OAuth organico por defecto no pide scopes legacy ni Page scopes", async () => {
+  const { statusCode, payload } = await callMetaOAuthStart();
+  assert.equal(statusCode, 200);
+  const scope = new URL(payload.url).searchParams.get("scope");
+  assert.equal(scope, "instagram_business_basic,instagram_business_content_publish");
+  assert.equal(scope.includes("instagram_basic"), false);
+  assert.equal(scope.includes("instagram_content_publish"), false);
+  assert.equal(scope.includes("pages_manage_posts"), false);
+  assert.deepEqual(payload.scopes, ["instagram_business_basic", "instagram_business_content_publish"]);
+});
+
+test("OAuth organico solo activa legacy con flag explicito", async () => {
+  assert.deepEqual(metaOrganicOAuthScopes({ env: validEnv }), ["instagram_business_basic", "instagram_business_content_publish"]);
+  assert.deepEqual(
+    metaOrganicOAuthScopes({ env: { ...validEnv, META_ENABLE_LEGACY_INSTAGRAM_SCOPES: "true" } }),
+    ["instagram_basic", "instagram_content_publish"]
+  );
+
+  const { payload } = await callMetaOAuthStart("", { ...validEnv, META_ENABLE_LEGACY_INSTAGRAM_SCOPES: "true" });
+  const scope = new URL(payload.url).searchParams.get("scope");
+  assert.equal(scope, "instagram_basic,instagram_content_publish");
+});
+
+test("OAuth organico Facebook Page queda en flujo separado", async () => {
+  const { payload } = await callMetaOAuthStart("target=facebook");
+  const scope = new URL(payload.url).searchParams.get("scope");
+  assert.equal(scope, "pages_show_list,pages_read_engagement,pages_manage_posts");
+  assert.equal(payload.target, "facebook");
 });

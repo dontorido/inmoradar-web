@@ -339,6 +339,7 @@ const els = {
   metaRefresh: document.querySelector("[data-meta-refresh]"),
   metaTest: document.querySelector("[data-meta-test]"),
   metaConnect: document.querySelector("[data-meta-connect]"),
+  metaConnectFacebook: document.querySelector("[data-meta-connect-facebook]"),
   metaDisconnect: document.querySelector("[data-meta-disconnect]"),
   metaLoadPages: document.querySelector("[data-meta-load-pages]"),
   metaGenerateNext: document.querySelector("[data-meta-generate-next]"),
@@ -2899,6 +2900,7 @@ function renderMetaConnection() {
     <div class="admin-linkedin-status-row"><span>Facebook Page</span><strong>${escapeHtml(c.facebook_page_name || env.facebook_page_name || "-")}</strong></div>
     <div class="admin-linkedin-status-row"><span>Page ID</span><code>${escapeHtml(c.facebook_page_id || "-")}</code></div>
     <div class="admin-linkedin-status-row"><span>Instagram ID</span><code>${escapeHtml(c.instagram_business_account_id || "-")}</code></div>
+    <div class="admin-linkedin-status-row"><span>Facebook org&aacute;nico</span>${chip(c.facebook_publish_available ? "Disponible" : "Pendiente permisos Page", c.facebook_publish_available ? "published" : "draft")}</div>
     <div class="admin-linkedin-status-row"><span>Autopublisher</span>${chip(autopublisher.enabled ? "Activo" : "Pausado", autopublisher.enabled ? "published" : "draft")}</div>
     <div class="admin-linkedin-status-row"><span>Frecuencia</span><strong>${escapeHtml(`${autopublisher.frequency_days || 1} dia(s)`)}</strong></div>
     <div class="admin-linkedin-status-row"><span>Proximo intento</span><strong>${escapeHtml(formatDate(autopublisher.next_publication))}</strong></div>
@@ -2921,6 +2923,7 @@ function renderMetaOrganicStatus(payload = state.meta.organic || {}) {
     <div class="admin-linkedin-status-row"><span>Facebook Page</span><strong>${escapeHtml(payload.facebook_page_name || c.facebook_page_name || "-")}</strong></div>
     <div class="admin-linkedin-status-row"><span>Page ID</span><code>${escapeHtml(payload.facebook_page_id || c.facebook_page_id || "-")}</code></div>
     <div class="admin-linkedin-status-row"><span>Instagram ID</span><code>${escapeHtml(payload.instagram_account_id || c.instagram_business_account_id || "-")}</code></div>
+    <div class="admin-linkedin-status-row"><span>Facebook org&aacute;nico</span>${chip(c.facebook_publish_available ? "Disponible" : "Pendiente permisos Page", c.facebook_publish_available ? "published" : "draft")}</div>
     <div class="admin-linkedin-status-row"><span>Permisos concedidos</span><strong>${escapeHtml((payload.permissions || c.scopes || []).join(", ") || "-")}</strong></div>
     <div class="admin-linkedin-status-row"><span>Permisos faltantes</span><strong>${escapeHtml((payload.missing_scopes || c.missing_scopes || []).join(", ") || "-")}</strong></div>
     <div class="admin-linkedin-status-row"><span>Ultimo intento</span><strong>${escapeHtml(last ? `${last.platform || "-"} · ${metaStatusLabel(last.status)} · ${formatDate(last.created_at || last.published_at)}` : "-")}</strong></div>
@@ -3073,8 +3076,8 @@ async function pauseMetaAutopublisher() {
   showStatus("Meta Autopublisher pausado.", "good");
 }
 
-async function connectMeta() {
-  const payload = await api("/api/meta/oauth/start?format=json");
+async function connectMeta(target = "instagram") {
+  const payload = await api(`/api/meta/oauth/start?format=json&target=${encodeURIComponent(target)}`);
   if (payload.state) sessionStorage.setItem("inmoradar_meta_oauth_state", payload.state);
   if (!payload.url) throw new Error("meta_oauth_url_missing");
   window.location.href = payload.url;
@@ -6213,7 +6216,10 @@ if (els.metaTest) {
   els.metaTest.addEventListener("click", () => testMetaConnection().catch((error) => showStatus(error.message, "bad")));
 }
 if (els.metaConnect) {
-  els.metaConnect.addEventListener("click", () => connectMeta().catch((error) => showStatus(error.message, "bad")));
+  els.metaConnect.addEventListener("click", () => connectMeta("instagram").catch((error) => showStatus(error.message, "bad")));
+}
+if (els.metaConnectFacebook) {
+  els.metaConnectFacebook.addEventListener("click", () => connectMeta("facebook").catch((error) => showStatus(error.message, "bad")));
 }
 if (els.metaDisconnect) {
   els.metaDisconnect.addEventListener("click", () => disconnectMeta().catch((error) => showStatus(error.message, "bad")));

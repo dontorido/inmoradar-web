@@ -36,6 +36,7 @@ META_INSTAGRAM_BUSINESS_ACCOUNT_ID=
 META_GRAPH_VERSION=v23.0
 META_DEFAULT_IMAGE_URL=
 META_TEST_IMAGE_URL=
+META_ENABLE_LEGACY_INSTAGRAM_SCOPES=false
 ```
 
 Tambien deben existir las variables backend ya usadas por BackOffice:
@@ -84,15 +85,20 @@ https://www.inmoradar.app/api/meta/oauth/callback
 ```
 
 3. Activa productos/permisos necesarios para Facebook Login, Pages e Instagram Graph API.
-4. Prepara permisos:
+4. Para la spike inicial de Instagram, prepara permisos:
+
+- `instagram_business_basic`
+- `instagram_business_content_publish`
+
+El OAuth organico por defecto solo pide esos scopes de Instagram Business. No pide `instagram_basic` ni `instagram_content_publish`; solo se pedirian activando explicitamente `META_ENABLE_LEGACY_INSTAGRAM_SCOPES=true`, que debe quedar apagado para esta app.
+
+5. Para publicar tambien en Facebook Page, la app debe tener disponible el flujo/producto de Pages y estos permisos en un flujo separado:
 
 - `pages_show_list`
 - `pages_read_engagement`
 - `pages_manage_posts`
-- `instagram_business_basic`
-- `instagram_business_content_publish`
 
-El codigo acepta tambien los nombres legacy `instagram_basic` e `instagram_content_publish` como equivalentes al calcular permisos faltantes, porque Meta puede devolver scopes antiguos segun el tipo de app/caso de uso.
+El codigo acepta nombres legacy de Instagram al evaluar permisos ya concedidos, pero no los solicita en OAuth salvo con el flag legacy anterior.
 
 Algunos permisos pueden requerir App Review, verificacion de negocio o configuracion adicional en Meta Developers.
 
@@ -100,13 +106,12 @@ Algunos permisos pueden requerir App Review, verificacion de negocio o configura
 
 En `BackOffice > Marketing > Meta`:
 
-1. Pulsa `Conectar Meta`.
-2. Autoriza con un usuario que gestione la Page.
+1. Pulsa `Conectar Instagram`.
+2. Autoriza con un usuario que gestione la cuenta profesional de Instagram.
 3. Vuelve a `BackOffice > Marketing > Meta`.
-4. Si no se selecciona la Page automaticamente, pulsa `Cargar Pages`.
-5. Selecciona la Facebook Page de InmoRadar.
-6. Guarda la Page. El sistema detecta `instagram_business_account` si existe.
-7. Usa `Estado` o `Probar conexion` antes de publicar.
+4. Usa `Estado` o `Probar conexion` antes de publicar en Instagram.
+5. Solo cuando la app tenga permisos Page disponibles, pulsa `Conectar Facebook Page`.
+6. Pulsa `Cargar Pages`, selecciona la Facebook Page de InmoRadar y guarda la Page.
 
 El endpoint nunca devuelve tokens al cliente. La lista de Pages se sanea y solo muestra id, nombre, tareas/permisos e Instagram vinculado.
 
@@ -114,11 +119,23 @@ El endpoint nunca devuelve tokens al cliente. La lista de Pages se sanea y solo 
 
 Endpoints exactos:
 
-- `GET /api/meta/oauth/start`: inicia OAuth y redirige a Meta. Desde BackOffice se usa `?format=json` con `ADMIN_IMPORT_TOKEN` para obtener la URL sin exponer secretos.
+- `GET /api/meta/oauth/start`: inicia OAuth y redirige a Meta. Desde BackOffice se usa `?format=json` con `ADMIN_IMPORT_TOKEN` para obtener la URL sin exponer secretos. Por defecto usa `target=instagram`; `target=facebook` pide solo permisos Page.
 - `GET /api/meta/oauth/callback`: recibe `code`, intercambia token, detecta Pages disponibles y guarda la conexion en `marketing_meta_connections`.
 - `GET /api/meta/status`: protegido por `ADMIN_IMPORT_TOKEN`; devuelve conexion, permisos, Page, Instagram, ultimo intento y ultimo error sin tokens.
 - `POST /api/meta/publish-test-facebook`: protegido por `ADMIN_IMPORT_TOKEN`; publica el test organico en la Page.
 - `POST /api/meta/publish-test-instagram`: protegido por `ADMIN_IMPORT_TOKEN`; crea media container y publica el test organico en Instagram.
+
+Scopes OAuth por defecto:
+
+```txt
+instagram_business_basic,instagram_business_content_publish
+```
+
+Scopes OAuth del flujo separado de Facebook Page:
+
+```txt
+pages_show_list,pages_read_engagement,pages_manage_posts
+```
 
 Copy Facebook:
 
