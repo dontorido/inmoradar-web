@@ -242,6 +242,100 @@ test("extension usage summary counts real users, sessions, activation and breakd
   assert.equal(summary.timeseries.find((row) => row.date === "2026-05-20").completed_analyses, 1);
 });
 
+test("extension usage acquisition matches daily classification and keeps unattributed sessions", () => {
+  const rows = [
+    {
+      event_name: "extension_opened",
+      anonymous_id_hash: "u-new-1",
+      session_id_hash: "s1",
+      metadata: { utm_source: "Google", utm_medium: "Organic", utm_campaign: "Launch A" },
+      created_at: "2026-05-26T08:00:00.000Z"
+    },
+    {
+      event_name: "analysis_completed",
+      anonymous_id_hash: "u-new-2",
+      session_id_hash: "s2",
+      metadata: { utm_source: "Google", utm_medium: "Organic", utm_campaign: "Launch A" },
+      created_at: "2026-05-26T08:01:00.000Z"
+    },
+    {
+      event_name: "extension_opened",
+      anonymous_id_hash: "u-new-3",
+      session_id_hash: "s3",
+      metadata: { acquisition_source: "Newsletter", utm_medium: "Email" },
+      created_at: "2026-05-26T08:02:00.000Z"
+    },
+    {
+      event_name: "extension_opened",
+      anonymous_id_hash: "u-returning",
+      session_id_hash: "s4",
+      metadata: { utm_source: "Google", utm_medium: "Organic", utm_campaign: "Launch A" },
+      created_at: "2026-05-26T08:03:00.000Z"
+    },
+    {
+      event_name: "heartbeat",
+      anonymous_id_hash: "u-returning",
+      session_id_hash: "s5",
+      created_at: "2026-05-26T08:04:00.000Z"
+    },
+    {
+      event_name: "extension_opened",
+      anonymous_id_hash: "u-unclassified",
+      session_id_hash: "s6",
+      created_at: "2026-05-26T08:05:00.000Z"
+    }
+  ];
+
+  const summary = summarizeExtensionUsage(rows, new Date("2026-05-26T09:00:00.000Z"), {
+    timeZone: "Europe/Madrid",
+    rangeStart: "2026-05-25T22:00:00.000Z",
+    rangeEnd: "2026-05-26T21:59:59.999Z",
+    rangeFromDate: "2026-05-26",
+    rangeToDate: "2026-05-26",
+    knownUsersBeforeRange: ["u-returning", "u-unclassified"]
+  });
+  const day = summary.timeseries.find((row) => row.date === "2026-05-26");
+  const acquisitionTotals = summary.acquisition.reduce(
+    (acc, row) => {
+      acc.users += row.users;
+      acc.newUsers += row.new_users;
+      acc.returningUsers += row.returning_users;
+      acc.unclassifiedUsers += row.unclassified_users;
+      acc.sessions += row.sessions;
+      return acc;
+    },
+    { users: 0, newUsers: 0, returningUsers: 0, unclassifiedUsers: 0, sessions: 0 }
+  );
+  const unknown = summary.acquisition.find((row) => row.source === "unknown" && row.medium === "unknown" && row.campaign === "-");
+  const google = summary.acquisition.find((row) => row.source === "google");
+
+  assert.equal(summary.kpis.unique_users, 5);
+  assert.equal(summary.kpis.new_users, 3);
+  assert.equal(summary.kpis.returning_users, 1);
+  assert.equal(summary.kpis.unclassified_users, 1);
+  assert.equal(summary.kpis.sessions, 6);
+  assert.equal(day.unique_users, 5);
+  assert.equal(day.new_users, 3);
+  assert.equal(day.returning_users, 1);
+  assert.equal(day.unclassified_users, 1);
+  assert.equal(day.sessions, 6);
+  assert.deepEqual(acquisitionTotals, {
+    users: 5,
+    newUsers: 3,
+    returningUsers: 1,
+    unclassifiedUsers: 1,
+    sessions: 6
+  });
+  assert.equal(unknown.sessions, 2);
+  assert.equal(unknown.users, 1);
+  assert.equal(unknown.unclassified_users, 1);
+  assert.equal(google.users, 3);
+  assert.equal(google.new_users, 2);
+  assert.equal(google.returning_users, 1);
+  assert.equal(google.sessions, 3);
+  assert.equal(google.analyses, 1);
+});
+
 test("extension usage duration uses explicit session_end duration", () => {
   const rows = [
     {

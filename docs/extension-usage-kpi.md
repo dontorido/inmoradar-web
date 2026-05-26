@@ -87,13 +87,26 @@ El endpoint limita la lectura a 10.000 eventos por defecto y permite hasta 20.00
 
 - Usuarios reales: instalaciones o usuarios anonimos distintos por `anonymous_id_hash`.
 - Nuevos usuarios: usuarios cuyo primer evento conocido cae dentro del rango.
-- Usuarios recurrentes: usuarios con actividad en mas de un dia o en mas de una sesion dentro del rango.
+- Usuarios recurrentes: usuarios ya conocidos antes del rango y con actividad en mas de un dia o en mas de una sesion dentro del rango.
+- Usuarios sin clasificar: usuarios activos que no pueden clasificarse como nuevos ni recurrentes con los datos disponibles. Se expone para que `usuarios = nuevos + recurrentes + sin clasificar`.
 - Sesiones: `session_id_hash` distinto; si falta, eventos del mismo usuario agrupados por ventanas de 30 minutos.
 - Eventos: total de eventos anonimos en el rango.
 - Analisis realizados: `analysis_completed`, `page_analyzed` o `page_analysis_completed`.
 - Activacion: usuarios del rango con al menos un analisis realizado / usuarios reales del rango.
 - Eventos por usuario: eventos / usuarios reales.
 - Sesiones por usuario: sesiones / usuarios reales.
+
+## Adquisicion por fuente
+
+La tabla de dashboard `Adquisicion por fuente` usa la misma base que `Evolucion diaria`: `extension_usage_events` filtrado por el mismo rango y zona horaria. Por eso `usuarios`, `nuevos`, `recurrentes`, `sin clasificar` y `sesiones` deben sumar contra la serie diaria del mismo rango.
+
+La atribucion se toma de `metadata.utm_source`, `metadata.install_source`, `metadata.acquisition_source`, `metadata.utm_medium` y `metadata.utm_campaign` cuando existan. Si una sesion no trae atribucion, se agrupa explicitamente como:
+
+- `source`: `unknown`
+- `medium`: `unknown`
+- `campaign`: `-`
+
+Los clics de CTA o Chrome Store son intencion web y no instalacion real; cuando no estan disponibles en esta tabla se devuelven como `null` para que el BackOffice muestre `-`, no `0`.
 
 ## Tiempo de uso
 
@@ -122,6 +135,7 @@ Si solo hay eventos aislados y no hay heartbeat/duracion, el BackOffice muestra 
     "unique_users": 12,
     "new_users": 4,
     "returning_users": 3,
+    "unclassified_users": 5,
     "sessions": 22,
     "events": 180,
     "completed_analyses": 38,
@@ -135,6 +149,19 @@ Si solo hay eventos aislados y no hay heartbeat/duracion, el BackOffice muestra 
     "versions": [],
     "events": []
   },
+  "acquisition": [
+    {
+      "source": "unknown",
+      "medium": "unknown",
+      "campaign": "-",
+      "users": 5,
+      "new_users": 2,
+      "returning_users": 1,
+      "unclassified_users": 2,
+      "sessions": 8,
+      "analyses": 3
+    }
+  ],
   "timeseries": []
 }
 ```
