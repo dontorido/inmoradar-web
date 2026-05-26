@@ -3,7 +3,7 @@
 Meta Autopublisher publica contenido de InmoRadar en:
 
 - Facebook Page de InmoRadar.
-- Instagram Business o Creator vinculado a esa Page.
+- Instagram Business o Creator conectado con Instagram API with Instagram Login.
 
 No usa scraping, navegador automatizado, credenciales manuales, perfiles personales, likes, follows, comentarios ni DMs.
 
@@ -23,6 +23,11 @@ META_AUTOPOST_FREQUENCY_DAYS=1
 META_AUTOPOST_MAX_PER_DAY=1
 META_AUTOPOST_TIME=10:00
 META_AUTOPOST_TIMEZONE=Europe/Madrid
+
+INSTAGRAM_APP_ID=
+INSTAGRAM_APP_SECRET=
+INSTAGRAM_REDIRECT_URI=https://www.inmoradar.app/api/meta/oauth/callback
+INSTAGRAM_GRAPH_VERSION=v23.0
 
 META_APP_ID=
 META_APP_SECRET=
@@ -77,26 +82,83 @@ Estados de posts:
 
 ## Meta Developers
 
-1. Crea o abre la Meta App de InmoRadar.
-2. Configura OAuth redirect URI:
+Hay dos IDs distintos:
+
+- `INSTAGRAM_APP_ID`: identificador de aplicacion de Instagram, por ejemplo `14386908146755569`, visible en `Casos de uso > Administrar mensajes y contenido en Instagram > API de Instagram > Configuracion de la API con el inicio de sesion de Instagram`.
+- `META_APP_ID`: App ID principal de Meta/Facebook, usado solo para Facebook Login y Facebook Page.
+
+No intercambies estos IDs. Instagram Login no debe usar el dialog de Facebook.
+
+### Instagram API with Instagram Login
+
+1. Abre la Meta App de InmoRadar.
+2. En `Casos de uso > Administrar mensajes y contenido en Instagram > API de Instagram > Configuracion de la API con el inicio de sesion de Instagram`, copia:
+
+- Identificador de aplicacion de Instagram -> `INSTAGRAM_APP_ID`.
+- Clave secreta de aplicacion de Instagram -> `INSTAGRAM_APP_SECRET`.
+
+3. Configura OAuth redirect URI de Instagram:
 
 ```txt
 https://www.inmoradar.app/api/meta/oauth/callback
 ```
 
-3. Activa productos/permisos necesarios para Facebook Login, Pages e Instagram Graph API.
-4. Para la spike inicial de Instagram, prepara permisos:
+4. En Vercel, guarda la misma URL en:
+
+```env
+INSTAGRAM_REDIRECT_URI=https://www.inmoradar.app/api/meta/oauth/callback
+```
+
+5. Para la spike inicial de Instagram, prepara permisos:
 
 - `instagram_business_basic`
 - `instagram_business_content_publish`
 
-El OAuth organico por defecto solo pide esos scopes de Instagram Business. No pide `instagram_basic` ni `instagram_content_publish`; solo se pedirian activando explicitamente `META_ENABLE_LEGACY_INSTAGRAM_SCOPES=true`, que debe quedar apagado para esta app.
+El OAuth organico por defecto usa:
 
-5. Para publicar tambien en Facebook Page, la app debe tener disponible el flujo/producto de Pages y estos permisos en un flujo separado:
+```txt
+https://www.instagram.com/oauth/authorize
+```
+
+con `client_id=INSTAGRAM_APP_ID`. No usa `https://www.facebook.com/{version}/dialog/oauth` para Instagram.
+
+El intercambio del `code` usa:
+
+```txt
+https://api.instagram.com/oauth/access_token
+```
+
+y luego intenta obtener token de larga duracion con:
+
+```txt
+https://graph.instagram.com/access_token
+```
+
+El flujo Instagram no pide `instagram_basic` ni `instagram_content_publish`; solo se pedirian activando explicitamente `META_ENABLE_LEGACY_INSTAGRAM_SCOPES=true`, que debe quedar apagado para esta app.
+
+### Facebook Page
+
+Para publicar tambien en Facebook Page, configura el App ID principal de Meta/Facebook:
+
+```env
+META_APP_ID=
+META_APP_SECRET=
+META_REDIRECT_URI=https://www.inmoradar.app/api/meta/oauth/callback
+```
+
+La app debe tener disponible el flujo/producto de Pages y estos permisos en un flujo separado:
 
 - `pages_show_list`
 - `pages_read_engagement`
 - `pages_manage_posts`
+
+El flujo Facebook Page usa:
+
+```txt
+https://www.facebook.com/{META_GRAPH_VERSION}/dialog/oauth
+```
+
+con `client_id=META_APP_ID`.
 
 El codigo acepta nombres legacy de Instagram al evaluar permisos ya concedidos, pero no los solicita en OAuth salvo con el flag legacy anterior.
 
@@ -119,7 +181,8 @@ El endpoint nunca devuelve tokens al cliente. La lista de Pages se sanea y solo 
 
 Endpoints exactos:
 
-- `GET /api/meta/oauth/start`: inicia OAuth y redirige a Meta. Desde BackOffice se usa `?format=json` con `ADMIN_IMPORT_TOKEN` para obtener la URL sin exponer secretos. Por defecto usa `target=instagram`; `target=facebook` pide solo permisos Page.
+- `GET /api/meta/oauth/start?target=instagram`: inicia Instagram Login y redirige a `https://www.instagram.com/oauth/authorize` con `INSTAGRAM_APP_ID`.
+- `GET /api/meta/oauth/start?target=facebook`: inicia Facebook Login y redirige a `https://www.facebook.com/{META_GRAPH_VERSION}/dialog/oauth` con `META_APP_ID`.
 - `GET /api/meta/oauth/callback`: recibe `code`, intercambia token, detecta Pages disponibles y guarda la conexion en `marketing_meta_connections`.
 - `GET /api/meta/status`: protegido por `ADMIN_IMPORT_TOKEN`; devuelve conexion, permisos, Page, Instagram, ultimo intento y ultimo error sin tokens.
 - `POST /api/meta/publish-test-facebook`: protegido por `ADMIN_IMPORT_TOKEN`; publica el test organico en la Page.
@@ -175,13 +238,13 @@ Registra `external_post_id`, `published_url` si Meta lo devuelve o se puede cons
 
 ## Publicacion Instagram
 
-Instagram usa Content Publishing API:
+Instagram usa Content Publishing API con Instagram Login:
 
 1. crea media container con `image_url` publica y caption;
 2. publica el container;
 3. intenta recuperar `permalink`.
 
-Instagram requiere una cuenta Business/Creator vinculada a la Page y una imagen publica. Si falta imagen publica o cuenta de Instagram, el post queda `failed` o `skipped`; no se publica contenido roto.
+El flujo Instagram usa endpoints `graph.instagram.com/{INSTAGRAM_GRAPH_VERSION}` y un token de usuario de Instagram. Requiere una cuenta Business/Creator, permisos concedidos y una imagen publica. Si falta imagen publica o cuenta de Instagram, el post queda `failed` o `skipped`; no se publica contenido roto.
 
 Ejemplo UTM:
 

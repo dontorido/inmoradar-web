@@ -83,12 +83,13 @@ const {
 const {
   META_MANUAL_MODE_NOTICE,
   META_PLATFORMS,
-  buildAuthorizationUrl: buildMetaAuthorizationUrl,
+  buildOrganicAuthorizationUrl,
   buildMetaPost,
   decryptToken: decryptMetaToken,
   defaultSettings: defaultMetaSettings,
   encryptToken: encryptMetaToken,
   exchangeAuthorizationCode: exchangeMetaAuthorizationCode,
+  exchangeInstagramAuthorizationCode,
   fetchManagedPages,
   generateMetaImageSvg,
   imageUrlForLanding,
@@ -1727,7 +1728,9 @@ async function saveDetectedMetaOrganicConnection(token, pages = [], target = "in
   const instagram = page?.instagram_business_account || null;
   const config = metaConfig(process.env);
   const pageMissingReason = config.facebookPageId && !page ? "meta_configured_page_not_found" : "meta_page_selection_required";
-  const instagramAccountId = instagram?.id || current.instagram_business_account_id || config.instagramBusinessAccountId || null;
+  const instagramAccountId = normalizedTarget === "instagram"
+    ? token.user_id || current.instagram_business_account_id || config.instagramBusinessAccountId || null
+    : instagram?.id || current.instagram_business_account_id || config.instagramBusinessAccountId || null;
   const facebookPageId = page?.id || current.facebook_page_id || null;
   const facebookPageName = page?.name || current.facebook_page_name || null;
   const mergedScopes = [...new Set([...(Array.isArray(current.scopes) ? current.scopes : []), ...(Array.isArray(token.scopes) ? token.scopes : [])])];
@@ -2101,7 +2104,7 @@ async function handleMetaConnect(req, url) {
   const target = normalizeOAuthTarget(url.searchParams.get("target") || url.searchParams.get("platform") || "instagram");
   const scopes = metaOrganicOAuthScopes({ target, env: process.env });
   console.log(`[Meta Organic OAuth] legacy connect target=${target} scope=${scopes.join(",")}`);
-  const result = buildMetaAuthorizationUrl({ scopes });
+  const result = buildOrganicAuthorizationUrl({ target, scopes });
   return { status: 200, payload: { ok: true, ...result, target } };
 }
 
@@ -2185,16 +2188,16 @@ async function handleMetaTestConnection(req) {
 
 async function handleMetaOrganicOAuthStart(req, res, url) {
   if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
-  const envStatus = validateMetaOrganicEnv(process.env);
+  const target = normalizeOAuthTarget(url.searchParams.get("target") || url.searchParams.get("platform") || "instagram");
+  const envStatus = validateMetaOrganicEnv(process.env, { target });
   if (!envStatus.ok) {
     return json(res, 500, { ok: false, error: "meta_oauth_not_configured", missing: envStatus.missing });
   }
   const returnTo = url.searchParams.get("return_to") || "/backoffice/marketing/meta";
-  const target = normalizeOAuthTarget(url.searchParams.get("target") || url.searchParams.get("platform") || "instagram");
   const scopes = metaOrganicOAuthScopes({ target, env: process.env });
   const state = encodeOrganicOAuthState({ returnTo, target });
   console.log(`[Meta Organic OAuth] target=${target} scope=${scopes.join(",")}`);
-  const result = buildMetaAuthorizationUrl({ state, scopes });
+  const result = buildOrganicAuthorizationUrl({ target, state, scopes });
   if (url.searchParams.get("format") === "json") {
     if (!assertAdmin(req, res)) return;
     return json(res, 200, { ok: true, ...result, target, redirect_uri: envStatus.redirect_uri });
@@ -2228,7 +2231,9 @@ async function handleMetaOrganicOAuthCallback(req, res, url) {
 
   try {
     const target = normalizeOAuthTarget(state.target || "instagram");
-    const token = await exchangeMetaAuthorizationCode({ code });
+    const token = target === "instagram"
+      ? await exchangeInstagramAuthorizationCode({ code })
+      : await exchangeMetaAuthorizationCode({ code });
     let pages = [];
     if (target !== "instagram") {
       try {
