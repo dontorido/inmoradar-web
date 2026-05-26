@@ -71,6 +71,9 @@ function supabaseMockFetch(url) {
   if (path.startsWith("premium_subscriptions?select=email,status")) {
     return jsonResponse([{ email: "client@example.com", status: "active" }]);
   }
+  if (path.startsWith("saved_property_email_reports?provider=eq.cloudflare_email_service_share")) {
+    return jsonResponse([{ id: "share-1" }, { id: "share-2" }, { id: "share-3" }]);
+  }
   if (path.startsWith("premium_revenue_events?")) return jsonResponse([]);
   if (path.startsWith("premium_subscriptions?select=email,event_name")) return jsonResponse([]);
   if (path.startsWith("seo_landings?select=status,index_status")) {
@@ -481,6 +484,7 @@ test("admin read-only router preserves summary payload shape", async () => {
   assert.equal(result.payload.ok, true);
   assert.ok(result.payload.generated_at);
   assert.equal(result.payload.premium.total, 2);
+  assert.equal(result.payload.premium.saved_report_shares, 3);
   assert.equal(result.payload.seo.total_landings, 2);
   assert.equal(result.payload.parking.total_cache_rows, 1);
 });

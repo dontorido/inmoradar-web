@@ -29,6 +29,7 @@ const rewrites = {
   "/api/analytics/event": "/api/market-price?resource=owned-analytics-event",
   "/api/saved-properties/email-report": "/api/check-premium?resource=saved-properties-email-report",
   "/api/saved-properties/report": "/api/check-premium?resource=saved-properties-report",
+  "/api/saved-properties/share": "/api/check-premium?resource=saved-properties-share",
   "/api/admin/summary": "/api/admin?resource=summary",
   "/api/admin/premium/subscriptions": "/api/admin?resource=premium/subscriptions",
   "/api/admin/seo/landings": "/api/admin?resource=seo/landings",

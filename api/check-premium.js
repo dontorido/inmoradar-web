@@ -14,6 +14,8 @@ const { buildCloudflareEmailPayload, buildSavedPropertiesEmail } = require("./_r
 
 const DAILY_REPORT_LIMIT = 5;
 const REPORT_ACCESS_TTL_DAYS = 14;
+const REPORT_PROVIDER = "cloudflare_email_service";
+const SHARE_REPORT_PROVIDER = "cloudflare_email_service_share";
 
 function requestUrl(req) {
   return new URL(req.url || "/", `https://${req.headers.host || "www.inmoradar.app"}`);
@@ -97,7 +99,7 @@ async function countReportsToday(email) {
   }
 }
 
-async function createReportAccess({ email, report, tokenHash, expiresAt }) {
+async function createReportAccess({ email, report, tokenHash, expiresAt, provider = REPORT_PROVIDER }) {
   if (!hasSupabaseConfig()) throw new Error("Supabase is not configured");
   const reportJson = reportAccessJson(report);
   try {
@@ -109,7 +111,7 @@ async function createReportAccess({ email, report, tokenHash, expiresAt }) {
           email,
           properties_count: report.summary.count,
           status: "sent",
-          provider: "cloudflare_email_service",
+          provider,
           access_token_hash: tokenHash,
           access_token_expires_at: expiresAt,
           report_json: reportJson
@@ -127,7 +129,7 @@ async function createReportAccess({ email, report, tokenHash, expiresAt }) {
           email,
           properties_count: report.summary.count,
           status: "sent",
-          provider: "cloudflare_email_service",
+          provider,
           provider_response_json: {
             access_token_hash: tokenHash,
             access_token_expires_at: expiresAt,
@@ -141,6 +143,37 @@ async function createReportAccess({ email, report, tokenHash, expiresAt }) {
     });
     return { mode: "legacy", fallback_from: modernError.message || "modern_report_access_failed" };
   }
+}
+
+async function findSavedPropertiesReportByTokenHash(tokenHash) {
+  let record = null;
+  try {
+    const modernRows = await supabaseFetch(
+      `saved_property_email_reports?access_token_hash=eq.${encodeURIComponent(tokenHash)}&status=eq.sent&select=email,properties_count,provider,report_json,access_token_expires_at,created_at,status&limit=1`,
+      { timeoutMs: 3000 }
+    );
+    record = Array.isArray(modernRows) ? modernRows[0] || null : null;
+  } catch {
+    record = null;
+  }
+  if (record?.report_json) return record;
+
+  const legacyRows = await supabaseFetch(
+    `saved_property_email_reports?error_text=eq.${encodeURIComponent(legacyReportAccessMarker(tokenHash))}&status=eq.sent&select=email,properties_count,provider,provider_response_json,created_at,status&limit=1`,
+    { timeoutMs: 3000 }
+  );
+  const legacyRecord = Array.isArray(legacyRows) ? legacyRows[0] || null : null;
+  const legacyJson = legacyRecord?.provider_response_json || null;
+  if (!legacyJson?.report_json) return null;
+  return {
+    email: legacyRecord.email,
+    properties_count: legacyRecord.properties_count,
+    provider: legacyRecord.provider,
+    report_json: legacyJson.report_json,
+    access_token_expires_at: legacyJson.access_token_expires_at || null,
+    created_at: legacyRecord.created_at,
+    status: legacyRecord.status
+  };
 }
 
 async function updateReportAccess({ tokenHash, storageMode = "modern", status, providerResponse = null, errorText = null }) {
@@ -277,7 +310,7 @@ async function handleSavedPropertiesEmailReport(req, res) {
       properties_count: report.summary.count,
       report_url: report.reportUrl,
       expires_at: expiresAt,
-      provider: "cloudflare_email_service",
+      provider: REPORT_PROVIDER,
       delivered: providerResponse?.result?.delivered || [],
       queued: providerResponse?.result?.queued || [],
       sent_at: new Date().toISOString()
@@ -302,6 +335,102 @@ async function handleSavedPropertiesEmailReport(req, res) {
   }
 }
 
+async function handleSavedPropertiesShare(req, res) {
+  if (req.method !== "POST") {
+    json(res, 405, { ok: false, error: "method_not_allowed" });
+    return;
+  }
+
+  const body = await readJsonBody(req);
+  const token = body.token || requestUrl(req).searchParams.get("token") || req.query?.token || "";
+  const email = normalizeEmail(body.email || body.recipientEmail);
+  if (!/^imr_[A-Za-z0-9_-]{32,120}$/.test(token)) {
+    json(res, 400, { ok: false, error: "invalid_token" });
+    return;
+  }
+  if (!isEmail(email)) {
+    json(res, 400, { ok: false, error: "invalid_email" });
+    return;
+  }
+  if (!hasSupabaseConfig()) {
+    json(res, 503, { ok: false, error: "report_store_not_configured" });
+    return;
+  }
+
+  const sourceTokenHash = hashReportToken(token);
+  const sourceRecord = await findSavedPropertiesReportByTokenHash(sourceTokenHash);
+  if (!sourceRecord?.report_json) {
+    json(res, 404, { ok: false, error: "report_not_found" });
+    return;
+  }
+  if (sourceRecord.access_token_expires_at && new Date(sourceRecord.access_token_expires_at).getTime() < Date.now()) {
+    json(res, 410, { ok: false, error: "report_expired" });
+    return;
+  }
+
+  const properties = Array.isArray(sourceRecord.report_json.rows) ? sourceRecord.report_json.rows : [];
+  if (!properties.length) {
+    json(res, 400, { ok: false, error: "properties_required" });
+    return;
+  }
+
+  const accessToken = createReportToken();
+  const tokenHash = hashReportToken(accessToken);
+  const expiresAt = reportExpiresAt();
+  const report = buildSavedPropertiesEmail({
+    email,
+    properties,
+    reportUrl: reportUrlForToken(req, accessToken),
+    siteUrl: publicSiteUrl(req)
+  });
+  const reportAccess = await createReportAccess({
+    email,
+    report,
+    tokenHash,
+    expiresAt,
+    provider: SHARE_REPORT_PROVIDER
+  });
+  const payload = buildCloudflareEmailPayload({
+    email,
+    from: cloudflareEmailConfig().from,
+    report
+  });
+
+  try {
+    const providerResponse = await sendCloudflareEmail(payload);
+    await updateReportAccess({ tokenHash, storageMode: reportAccess.mode, status: "sent", providerResponse });
+    json(res, 200, {
+      ok: true,
+      shared: true,
+      email,
+      properties_count: report.summary.count,
+      report_url: report.reportUrl,
+      expires_at: expiresAt,
+      provider: SHARE_REPORT_PROVIDER,
+      delivered: providerResponse?.result?.delivered || [],
+      queued: providerResponse?.result?.queued || [],
+      sent_at: new Date().toISOString()
+    });
+  } catch (error) {
+    await updateReportAccess({
+      tokenHash,
+      storageMode: reportAccess.mode,
+      status: "failed",
+      providerResponse: error.providerResponse || null,
+      errorText: error.message
+    });
+    json(res, error.status || 500, {
+      ok: false,
+      shared: false,
+      error: error.message || "email_send_failed",
+      message:
+        error.message === "cloudflare_email_not_configured"
+          ? "Faltan las variables de Cloudflare Email Service en Vercel."
+          : "No se ha podido compartir el informe ahora."
+    });
+  }
+}
+
 async function handleSavedPropertiesReport(req, res) {
   if (req.method !== "GET") {
     json(res, 405, { ok: false, error: "method_not_allowed" });
@@ -317,33 +446,7 @@ async function handleSavedPropertiesReport(req, res) {
     return;
   }
   const tokenHash = hashReportToken(token);
-  let record = null;
-  try {
-    const modernRows = await supabaseFetch(
-      `saved_property_email_reports?access_token_hash=eq.${encodeURIComponent(tokenHash)}&status=eq.sent&select=properties_count,report_json,access_token_expires_at,created_at,status&limit=1`,
-      { timeoutMs: 3000 }
-    );
-    record = Array.isArray(modernRows) ? modernRows[0] || null : null;
-  } catch {
-    record = null;
-  }
-  if (!record?.report_json) {
-    const legacyRows = await supabaseFetch(
-      `saved_property_email_reports?error_text=eq.${encodeURIComponent(legacyReportAccessMarker(tokenHash))}&status=eq.sent&select=properties_count,provider_response_json,created_at,status&limit=1`,
-      { timeoutMs: 3000 }
-    );
-    const legacyRecord = Array.isArray(legacyRows) ? legacyRows[0] || null : null;
-    const legacyJson = legacyRecord?.provider_response_json || null;
-    if (legacyJson?.report_json) {
-      record = {
-        properties_count: legacyRecord.properties_count,
-        report_json: legacyJson.report_json,
-        access_token_expires_at: legacyJson.access_token_expires_at || null,
-        created_at: legacyRecord.created_at,
-        status: legacyRecord.status
-      };
-    }
-  }
+  const record = await findSavedPropertiesReportByTokenHash(tokenHash);
   if (!record?.report_json) {
     json(res, 404, { ok: false, error: "report_not_found" });
     return;
@@ -415,6 +518,10 @@ module.exports = async function handler(req, res) {
       await handleSavedPropertiesReport(req, res);
       return;
     }
+    if (resource === "saved-properties-share") {
+      await handleSavedPropertiesShare(req, res);
+      return;
+    }
     await handlePremiumCheck(req, res);
   } catch (error) {
     console.error("[check-premium]", error);
@@ -430,5 +537,7 @@ module.exports._private = {
   buildSavedPropertiesEmail,
   cloudflareEmailConfig,
   countReportsToday,
-  findSubscription
+  findSavedPropertiesReportByTokenHash,
+  findSubscription,
+  SHARE_REPORT_PROVIDER
 };

@@ -144,7 +144,7 @@ function normalizeReportProperty(property = {}, index = 0) {
   const price = asNumber(property.price);
   const surface = asNumber(property.surfaceM2 || property.area || property.surface || property.sizeM2);
   const eurM2 = asNumber(property.eurM2 || property.pricePerM2 || (price && surface ? price / surface : null));
-  const reference = asNumber(market.reference || property.marketReference || property.referenceEurM2);
+  const reference = asNumber(market.reference || property.reference || property.marketReference || property.referenceEurM2);
   const differencePct = asNumber(market.differencePct ?? property.differencePct ?? property.marketDiff);
   const savedAt = property.savedAt || property.updatedAt || property.createdAt || null;
   const imageUrl = safeUrl(
@@ -161,7 +161,7 @@ function normalizeReportProperty(property = {}, index = 0) {
     id: cleanText(property.id || property.url || `${property.address || property.title}-${property.price}`, ""),
     title: cleanText(property.address || property.title, "Inmueble guardado"),
     location: cleanText(
-      property.municipality || property.zone || property.district || property.region || property.city || property.province,
+      property.location || property.municipality || property.zone || property.district || property.region || property.city || property.province,
       "Zona no detectada"
     ),
     portal: cleanText(property.portal || property.source || "Portal"),
@@ -180,7 +180,7 @@ function normalizeReportProperty(property = {}, index = 0) {
     transport: cleanText(property.transportSummary || property.commute?.work1?.driving || property.commute?.work1?.transit),
     monthlyMortgage: asNumber(property.mortgageMonthly ?? property.mortgage),
     monthlyTotal: monthlyCost(property),
-    downPayment: asNumber(property.total || property.downPayment?.total),
+    downPayment: asNumber(property.total || property.downPayment?.total || property.downPayment),
     ibi: cleanText(property.ibi || property.ibiEstimate?.annualMin),
     decisionStatus: cleanText(property.decisionStatus || "pending", "pending"),
     decisionStatusLabel: statusLabel(property.decisionStatus),

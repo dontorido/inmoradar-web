@@ -264,6 +264,7 @@ test("servidor local cubre rewrites operativas clave de Vercel", () => {
   assert.match(localServer, /"\/api\/extension-usage": "\/api\/extension-version\?resource=usage"/);
   assert.match(localServer, /"\/api\/saved-properties\/email-report": "\/api\/check-premium\?resource=saved-properties-email-report"/);
   assert.match(localServer, /"\/api\/saved-properties\/report": "\/api\/check-premium\?resource=saved-properties-report"/);
+  assert.match(localServer, /"\/api\/saved-properties\/share": "\/api\/check-premium\?resource=saved-properties-share"/);
   assert.match(localServer, /"\/api\/admin\/seo-autogenerate\/run": "\/api\/admin\?resource=seo-autogenerate\/run"/);
   assert.match(localServer, /"\/api\/admin\/meta": "\/api\/admin\?resource=meta"/);
   assert.match(localServer, /"\/api\/kpi-settings": "\/api\/market-price\?resource=kpi-settings"/);
@@ -271,6 +272,28 @@ test("servidor local cubre rewrites operativas clave de Vercel", () => {
   assert.match(localServer, /"\/metodologia": "\/metodologia\.html"/);
   assert.match(localServer, /"\/clientes": "\/clientes\.html"/);
   assert.match(localServer, /"\/inmuebles-guardados": "\/inmuebles-guardados\.html"/);
+});
+
+test("menus publicos no enlazan a Premium mientras esta oculto", () => {
+  const root = path.join(__dirname, "..");
+  const files = [
+    "index.html",
+    "que-analiza.html",
+    "datos.html",
+    "noticias.html",
+    "faq.html",
+    "contacto.html",
+    "clientes.html",
+    "inmuebles-guardados.html",
+    "status.html",
+    "privacidad.html",
+    "terminos.html"
+  ];
+  for (const file of files) {
+    const html = fs.readFileSync(path.join(root, file), "utf8");
+    assert.doesNotMatch(html, /href="\/premium"/, file);
+    assert.doesNotMatch(html, /nav-link-premium|nav-mobile-link-premium|footer-link-premium/, file);
+  }
 });
 
 test("backoffice muestra fallback si /api/status falla", () => {

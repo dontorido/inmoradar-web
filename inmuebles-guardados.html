@@ -21,7 +21,7 @@
       <div class="nav-links" aria-label="Secciones">
         <a href="/que-analiza">Qué analiza</a>
         <a href="/datos">APIs</a>
-        <a href="/premium">Premium</a>
+
         <a href="/noticias">Noticias</a>
         <a href="/faq">FAQ</a>
         <a href="/contacto">Contacto</a>
@@ -37,7 +37,7 @@
     <div class="mobile-panel" data-mobile-panel>
       <a href="/que-analiza">Qué analiza</a>
       <a href="/datos">APIs</a>
-      <a href="/premium">Premium</a>
+
       <a href="/noticias">Noticias</a>
       <a href="/clientes">Clientes</a>
       <a href="/faq">FAQ</a>
@@ -53,11 +53,24 @@
           <h1>Inmuebles guardados.</h1>
           <p class="lead">Revisa la lista con calma, compara señales clave y abre cada anuncio cuando quieras continuar.</p>
         </div>
-        <aside class="saved-report-summary" data-report-summary aria-live="polite">
-          <span>Cargando</span>
-          <strong>Preparando lista...</strong>
-          <p>Estamos recuperando el enlace privado del informe.</p>
-        </aside>
+        <div class="saved-report-side">
+          <aside class="saved-report-summary" data-report-summary aria-live="polite">
+            <span>Cargando</span>
+            <strong>Preparando lista...</strong>
+            <p>Estamos recuperando el enlace privado del informe.</p>
+          </aside>
+          <div class="saved-report-share-card">
+            <button class="button secondary full" type="button" data-report-share-toggle>Compartir informe</button>
+            <form class="saved-report-share" data-report-share hidden>
+              <label for="saved-report-share-email">
+                <span>Enviar esta comparativa a</span>
+                <input id="saved-report-share-email" name="email" type="email" autocomplete="email" placeholder="email@dominio.com" required>
+              </label>
+              <button class="button full" type="submit" data-report-share-submit>Enviar por email</button>
+              <p data-report-share-status aria-live="polite"></p>
+            </form>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -77,7 +90,7 @@
     <div class="container">
       <div class="footer-top">
         <div><a class="brand" href="/"><span class="brand-mark" data-icon="Radar"></span><span><strong>Inmo</strong><em>Radar</em></span></a><p class="footer-tagline">Analiza anuncios antes de contactar.</p></div>
-        <div class="footer-col"><h4>Producto</h4><a href="/que-analiza">Qué analiza</a><a href="/datos">APIs</a><a href="/premium">Premium</a></div>
+        <div class="footer-col"><h4>Producto</h4><a href="/que-analiza">Qué analiza</a><a href="/datos">APIs</a></div>
         <div class="footer-col"><h4>Contenido</h4><a href="/noticias">Noticias</a><a href="/faq">FAQ</a></div>
         <div class="footer-col"><h4>Compañía</h4><a href="/contacto">Contacto</a><a href="/status/">Estado</a><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></div>
         <span class="footer-status">Online</span>
@@ -93,6 +106,11 @@
       const stateNode = document.querySelector("[data-report-state]");
       const listNode = document.querySelector("[data-report-list]");
       const summaryNode = document.querySelector("[data-report-summary]");
+      const shareToggle = document.querySelector("[data-report-share-toggle]");
+      const shareForm = document.querySelector("[data-report-share]");
+      const shareEmail = document.querySelector("#saved-report-share-email");
+      const shareSubmit = document.querySelector("[data-report-share-submit]");
+      const shareStatus = document.querySelector("[data-report-share-status]");
       const params = new URLSearchParams(window.location.search);
       const token = params.get("token") || "";
 
@@ -182,6 +200,64 @@
           <p>Enlace privado${expiresAt ? ` · caduca ${escapeHtml(new Date(expiresAt).toLocaleDateString("es-ES"))}` : ""}</p>
         `;
       }
+
+      function setShareStatus(message, tone) {
+        if (!shareStatus) return;
+        shareStatus.textContent = message || "";
+        shareStatus.dataset.tone = tone || "neutral";
+      }
+
+      if (shareToggle && shareForm) {
+        shareToggle.addEventListener("click", () => {
+          const nextHidden = !shareForm.hidden;
+          shareForm.hidden = nextHidden;
+          shareToggle.textContent = nextHidden ? "Compartir informe" : "Cerrar compartir";
+          if (!nextHidden) shareEmail?.focus();
+        });
+      }
+
+      shareForm?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const email = String(shareEmail?.value || "").trim();
+        if (!token) {
+          setShareStatus("El enlace privado no esta disponible.", "bad");
+          return;
+        }
+        if (!email) {
+          setShareStatus("Introduce un email para compartir.", "bad");
+          return;
+        }
+
+        const previousText = shareSubmit?.textContent || "Enviar por email";
+        if (shareSubmit) {
+          shareSubmit.disabled = true;
+          shareSubmit.textContent = "Enviando...";
+        }
+        setShareStatus("Preparando envio...", "neutral");
+        try {
+          const response = await fetch("/api/saved-properties/share", {
+            method: "POST",
+            headers: {
+              accept: "application/json",
+              "content-type": "application/json"
+            },
+            body: JSON.stringify({ token, email })
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload.ok === false) {
+            throw new Error(payload.message || payload.error || "share_failed");
+          }
+          setShareStatus(`Enviado a ${email}.`, "good");
+          shareForm.reset();
+        } catch (error) {
+          setShareStatus(error.message || "No se ha podido compartir ahora.", "bad");
+        } finally {
+          if (shareSubmit) {
+            shareSubmit.disabled = false;
+            shareSubmit.textContent = previousText;
+          }
+        }
+      });
 
       function renderRows(rows) {
         listNode.hidden = false;

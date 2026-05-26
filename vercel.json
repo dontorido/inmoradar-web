@@ -13,6 +13,7 @@
     { "source": "/api/analytics/event", "destination": "/api/market-price?resource=owned-analytics-event" },
     { "source": "/api/saved-properties/email-report", "destination": "/api/check-premium?resource=saved-properties-email-report" },
     { "source": "/api/saved-properties/report", "destination": "/api/check-premium?resource=saved-properties-report" },
+    { "source": "/api/saved-properties/share", "destination": "/api/check-premium?resource=saved-properties-share" },
     { "source": "/api/admin/summary", "destination": "/api/admin?resource=summary" },
     { "source": "/api/admin/premium/subscriptions", "destination": "/api/admin?resource=premium/subscriptions" },
     { "source": "/api/admin/seo/landings", "destination": "/api/admin?resource=seo/landings" },

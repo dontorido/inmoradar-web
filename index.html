@@ -25,7 +25,7 @@
       <div class="nav-links" aria-label="Secciones">
         <a href="/que-analiza" data-testid="nav-link-que-analiza" data-i18n-key="navAnalysis">Qué analiza</a>
         <a href="/datos" data-testid="nav-link-datos" data-i18n-key="navApis">APIs</a>
-        <a href="/premium" data-testid="nav-link-premium" data-i18n-key="navPremium">Premium</a>
+
         <a href="/noticias" data-testid="nav-link-noticias" data-i18n-key="navNews">Noticias</a>
         <a href="/faq" data-testid="nav-link-faq" data-i18n-key="navFaq">FAQ</a>
         <a href="/contacto" data-testid="nav-link-contacto" data-i18n-key="navContact">Contacto</a>
@@ -35,7 +35,7 @@
           <button type="button" data-lang="es" aria-pressed="true"><span class="flag flag-es" aria-hidden="true"></span><span>ES</span></button>
           <button type="button" data-lang="en" aria-pressed="false"><span class="flag flag-en" aria-hidden="true"></span><span>EN</span></button>
         </div><a class="client-link" href="/clientes" aria-label="Área de clientes" title="Área de clientes" data-testid="nav-clientes"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle></svg></a>
-        <button class="button" type="button" data-testid="nav-cta-premium" data-install-button data-install-source="nav">Empezar gratis</button>
+        <button class="button" type="button" data-testid="nav-cta-install" data-install-button data-install-source="nav">Empezar gratis</button>
       </div>
       <button class="mobile-toggle" type="button" data-mobile-toggle data-testid="nav-mobile-toggle" aria-label="Abrir menú" aria-expanded="false">
         <span data-icon="Radar"></span>
@@ -44,7 +44,7 @@
     <div class="mobile-panel" data-mobile-panel data-testid="nav-mobile-panel">
       <a href="/que-analiza" data-testid="nav-mobile-link-que-analiza">Qué analiza</a>
       <a href="/datos" data-testid="nav-mobile-link-datos">APIs</a>
-      <a href="/premium" data-testid="nav-mobile-link-premium">Premium</a>
+
       <a href="/noticias" data-testid="nav-mobile-link-noticias">Noticias</a><a href="/clientes" data-testid="nav-mobile-link-clientes">Clientes</a>
       <a href="/faq" data-testid="nav-mobile-link-faq">FAQ</a>
       <a href="/contacto" data-testid="nav-mobile-link-contacto">Contacto</a>
@@ -258,28 +258,6 @@
       </div>
     </section>
 
-    <section class="section dark" id="premium">
-      <div class="container premium-grid">
-        <div class="premium-copy">
-          <span class="section-label">Para búsquedas intensivas</span>
-          <h2>Paga solo durante<br><span class="accent">tu búsqueda activa.</span></h2>
-          <p class="lead">Instala InmoRadar y empieza gratis. Si más adelante necesitas funciones avanzadas, el checkout mostrará las condiciones vigentes antes de confirmar.</p>
-        </div>
-        <article class="pricing-card">
-          <span class="badge">Opcional</span>
-          <div class="price"><strong>Premium</strong><span>según checkout</span></div>
-          <p>Condiciones visibles antes de confirmar el pago.</p>
-          <ul class="check-list">
-            <li>Análisis ilimitados de fichas.</li>
-            <li>Comparativa de inmuebles guardados.</li>
-            <li>Señales urbanas y precio por zona.</li>
-            <li>Cancelación inmediata, sin permanencia.</li>
-          </ul>
-          <button class="button secondary full" type="button" data-checkout-button data-checkout-source="pricing">Ver condiciones de Premium <span data-icon="ArrowRight"></span></button>
-        </article>
-      </div>
-    </section>
-
     <section class="section" id="noticias">
       <div class="container">
         <div class="section-head">
@@ -324,7 +302,7 @@
           <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-2" aria-expanded="false" aria-controls="faq-2">¿InmoRadar mide datos exactos?<span>+</span></button><div class="faq-panel" id="faq-2">No. Son estimaciones orientativas basadas en datos abiertos, información visible del anuncio y señales urbanas.</div></div>
           <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-3" aria-expanded="false" aria-controls="faq-3">¿Tengo que elegir navegador?<span>+</span></button><div class="faq-panel" id="faq-3">No. El sistema detecta el entorno compatible e inicia el flujo de instalación correspondiente.</div></div>
           <div class='faq-item'><button class='faq-trigger' type='button' data-faq-trigger data-testid='faq-trigger-4' aria-expanded='false' aria-controls='faq-4'>¿Para qué sirve antes de contactar?<span>+</span></button><div class='faq-panel' id='faq-4'>Para revisar precio por metro cuadrado, coste inicial, zona, transporte, aparcamiento y señales del anuncio antes de escribir o llamar.</div></div>
-          <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-5" aria-expanded="false" aria-controls="faq-5">¿Qué pasa con Premium?<span>+</span></button><div class="faq-panel" id="faq-5">Premium es opcional. Si decides abrir el checkout, verás las condiciones vigentes antes de confirmar cualquier pago.</div></div>
+
           <div class="faq-item"><button class="faq-trigger" type="button" data-faq-trigger data-testid="faq-trigger-6" aria-expanded="false" aria-controls="faq-6">¿Puedo empezar gratis?<span>+</span></button><div class="faq-panel" id="faq-6">Sí. Pulsa Empezar gratis para instalar InmoRadar y analizar tu primer anuncio.</div></div>
         </div>
         <div class="section-action">
@@ -354,7 +332,6 @@
           </div>
           <div class="topic-row" aria-label="Tema">
             <button class="topic-pill active" type="button" data-topic="general" data-testid="contact-topic-general">General</button>
-            <button class="topic-pill" type="button" data-topic="premium" data-testid="contact-topic-premium">Premium</button>
             <button class="topic-pill" type="button" data-topic="partner" data-testid="contact-topic-partner">Partner</button>
             <button class="topic-pill" type="button" data-topic="prensa" data-testid="contact-topic-prensa">Prensa</button>
           </div>
@@ -385,9 +362,9 @@
         <div>
           <a class="brand" href="/"><span class="brand-mark" data-icon="Radar"></span><span><strong>Inmo</strong><em>Radar</em></span></a>
           <p class="footer-tagline">Analiza anuncios antes de contactar.</p>
-          <button class="button" type="button" data-testid="footer-cta-premium" data-install-button data-install-source="footer">Empezar gratis</button>
+          <button class="button" type="button" data-testid="footer-cta-install" data-install-button data-install-source="footer">Empezar gratis</button>
         </div>
-        <div class="footer-col"><h4>Producto</h4><a href="/que-analiza" data-testid="footer-link-que-analiza">Qué analiza</a><a href="/datos" data-testid="footer-link-datos">APIs</a><a href="/premium" data-testid="footer-link-premium">Premium</a></div>
+        <div class="footer-col"><h4>Producto</h4><a href="/que-analiza" data-testid="footer-link-que-analiza">Qué analiza</a><a href="/datos" data-testid="footer-link-datos">APIs</a></div>
         <div class="footer-col"><h4>Contenido</h4><a href="/noticias" data-testid="footer-link-noticias">Noticias</a><a href="/faq" data-testid="footer-link-faq">FAQ</a></div>
         <div class="footer-col"><h4>Compañía</h4><a href="/contacto" data-testid="footer-link-contacto">Contacto</a><a href="/privacidad" data-testid="footer-link-privacidad">Privacidad</a><a href="/terminos" data-testid="footer-link-terminos">Términos</a></div>
         <span class="footer-status">Online</span>

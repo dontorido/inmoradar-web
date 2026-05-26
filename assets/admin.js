@@ -1226,6 +1226,10 @@ function renderStats(summary) {
     stat("Paid", statusCount("paid"), {
       id: "premium-paid",
       hint: "Eventos de pago confirmados"
+    }),
+    stat("Informes compartidos", premium.saved_report_shares || 0, {
+      id: "saved-report-shares",
+      hint: "Envios virales desde la vista privada"
     })
   ].join("");
 }

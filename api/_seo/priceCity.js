@@ -270,11 +270,6 @@ function usefulLinks() {
         <span>Página principal de InmoRadar</span>
         <small>INMORADAR.APP</small>
       </a>
-      <a href="/premium">
-        ${icon("arrowUpRight")}
-        <span>Funciones Premium opcionales</span>
-        <small>INMORADAR.APP/PREMIUM</small>
-      </a>
     </div>
   </section>`;
 }

@@ -460,7 +460,8 @@ async function handleSummary() {
     landingResult,
     recentLandingResult,
     opportunityResult,
-    parkingResult
+    parkingResult,
+    savedReportSharesResult
   ] = await Promise.all([
       safeFetch("premium_subscriptions?select=status,updated_at&limit=1000"),
       safeFetch(
@@ -475,7 +476,10 @@ async function handleSummary() {
         "seo_landings?select=id,slug,title,city,template_type,status,index_status,quality_score,word_count,updated_at,published_at&order=updated_at.desc&limit=8"
       ),
       safeFetch("seo_landing_opportunities?select=status,template_type&limit=1000"),
-      safeFetch("parking_difficulty_cache?select=score,label,confidence_score,perspective,expires_at&limit=1000")
+      safeFetch("parking_difficulty_cache?select=score,label,confidence_score,perspective,expires_at&limit=1000"),
+      safeFetch(
+        "saved_property_email_reports?provider=eq.cloudflare_email_service_share&status=eq.sent&select=id,created_at&limit=1000"
+      )
     ]);
 
   const premiumRows = Array.isArray(premiumResult) ? premiumResult : premiumResult.rows;
@@ -494,6 +498,7 @@ async function handleSummary() {
   const landingRows = Array.isArray(landingResult) ? landingResult : landingResult.rows;
   const opportunityRows = Array.isArray(opportunityResult) ? opportunityResult : opportunityResult.rows;
   const parkingRows = Array.isArray(parkingResult) ? parkingResult : parkingResult.rows;
+  const savedReportShareRows = Array.isArray(savedReportSharesResult) ? savedReportSharesResult : savedReportSharesResult.rows;
   const validParkingRows = parkingRows.filter((row) => !row.expires_at || new Date(row.expires_at).getTime() > Date.now());
 
   return {
@@ -512,8 +517,9 @@ async function handleSummary() {
     premium: {
       total: premiumRows.length,
       by_status: countBy(premiumRows, "status"),
+      saved_report_shares: savedReportShareRows.length,
       recent: Array.isArray(recentPremiumResult) ? recentPremiumResult : recentPremiumResult.rows,
-      error: premiumResult.error || recentPremiumResult.error || null
+      error: premiumResult.error || recentPremiumResult.error || savedReportSharesResult.error || null
     },
     revenue,
     seo: {
