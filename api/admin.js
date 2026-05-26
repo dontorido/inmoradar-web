@@ -81,6 +81,7 @@ const {
   validatePublishInput
 } = require("../lib/linkedin/services");
 const {
+  META_REQUIRED_SCOPES,
   META_MANUAL_MODE_NOTICE,
   META_PLATFORMS,
   buildAuthorizationUrl: buildMetaAuthorizationUrl,
@@ -106,6 +107,14 @@ const {
   validatePublishInput: validateMetaPublishInput,
   withUtm
 } = require("../lib/meta/services");
+const {
+  META_ORGANIC_SOURCE_TYPE,
+  buildFacebookOrganicTestPost,
+  buildInstagramOrganicTestPost,
+  decodeOrganicOAuthState,
+  encodeOrganicOAuthState,
+  validateMetaOrganicEnv
+} = require("../lib/meta/organic");
 const { logRequestMetric } = require("../lib/observability/request-metrics");
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at,source_data_json";
@@ -444,6 +453,21 @@ function routeFromRequest(req) {
 
   const pathname = url.pathname.replace(/^\/api\/admin\/?/, "").replace(/\/+$/, "");
   return { url, resource: pathname || "summary" };
+}
+
+function redirect(res, target, status = 302) {
+  res.statusCode = status;
+  res.setHeader("location", target);
+  res.setHeader("cache-control", "no-store, max-age=0");
+  res.end("");
+}
+
+function relativeWithQuery(path, params = {}) {
+  const target = new URL(path, "https://www.inmoradar.app");
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") target.searchParams.set(key, String(value));
+  });
+  return `${target.pathname}${target.search}${target.hash}`;
 }
 
 async function handleSummary() {
@@ -1624,6 +1648,122 @@ async function listMetaRuns(limit = 5) {
   }
 }
 
+async function latestMetaOrganicPost() {
+  try {
+    const params = new URLSearchParams({
+      select: "*",
+      source_type: `eq.${META_ORGANIC_SOURCE_TYPE}`,
+      order: "created_at.desc",
+      limit: "1"
+    });
+    const rows = await supabaseFetch(`marketing_meta_posts?${params.toString()}`);
+    return { post: normalizeMetaPostRow(Array.isArray(rows) ? rows[0] || null : rows), table_missing: false, error: null };
+  } catch (error) {
+    return {
+      post: null,
+      table_missing: /marketing_meta_posts/.test(error.message),
+      error: sanitizeMetaSecretText(error.message || error)
+    };
+  }
+}
+
+async function recordMetaOrganicPost(platform, payload = {}, patch = {}) {
+  if (!hasSupabaseConfig()) return { post: null, persisted: false, table_missing: false, error: "supabase_not_configured" };
+  const row = {
+    source_type: META_ORGANIC_SOURCE_TYPE,
+    source_slug: "organic-test",
+    source_url: payload.source_url || payload.link || metaConfig(process.env).siteUrl,
+    platform,
+    status: patch.status || "failed",
+    caption: payload.caption || "",
+    image_url: payload.image_url || null,
+    published_url: patch.published_url || null,
+    external_post_id: patch.external_post_id || null,
+    published_at: patch.published_at || null,
+    error_message: patch.error_message || null,
+    utm_source: platform,
+    utm_medium: "social",
+    utm_campaign: "organic_publish_spike",
+    city: null,
+    template_type: "organic_test",
+    meta_response: patch.meta_response || null
+  };
+  try {
+    const rows = await supabaseFetch("marketing_meta_posts", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify([row])
+    });
+    return { post: normalizeMetaPostRow(Array.isArray(rows) ? rows[0] || null : rows), persisted: true, table_missing: false, error: null };
+  } catch (error) {
+    return {
+      post: null,
+      persisted: false,
+      table_missing: /marketing_meta_posts/.test(error.message),
+      error: sanitizeMetaSecretText(error.message || error)
+    };
+  }
+}
+
+function selectedMetaPageFromPages(pages = [], env = process.env) {
+  const config = metaConfig(env);
+  if (config.facebookPageId) return selectManagedPage(pages, config.facebookPageId);
+  if (config.facebookPageName) {
+    const wanted = config.facebookPageName.trim().toLowerCase();
+    const byName = pages.find((page) => String(page.name || "").trim().toLowerCase() === wanted);
+    if (byName) return byName;
+  }
+  const inmoradarPage = pages.find((page) => /inmoradar/i.test(String(page.name || "")));
+  if (inmoradarPage) return inmoradarPage;
+  return pages.length === 1 ? pages[0] : null;
+}
+
+async function saveDetectedMetaOrganicConnection(token, pages = []) {
+  const page = selectedMetaPageFromPages(pages);
+  const instagram = page?.instagram_business_account || null;
+  const config = metaConfig(process.env);
+  const pageMissingReason = config.facebookPageId && !page ? "meta_configured_page_not_found" : "meta_page_selection_required";
+  const connection = await saveMetaConnection({
+    status: page?.access_token ? "connected" : "needs_page",
+    facebook_page_id: page?.id || null,
+    facebook_page_name: page?.name || null,
+    instagram_business_account_id: instagram?.id || config.instagramBusinessAccountId || null,
+    access_token_encrypted: encryptMetaToken(page?.access_token || token.access_token),
+    user_access_token_encrypted: encryptMetaToken(token.access_token),
+    page_access_token_encrypted: page?.access_token ? encryptMetaToken(page.access_token) : null,
+    token_expires_at: token.token_expires_at,
+    scopes: token.scopes,
+    last_error: page?.access_token ? (instagram?.id || config.instagramBusinessAccountId ? null : "missing_instagram_business_account_id") : pageMissingReason
+  });
+  return { connection, page };
+}
+
+function metaOrganicStatusPayload(connectionState, lastAttemptState = {}, extra = {}) {
+  const summary = summarizeMetaConnection(connectionState.connection, process.env);
+  return {
+    ok: true,
+    connected: summary.status === "connected",
+    status: summary.status,
+    connection: summary,
+    permissions: summary.scopes,
+    missing_scopes: summary.missing_scopes,
+    facebook_page_id: summary.facebook_page_id,
+    facebook_page_name: summary.facebook_page_name,
+    instagram_account_id: summary.instagram_business_account_id,
+    last_error: summary.last_error || connectionState.error || null,
+    last_attempt: lastAttemptState.post || null,
+    env: metaEnvStatus(process.env),
+    organic_env: validateMetaOrganicEnv(process.env),
+    storage: {
+      connection_table_missing: connectionState.table_missing,
+      posts_table_missing: lastAttemptState.table_missing,
+      connection_error: connectionState.error,
+      posts_error: lastAttemptState.error
+    },
+    ...extra
+  };
+}
+
 async function createMetaRun(triggerType = "cron", platform = "multi") {
   try {
     const rows = await supabaseFetch("meta_autopublisher_runs", {
@@ -2022,6 +2162,131 @@ async function handleMetaTestConnection(req) {
   };
 }
 
+async function handleMetaOrganicOAuthStart(req, res, url) {
+  if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
+  const envStatus = validateMetaOrganicEnv(process.env);
+  if (!envStatus.ok) {
+    return json(res, 500, { ok: false, error: "meta_oauth_not_configured", missing: envStatus.missing });
+  }
+  const returnTo = url.searchParams.get("return_to") || "/backoffice/marketing/meta";
+  const state = encodeOrganicOAuthState({ returnTo });
+  const result = buildMetaAuthorizationUrl({ state, scopes: META_REQUIRED_SCOPES });
+  if (url.searchParams.get("format") === "json") {
+    if (!assertAdmin(req, res)) return;
+    return json(res, 200, { ok: true, ...result, redirect_uri: envStatus.redirect_uri });
+  }
+  return redirect(res, result.url);
+}
+
+async function handleMetaOrganicOAuthCallback(req, res, url) {
+  if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
+  let state = { returnTo: "/backoffice/marketing/meta" };
+  try {
+    if (!url.searchParams.get("state")) throw new Error("meta_oauth_state_required");
+    state = decodeOrganicOAuthState(url.searchParams.get("state"));
+  } catch (error) {
+    return redirect(res, relativeWithQuery("/backoffice/marketing/meta", {
+      meta_oauth: "error",
+      meta_error: sanitizeMetaSecretText(error.message || error)
+    }));
+  }
+
+  if (url.searchParams.get("error")) {
+    const message = sanitizeMetaSecretText(url.searchParams.get("error_description") || url.searchParams.get("error_reason") || url.searchParams.get("error"));
+    return redirect(res, relativeWithQuery(state.returnTo, { meta_oauth: "error", meta_error: message }));
+  }
+
+  const code = url.searchParams.get("code");
+  if (!code) return redirect(res, relativeWithQuery(state.returnTo, { meta_oauth: "error", meta_error: "meta_code_required" }));
+  if (!hasSupabaseConfig()) {
+    return redirect(res, relativeWithQuery(state.returnTo, { meta_oauth: "error", meta_error: "supabase_not_configured" }));
+  }
+
+  try {
+    const token = await exchangeMetaAuthorizationCode({ code });
+    let pages = [];
+    try {
+      pages = await fetchManagedPages({ userAccessToken: token.access_token });
+    } catch (error) {
+      pages = [];
+    }
+    const { connection, page } = await saveDetectedMetaOrganicConnection(token, pages);
+    const summary = summarizeMetaConnection(connection, process.env);
+    return redirect(res, relativeWithQuery(state.returnTo, {
+      meta_oauth: page?.access_token ? "connected" : "needs_page",
+      meta_status: summary.status
+    }));
+  } catch (error) {
+    const message = sanitizeMetaSecretText(error.message || error);
+    try {
+      if (hasSupabaseConfig()) await saveMetaConnection({ status: "error", last_error: message });
+    } catch {}
+    return redirect(res, relativeWithQuery(state.returnTo, { meta_oauth: "error", meta_error: message }));
+  }
+}
+
+async function handleMetaOrganicStatus(req) {
+  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const [connectionState, lastAttemptState] = await Promise.all([readMetaConnectionState(), latestMetaOrganicPost()]);
+  return { status: 200, payload: metaOrganicStatusPayload(connectionState, lastAttemptState) };
+}
+
+async function handleMetaOrganicPublishTest(req, platform) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  await readJsonBody(req).catch(() => ({}));
+  if (!hasSupabaseConfig()) {
+    return { status: 500, payload: { ok: false, error: "supabase_not_configured", pending_sql: "database/marketing-meta.sql" } };
+  }
+  const connectionState = await readMetaConnectionState();
+  const connection = connectionState.connection;
+  if (!connection) return { status: 400, payload: { ok: false, error: "meta_connection_missing" } };
+  const config = metaConfig(process.env);
+  const pageId = cleanNullable(connection.facebook_page_id || config.facebookPageId);
+  const instagramAccountId = cleanNullable(connection.instagram_business_account_id || config.instagramBusinessAccountId);
+  const payload = platform === "facebook" ? buildFacebookOrganicTestPost(process.env) : buildInstagramOrganicTestPost(process.env);
+
+  try {
+    const accessToken = await loadMetaAccessToken(connection);
+    if (platform === "facebook" && !pageId) throw new Error("meta_facebook_page_id_missing");
+    if (platform === "instagram" && !instagramAccountId) throw new Error("meta_instagram_business_account_id_missing");
+    const result = await publishMetaToPlatform({
+      platform,
+      accessToken,
+      pageId,
+      instagramBusinessAccountId: instagramAccountId,
+      caption: payload.caption,
+      link: payload.link,
+      imageUrl: payload.image_url,
+      env: process.env
+    });
+    const saved = await recordMetaOrganicPost(platform, payload, {
+      status: "published",
+      published_at: new Date().toISOString(),
+      external_post_id: result.external_post_id,
+      published_url: result.published_url,
+      meta_response: result.meta_response
+    });
+    await saveMetaConnection({ status: "connected", last_error: null }).catch(() => null);
+    return { status: 200, payload: { ok: true, platform, result, post: saved.post, persisted: saved.persisted, storage_error: saved.error || null } };
+  } catch (error) {
+    const message = sanitizeMetaSecretText(sanitizeErrorMessage(error, 800));
+    const saved = await recordMetaOrganicPost(platform, payload, { status: "failed", error_message: message });
+    await saveMetaConnection({ status: "error", last_error: message }).catch(() => null);
+    return {
+      status: 400,
+      payload: {
+        ok: false,
+        platform,
+        error: "meta_publish_failed",
+        message,
+        post: saved.post,
+        persisted: saved.persisted,
+        storage_error: saved.error || null
+      }
+    };
+  }
+}
+
 async function handleMetaSettings(req) {
   if (req.method === "GET") {
     const result = await readMetaSettings();
@@ -2101,6 +2366,9 @@ async function handleMeta(req, url, resource) {
   if (resource === "meta/disconnect") return handleMetaDisconnect(req);
   if (resource === "meta/pages") return handleMetaPages(req);
   if (resource === "meta/test-connection") return handleMetaTestConnection(req);
+  if (resource === "meta/status") return handleMetaOrganicStatus(req);
+  if (resource === "meta/publish-test-facebook") return handleMetaOrganicPublishTest(req, "facebook");
+  if (resource === "meta/publish-test-instagram") return handleMetaOrganicPublishTest(req, "instagram");
   if (resource === "meta/settings") return handleMetaSettings(req);
   if (resource === "meta/posts") return handleMetaPosts(req, url);
   return { status: 404, payload: { ok: false, error: "meta_resource_not_found", resource } };
@@ -3196,6 +3464,12 @@ async function handleAdminRequest(req, res) {
     } catch (error) {
       return json(res, 500, { ok: false, error: "meta_daily_failed", message: sanitizeMetaSecretText(error.message || error, 500) });
     }
+  }
+  if (resource === "meta/oauth/start") {
+    return handleMetaOrganicOAuthStart(req, res, url);
+  }
+  if (resource === "meta/oauth/callback") {
+    return handleMetaOrganicOAuthCallback(req, res, url);
   }
   if (resource === "seo-autogenerate/run") {
     if (!assertAdminOrCron(req, res)) return;

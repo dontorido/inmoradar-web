@@ -21,16 +21,24 @@ const {
   shouldRunAutopublisher,
   summarizeConnection
 } = require("../lib/meta/services");
+const {
+  buildFacebookOrganicTestPost,
+  buildInstagramOrganicTestPost,
+  decodeOrganicOAuthState,
+  encodeOrganicOAuthState,
+  maskSecret,
+  validateMetaOrganicEnv
+} = require("../lib/meta/organic");
 
 const validEnv = {
   META_APP_ID: "meta-app-id",
   META_APP_SECRET: "meta-app-secret",
-  META_REDIRECT_URI: "https://www.inmoradar.app/admin",
+  META_REDIRECT_URI: "https://www.inmoradar.app/api/meta/oauth/callback",
   META_ACCESS_TOKEN_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef",
   META_AUTOPOST_ENABLED: "true",
   META_FACEBOOK_PAGE_ID: "123",
   META_FACEBOOK_PAGE_NAME: "InmoRadar",
-  META_INSTAGRAM_BUSINESS_ACCOUNT_ID: "456",
+  META_INSTAGRAM_ACCOUNT_ID: "456",
   PUBLIC_SITE_URL: "https://www.inmoradar.app"
 };
 
@@ -98,7 +106,7 @@ test("no publica si falta conexion", () => {
 test("no publica si faltan permisos Meta", () => {
   const missing = missingRequiredScopes(["pages_show_list"]);
   assert.ok(missing.includes("pages_manage_posts"));
-  assert.ok(missing.includes("instagram_content_publish"));
+  assert.ok(missing.includes("instagram_business_content_publish"));
   const decision = shouldRunAutopublisher({
     posts: [],
     settings: { ...defaultSettings(validEnv), autopost_enabled: true },
@@ -216,9 +224,21 @@ test("Instagram requiere imagen publica", async () => {
 
 test("OAuth Meta genera URL con permisos esperados", () => {
   const { url, scopes } = buildAuthorizationUrl({ state: "state", env: validEnv });
-  assert.match(url, /facebook\.com\/v20\.0\/dialog\/oauth/);
+  assert.match(url, /facebook\.com\/v23\.0\/dialog\/oauth/);
   assert.ok(scopes.includes("pages_manage_posts"));
-  assert.ok(scopes.includes("instagram_content_publish"));
+  assert.ok(scopes.includes("instagram_business_content_publish"));
+  assert.ok(url.includes(encodeURIComponent("https://www.inmoradar.app/api/meta/oauth/callback")));
+});
+
+test("acepta scopes legacy de Instagram como equivalentes para status", () => {
+  const missing = missingRequiredScopes([
+    "pages_show_list",
+    "pages_read_engagement",
+    "pages_manage_posts",
+    "instagram_basic",
+    "instagram_content_publish"
+  ]);
+  assert.deepEqual(missing, []);
 });
 
 test("imagen por defecto para Meta es publica y statuses incluyen skipped y failed", () => {
@@ -261,4 +281,37 @@ test("sanea mensajes de error que incluyan tokens", async () => {
       return true;
     }
   );
+});
+
+test("valida variables requeridas para spike organica Meta", () => {
+  const ok = validateMetaOrganicEnv(validEnv);
+  assert.equal(ok.ok, true);
+  assert.equal(ok.redirect_uri, "https://www.inmoradar.app/api/meta/oauth/callback");
+  assert.equal(ok.facebook_page_id, "123");
+  assert.equal(ok.instagram_account_id, "456");
+
+  const missing = validateMetaOrganicEnv({ META_APP_ID: "app" });
+  assert.equal(missing.ok, false);
+  assert.deepEqual(missing.missing, ["META_APP_SECRET"]);
+});
+
+test("construye payloads de publicacion organica de prueba", () => {
+  const facebook = buildFacebookOrganicTestPost(validEnv);
+  assert.equal(facebook.platform, "facebook");
+  assert.equal(facebook.link, "https://www.inmoradar.app");
+  assert.match(facebook.caption, /publicacion automatica de InmoRadar/);
+
+  const instagram = buildInstagramOrganicTestPost(validEnv);
+  assert.equal(instagram.platform, "instagram");
+  assert.match(instagram.caption, /Analiza pisos antes de contactar/);
+  assert.equal(instagram.image_url, "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg");
+});
+
+test("firma state OAuth organico sin exponer secretos", () => {
+  const state = encodeOrganicOAuthState({ returnTo: "/backoffice/marketing/meta", issuedAt: 1770000000000, nonce: "nonce" }, validEnv);
+  const decoded = decodeOrganicOAuthState(state, validEnv, { now: 1770000000000 });
+  assert.equal(decoded.returnTo, "/backoffice/marketing/meta");
+  assert.equal(decoded.nonce, "nonce");
+  assert.equal(maskSecret("abc123456789xyz"), "abc123...9xyz");
+  assert.throws(() => decodeOrganicOAuthState(`${state}x`, validEnv, { now: 1770000000000 }), /meta_oauth_state_invalid/);
 });

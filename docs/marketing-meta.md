@@ -7,6 +7,8 @@ Meta Autopublisher publica contenido de InmoRadar en:
 
 No usa scraping, navegador automatizado, credenciales manuales, perfiles personales, likes, follows, comentarios ni DMs.
 
+La spike organica rapida vive en los endpoints `/api/meta/*` y permite probar OAuth + un post controlado en canales propios sin activar Ads API, campanas, audiencias, pixeles ni automatizacion de interacciones.
+
 El despliegue inicial debe salir siempre con:
 
 ```env
@@ -24,14 +26,16 @@ META_AUTOPOST_TIMEZONE=Europe/Madrid
 
 META_APP_ID=
 META_APP_SECRET=
-META_REDIRECT_URI=https://www.inmoradar.app/admin
+META_REDIRECT_URI=https://www.inmoradar.app/api/meta/oauth/callback
 META_ACCESS_TOKEN_ENCRYPTION_KEY=
 
 META_FACEBOOK_PAGE_ID=
 META_FACEBOOK_PAGE_NAME=
+META_INSTAGRAM_ACCOUNT_ID=
 META_INSTAGRAM_BUSINESS_ACCOUNT_ID=
-META_GRAPH_VERSION=v20.0
+META_GRAPH_VERSION=v23.0
 META_DEFAULT_IMAGE_URL=
+META_TEST_IMAGE_URL=
 ```
 
 Tambien deben existir las variables backend ya usadas por BackOffice:
@@ -76,7 +80,7 @@ Estados de posts:
 2. Configura OAuth redirect URI:
 
 ```txt
-https://www.inmoradar.app/admin
+https://www.inmoradar.app/api/meta/oauth/callback
 ```
 
 3. Activa productos/permisos necesarios para Facebook Login, Pages e Instagram Graph API.
@@ -85,8 +89,10 @@ https://www.inmoradar.app/admin
 - `pages_show_list`
 - `pages_read_engagement`
 - `pages_manage_posts`
-- `instagram_basic`
-- `instagram_content_publish`
+- `instagram_business_basic`
+- `instagram_business_content_publish`
+
+El codigo acepta tambien los nombres legacy `instagram_basic` e `instagram_content_publish` como equivalentes al calcular permisos faltantes, porque Meta puede devolver scopes antiguos segun el tipo de app/caso de uso.
 
 Algunos permisos pueden requerir App Review, verificacion de negocio o configuracion adicional en Meta Developers.
 
@@ -96,12 +102,43 @@ En `BackOffice > Marketing > Meta`:
 
 1. Pulsa `Conectar Meta`.
 2. Autoriza con un usuario que gestione la Page.
-3. Pulsa `Cargar Pages`.
-4. Selecciona la Facebook Page de InmoRadar.
-5. Guarda la Page. El sistema detecta `instagram_business_account` si existe.
-6. Usa `Probar conexion` antes de publicar.
+3. Vuelve a `BackOffice > Marketing > Meta`.
+4. Si no se selecciona la Page automaticamente, pulsa `Cargar Pages`.
+5. Selecciona la Facebook Page de InmoRadar.
+6. Guarda la Page. El sistema detecta `instagram_business_account` si existe.
+7. Usa `Estado` o `Probar conexion` antes de publicar.
 
 El endpoint nunca devuelve tokens al cliente. La lista de Pages se sanea y solo muestra id, nombre, tareas/permisos e Instagram vinculado.
+
+## Spike organica
+
+Endpoints exactos:
+
+- `GET /api/meta/oauth/start`: inicia OAuth y redirige a Meta. Desde BackOffice se usa `?format=json` con `ADMIN_IMPORT_TOKEN` para obtener la URL sin exponer secretos.
+- `GET /api/meta/oauth/callback`: recibe `code`, intercambia token, detecta Pages disponibles y guarda la conexion en `marketing_meta_connections`.
+- `GET /api/meta/status`: protegido por `ADMIN_IMPORT_TOKEN`; devuelve conexion, permisos, Page, Instagram, ultimo intento y ultimo error sin tokens.
+- `POST /api/meta/publish-test-facebook`: protegido por `ADMIN_IMPORT_TOKEN`; publica el test organico en la Page.
+- `POST /api/meta/publish-test-instagram`: protegido por `ADMIN_IMPORT_TOKEN`; crea media container y publica el test organico en Instagram.
+
+Copy Facebook:
+
+```txt
+Estamos probando la publicacion automatica de InmoRadar. InmoRadar ayuda a analizar anuncios inmobiliarios antes de contactar.
+```
+
+Link:
+
+```txt
+https://www.inmoradar.app
+```
+
+Caption Instagram:
+
+```txt
+Probando publicacion automatica de InmoRadar. Analiza pisos antes de contactar. Mas informacion en inmoradar.app
+```
+
+Imagen de prueba: `META_TEST_IMAGE_URL` si existe; si no, `https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg`.
 
 ## Publicacion Facebook
 
