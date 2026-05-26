@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <script src="/assets/consent.js" defer></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inmuebles guardados | InmoRadar</title>
+  <meta name="description" content="Vista privada de inmuebles guardados enviados por email desde la extension InmoRadar.">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#FAFAFA">
+  <link rel="icon" href="/assets/favicon-32.png?v=20260519b" type="image/png" sizes="32x32">
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <header class="site-header" data-site-header data-testid="site-navbar">
+    <nav class="nav container" aria-label="Principal">
+      <a class="brand" href="/" data-testid="nav-logo" aria-label="InmoRadar">
+        <span class="brand-mark" data-icon="Radar" aria-hidden="true"></span>
+        <span><strong>Inmo</strong><em>Radar</em></span>
+      </a>
+      <div class="nav-links" aria-label="Secciones">
+        <a href="/que-analiza">Qué analiza</a>
+        <a href="/datos">APIs</a>
+        <a href="/premium">Premium</a>
+        <a href="/noticias">Noticias</a>
+        <a href="/faq">FAQ</a>
+        <a href="/contacto">Contacto</a>
+      </div>
+      <div class="nav-actions">
+        <a class="client-link" href="/clientes" aria-label="Área de clientes" title="Área de clientes" data-testid="nav-clientes"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle></svg></a>
+        <button class="button" type="button" data-install-button data-install-source="saved-report-nav">Empezar gratis</button>
+      </div>
+      <button class="mobile-toggle" type="button" data-mobile-toggle aria-label="Abrir menu" aria-expanded="false">
+        <span data-icon="Radar"></span>
+      </button>
+    </nav>
+    <div class="mobile-panel" data-mobile-panel>
+      <a href="/que-analiza">Qué analiza</a>
+      <a href="/datos">APIs</a>
+      <a href="/premium">Premium</a>
+      <a href="/noticias">Noticias</a>
+      <a href="/clientes">Clientes</a>
+      <a href="/faq">FAQ</a>
+      <a href="/contacto">Contacto</a>
+    </div>
+  </header>
+
+  <main data-saved-report-page>
+    <section class="page-header saved-report-hero grid-bg">
+      <div class="container saved-report-hero-layout">
+        <div>
+          <p class="pill"><span class="dot-radar"></span>Comparativa privada</p>
+          <h1>Inmuebles guardados.</h1>
+          <p class="lead">Revisa la lista con calma, compara señales clave y abre cada anuncio cuando quieras continuar.</p>
+        </div>
+        <aside class="saved-report-summary" data-report-summary aria-live="polite">
+          <span>Cargando</span>
+          <strong>Preparando lista...</strong>
+          <p>Estamos recuperando el enlace privado del informe.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section saved-report-section">
+      <div class="container">
+        <div class="saved-report-state" data-report-state>
+          <span class="section-label">Informe</span>
+          <h2>Cargando inmuebles...</h2>
+          <p class="lead">Un momento.</p>
+        </div>
+        <div class="saved-report-grid" data-report-list hidden></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-top">
+        <div><a class="brand" href="/"><span class="brand-mark" data-icon="Radar"></span><span><strong>Inmo</strong><em>Radar</em></span></a><p class="footer-tagline">Analiza anuncios antes de contactar.</p></div>
+        <div class="footer-col"><h4>Producto</h4><a href="/que-analiza">Qué analiza</a><a href="/datos">APIs</a><a href="/premium">Premium</a></div>
+        <div class="footer-col"><h4>Contenido</h4><a href="/noticias">Noticias</a><a href="/faq">FAQ</a></div>
+        <div class="footer-col"><h4>Compañía</h4><a href="/contacto">Contacto</a><a href="/status/">Estado</a><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></div>
+        <span class="footer-status">Online</span>
+      </div>
+      <div class="footer-word">INMORADAR</div>
+      <div class="footer-meta"><span>&copy; <span data-year></span> InmoRadar</span><span>v1.0</span></div>
+    </div>
+  </footer>
+
+  <script src="/assets/app.js" defer></script>
+  <script>
+    (function () {
+      const stateNode = document.querySelector("[data-report-state]");
+      const listNode = document.querySelector("[data-report-list]");
+      const summaryNode = document.querySelector("[data-report-summary]");
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("token") || "";
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function number(value) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+
+      function formatNumber(value, decimals) {
+        const parsed = number(value);
+        if (parsed === null) return "-";
+        return new Intl.NumberFormat("es-ES", {
+          maximumFractionDigits: decimals || 0,
+          minimumFractionDigits: decimals || 0
+        }).format(parsed);
+      }
+
+      function formatEuro(value) {
+        return number(value) === null ? "-" : `${formatNumber(value)} €`;
+      }
+
+      function formatEuroM2(value) {
+        return number(value) === null ? "-" : `${formatNumber(value)} €/m²`;
+      }
+
+      function formatPercent(value) {
+        const parsed = number(value);
+        if (parsed === null) return "-";
+        return `${parsed > 0 ? "+" : ""}${formatNumber(parsed, 1)}%`;
+      }
+
+      function formatScore(value) {
+        const parsed = number(value);
+        return parsed === null ? "-" : `${parsed.toFixed(1).replace(".", ",")}/10`;
+      }
+
+      function renderState(title, text, tone) {
+        stateNode.dataset.tone = tone || "neutral";
+        stateNode.innerHTML = `<span class="section-label">Informe</span><h2>${escapeHtml(title)}</h2><p class="lead">${escapeHtml(text)}</p>`;
+      }
+
+      function renderSummary(report, expiresAt) {
+        const count = report?.rows?.length || 0;
+        summaryNode.innerHTML = `
+          <span>${count} inmuebles</span>
+          <strong>${escapeHtml(report?.summary?.bestOverall?.title || "Lista InmoRadar")}</strong>
+          <p>Enlace privado${expiresAt ? ` · caduca ${escapeHtml(new Date(expiresAt).toLocaleDateString("es-ES"))}` : ""}</p>
+        `;
+      }
+
+      function renderRows(rows) {
+        listNode.hidden = false;
+        listNode.innerHTML = rows
+          .map((row) => {
+            const href = row.url ? escapeHtml(row.url) : "";
+            return `
+              <article class="saved-report-card">
+                <div class="saved-report-card-main">
+                  <span class="section-label">${escapeHtml(row.portal || "Portal")} · ${escapeHtml(row.decisionStatusLabel || "Pendiente")}</span>
+                  <h2>${escapeHtml(row.title || "Inmueble guardado")}</h2>
+                  <p>${escapeHtml(row.location || "Ubicación no detectada")}</p>
+                  <div class="saved-report-metrics">
+                    <span><strong>${formatEuro(row.price)}</strong><small>Precio</small></span>
+                    <span><strong>${formatEuroM2(row.eurM2)}</strong><small>${formatPercent(row.differencePct)} vs mercado</small></span>
+                    <span><strong>${formatEuro(row.downPayment)}</strong><small>Entrada</small></span>
+                    <span><strong>${formatEuro(row.monthlyTotal)}</strong><small>Mes estimado</small></span>
+                    <span><strong>${formatScore(row.propertyScore)}</strong><small>Inmueble</small></span>
+                    <span><strong>${formatScore(row.zoneScore)}</strong><small>Zona</small></span>
+                  </div>
+                  <p class="saved-report-signal"><strong>Señal:</strong> ${escapeHtml(row.topSignal || "Sin señal destacada")}</p>
+                  ${row.notes ? `<p class="saved-report-notes"><strong>Nota:</strong> ${escapeHtml(row.notes)}</p>` : ""}
+                </div>
+                <div class="saved-report-actions">
+                  ${href ? `<a class="button" href="${href}" target="_blank" rel="noopener noreferrer">Ver anuncio</a>` : `<button class="button secondary" type="button" disabled>Sin enlace</button>`}
+                </div>
+              </article>
+            `;
+          })
+          .join("");
+      }
+
+      async function loadReport() {
+        if (!token) {
+          renderState("Enlace no válido", "Abre esta página desde el botón del email de InmoRadar.", "bad");
+          summaryNode.innerHTML = "<span>Error</span><strong>Sin token</strong><p>Falta el identificador privado.</p>";
+          return;
+        }
+
+        try {
+          const response = await fetch(`/api/saved-properties/report?token=${encodeURIComponent(token)}`, {
+            headers: { accept: "application/json" }
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload.ok === false) {
+            const expired = payload.error === "report_expired";
+            renderState(expired ? "El enlace ha caducado" : "No hemos encontrado el informe", expired ? "Vuelve a enviarte la comparativa desde la extensión." : "Comprueba que has abierto el enlace completo.", "bad");
+            summaryNode.innerHTML = `<span>${response.status}</span><strong>${escapeHtml(payload.error || "Error")}</strong><p>Informe no disponible.</p>`;
+            return;
+          }
+          const report = payload.report || {};
+          renderSummary(report, payload.expires_at);
+          renderState("Comparativa lista", "Todos los inmuebles del informe aparecen debajo con sus señales, notas y enlaces.", "good");
+          renderRows(report.rows || []);
+        } catch (error) {
+          renderState("No se ha podido cargar", "Reinténtalo en unos segundos.", "bad");
+          summaryNode.innerHTML = "<span>Error</span><strong>Conexión fallida</strong><p>El informe no se ha cargado.</p>";
+        }
+      }
+
+      loadReport();
+    })();
+  </script>
+</body>
+</html>

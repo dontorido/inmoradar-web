@@ -263,12 +263,14 @@ test("servidor local cubre rewrites operativas clave de Vercel", () => {
 
   assert.match(localServer, /"\/api\/extension-usage": "\/api\/extension-version\?resource=usage"/);
   assert.match(localServer, /"\/api\/saved-properties\/email-report": "\/api\/check-premium\?resource=saved-properties-email-report"/);
+  assert.match(localServer, /"\/api\/saved-properties\/report": "\/api\/check-premium\?resource=saved-properties-report"/);
   assert.match(localServer, /"\/api\/admin\/seo-autogenerate\/run": "\/api\/admin\?resource=seo-autogenerate\/run"/);
   assert.match(localServer, /"\/api\/admin\/meta": "\/api\/admin\?resource=meta"/);
   assert.match(localServer, /"\/api\/kpi-settings": "\/api\/market-price\?resource=kpi-settings"/);
   assert.match(localServer, /"\/backoffice\/marketing\/meta": "\/admin\.html"/);
   assert.match(localServer, /"\/metodologia": "\/metodologia\.html"/);
   assert.match(localServer, /"\/clientes": "\/clientes\.html"/);
+  assert.match(localServer, /"\/inmuebles-guardados": "\/inmuebles-guardados\.html"/);
 });
 
 test("backoffice muestra fallback si /api/status falla", () => {

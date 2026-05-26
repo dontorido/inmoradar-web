@@ -5,7 +5,8 @@ const {
   buildCloudflareEmailPayload,
   buildSavedPropertiesCsv,
   buildSavedPropertiesEmail,
-  normalizeReportProperties
+  normalizeReportProperties,
+  PREHEADER
 } = require("../api/_reports/savedPropertiesEmail");
 
 const properties = [
@@ -24,6 +25,8 @@ const properties = [
       differencePct: -8.7,
       label: "BUEN PRECIO"
     },
+    decisionStatus: "favorite",
+    notes: "Llamar despues de comparar colegios.",
     url: "https://example.com/inmueble/1",
     savedAt: "2026-05-19T10:00:00.000Z"
   }
@@ -36,14 +39,30 @@ test("normalizeReportProperties prepara columnas clave para email", () => {
   assert.equal(rows[0].eurM2, 2100);
   assert.equal(rows[0].reference, 2300);
   assert.equal(rows[0].differencePct, -8.7);
+  assert.equal(rows[0].decisionStatusLabel, "Favorito");
+  assert.equal(rows[0].notes, "Llamar despues de comparar colegios.");
 });
 
 test("buildSavedPropertiesEmail genera HTML, texto y resumen", () => {
-  const report = buildSavedPropertiesEmail({ email: "premium@inmoradar.app", properties });
+  const report = buildSavedPropertiesEmail({
+    email: "premium@inmoradar.app",
+    properties,
+    reportUrl: "https://www.inmoradar.app/inmuebles-guardados?token=imr_test"
+  });
   assert.equal(report.summary.count, 1);
   assert.match(report.subject, /Comparativa/);
+  assert.match(report.html, new RegExp(PREHEADER));
+  assert.match(report.html, /INMORADAR · COMPARATIVA/);
+  assert.match(report.html, /Compara lo que/);
   assert.match(report.html, /Calle Mayor 1/);
+  assert.match(report.html, /Abrir InmoRadar/);
+  assert.match(report.html, /Ver inmuebles guardados/);
+  assert.match(report.html, /LECTURA RÁPIDA/);
+  assert.match(report.html, /LO QUE EL ANUNCIO NO TE CUENTA/);
+  assert.match(report.html, /No es una tasación\. Es una capa de criterio\./);
+  assert.doesNotMatch(report.html, /dashboard negro/i);
   assert.match(report.text, /BUEN PRECIO|Calle Mayor 1/);
+  assert.match(report.text, /Ver inmuebles guardados/);
 });
 
 test("buildCloudflareEmailPayload adjunta CSV en base64", () => {
@@ -58,5 +77,6 @@ test("buildCloudflareEmailPayload adjunta CSV en base64", () => {
   assert.equal(payload.attachments[0].filename, "inmoradar-inmuebles-guardados.csv");
   const csv = Buffer.from(payload.attachments[0].content, "base64").toString("utf8");
   assert.match(csv, /referencia_mercado_eur_m2/);
+  assert.match(csv, /notas/);
   assert.match(buildSavedPropertiesCsv(report.rows), /Calle Mayor 1/);
 });

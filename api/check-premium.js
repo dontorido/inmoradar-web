@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const {
   fetchWithTimeout,
   handleCors,
@@ -12,6 +13,7 @@ const {
 const { buildCloudflareEmailPayload, buildSavedPropertiesEmail } = require("./_reports/savedPropertiesEmail");
 
 const DAILY_REPORT_LIMIT = 5;
+const REPORT_ACCESS_TTL_DAYS = 14;
 
 function requestUrl(req) {
   return new URL(req.url || "/", `https://${req.headers.host || "www.inmoradar.app"}`);
@@ -40,6 +42,46 @@ function cloudflareEmailConfig() {
   };
 }
 
+function publicSiteUrl(req) {
+  const explicit = process.env.PUBLIC_SITE_URL || process.env.INMORADAR_SITE_URL || process.env.SITE_URL;
+  if (explicit) return String(explicit).replace(/\/+$/, "");
+  const host = req.headers.host || "www.inmoradar.app";
+  const protocol = /localhost|127\.0\.0\.1/i.test(host) ? "http" : "https";
+  return `${protocol}://${host}`;
+}
+
+function createReportToken() {
+  return `imr_${crypto.randomBytes(32).toString("base64url")}`;
+}
+
+function hashReportToken(token) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
+}
+
+function reportUrlForToken(req, token) {
+  return `${publicSiteUrl(req)}/inmuebles-guardados?token=${encodeURIComponent(token)}`;
+}
+
+function reportExpiresAt() {
+  const date = new Date();
+  date.setDate(date.getDate() + REPORT_ACCESS_TTL_DAYS);
+  return date.toISOString();
+}
+
+function reportAccessJson(report) {
+  return {
+    generated_at: report.generatedAt,
+    summary: report.summary,
+    rows: report.rows,
+    report_url: report.reportUrl,
+    preview_image_url: report.previewImageUrl
+  };
+}
+
+function legacyReportAccessMarker(tokenHash) {
+  return `report_access:${tokenHash}`;
+}
+
 async function countReportsToday(email) {
   if (!hasSupabaseConfig()) return 0;
   const since = new Date();
@@ -55,25 +97,78 @@ async function countReportsToday(email) {
   }
 }
 
-async function logReportAttempt({ email, report, status, providerResponse = null, errorText = null }) {
-  if (!hasSupabaseConfig()) return;
+async function createReportAccess({ email, report, tokenHash, expiresAt }) {
+  if (!hasSupabaseConfig()) throw new Error("Supabase is not configured");
+  const reportJson = reportAccessJson(report);
   try {
     await supabaseFetch("saved_property_email_reports", {
       method: "POST",
+      headers: { Prefer: "return=minimal" },
       body: JSON.stringify([
         {
           email,
-          properties_count: report?.summary?.count || report?.rows?.length || 0,
-          status,
+          properties_count: report.summary.count,
+          status: "sent",
           provider: "cloudflare_email_service",
-          provider_response_json: providerResponse || null,
-          error_text: errorText || null
+          access_token_hash: tokenHash,
+          access_token_expires_at: expiresAt,
+          report_json: reportJson
         }
       ]),
+      timeoutMs: 3000
+    });
+    return { mode: "modern" };
+  } catch (modernError) {
+    await supabaseFetch("saved_property_email_reports", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify([
+        {
+          email,
+          properties_count: report.summary.count,
+          status: "sent",
+          provider: "cloudflare_email_service",
+          provider_response_json: {
+            access_token_hash: tokenHash,
+            access_token_expires_at: expiresAt,
+            report_json: reportJson,
+            storage_mode: "legacy_provider_response_json"
+          },
+          error_text: legacyReportAccessMarker(tokenHash)
+        }
+      ]),
+      timeoutMs: 3000
+    });
+    return { mode: "legacy", fallback_from: modernError.message || "modern_report_access_failed" };
+  }
+}
+
+async function updateReportAccess({ tokenHash, storageMode = "modern", status, providerResponse = null, errorText = null }) {
+  if (!hasSupabaseConfig() || !tokenHash) return;
+  try {
+    const query =
+      storageMode === "legacy"
+        ? `saved_property_email_reports?error_text=eq.${encodeURIComponent(legacyReportAccessMarker(tokenHash))}`
+        : `saved_property_email_reports?access_token_hash=eq.${encodeURIComponent(tokenHash)}`;
+    const body =
+      storageMode === "legacy"
+        ? {
+            status,
+            ...(status === "failed" ? { error_text: errorText || null } : {})
+          }
+        : {
+            status,
+            provider_response_json: providerResponse || null,
+            error_text: errorText || null
+          };
+    await supabaseFetch(query, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(body),
       timeoutMs: 2500
     });
   } catch {
-    // El envio del email no debe fallar solo porque falte la tabla de auditoria.
+    // No bloquea el resultado del envio.
   }
 }
 
@@ -117,8 +212,17 @@ async function handleSavedPropertiesEmailReport(req, res) {
   const body = await readJsonBody(req);
   const email = normalizeEmail(body.email);
   const properties = Array.isArray(body.properties) ? body.properties : [];
+  const privacyAccepted = body.privacyAccepted === true;
   if (!isEmail(email)) {
     json(res, 400, { ok: false, error: "invalid_email" });
+    return;
+  }
+  if (!privacyAccepted) {
+    json(res, 400, {
+      ok: false,
+      error: "privacy_required",
+      message: "Debes aceptar la politica de privacidad para enviar el informe."
+    });
     return;
   }
   if (!properties.length) {
@@ -147,7 +251,16 @@ async function handleSavedPropertiesEmailReport(req, res) {
     return;
   }
 
-  const report = buildSavedPropertiesEmail({ email, properties });
+  const accessToken = createReportToken();
+  const tokenHash = hashReportToken(accessToken);
+  const expiresAt = reportExpiresAt();
+  const report = buildSavedPropertiesEmail({
+    email,
+    properties,
+    reportUrl: reportUrlForToken(req, accessToken),
+    siteUrl: publicSiteUrl(req)
+  });
+  const reportAccess = await createReportAccess({ email, report, tokenHash, expiresAt });
   const payload = buildCloudflareEmailPayload({
     email,
     from: cloudflareEmailConfig().from,
@@ -156,21 +269,23 @@ async function handleSavedPropertiesEmailReport(req, res) {
 
   try {
     const providerResponse = await sendCloudflareEmail(payload);
-    await logReportAttempt({ email, report, status: "sent", providerResponse });
+    await updateReportAccess({ tokenHash, storageMode: reportAccess.mode, status: "sent", providerResponse });
     json(res, 200, {
       ok: true,
       premium: true,
       email,
       properties_count: report.summary.count,
+      report_url: report.reportUrl,
+      expires_at: expiresAt,
       provider: "cloudflare_email_service",
       delivered: providerResponse?.result?.delivered || [],
       queued: providerResponse?.result?.queued || [],
       sent_at: new Date().toISOString()
     });
   } catch (error) {
-    await logReportAttempt({
-      email,
-      report,
+    await updateReportAccess({
+      tokenHash,
+      storageMode: reportAccess.mode,
       status: "failed",
       providerResponse: error.providerResponse || null,
       errorText: error.message
@@ -185,6 +300,65 @@ async function handleSavedPropertiesEmailReport(req, res) {
           : "No se ha podido enviar el informe ahora."
     });
   }
+}
+
+async function handleSavedPropertiesReport(req, res) {
+  if (req.method !== "GET") {
+    json(res, 405, { ok: false, error: "method_not_allowed" });
+    return;
+  }
+  const token = requestUrl(req).searchParams.get("token") || req.query?.token || "";
+  if (!/^imr_[A-Za-z0-9_-]{32,120}$/.test(token)) {
+    json(res, 400, { ok: false, error: "invalid_token" });
+    return;
+  }
+  if (!hasSupabaseConfig()) {
+    json(res, 503, { ok: false, error: "report_store_not_configured" });
+    return;
+  }
+  const tokenHash = hashReportToken(token);
+  let record = null;
+  try {
+    const modernRows = await supabaseFetch(
+      `saved_property_email_reports?access_token_hash=eq.${encodeURIComponent(tokenHash)}&status=eq.sent&select=properties_count,report_json,access_token_expires_at,created_at,status&limit=1`,
+      { timeoutMs: 3000 }
+    );
+    record = Array.isArray(modernRows) ? modernRows[0] || null : null;
+  } catch {
+    record = null;
+  }
+  if (!record?.report_json) {
+    const legacyRows = await supabaseFetch(
+      `saved_property_email_reports?error_text=eq.${encodeURIComponent(legacyReportAccessMarker(tokenHash))}&status=eq.sent&select=properties_count,provider_response_json,created_at,status&limit=1`,
+      { timeoutMs: 3000 }
+    );
+    const legacyRecord = Array.isArray(legacyRows) ? legacyRows[0] || null : null;
+    const legacyJson = legacyRecord?.provider_response_json || null;
+    if (legacyJson?.report_json) {
+      record = {
+        properties_count: legacyRecord.properties_count,
+        report_json: legacyJson.report_json,
+        access_token_expires_at: legacyJson.access_token_expires_at || null,
+        created_at: legacyRecord.created_at,
+        status: legacyRecord.status
+      };
+    }
+  }
+  if (!record?.report_json) {
+    json(res, 404, { ok: false, error: "report_not_found" });
+    return;
+  }
+  if (record.access_token_expires_at && new Date(record.access_token_expires_at).getTime() < Date.now()) {
+    json(res, 410, { ok: false, error: "report_expired" });
+    return;
+  }
+  json(res, 200, {
+    ok: true,
+    properties_count: record.properties_count || record.report_json?.rows?.length || 0,
+    expires_at: record.access_token_expires_at || null,
+    created_at: record.created_at || null,
+    report: record.report_json
+  });
 }
 
 async function handlePremiumCheck(req, res) {
@@ -235,6 +409,10 @@ module.exports = async function handler(req, res) {
     const resource = requestUrl(req).searchParams.get("resource");
     if (resource === "saved-properties-email-report") {
       await handleSavedPropertiesEmailReport(req, res);
+      return;
+    }
+    if (resource === "saved-properties-report") {
+      await handleSavedPropertiesReport(req, res);
       return;
     }
     await handlePremiumCheck(req, res);
