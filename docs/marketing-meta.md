@@ -117,10 +117,10 @@ INSTAGRAM_REDIRECT_URI=https://www.inmoradar.app/api/meta/oauth/callback
 El OAuth organico por defecto usa:
 
 ```txt
-https://www.instagram.com/oauth/authorize
+https://api.instagram.com/oauth/authorize
 ```
 
-con `client_id=INSTAGRAM_APP_ID`. No usa `https://www.facebook.com/{version}/dialog/oauth` para Instagram.
+con `client_id=INSTAGRAM_APP_ID`. No usa `https://www.facebook.com/{version}/dialog/oauth` ni `https://www.instagram.com/oauth/authorize` para Instagram.
 
 El intercambio del `code` usa:
 
@@ -181,7 +181,7 @@ El endpoint nunca devuelve tokens al cliente. La lista de Pages se sanea y solo 
 
 Endpoints exactos:
 
-- `GET /api/meta/oauth/start?target=instagram`: inicia Instagram Login y redirige a `https://www.instagram.com/oauth/authorize` con `INSTAGRAM_APP_ID`.
+- `GET /api/meta/oauth/start?target=instagram`: inicia Instagram Login y redirige a `https://api.instagram.com/oauth/authorize` con `INSTAGRAM_APP_ID`.
 - `GET /api/meta/oauth/start?target=facebook`: inicia Facebook Login y redirige a `https://www.facebook.com/{META_GRAPH_VERSION}/dialog/oauth` con `META_APP_ID`.
 - `GET /api/meta/oauth/callback`: recibe `code`, intercambia token, detecta Pages disponibles y guarda la conexion en `marketing_meta_connections`.
 - `GET /api/meta/status`: protegido por `ADMIN_IMPORT_TOKEN`; devuelve conexion, permisos, Page, Instagram, ultimo intento y ultimo error sin tokens.

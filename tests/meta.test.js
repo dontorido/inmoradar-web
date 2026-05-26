@@ -330,11 +330,11 @@ test("OAuth Facebook Page usa Meta App ID y dialog de Facebook", () => {
   assert.ok(url.includes(encodeURIComponent("https://www.inmoradar.app/api/meta/oauth/callback")));
 });
 
-test("OAuth Instagram Login usa Instagram App ID y endpoint Instagram", () => {
+test("OAuth Instagram Login usa Instagram App ID y authorize de api.instagram.com", () => {
   const { url, scopes, provider } = buildInstagramAuthorizationUrl({ state: "state", env: validEnv });
   const parsed = new URL(url);
   assert.equal(provider, "instagram");
-  assert.equal(parsed.origin, "https://www.instagram.com");
+  assert.equal(parsed.origin, "https://api.instagram.com");
   assert.equal(parsed.pathname, "/oauth/authorize");
   assert.equal(parsed.searchParams.get("client_id"), "14386908146755569");
   assert.equal(parsed.searchParams.get("client_id") === validEnv.META_APP_ID, false);
@@ -342,6 +342,7 @@ test("OAuth Instagram Login usa Instagram App ID y endpoint Instagram", () => {
   assert.equal(parsed.searchParams.get("scope"), "instagram_business_basic,instagram_business_content_publish");
   assert.equal(parsed.searchParams.get("enable_fb_login"), "0");
   assert.equal(url.includes("facebook.com"), false);
+  assert.equal(url.includes("www.instagram.com/oauth/authorize"), false);
   assert.deepEqual(scopes, ["instagram_business_basic", "instagram_business_content_publish"]);
 });
 
@@ -485,10 +486,11 @@ test("OAuth organico por defecto no pide scopes legacy ni Page scopes", async ()
   assert.equal(statusCode, 200);
   const parsed = new URL(payload.url);
   const scope = parsed.searchParams.get("scope");
-  assert.equal(parsed.origin, "https://www.instagram.com");
+  assert.equal(parsed.origin, "https://api.instagram.com");
   assert.equal(parsed.pathname, "/oauth/authorize");
   assert.equal(parsed.searchParams.get("client_id"), "14386908146755569");
   assert.equal(payload.url.includes("facebook.com"), false);
+  assert.equal(payload.url.includes("www.instagram.com/oauth/authorize"), false);
   assert.equal(scope, "instagram_business_basic,instagram_business_content_publish");
   assert.equal(scope.includes("instagram_basic"), false);
   assert.equal(scope.includes("instagram_content_publish"), false);
@@ -527,7 +529,8 @@ test("OAuth organico no mezcla scopes aunque pidan target meta/all", async () =>
   const parsed = new URL(payload.url);
   const scope = parsed.searchParams.get("scope");
   assert.equal(payload.target, "instagram");
-  assert.equal(parsed.origin, "https://www.instagram.com");
+  assert.equal(parsed.origin, "https://api.instagram.com");
+  assert.equal(payload.url.includes("www.instagram.com/oauth/authorize"), false);
   assert.equal(scope, "instagram_business_basic,instagram_business_content_publish");
   assert.equal(scope.includes("pages_show_list"), false);
   assert.equal(scope.includes("pages_manage_posts"), false);
@@ -550,8 +553,9 @@ test("endpoint legacy meta/connect queda blindado a Instagram-only por defecto",
   assert.equal(statusCode, 200);
   const parsed = new URL(payload.url);
   const scope = parsed.searchParams.get("scope");
-  assert.equal(parsed.origin, "https://www.instagram.com");
+  assert.equal(parsed.origin, "https://api.instagram.com");
   assert.equal(parsed.searchParams.get("client_id"), "14386908146755569");
+  assert.equal(payload.url.includes("www.instagram.com/oauth/authorize"), false);
   assert.equal(scope, "instagram_business_basic,instagram_business_content_publish");
   assert.equal(scope.includes("pages_show_list"), false);
   assert.equal(scope.includes("instagram_basic"), false);
