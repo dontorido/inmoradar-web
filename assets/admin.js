@@ -3077,10 +3077,11 @@ async function pauseMetaAutopublisher() {
 }
 
 async function connectMeta(target = "instagram") {
-  const payload = await api(`/api/meta/oauth/start?format=json&target=${encodeURIComponent(target)}`);
-  if (payload.state) sessionStorage.setItem("inmoradar_meta_oauth_state", payload.state);
-  if (!payload.url) throw new Error("meta_oauth_url_missing");
-  window.location.href = payload.url;
+  const normalizedTarget = target === "facebook" ? "facebook" : "instagram";
+  const url = `/api/meta/oauth/start?target=${encodeURIComponent(normalizedTarget)}`;
+  console.info(`[Meta Organic OAuth] target=${normalizedTarget} url=${url}`);
+  showStatus(`Conectando Meta (${normalizedTarget})...`);
+  window.location.href = url;
 }
 
 async function disconnectMeta() {
@@ -6216,10 +6217,10 @@ if (els.metaTest) {
   els.metaTest.addEventListener("click", () => testMetaConnection().catch((error) => showStatus(error.message, "bad")));
 }
 if (els.metaConnect) {
-  els.metaConnect.addEventListener("click", () => connectMeta("instagram").catch((error) => showStatus(error.message, "bad")));
+  els.metaConnect.addEventListener("click", () => connectMeta(els.metaConnect.dataset.metaConnectTarget || "instagram").catch((error) => showStatus(error.message, "bad")));
 }
 if (els.metaConnectFacebook) {
-  els.metaConnectFacebook.addEventListener("click", () => connectMeta("facebook").catch((error) => showStatus(error.message, "bad")));
+  els.metaConnectFacebook.addEventListener("click", () => connectMeta(els.metaConnectFacebook.dataset.metaConnectTarget || "facebook").catch((error) => showStatus(error.message, "bad")));
 }
 if (els.metaDisconnect) {
   els.metaDisconnect.addEventListener("click", () => disconnectMeta().catch((error) => showStatus(error.message, "bad")));

@@ -1,5 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const adminHandler = require("../api/admin");
 
 const {
@@ -100,6 +102,18 @@ async function callMetaOAuthStart(query = "", env = validEnv) {
     await adminHandler({
       method: "GET",
       url: `/api/admin?resource=meta/oauth/start&format=json${query ? `&${query.replace(/^&/, "")}` : ""}`,
+      headers: { authorization: "Bearer admin-test-token", host: "www.inmoradar.app" }
+    }, res);
+    return { statusCode: res.statusCode, payload: payload() };
+  });
+}
+
+async function callLegacyMetaConnect(query = "", env = validEnv) {
+  return withEnv({ ADMIN_IMPORT_TOKEN: "admin-test-token", ...env }, async () => {
+    const { res, payload } = createJsonResponse();
+    await adminHandler({
+      method: "GET",
+      url: `/api/admin?resource=meta/connect${query ? `&${query.replace(/^&/, "")}` : ""}`,
       headers: { authorization: "Bearer admin-test-token", host: "www.inmoradar.app" }
     }, res);
     return { statusCode: res.statusCode, payload: payload() };
@@ -397,4 +411,27 @@ test("OAuth organico Facebook Page queda en flujo separado", async () => {
   const scope = new URL(payload.url).searchParams.get("scope");
   assert.equal(scope, "pages_show_list,pages_read_engagement,pages_manage_posts");
   assert.equal(payload.target, "facebook");
+});
+
+test("BackOffice conecta Instagram con target explicito y sin endpoint legacy", () => {
+  const adminHtml = fs.readFileSync(path.join(__dirname, "..", "admin.html"), "utf8");
+  const adminJs = fs.readFileSync(path.join(__dirname, "..", "assets", "admin.js"), "utf8");
+
+  assert.match(adminHtml, /data-meta-connect-target="instagram"[^>]*>Conectar Instagram<\/button>/);
+  assert.match(adminHtml, /data-meta-connect-target="facebook"[^>]*>Conectar Facebook Page<\/button>/);
+  assert.doesNotMatch(adminHtml, />Conectar Meta<\/button>/);
+  assert.match(adminJs, /\/api\/meta\/oauth\/start\?target=/);
+  assert.match(adminJs, /dataset\.metaConnectTarget \|\| "instagram"/);
+  assert.doesNotMatch(adminJs, /\/api\/admin\?resource=meta\/connect/);
+});
+
+test("endpoint legacy meta/connect queda blindado a Instagram-only por defecto", async () => {
+  const { statusCode, payload } = await callLegacyMetaConnect("scopes=pages_show_list,instagram_basic,instagram_content_publish");
+  assert.equal(statusCode, 200);
+  const scope = new URL(payload.url).searchParams.get("scope");
+  assert.equal(scope, "instagram_business_basic,instagram_business_content_publish");
+  assert.equal(scope.includes("pages_show_list"), false);
+  assert.equal(scope.includes("instagram_basic"), false);
+  assert.equal(scope.includes("instagram_content_publish"), false);
+  assert.equal(payload.target, "instagram");
 });

@@ -2098,11 +2098,11 @@ async function handleMetaDashboard(url) {
 
 async function handleMetaConnect(req, url) {
   if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
-  const scopes = String(url.searchParams.get("scopes") || "")
-    .split(/[\s,]+/)
-    .filter(Boolean);
-  const result = buildMetaAuthorizationUrl({ scopes: scopes.length ? scopes : undefined });
-  return { status: 200, payload: { ok: true, ...result } };
+  const target = normalizeOAuthTarget(url.searchParams.get("target") || url.searchParams.get("platform") || "instagram");
+  const scopes = metaOrganicOAuthScopes({ target, env: process.env });
+  console.log(`[Meta Organic OAuth] legacy connect target=${target} scope=${scopes.join(",")}`);
+  const result = buildMetaAuthorizationUrl({ scopes });
+  return { status: 200, payload: { ok: true, ...result, target } };
 }
 
 async function handleMetaCallback(req) {
@@ -3515,6 +3515,10 @@ async function handleAdminRequest(req, res) {
     const preSupabaseReadOnly = await dispatchAdminRoute(ADMIN_PRE_SUPABASE_READ_ONLY_ROUTES, { req, url, resource });
     if (preSupabaseReadOnly) {
       return json(res, preSupabaseReadOnly.status, preSupabaseReadOnly.payload);
+    }
+    if (resource === "meta/connect") {
+      const result = await handleMeta(req, url, resource);
+      return json(res, result.status, result.payload);
     }
     if (!hasSupabaseConfig()) {
       return json(res, 500, { ok: false, error: "supabase_not_configured" });
