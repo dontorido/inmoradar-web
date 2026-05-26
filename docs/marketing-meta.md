@@ -114,13 +114,19 @@ INSTAGRAM_REDIRECT_URI=https://www.inmoradar.app/api/meta/oauth/callback
 - `instagram_business_basic`
 - `instagram_business_content_publish`
 
-El OAuth organico por defecto usa:
+El OAuth organico por defecto replica la URL de insercion generada por Meta Developers:
 
 ```txt
-https://api.instagram.com/oauth/authorize
+https://www.instagram.com/accounts/login/?force_authentication&platform_app_id=INSTAGRAM_APP_ID&next=...
 ```
 
-con `client_id=INSTAGRAM_APP_ID`. No usa `https://www.facebook.com/{version}/dialog/oauth` ni `https://www.instagram.com/oauth/authorize` para Instagram.
+El parametro `next` contiene la ruta codificada a:
+
+```txt
+/oauth/authorize/third_party/
+```
+
+con `client_id=INSTAGRAM_APP_ID`, `redirect_uri=INSTAGRAM_REDIRECT_URI`, `response_type=code`, los scopes organicos y el `state` firmado. No usa `https://www.facebook.com/{version}/dialog/oauth`, `https://api.instagram.com/oauth/authorize` ni `https://www.instagram.com/oauth/authorize` como endpoint directo de autorizacion para Instagram.
 
 El intercambio del `code` usa:
 
@@ -181,7 +187,7 @@ El endpoint nunca devuelve tokens al cliente. La lista de Pages se sanea y solo 
 
 Endpoints exactos:
 
-- `GET /api/meta/oauth/start?target=instagram`: inicia Instagram Login y redirige a `https://api.instagram.com/oauth/authorize` con `INSTAGRAM_APP_ID`.
+- `GET /api/meta/oauth/start?target=instagram`: inicia Instagram Login y redirige a `https://www.instagram.com/accounts/login/` con `platform_app_id=INSTAGRAM_APP_ID`; el parametro `next` apunta a `/oauth/authorize/third_party/`.
 - `GET /api/meta/oauth/start?target=facebook`: inicia Facebook Login y redirige a `https://www.facebook.com/{META_GRAPH_VERSION}/dialog/oauth` con `META_APP_ID`.
 - `GET /api/meta/oauth/callback`: recibe `code`, intercambia token, detecta Pages disponibles y guarda la conexion en `marketing_meta_connections`.
 - `GET /api/meta/status`: protegido por `ADMIN_IMPORT_TOKEN`; devuelve conexion, permisos, Page, Instagram, ultimo intento y ultimo error sin tokens.
