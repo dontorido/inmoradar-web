@@ -158,6 +158,18 @@ async function callMetaOAuthStart(query = "", env = validEnv) {
   });
 }
 
+async function callAdminResource(resource, headers = {}, env = validEnv) {
+  return withEnv({ ADMIN_IMPORT_TOKEN: "admin-test-token", ...env }, async () => {
+    const { res, payload } = createJsonResponse();
+    await adminHandler({
+      method: "GET",
+      url: `/api/admin?resource=${encodeURIComponent(resource)}`,
+      headers: { host: "www.inmoradar.app", ...headers }
+    }, res);
+    return { statusCode: res.statusCode, payload: payload() };
+  });
+}
+
 async function callLegacyMetaConnect(query = "", env = validEnv) {
   return withEnv({ ADMIN_IMPORT_TOKEN: "admin-test-token", ...env }, async () => {
     const { res, payload } = createJsonResponse();
@@ -640,6 +652,31 @@ test("BackOffice conecta Instagram con target explicito y sin endpoint legacy", 
   assert.match(adminJs, /\/api\/meta\/oauth\/start\?target=/);
   assert.match(adminJs, /dataset\.metaConnectTarget \|\| "instagram"/);
   assert.doesNotMatch(adminJs, /\/api\/admin\?resource=meta\/connect/);
+  assert.match(adminJs, /adminPreviewAuthMessage/);
+  assert.match(adminJs, /metaOrganicStatusErrorPayload/);
+});
+
+test("Meta organic status usa la misma proteccion admin que BackOffice", async () => {
+  const envWithoutSupabase = {
+    ...validEnv,
+    SUPABASE_URL: undefined,
+    SUPABASE_SERVICE_ROLE_KEY: undefined
+  };
+
+  const metaStatus = await callAdminResource("meta/status", {}, envWithoutSupabase);
+  const adminSummary = await callAdminResource("summary", {}, envWithoutSupabase);
+  assert.equal(metaStatus.statusCode, 401);
+  assert.equal(metaStatus.payload.error, "unauthorized");
+  assert.equal(adminSummary.statusCode, 401);
+  assert.equal(adminSummary.payload.error, "unauthorized");
+
+  const authorizedMetaStatus = await callAdminResource(
+    "meta/status",
+    { authorization: "Bearer admin-test-token" },
+    envWithoutSupabase
+  );
+  assert.equal(authorizedMetaStatus.statusCode, 500);
+  assert.equal(authorizedMetaStatus.payload.error, "supabase_not_configured");
 });
 
 test("endpoint legacy meta/connect queda blindado a Instagram-only por defecto", async () => {

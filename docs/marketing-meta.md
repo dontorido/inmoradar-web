@@ -183,6 +183,7 @@ Algunos permisos pueden requerir App Review, verificacion de negocio o configura
 
 En `BackOffice > Marketing > Meta`:
 
+0. En Vercel Preview, entra primero al BackOffice pegando `ADMIN_IMPORT_TOKEN` en ese mismo hostname de Preview. La pagina HTML puede responder `200`, pero `/api/admin` y `/api/meta/status` devuelven `401` hasta que el token admin queda guardado en `sessionStorage` para ese origen.
 1. Pulsa `Conectar Instagram`.
 2. Autoriza con un usuario que gestione la cuenta profesional de Instagram.
 3. Vuelve a `BackOffice > Marketing > Meta`.
@@ -361,6 +362,7 @@ Rollback de datos:
 
 ## Troubleshooting
 
+- `401 unauthorized` en `/api/meta/status` o `/api/admin`: falta `ADMIN_IMPORT_TOKEN` en la sesion del BackOffice para ese host. En Preview hay que pegar el token otra vez porque `sessionStorage` no se comparte con produccion ni con otros dominios `*.vercel.app`. No significa que OAuth haya fallado; significa que el panel no esta autorizado para leer el estado.
 - `missing_permissions:*`: faltan permisos o App Review.
 - `missing_facebook_page_id`: no se ha seleccionado Page.
 - `missing_instagram_business_account_id`: la Page no tiene Instagram profesional vinculado o no fue detectado.

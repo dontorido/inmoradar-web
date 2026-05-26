@@ -859,6 +859,24 @@ async function api(path, options = {}) {
   return payload;
 }
 
+function isAdminUnauthorizedError(error) {
+  return error?.status === 401 || error?.payload?.error === "unauthorized" || /unauthorized/i.test(String(error?.message || ""));
+}
+
+function adminPreviewAuthMessage() {
+  return "Sesion admin no autorizada en este Preview. Entra con ADMIN_IMPORT_TOKEN en este mismo host y vuelve a cargar Estado.";
+}
+
+function metaOrganicStatusErrorPayload(error) {
+  const authError = isAdminUnauthorizedError(error);
+  return {
+    ok: false,
+    status: authError ? "admin_unauthorized" : "error",
+    auth_error: authError,
+    last_error: authError ? adminPreviewAuthMessage() : String(error?.message || "meta_status_failed")
+  };
+}
+
 function adminAlertDismissKey(id) {
   return `${ALERT_DISMISS_PREFIX}${id}`;
 }
@@ -1073,7 +1091,7 @@ function statusTone(value) {
   if (["unknown"].includes(normalized)) return "draft";
   if (["published", "active", "on_trial", "connected", "manually_published", "included", "pass", "ok", "indexable"].includes(normalized)) return "published";
   if (["ready", "ready_to_publish", "index", "paid", "scheduled", "pending_review"].includes(normalized)) return "ready";
-  if (["cancelled", "expired", "needs_reauth", "needs_connection", "noindex", "unpaid", "payment_failed", "failed", "error", "disconnected", "excluded", "blocked", "fail"].includes(normalized)) return "bad";
+  if (["cancelled", "expired", "needs_reauth", "needs_connection", "admin_unauthorized", "noindex", "unpaid", "payment_failed", "failed", "error", "disconnected", "excluded", "blocked", "fail"].includes(normalized)) return "bad";
   if (["past_due", "publishing"].includes(normalized)) return "warn";
   if (["draft", "image_pending", "needs_review", "manual", "skipped"].includes(normalized)) return "draft";
   if (["archived"].includes(normalized)) return "muted";
@@ -2831,6 +2849,7 @@ function metaStatusLabel(value) {
     needs_instagram: "Sin Instagram",
     needs_permissions: "Faltan permisos",
     needs_reauth: "Reautorizar",
+    admin_unauthorized: "Admin no autorizado",
     connected: "Conectado",
     expired: "Token expirado",
     error: "Error",
@@ -3050,7 +3069,7 @@ async function loadMeta() {
   if (!els.metaConnection) return;
   const [payload, organic] = await Promise.all([
     api("/api/admin?resource=meta"),
-    api("/api/meta/status").catch((error) => ({ ok: false, status: "error", last_error: error.message }))
+    api("/api/meta/status").catch((error) => metaOrganicStatusErrorPayload(error))
   ]);
   state.meta.organic = organic;
   renderMeta(payload);
@@ -3159,11 +3178,11 @@ async function runMetaAction(action, id = state.meta.currentPostId) {
 }
 
 async function loadMetaOrganicStatus() {
-  const payload = await api("/api/meta/status");
+  const payload = await api("/api/meta/status").catch((error) => metaOrganicStatusErrorPayload(error));
   state.meta.organic = payload;
   if (payload.connection) state.meta.connection = payload.connection;
   renderMetaOrganicStatus(payload);
-  showStatus("Estado de Meta organico actualizado.", "good");
+  showStatus(payload.auth_error ? payload.last_error : "Estado de Meta organico actualizado.", payload.auth_error ? "bad" : "good");
 }
 
 async function publishMetaOrganicTest(platform) {
@@ -3185,6 +3204,13 @@ async function handleMetaOAuthCallbackFromUrl() {
     params.delete("meta_status");
     const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash || ""}`;
     window.history.replaceState({}, document.title, next);
+    if (!state.token) {
+      const authPayload = metaOrganicStatusErrorPayload({ status: 401, message: "unauthorized" });
+      state.meta.organic = authPayload;
+      renderMetaOrganicStatus(authPayload);
+      showStatus(metaOAuth === "error" ? `Meta OAuth: ${error || "error"}` : adminPreviewAuthMessage(), metaOAuth === "error" ? "bad" : "neutral");
+      return;
+    }
     await loadMeta();
     showStatus(metaOAuth === "error" ? `Meta OAuth: ${error || "error"}` : "Meta conectado. Revisa Page, Instagram y permisos.", metaOAuth === "error" ? "bad" : "good");
     return;
