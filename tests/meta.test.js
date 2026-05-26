@@ -13,18 +13,22 @@ const {
   buildCaption,
   defaultBrandImageUrl,
   defaultSettings,
+  diffInstagramAuthorizationUrls,
   duplicateForPlatform,
   encryptToken,
   exchangeInstagramAuthorizationCode,
+  instagramOAuthStateMode,
   imageUrlForLanding,
   isEligibleLanding,
   missingRequiredScopes,
   pickNextLanding,
   publishFacebookPost,
   publishInstagramPost,
+  redactInstagramAuthorizationUrl,
   sanitizeMetaPayload,
   sanitizeSecretText,
   shouldRunAutopublisher,
+  summarizeInstagramAuthorizationUrl,
   summarizeConnection
 } = require("../lib/meta/services");
 const {
@@ -102,6 +106,24 @@ function createJsonResponse() {
   };
 }
 
+function createRawResponse() {
+  const chunks = [];
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[String(name).toLowerCase()] = value;
+    },
+    getHeader(name) {
+      return this.headers[String(name).toLowerCase()];
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+  return { res, body: () => chunks.join("") };
+}
+
 function parseInstagramLoginUrl(url) {
   const parsed = new URL(url);
   const next = parsed.searchParams.get("next");
@@ -110,6 +132,18 @@ function parseInstagramLoginUrl(url) {
     next,
     nextUrl: new URL(next || "/", "https://www.instagram.com")
   };
+}
+
+async function callMetaOAuthStartRedirect(query = "", env = validEnv) {
+  return withEnv({ ADMIN_IMPORT_TOKEN: "admin-test-token", ...env }, async () => {
+    const { res, body } = createRawResponse();
+    await adminHandler({
+      method: "GET",
+      url: `/api/admin?resource=meta/oauth/start${query ? `&${query.replace(/^&/, "")}` : ""}`,
+      headers: { authorization: "Bearer admin-test-token", host: "www.inmoradar.app" }
+    }, res);
+    return { statusCode: res.statusCode, headers: res.headers, body: body() };
+  });
 }
 
 async function callMetaOAuthStart(query = "", env = validEnv) {
@@ -359,6 +393,43 @@ test("OAuth Instagram Login usa URL de insercion con accounts/login y next third
   assert.equal(url.includes("api.instagram.com/oauth/authorize"), false);
   assert.equal(url.includes("www.instagram.com/oauth/authorize"), false);
   assert.deepEqual(scopes, ["instagram_business_basic", "instagram_business_content_publish"]);
+});
+
+test("OAuth Instagram conserva extras de la URL oficial y permite comparar diferencias", () => {
+  const officialUrl = "https://www.instagram.com/accounts/login/?force_authentication&platform_app_id=14386908146755569&logger_id=official-logger&next=%2Foauth%2Fauthorize%2Fthird_party%2F%3Fconfig_id%3Dofficial-config%26client_id%3D14386908146755569%26redirect_uri%3Dhttps%253A%252F%252Fexample.com%252Fcallback%26response_type%3Dcode%26scope%3Dinstagram_business_basic%252Cinstagram_business_content_publish";
+  const { url } = buildInstagramAuthorizationUrl({
+    state: "state",
+    env: { ...validEnv, INSTAGRAM_OFFICIAL_EMBED_URL: officialUrl }
+  });
+  const { parsed, nextUrl } = parseInstagramLoginUrl(url);
+  assert.equal(parsed.searchParams.get("logger_id"), "official-logger");
+  assert.equal(parsed.searchParams.get("platform_app_id"), "14386908146755569");
+  assert.equal(nextUrl.searchParams.get("config_id"), "official-config");
+  assert.equal(nextUrl.searchParams.get("client_id"), "14386908146755569");
+  assert.equal(nextUrl.searchParams.get("redirect_uri"), "https://www.inmoradar.app/api/meta/oauth/callback");
+  assert.equal(nextUrl.searchParams.get("state"), "state");
+
+  const summary = summarizeInstagramAuthorizationUrl(url);
+  assert.equal(summary.path, "/accounts/login/");
+  assert.equal(summary.next_path, "/oauth/authorize/third_party/");
+  assert.match(summary.next_params.state, /\[present:5\]/);
+  assert.equal(redactInstagramAuthorizationUrl(url).includes("state"), true);
+  const diffs = diffInstagramAuthorizationUrls(url, officialUrl);
+  assert.ok(diffs.some((item) => item.field === "next_params.redirect_uri"));
+  assert.ok(diffs.some((item) => item.field === "next_params.state"));
+});
+
+test("OAuth Instagram puede mover state a cookie si la URL oficial no acepta state", async () => {
+  assert.equal(instagramOAuthStateMode({ ...validEnv, INSTAGRAM_OAUTH_STATE_MODE: "cookie" }), "cookie");
+  const { statusCode, headers } = await callMetaOAuthStartRedirect("", { ...validEnv, INSTAGRAM_OAUTH_STATE_MODE: "cookie" });
+  assert.equal(statusCode, 302);
+  const { nextUrl } = parseInstagramLoginUrl(headers.location);
+  assert.equal(nextUrl.searchParams.has("state"), false);
+  const cookie = Array.isArray(headers["set-cookie"]) ? headers["set-cookie"].join(";") : String(headers["set-cookie"] || "");
+  assert.match(cookie, /inmoradar_meta_oauth_state=/);
+  const encodedState = cookie.match(/inmoradar_meta_oauth_state=([^;]+)/)?.[1] || "";
+  const decoded = decodeOrganicOAuthState(decodeURIComponent(encodedState), validEnv, { now: Date.now() });
+  assert.equal(decoded.target, "instagram");
 });
 
 test("intercambio Instagram Login usa api.instagram.com y secreto Instagram", async () => {

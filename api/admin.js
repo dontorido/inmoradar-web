@@ -87,6 +87,7 @@ const {
   buildMetaPost,
   decryptToken: decryptMetaToken,
   defaultSettings: defaultMetaSettings,
+  diffInstagramAuthorizationUrls,
   encryptToken: encryptMetaToken,
   exchangeAuthorizationCode: exchangeMetaAuthorizationCode,
   exchangeInstagramAuthorizationCode,
@@ -99,10 +100,12 @@ const {
   normalizeSettings: normalizeMetaSettings,
   pickNextLanding,
   publishToPlatform: publishMetaToPlatform,
+  redactInstagramAuthorizationUrl,
   sanitizeSecretText: sanitizeMetaSecretText,
   sanitizePage,
   selectManagedPage,
   shouldRunAutopublisher: shouldRunMetaAutopublisher,
+  summarizeInstagramAuthorizationUrl,
   summarizeConnection: summarizeMetaConnection,
   validatePublishInput: validateMetaPublishInput,
   withUtm
@@ -120,6 +123,7 @@ const {
 const { logRequestMetric } = require("../lib/observability/request-metrics");
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at,source_data_json";
+const META_OAUTH_STATE_COOKIE = "inmoradar_meta_oauth_state";
 
 function requestHeader(req, name) {
   const headers = req.headers || {};
@@ -127,6 +131,39 @@ function requestHeader(req, name) {
   const lowerName = String(name).toLowerCase();
   const entry = Object.entries(headers).find(([key]) => String(key).toLowerCase() === lowerName);
   return entry ? entry[1] : "";
+}
+
+function responseHeaderValue(res, name) {
+  const lowerName = String(name || "").toLowerCase();
+  if (typeof res.getHeader === "function") return res.getHeader(name) || res.getHeader(lowerName);
+  return res.headers?.[lowerName] || res.headers?.[name];
+}
+
+function appendResponseHeader(res, name, value) {
+  const current = responseHeaderValue(res, name);
+  if (!current) return res.setHeader(name, value);
+  const next = Array.isArray(current) ? [...current, value] : [current, value];
+  return res.setHeader(name, next);
+}
+
+function parseCookieHeader(value) {
+  return String(value || "")
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce((acc, part) => {
+      const index = part.indexOf("=");
+      const key = index >= 0 ? part.slice(0, index).trim() : part;
+      const rawValue = index >= 0 ? part.slice(index + 1) : "";
+      if (key) {
+        try {
+          acc[key] = decodeURIComponent(rawValue || "");
+        } catch (error) {
+          acc[key] = rawValue || "";
+        }
+      }
+      return acc;
+    }, {});
 }
 
 function cleanRequestToken(value) {
@@ -462,6 +499,26 @@ function redirect(res, target, status = 302) {
   res.setHeader("location", target);
   res.setHeader("cache-control", "no-store, max-age=0");
   res.end("");
+}
+
+function setMetaOAuthStateCookie(res, state) {
+  appendResponseHeader(
+    res,
+    "set-cookie",
+    `${META_OAUTH_STATE_COOKIE}=${encodeURIComponent(state)}; Path=/api/meta/oauth/callback; Max-Age=1800; HttpOnly; Secure; SameSite=Lax`
+  );
+}
+
+function clearMetaOAuthStateCookie(res) {
+  appendResponseHeader(
+    res,
+    "set-cookie",
+    `${META_OAUTH_STATE_COOKIE}=; Path=/api/meta/oauth/callback; Max-Age=0; HttpOnly; Secure; SameSite=Lax`
+  );
+}
+
+function readMetaOAuthStateCookie(req) {
+  return parseCookieHeader(requestHeader(req, "cookie"))[META_OAUTH_STATE_COOKIE] || "";
 }
 
 function relativeWithQuery(path, params = {}) {
@@ -2198,6 +2255,15 @@ async function handleMetaOrganicOAuthStart(req, res, url) {
   const state = encodeOrganicOAuthState({ returnTo, target });
   console.log(`[Meta Organic OAuth] target=${target} scope=${scopes.join(",")}`);
   const result = buildOrganicAuthorizationUrl({ target, state, scopes });
+  if (target === "instagram") {
+    const officialUrl = process.env.INSTAGRAM_OFFICIAL_EMBED_URL || process.env.INSTAGRAM_BUSINESS_LOGIN_URL || process.env.META_INSTAGRAM_OFFICIAL_EMBED_URL || "";
+    console.log(`[Meta Organic OAuth] instagram_authorize_url=${redactInstagramAuthorizationUrl(result.url)}`);
+    console.log(`[Meta Organic OAuth] instagram_authorize_summary=${JSON.stringify(summarizeInstagramAuthorizationUrl(result.url))}`);
+    if (officialUrl) {
+      console.log(`[Meta Organic OAuth] instagram_authorize_diff=${JSON.stringify(diffInstagramAuthorizationUrls(result.url, officialUrl))}`);
+    }
+    if (result.state_mode === "cookie") setMetaOAuthStateCookie(res, state);
+  }
   if (url.searchParams.get("format") === "json") {
     if (!assertAdmin(req, res)) return;
     return json(res, 200, { ok: true, ...result, target, redirect_uri: envStatus.redirect_uri });
@@ -2208,9 +2274,11 @@ async function handleMetaOrganicOAuthStart(req, res, url) {
 async function handleMetaOrganicOAuthCallback(req, res, url) {
   if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
   let state = { returnTo: "/backoffice/marketing/meta" };
+  const rawState = url.searchParams.get("state") || readMetaOAuthStateCookie(req);
+  if (readMetaOAuthStateCookie(req)) clearMetaOAuthStateCookie(res);
   try {
-    if (!url.searchParams.get("state")) throw new Error("meta_oauth_state_required");
-    state = decodeOrganicOAuthState(url.searchParams.get("state"));
+    if (!rawState) throw new Error("meta_oauth_state_required");
+    state = decodeOrganicOAuthState(rawState);
   } catch (error) {
     return redirect(res, relativeWithQuery("/backoffice/marketing/meta", {
       meta_oauth: "error",
