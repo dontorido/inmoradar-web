@@ -138,6 +138,37 @@
         return parsed === null ? "-" : `${parsed.toFixed(1).replace(".", ",")}/10`;
       }
 
+      function toneFromScore(value) {
+        const parsed = number(value);
+        if (parsed === null) return "neutral";
+        if (parsed >= 7.5) return "good";
+        if (parsed >= 6) return "neutral";
+        if (parsed >= 4.5) return "warning";
+        return "danger";
+      }
+
+      function toneFromMarketDiff(value) {
+        const parsed = number(value);
+        if (parsed === null) return "neutral";
+        if (parsed <= -5) return "good";
+        if (parsed <= 5) return "neutral";
+        if (parsed <= 15) return "warning";
+        return "danger";
+      }
+
+      function toneFromParking(value) {
+        const text = String(value || "").toLowerCase();
+        if (!text || text === "-") return "neutral";
+        if (/incluido|garaje|facil|fácil|buena|baja/.test(text)) return "good";
+        if (/media|normal|zona azul/.test(text)) return "neutral";
+        if (/dificil|difícil|alta|complicada|mala/.test(text)) return "danger";
+        return "warning";
+      }
+
+      function badge(text, tone) {
+        return `<span class="saved-report-badge" data-tone="${escapeHtml(tone || "neutral")}">${escapeHtml(text)}</span>`;
+      }
+
       function renderState(title, text, tone) {
         stateNode.dataset.tone = tone || "neutral";
         stateNode.innerHTML = `<span class="section-label">Informe</span><h2>${escapeHtml(title)}</h2><p class="lead">${escapeHtml(text)}</p>`;
@@ -154,33 +185,80 @@
 
       function renderRows(rows) {
         listNode.hidden = false;
-        listNode.innerHTML = rows
-          .map((row) => {
+        if (!rows.length) {
+          listNode.innerHTML = `
+            <div class="saved-report-empty">
+              <h3>No hay inmuebles en este informe.</h3>
+              <p>Vuelve a enviar la comparativa desde la extensión cuando tengas anuncios guardados.</p>
+            </div>
+          `;
+          return;
+        }
+
+        const body = rows
+          .map((row, index) => {
             const href = row.url ? escapeHtml(row.url) : "";
+            const surfaceAndRooms = [
+              number(row.surface) === null ? "" : `${formatNumber(row.surface)} m²`,
+              row.rooms ? `${escapeHtml(row.rooms)} hab.` : ""
+            ].filter(Boolean).join(" · ");
+            const sourceLine = [
+              row.portal || "Portal",
+              row.decisionStatusLabel || "Pendiente"
+            ].filter(Boolean).join(" · ");
             return `
-              <article class="saved-report-card">
-                <div class="saved-report-card-main">
-                  <span class="section-label">${escapeHtml(row.portal || "Portal")} · ${escapeHtml(row.decisionStatusLabel || "Pendiente")}</span>
-                  <h2>${escapeHtml(row.title || "Inmueble guardado")}</h2>
-                  <p>${escapeHtml(row.location || "Ubicación no detectada")}</p>
-                  <div class="saved-report-metrics">
-                    <span><strong>${formatEuro(row.price)}</strong><small>Precio</small></span>
-                    <span><strong>${formatEuroM2(row.eurM2)}</strong><small>${formatPercent(row.differencePct)} vs mercado</small></span>
-                    <span><strong>${formatEuro(row.downPayment)}</strong><small>Entrada</small></span>
-                    <span><strong>${formatEuro(row.monthlyTotal)}</strong><small>Mes estimado</small></span>
-                    <span><strong>${formatScore(row.propertyScore)}</strong><small>Inmueble</small></span>
-                    <span><strong>${formatScore(row.zoneScore)}</strong><small>Zona</small></span>
+              <tr>
+                <td class="saved-report-property-cell" data-label="Inmueble">
+                  <div class="saved-report-property">
+                    <span class="saved-report-rank">${index + 1}</span>
+                    <div>
+                      <span class="section-label">${escapeHtml(sourceLine)}</span>
+                      <h3>${escapeHtml(row.title || "Inmueble guardado")}</h3>
+                      <p>${escapeHtml(row.location || "Ubicación no detectada")}</p>
+                      <p class="saved-report-signal"><strong>Señal:</strong> ${escapeHtml(row.topSignal || "Sin señal destacada")}</p>
+                      ${row.notes ? `<p class="saved-report-notes"><strong>Nota:</strong> ${escapeHtml(row.notes)}</p>` : ""}
+                    </div>
                   </div>
-                  <p class="saved-report-signal"><strong>Señal:</strong> ${escapeHtml(row.topSignal || "Sin señal destacada")}</p>
-                  ${row.notes ? `<p class="saved-report-notes"><strong>Nota:</strong> ${escapeHtml(row.notes)}</p>` : ""}
-                </div>
-                <div class="saved-report-actions">
+                </td>
+                <td data-label="Precio"><strong class="saved-report-number">${formatEuro(row.price)}</strong><small>${surfaceAndRooms || "-"}</small></td>
+                <td data-label="Mercado">
+                  <strong class="saved-report-number">${formatEuroM2(row.eurM2)}</strong>
+                  <small>Ref. ${formatEuroM2(row.reference)}</small>
+                  ${badge(`${formatPercent(row.differencePct)} vs mercado`, toneFromMarketDiff(row.differencePct))}
+                </td>
+                <td data-label="Score">${badge(formatScore(row.propertyScore), toneFromScore(row.propertyScore))}</td>
+                <td data-label="Zona">${badge(formatScore(row.zoneScore), toneFromScore(row.zoneScore))}</td>
+                <td data-label="Parking">${badge(row.parking || "-", toneFromParking(row.parking))}</td>
+                <td data-label="Coste/mes"><strong class="saved-report-number">${formatEuro(row.monthlyTotal || row.monthlyMortgage)}</strong><small>${number(row.downPayment) === null ? "" : `Entrada ${formatEuro(row.downPayment)}`}</small></td>
+                <td data-label="Guardado"><span class="saved-report-date">${escapeHtml(row.savedAt ? new Date(row.savedAt).toLocaleDateString("es-ES") : "-")}</span></td>
+                <td class="saved-report-action-cell" data-label="Acción">
                   ${href ? `<a class="button" href="${href}" target="_blank" rel="noopener noreferrer">Ver anuncio</a>` : `<button class="button secondary" type="button" disabled>Sin enlace</button>`}
-                </div>
-              </article>
+                </td>
+              </tr>
             `;
           })
           .join("");
+
+        listNode.innerHTML = `
+          <div class="saved-report-table-wrap">
+            <table class="saved-report-table">
+              <thead>
+                <tr>
+                  <th>Inmueble</th>
+                  <th>Precio</th>
+                  <th>Mercado</th>
+                  <th>Score</th>
+                  <th>Zona</th>
+                  <th>Parking</th>
+                  <th>Coste/mes</th>
+                  <th>Guardado</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>${body}</tbody>
+            </table>
+          </div>
+        `;
       }
 
       async function loadReport() {
@@ -203,7 +281,7 @@
           }
           const report = payload.report || {};
           renderSummary(report, payload.expires_at);
-          renderState("Comparativa lista", "Todos los inmuebles del informe aparecen debajo con sus señales, notas y enlaces.", "good");
+          renderState("Comparativa lista", "Todos los inmuebles del informe aparecen debajo en formato tabla, con señales, notas y enlaces.", "good");
           renderRows(report.rows || []);
         } catch (error) {
           renderState("No se ha podido cargar", "Reinténtalo en unos segundos.", "bad");

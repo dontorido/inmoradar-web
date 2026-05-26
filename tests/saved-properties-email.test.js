@@ -1,5 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const {
   buildCloudflareEmailPayload,
@@ -79,4 +81,18 @@ test("buildCloudflareEmailPayload adjunta CSV en base64", () => {
   assert.match(csv, /referencia_mercado_eur_m2/);
   assert.match(csv, /notas/);
   assert.match(buildSavedPropertiesCsv(report.rows), /Calle Mayor 1/);
+});
+
+test("pagina privada de inmuebles guardados renderiza la comparativa como tabla", () => {
+  const root = path.join(__dirname, "..");
+  const page = fs.readFileSync(path.join(root, "inmuebles-guardados.html"), "utf8");
+  const styles = fs.readFileSync(path.join(root, "assets", "styles.css"), "utf8");
+
+  assert.match(page, /<table class="saved-report-table">/);
+  assert.match(page, /<th>Mercado<\/th>/);
+  assert.match(page, /data-label="Mercado"/);
+  assert.match(page, /data-label="Coste\/mes"/);
+  assert.doesNotMatch(page, /saved-report-card/);
+  assert.match(styles, /\.saved-report-table-wrap/);
+  assert.match(styles, /@media \(max-width: 760px\)/);
 });
