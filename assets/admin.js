@@ -270,10 +270,15 @@ const state = {
     channels: {},
     settings: {},
     metrics: {},
+    assets: [],
     posts: [],
     logs: [],
     autopublisher: {},
     storage: {},
+    assetType: "all",
+    assetProvider: "all",
+    assetStatus: "all",
+    selectedAssetId: "",
     queuePlatform: "all",
     queueStatus: "all",
     selectedPostId: ""
@@ -374,6 +379,12 @@ const els = {
   socialRefresh: document.querySelector("[data-social-refresh]"),
   socialSummary: document.querySelector("[data-social-summary]"),
   socialChannels: document.querySelector("[data-social-channels]"),
+  socialAssetType: document.querySelector("[data-social-asset-type]"),
+  socialAssetProvider: document.querySelector("[data-social-asset-provider]"),
+  socialAssetStatus: document.querySelector("[data-social-asset-status]"),
+  socialCreateAsset: document.querySelector("[data-social-create-asset]"),
+  socialAssetRows: document.querySelector("[data-social-asset-rows]"),
+  socialAssetEditor: document.querySelector("[data-social-asset-editor]"),
   socialQueuePlatform: document.querySelector("[data-social-queue-platform]"),
   socialQueueStatus: document.querySelector("[data-social-queue-status]"),
   socialCreateDraft: document.querySelector("[data-social-create-draft]"),
@@ -2879,6 +2890,8 @@ function metaStatusLabel(value) {
     expired: "Token expirado",
     error: "Error",
     draft: "Draft",
+    processing: "Processing",
+    ready: "Ready",
     needs_review: "Needs review",
     approved: "Approved",
     scheduled: "Scheduled",
@@ -2889,7 +2902,8 @@ function metaStatusLabel(value) {
     failed: "Error",
     skipped: "Omitido",
     rejected: "Rejected",
-    cancelled: "Cancelled"
+    cancelled: "Cancelled",
+    archived: "Archived"
   };
   return map[String(value || "").toLowerCase()] || value || "-";
 }
@@ -3050,6 +3064,48 @@ function socialChannelLabel(value) {
   }[String(value || "").toLowerCase()] || value || "-";
 }
 
+function socialAssetTypeLabel(value) {
+  return {
+    image: "Imagen",
+    video: "Video"
+  }[String(value || "").toLowerCase()] || value || "-";
+}
+
+function socialAssetById(id) {
+  return (state.social.assets || []).find((asset) => asset.id === id) || null;
+}
+
+function filteredSocialAssets() {
+  const type = state.social.assetType || "all";
+  const provider = state.social.assetProvider || "all";
+  const status = state.social.assetStatus || "all";
+  const assets = state.social.assets || [];
+  return assets.filter((asset) => {
+    const typeMatch = type === "all" || asset.media_type === type;
+    const providerMatch = provider === "all" || asset.provider === provider;
+    const statusMatch = status === "all" || asset.status === status;
+    return typeMatch && providerMatch && statusMatch;
+  });
+}
+
+function selectedSocialAsset() {
+  return socialAssetById(state.social.selectedAssetId);
+}
+
+function socialAssetIsReady(asset) {
+  return Boolean(asset?.status === "ready" && isPublicSocialMediaUrl(asset.public_url));
+}
+
+function effectiveSocialPostAsset(post) {
+  return post?.media_asset || socialAssetById(post?.media_asset_id) || null;
+}
+
+function effectiveSocialPostMediaUrl(post) {
+  const asset = effectiveSocialPostAsset(post);
+  if (asset?.public_url) return asset.public_url;
+  return post?.media_url || post?.image_url || "";
+}
+
 function filteredSocialPosts() {
   const platform = state.social.queuePlatform || "all";
   const status = state.social.queueStatus || "all";
@@ -3075,7 +3131,12 @@ function socialPostCanPublish(post) {
   if (!socialChannelIsValidated(post.channel)) return false;
   if (!["approved", "scheduled"].includes(String(post.status || "").toLowerCase())) return false;
   if (!String(post.caption || post.caption_preview || "").trim()) return false;
-  if (!isPublicSocialMediaUrl(post.media_url || post.image_url)) return false;
+  const asset = effectiveSocialPostAsset(post);
+  if (asset) {
+    if (!socialAssetIsReady(asset)) return false;
+    if (post.channel === "instagram" && asset.media_type !== "image") return false;
+  }
+  if (!isPublicSocialMediaUrl(effectiveSocialPostMediaUrl(post))) return false;
   return true;
 }
 
@@ -3093,6 +3154,7 @@ function renderSocial(payload = {}) {
   state.social.channels = payload.channels || {};
   state.social.settings = payload.settings || {};
   state.social.metrics = payload.metrics || {};
+  state.social.assets = payload.assets || [];
   state.social.posts = payload.posts || [];
   state.social.logs = payload.logs || [];
   state.social.autopublisher = payload.autopublisher || {};
@@ -3106,12 +3168,27 @@ function renderSocial(payload = {}) {
   if (els.socialQueueStatus) {
     state.social.queueStatus = els.socialQueueStatus.value || state.social.queueStatus || "all";
   }
+  if (els.socialAssetType) {
+    state.social.assetType = els.socialAssetType.value || state.social.assetType || "all";
+  }
+  if (els.socialAssetProvider) {
+    state.social.assetProvider = els.socialAssetProvider.value || state.social.assetProvider || "all";
+  }
+  if (els.socialAssetStatus) {
+    state.social.assetStatus = els.socialAssetStatus.value || state.social.assetStatus || "all";
+  }
+  const visibleAssets = filteredSocialAssets();
+  if (!visibleAssets.some((asset) => asset.id === state.social.selectedAssetId)) {
+    state.social.selectedAssetId = visibleAssets[0]?.id || "";
+  }
   const visiblePosts = filteredSocialPosts();
   if (!visiblePosts.some((post) => post.id === state.social.selectedPostId)) {
     state.social.selectedPostId = visiblePosts[0]?.id || "";
   }
   renderSocialSummary();
   renderSocialChannels();
+  renderSocialAssets();
+  renderSocialAssetEditor();
   renderSocialQueue();
   renderSocialPreview();
   renderSocialSettings();
@@ -3203,6 +3280,118 @@ function renderSocialChannels() {
   updateMetaConnectLabels(state.meta.organic);
 }
 
+function socialAssetPreview(asset = {}) {
+  const thumb = asset.thumbnail_url || asset.public_url || "";
+  if (!thumb) return "-";
+  if (asset.media_type === "image") {
+    return `<img class="admin-linkedin-thumb" src="${escapeHtml(thumb)}" alt="Preview asset social">`;
+  }
+  return `
+    <div class="admin-linkedin-thumb admin-social-video-thumb">
+      ${asset.thumbnail_url ? `<img src="${escapeHtml(asset.thumbnail_url)}" alt="Thumbnail video">` : "<span>VIDEO</span>"}
+    </div>
+  `;
+}
+
+function renderSocialAssets() {
+  if (!els.socialAssetRows) return;
+  if (state.social.storage?.social_media_assets_table_missing) {
+    els.socialAssetRows.innerHTML = `<tr><td colspan="9">Falta la tabla social_media_assets. Propuesta SQL: ${escapeHtml(state.social.storage.social_media_assets_pending_sql || "database/social-media-assets.sql")}</td></tr>`;
+    state.social.selectedAssetId = "";
+    renderSocialAssetEditor();
+    return;
+  }
+  const rows = filteredSocialAssets();
+  if (!rows.length) {
+    els.socialAssetRows.innerHTML = '<tr><td colspan="9">Sin assets sociales para el filtro actual.</td></tr>';
+    state.social.selectedAssetId = "";
+    renderSocialAssetEditor();
+    return;
+  }
+  if (!rows.some((asset) => asset.id === state.social.selectedAssetId)) {
+    state.social.selectedAssetId = rows[0].id || "";
+  }
+  els.socialAssetRows.innerHTML = rows.map((asset) => {
+    const active = asset.id === state.social.selectedAssetId;
+    return `
+      <tr class="${active ? "is-selected" : ""}" data-social-asset-id="${escapeHtml(asset.id || "")}">
+        <td>${socialAssetPreview(asset)}</td>
+        <td><strong>${escapeHtml(asset.title || "-")}</strong><div class="admin-subtle">${escapeHtml(asset.description || "")}</div></td>
+        <td>${chip(socialAssetTypeLabel(asset.media_type), asset.media_type === "video" ? "ready" : "draft")}</td>
+        <td>${chip(metaStatusLabel(asset.status), statusTone(asset.status))}</td>
+        <td>${escapeHtml(asset.provider || "-")}</td>
+        <td><code>${escapeHtml(asset.public_url || "-")}</code></td>
+        <td>${escapeHtml(asset.duration_seconds ? `${asset.duration_seconds}s` : "-")}</td>
+        <td>${escapeHtml(asset.license_status || "-")}</td>
+        <td>
+          <div class="admin-row-actions">
+            <button class="admin-icon-button admin-linkedin-action-button" type="button" data-social-asset-action="view" data-social-asset-id="${escapeHtml(asset.id || "")}" title="Editar asset">Ver</button>
+            <button class="admin-icon-button admin-linkedin-action-button" type="button" data-social-asset-action="choose" data-social-asset-id="${escapeHtml(asset.id || "")}" title="Elegir para borrador">Elegir</button>
+            <button class="admin-icon-button admin-linkedin-action-button" type="button" data-social-asset-action="archive" data-social-asset-id="${escapeHtml(asset.id || "")}" title="Archivar asset">Archivar</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function renderSocialAssetEditor() {
+  if (!els.socialAssetEditor) return;
+  const asset = selectedSocialAsset();
+  if (!asset) {
+    const missing = state.social.storage?.social_media_assets_table_missing
+      ? `Falta la tabla social_media_assets. Aplica ${state.social.storage.social_media_assets_pending_sql || "database/social-media-assets.sql"} para activar la biblioteca.`
+      : "Selecciona un asset o crea uno manual para editar la biblioteca social.";
+    els.socialAssetEditor.innerHTML = `<p class="admin-empty-state">${escapeHtml(missing)}</p>`;
+    return;
+  }
+  els.socialAssetEditor.innerHTML = `
+    <article class="admin-linkedin-card">
+      <div class="admin-linkedin-card-head">
+        <span>${escapeHtml(asset.title || "Asset social")}</span>
+        ${chip(metaStatusLabel(asset.status), statusTone(asset.status))}
+      </div>
+      <form class="admin-linkedin-form admin-social-editor" data-social-asset-form data-social-asset-id="${escapeHtml(asset.id || "")}">
+        <input type="hidden" name="id" value="${escapeHtml(asset.id || "")}">
+        <label><span>Tipo</span><select name="media_type">
+          ${["image", "video"].map((value) => `<option value="${value}"${asset.media_type === value ? " selected" : ""}>${socialAssetTypeLabel(value)}</option>`).join("")}
+        </select></label>
+        <label><span>Proveedor</span><select name="provider">
+          ${["manual", "runway", "external", "future_stock"].map((value) => `<option value="${value}"${asset.provider === value ? " selected" : ""}>${value}</option>`).join("")}
+        </select></label>
+        <label><span>Estado</span><select name="status">
+          ${["draft", "processing", "ready", "failed", "archived"].map((value) => `<option value="${value}"${asset.status === value ? " selected" : ""}>${metaStatusLabel(value)}</option>`).join("")}
+        </select></label>
+        <label><span>Licencia</span><select name="license_status">
+          ${["internal", "licensed", "unknown", "restricted"].map((value) => `<option value="${value}"${asset.license_status === value ? " selected" : ""}>${value}</option>`).join("")}
+        </select></label>
+        <label class="admin-linkedin-wide"><span>Titulo</span><input name="title" value="${escapeHtml(asset.title || "")}" placeholder="Logo InmoRadar, clip Runway..."></label>
+        <label class="admin-linkedin-wide"><span>Descripcion</span><textarea name="description" rows="3">${escapeHtml(asset.description || "")}</textarea></label>
+        <label class="admin-linkedin-wide"><span>Public URL</span><input name="public_url" type="url" value="${escapeHtml(asset.public_url || "")}" placeholder="https://..."></label>
+        <label class="admin-linkedin-wide"><span>Thumbnail URL</span><input name="thumbnail_url" type="url" value="${escapeHtml(asset.thumbnail_url || "")}" placeholder="https://..."></label>
+        <label><span>Duracion s</span><input name="duration_seconds" type="number" min="0" step="0.1" value="${escapeHtml(asset.duration_seconds ?? "")}"></label>
+        <label><span>Width</span><input name="width" type="number" min="0" step="1" value="${escapeHtml(asset.width ?? "")}"></label>
+        <label><span>Height</span><input name="height" type="number" min="0" step="1" value="${escapeHtml(asset.height ?? "")}"></label>
+        <label><span>Ratio</span><input name="ratio" value="${escapeHtml(asset.ratio || "")}" placeholder="9:16"></label>
+        <label><span>MIME</span><input name="mime_type" value="${escapeHtml(asset.mime_type || "")}" placeholder="image/jpeg, video/mp4"></label>
+        <label><span>Bytes</span><input name="file_size_bytes" type="number" min="0" step="1" value="${escapeHtml(asset.file_size_bytes ?? "")}"></label>
+        <label><span>Provider asset ID</span><input name="provider_asset_id" value="${escapeHtml(asset.provider_asset_id || "")}"></label>
+        <label><span>Provider job ID</span><input name="provider_job_id" value="${escapeHtml(asset.provider_job_id || "")}"></label>
+        <label class="admin-linkedin-wide"><span>Notas de uso</span><textarea name="usage_notes" rows="3">${escapeHtml(asset.usage_notes || "")}</textarea></label>
+        <label class="admin-linkedin-wide"><span>Prompt origen</span><textarea name="source_prompt" rows="3">${escapeHtml(asset.source_prompt || "")}</textarea></label>
+        <div class="admin-linkedin-editor-actions admin-linkedin-wide">
+          <button class="admin-button tiny" type="submit">Guardar asset</button>
+          <button class="admin-button tiny ghost" type="button" data-social-asset-editor-action="validate">Validar ready</button>
+          <button class="admin-button tiny ghost" type="button" data-social-asset-editor-action="archive">Archivar</button>
+          <button class="admin-button tiny" type="button" data-social-asset-editor-action="choose">Elegir para borrador</button>
+        </div>
+        <small class="admin-subtle admin-linkedin-wide">Ready exige Public URL HTTPS. No se guardan tokens ni secretos en metadata.</small>
+      </form>
+    </article>
+  `;
+  bindSocialAssetDynamicActions();
+}
+
 function renderSocialQueue() {
   if (!els.socialQueueRows) return;
   if (state.social.storage?.social_posts_table_missing) {
@@ -3254,15 +3443,28 @@ function renderSocialPreview() {
   const channelValidated = socialChannelIsValidated(post.channel);
   const status = String(post.status || "").toLowerCase();
   const terminal = ["publishing", "published", "cancelled", "rejected"].includes(status);
+  const asset = effectiveSocialPostAsset(post);
+  const effectiveMediaUrl = effectiveSocialPostMediaUrl(post);
+  const assetOptions = [
+    '<option value="">Sin asset asociado</option>',
+    ...(state.social.assets || []).map((item) => {
+      const label = `${socialAssetTypeLabel(item.media_type)} - ${item.title || item.public_url || item.id || "asset"} - ${metaStatusLabel(item.status)}`;
+      return `<option value="${escapeHtml(item.id || "")}"${(post.media_asset_id || asset?.id || "") === item.id ? " selected" : ""}>${escapeHtml(label)}</option>`;
+    })
+  ].join("");
   const disabledReason = !channelValidated
     ? `${socialChannelLabel(post.channel)} no esta validado para publicar`
     : !["approved", "scheduled"].includes(status)
       ? "Solo se publica manualmente si esta approved o scheduled"
       : !String(post.caption || post.caption_preview || "").trim()
         ? "Falta caption"
-        : !isPublicSocialMediaUrl(post.media_url || post.image_url)
-          ? "Falta media_url HTTPS publica"
-          : "No disponible para este estado";
+        : asset && !socialAssetIsReady(asset)
+          ? `Asset asociado no esta ready (${metaStatusLabel(asset.status)})`
+          : asset && post.channel === "instagram" && asset.media_type !== "image"
+            ? "Instagram manual solo admite asset de imagen en esta fase"
+            : !isPublicSocialMediaUrl(effectiveMediaUrl)
+              ? "Falta media_url HTTPS publica o asset ready"
+              : "No disponible para este estado";
   els.socialPreview.innerHTML = `
     <article class="admin-linkedin-card">
       <div class="admin-linkedin-card-head">
@@ -3282,6 +3484,7 @@ function renderSocialPreview() {
         <label class="admin-linkedin-wide"><span>Tema</span><input name="topic" value="${escapeHtml(post.topic || "")}" placeholder="Idea o briefing interno"></label>
         <label class="admin-linkedin-wide"><span>Caption</span><textarea name="caption" rows="6" placeholder="Copy del post">${escapeHtml(post.caption || "")}</textarea></label>
         <label class="admin-linkedin-wide"><span>Media URL</span><input name="media_url" type="url" value="${escapeHtml(post.media_url || post.image_url || "")}" placeholder="https://www.inmoradar.app/assets/..."></label>
+        <label class="admin-linkedin-wide"><span>Asset biblioteca</span><select name="media_asset_id">${assetOptions}</select></label>
         <label class="admin-linkedin-wide"><span>Target URL</span><input name="target_url" type="url" value="${escapeHtml(post.target_url || post.source_url || "")}" placeholder="https://www.inmoradar.app"></label>
         <label><span>UTM source</span><input name="utm_source" value="${escapeHtml(post.utm_source || post.channel || "")}"></label>
         <label><span>UTM campaign</span><input name="utm_campaign" value="${escapeHtml(post.utm_campaign || "organic_social")}"></label>
@@ -3299,6 +3502,8 @@ function renderSocialPreview() {
         </div>
         <small class="admin-subtle admin-linkedin-wide">${escapeHtml(canPublish ? "Accion manual con confirmacion. No activa autopublisher." : disabledReason)}</small>
         <div class="admin-linkedin-status admin-linkedin-wide">
+          <div class="admin-linkedin-status-row"><span>Asset asociado</span><strong>${escapeHtml(asset ? `${asset.title || asset.id} (${metaStatusLabel(asset.status)})` : "-")}</strong></div>
+          <div class="admin-linkedin-status-row"><span>Media efectiva</span><code>${escapeHtml(effectiveMediaUrl || "-")}</code></div>
           <div class="admin-linkedin-status-row"><span>Published media ID</span><code>${escapeHtml(post.published_media_id || "-")}</code></div>
           <div class="admin-linkedin-status-row"><span>Error</span><strong>${escapeHtml(post.error_message || "-")}</strong></div>
         </div>
@@ -3435,8 +3640,32 @@ function bindSocialDynamicActions() {
   }
 }
 
+function bindSocialAssetDynamicActions() {
+  const assetForm = els.socialAssetEditor?.querySelector("[data-social-asset-form]");
+  if (!assetForm || assetForm.dataset.boundSocialAction) return;
+  assetForm.dataset.boundSocialAction = "true";
+  assetForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveSocialAsset().catch((error) => showStatus(error.message, "bad"));
+  });
+  assetForm.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-social-asset-editor-action]");
+    if (!button) return;
+    const action = button.dataset.socialAssetEditorAction;
+    if (action === "choose") {
+      chooseSocialAssetForPost().catch((error) => showStatus(error.message, "bad"));
+      return;
+    }
+    runSocialAssetAction(action).catch((error) => showStatus(error.message, "bad"));
+  });
+}
+
 function socialEditorForm() {
   return els.socialPreview?.querySelector("[data-social-editor-form]") || null;
+}
+
+function socialAssetForm() {
+  return els.socialAssetEditor?.querySelector("[data-social-asset-form]") || null;
 }
 
 function collectSocialPostInput() {
@@ -3450,11 +3679,113 @@ function collectSocialPostInput() {
     topic: String(data.get("topic") || ""),
     caption: String(data.get("caption") || ""),
     media_url: String(data.get("media_url") || ""),
+    media_asset_id: String(data.get("media_asset_id") || ""),
     target_url: String(data.get("target_url") || ""),
     utm_source: String(data.get("utm_source") || ""),
     utm_campaign: String(data.get("utm_campaign") || "organic_social"),
     scheduled_at: fromLocalDatetimeValue(String(data.get("scheduled_at") || ""))
   };
+}
+
+function collectSocialAssetInput() {
+  const form = socialAssetForm();
+  if (!form) return {};
+  const data = new FormData(form);
+  return {
+    id: String(data.get("id") || ""),
+    media_type: String(data.get("media_type") || "image"),
+    provider: String(data.get("provider") || "manual"),
+    status: String(data.get("status") || "draft"),
+    license_status: String(data.get("license_status") || "internal"),
+    title: String(data.get("title") || ""),
+    description: String(data.get("description") || ""),
+    public_url: String(data.get("public_url") || ""),
+    thumbnail_url: String(data.get("thumbnail_url") || ""),
+    duration_seconds: String(data.get("duration_seconds") || ""),
+    width: String(data.get("width") || ""),
+    height: String(data.get("height") || ""),
+    ratio: String(data.get("ratio") || ""),
+    mime_type: String(data.get("mime_type") || ""),
+    file_size_bytes: String(data.get("file_size_bytes") || ""),
+    provider_asset_id: String(data.get("provider_asset_id") || ""),
+    provider_job_id: String(data.get("provider_job_id") || ""),
+    usage_notes: String(data.get("usage_notes") || ""),
+    source_prompt: String(data.get("source_prompt") || "")
+  };
+}
+
+async function createSocialAsset() {
+  if (state.social.storage?.social_media_assets_table_missing) {
+    throw new Error(`Falta social_media_assets. Aplica ${state.social.storage.social_media_assets_pending_sql || "database/social-media-assets.sql"}.`);
+  }
+  const mediaType = state.social.assetType && state.social.assetType !== "all" ? state.social.assetType : "image";
+  showStatus("Creando asset social manual...");
+  const payload = await api("/api/social/assets", {
+    method: "POST",
+    body: JSON.stringify({
+      provider: "manual",
+      media_type: mediaType,
+      status: "draft",
+      title: "Asset manual"
+    })
+  });
+  await loadSocial();
+  state.social.selectedAssetId = payload.asset?.id || state.social.selectedAssetId;
+  renderSocialAssets();
+  renderSocialAssetEditor();
+  renderSocialPreview();
+  showStatus("Asset social creado.", "good");
+}
+
+async function saveSocialAsset() {
+  const input = collectSocialAssetInput();
+  if (!input.id) throw new Error("Selecciona un asset social primero.");
+  showStatus("Guardando asset social...");
+  const payload = await api(`/api/social/assets?id=${encodeURIComponent(input.id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+  await loadSocial();
+  state.social.selectedAssetId = payload.asset?.id || input.id;
+  renderSocialAssets();
+  renderSocialAssetEditor();
+  renderSocialPreview();
+  showStatus("Asset social guardado.", "good");
+}
+
+async function runSocialAssetAction(action, id = state.social.selectedAssetId) {
+  if (!id) throw new Error("Selecciona un asset social primero.");
+  const label = action === "archive" ? "archivar" : action === "validate" ? "validar ready" : action;
+  if (action === "archive" && !window.confirm("Archivar este asset social?")) return;
+  showStatus(`Social assets: ${label}...`);
+  const payload = await api(`/api/social/assets?action=${encodeURIComponent(action)}&id=${encodeURIComponent(id)}`, {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+  await loadSocial();
+  state.social.selectedAssetId = payload.asset?.id || id;
+  renderSocialAssets();
+  renderSocialAssetEditor();
+  renderSocialPreview();
+  showStatus("Accion de asset completada.", "good");
+}
+
+async function chooseSocialAssetForPost(id = state.social.selectedAssetId) {
+  const post = selectedSocialPost();
+  if (!post?.id) throw new Error("Selecciona un borrador social primero.");
+  if (!id) throw new Error("Selecciona un asset social primero.");
+  showStatus("Asociando asset al borrador...");
+  const payload = await api(`/api/social/posts?id=${encodeURIComponent(post.id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ media_asset_id: id })
+  });
+  await loadSocial();
+  state.social.selectedPostId = payload.post?.id || post.id;
+  state.social.selectedAssetId = id;
+  renderSocialQueue();
+  renderSocialPreview();
+  renderSocialAssets();
+  showStatus("Asset asociado al borrador.", "good");
 }
 
 async function createSocialDraft() {
@@ -6920,6 +7251,61 @@ if (els.socialQueueStatus) {
     state.social.selectedPostId = rows[0]?.id || "";
     renderSocialQueue();
     renderSocialPreview();
+  });
+}
+if (els.socialAssetType) {
+  els.socialAssetType.addEventListener("change", () => {
+    state.social.assetType = els.socialAssetType.value || "all";
+    const rows = filteredSocialAssets();
+    state.social.selectedAssetId = rows[0]?.id || "";
+    renderSocialAssets();
+    renderSocialAssetEditor();
+  });
+}
+if (els.socialAssetProvider) {
+  els.socialAssetProvider.addEventListener("change", () => {
+    state.social.assetProvider = els.socialAssetProvider.value || "all";
+    const rows = filteredSocialAssets();
+    state.social.selectedAssetId = rows[0]?.id || "";
+    renderSocialAssets();
+    renderSocialAssetEditor();
+  });
+}
+if (els.socialAssetStatus) {
+  els.socialAssetStatus.addEventListener("change", () => {
+    state.social.assetStatus = els.socialAssetStatus.value || "all";
+    const rows = filteredSocialAssets();
+    state.social.selectedAssetId = rows[0]?.id || "";
+    renderSocialAssets();
+    renderSocialAssetEditor();
+  });
+}
+if (els.socialCreateAsset) {
+  els.socialCreateAsset.addEventListener("click", () => createSocialAsset().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.socialAssetRows) {
+  els.socialAssetRows.addEventListener("click", (event) => {
+    const actionButton = event.target.closest("[data-social-asset-action]");
+    if (actionButton) {
+      const id = actionButton.dataset.socialAssetId || "";
+      state.social.selectedAssetId = id;
+      if (actionButton.dataset.socialAssetAction === "choose") {
+        chooseSocialAssetForPost(id).catch((error) => showStatus(error.message, "bad"));
+        return;
+      }
+      if (actionButton.dataset.socialAssetAction === "archive") {
+        runSocialAssetAction("archive", id).catch((error) => showStatus(error.message, "bad"));
+        return;
+      }
+      renderSocialAssets();
+      renderSocialAssetEditor();
+      return;
+    }
+    const row = event.target.closest("[data-social-asset-id]");
+    if (!row) return;
+    state.social.selectedAssetId = row.dataset.socialAssetId || "";
+    renderSocialAssets();
+    renderSocialAssetEditor();
   });
 }
 if (els.socialCreateDraft) {
