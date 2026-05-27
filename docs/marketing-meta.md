@@ -28,6 +28,7 @@ INSTAGRAM_APP_ID=
 INSTAGRAM_APP_SECRET=
 INSTAGRAM_REDIRECT_URI=https://www.inmoradar.app/api/meta/oauth/callback
 INSTAGRAM_GRAPH_VERSION=v23.0
+INSTAGRAM_PUBLISH_ACCOUNT_ID=
 INSTAGRAM_OFFICIAL_EMBED_URL=
 INSTAGRAM_BUSINESS_LOGIN_URL=
 INSTAGRAM_OAUTH_STATE_MODE=query
@@ -266,7 +267,32 @@ Instagram usa Content Publishing API con Instagram Login:
 
 El flujo Instagram usa endpoints `graph.instagram.com/{INSTAGRAM_GRAPH_VERSION}` y un token de usuario de Instagram. Requiere una cuenta Business/Creator, permisos concedidos y una imagen publica. Si falta imagen publica o cuenta de Instagram, el post queda `failed` o `skipped`; no se publica contenido roto.
 
-El `user_id` devuelto por Instagram Login en `POST https://api.instagram.com/oauth/access_token` es el identificador operativo que esta spike guarda como `instagram_business_account_id` y usa para publicar con ese token. Puede no coincidir con el asset ID visible en Business Settings o con el ID de Instagram conectado a una Page. Por ejemplo, si el callback devuelve `26828053596835680`, ese es el ID que se debe usar en este flujo; `1784143546309305` puede seguir apareciendo como asset ID en Business Settings.
+Antes de publicar, el backend llama a:
+
+```txt
+GET https://graph.instagram.com/{INSTAGRAM_GRAPH_VERSION}/me?fields=id,username,account_type,user_id
+```
+
+con el token de Instagram Login. Ese diagnostico confirma el usuario que Meta reconoce para el token, y se guarda/loguea sin tokens como `instagram_profile`. Si Meta devuelve `user_id`, se prefiere ese valor como `instagram_business_account_id` operativo; si no, se conserva `id`.
+
+Por defecto, la publicacion usa el alias del token:
+
+```txt
+POST https://graph.instagram.com/{INSTAGRAM_GRAPH_VERSION}/me/media
+POST https://graph.instagram.com/{INSTAGRAM_GRAPH_VERSION}/me/media_publish
+```
+
+Esto evita mezclar el asset ID visible en Business Settings con el ID app-scoped de Instagram Login. El `id` devuelto por Instagram Login en `POST https://api.instagram.com/oauth/access_token` o por `GET /me` puede no coincidir con el asset ID visible en Business Settings o con el ID de Instagram conectado a una Page. Por ejemplo, si el callback o `/me` devuelve `26828053596835680`, ese es un ID del token de Instagram Login; `1784143546309305` puede seguir apareciendo como asset ID en Business Settings o como `user_id` si Meta lo devuelve en `/me`.
+
+Si Meta exige publicar contra un ID explicito, configura en Vercel:
+
+```env
+INSTAGRAM_PUBLISH_ACCOUNT_ID=
+```
+
+Con esa variable, el backend mantiene el diagnostico `GET /me`, pero crea y publica contenedores en `/{INSTAGRAM_PUBLISH_ACCOUNT_ID}/media` y `/{INSTAGRAM_PUBLISH_ACCOUNT_ID}/media_publish`.
+
+La `image_url` de Instagram debe ser HTTPS publica y no depender de un Preview de Vercel protegido. Si no se configura `META_TEST_IMAGE_URL`, el test usa `https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg`.
 
 Ejemplo UTM:
 

@@ -102,6 +102,7 @@ const {
   publishToPlatform: publishMetaToPlatform,
   redactInstagramAuthorizationUrl,
   sanitizeSecretText: sanitizeMetaSecretText,
+  sanitizeMetaPayload,
   sanitizePage,
   selectManagedPage,
   shouldRunAutopublisher: shouldRunMetaAutopublisher,
@@ -1965,21 +1966,22 @@ async function publishMetaPostById(id) {
     const nextStatus = /missing|required|disabled|false|not_ready|env|frequency|max/.test(message) ? "skipped" : "failed";
     return await patchMetaPost(id, { status: nextStatus, error_message: message });
   }
+  const platform = String(post.platform || "").toLowerCase();
   let accessToken;
   try {
-    accessToken = await loadMetaAccessToken(connection);
+    accessToken = platform === "instagram" ? await loadMetaInstagramAccessToken(connection) : await loadMetaAccessToken(connection);
   } catch (error) {
     return await patchMetaPost(id, { status: "skipped", error_message: sanitizeMetaSecretText(error.message || "meta_access_token_missing") });
   }
   await patchMetaPost(id, { status: "publishing", error_message: null });
   try {
-    const platform = String(post.platform || "").toLowerCase();
     const link = withUtm(post.source_url, platform, { city: post.city, slug: post.source_slug }, process.env);
+    const config = metaConfig(process.env);
     const result = await publishMetaToPlatform({
       platform,
       accessToken,
-      pageId: connection.facebook_page_id || process.env.META_FACEBOOK_PAGE_ID,
-      instagramBusinessAccountId: connection.instagram_business_account_id || process.env.META_INSTAGRAM_BUSINESS_ACCOUNT_ID,
+      pageId: connection.facebook_page_id || config.facebookPageId,
+      instagramBusinessAccountId: connection.instagram_business_account_id || config.instagramBusinessAccountId || config.instagramPublishAccountId,
       caption: post.caption,
       link,
       imageUrl: post.image_url,
@@ -2347,13 +2349,12 @@ async function handleMetaOrganicPublishTest(req, platform) {
   if (!connection) return { status: 400, payload: { ok: false, error: "meta_connection_missing" } };
   const config = metaConfig(process.env);
   const pageId = cleanNullable(connection.facebook_page_id || config.facebookPageId);
-  const instagramAccountId = cleanNullable(connection.instagram_business_account_id || config.instagramBusinessAccountId);
+  const instagramAccountId = cleanNullable(connection.instagram_business_account_id || config.instagramBusinessAccountId || config.instagramPublishAccountId);
   const payload = platform === "facebook" ? buildFacebookOrganicTestPost(process.env) : buildInstagramOrganicTestPost(process.env);
 
   try {
     if (platform === "facebook" && !pageId) throw new Error("meta_facebook_page_id_missing");
     if (platform === "facebook" && !connection.page_access_token_encrypted) throw new Error("meta_facebook_page_access_token_missing");
-    if (platform === "instagram" && !instagramAccountId) throw new Error("meta_instagram_business_account_id_missing");
     const accessToken = platform === "instagram" ? await loadMetaInstagramAccessToken(connection) : await loadMetaAccessToken(connection);
     const result = await publishMetaToPlatform({
       platform,
@@ -2372,12 +2373,26 @@ async function handleMetaOrganicPublishTest(req, platform) {
       published_url: result.published_url,
       meta_response: result.meta_response
     });
-    await saveMetaConnection({ status: "connected", last_error: null }).catch(() => null);
+    const profileId = result.meta_response?.instagram_profile?.user_id || result.meta_response?.instagram_profile?.id || null;
+    await saveMetaConnection({
+      status: "connected",
+      last_error: null,
+      ...(platform === "instagram" && profileId ? { instagram_business_account_id: profileId } : {})
+    }).catch(() => null);
     return { status: 200, payload: { ok: true, platform, result, post: saved.post, persisted: saved.persisted, storage_error: saved.error || null } };
   } catch (error) {
     const message = sanitizeMetaSecretText(sanitizeErrorMessage(error, 800));
-    const saved = await recordMetaOrganicPost(platform, payload, { status: "failed", error_message: message });
-    await saveMetaConnection({ status: "error", last_error: message }).catch(() => null);
+    const safeMetaResponse = error?.meta_response || error?.payload
+      ? sanitizeMetaPayload(error.meta_response || error.payload)
+      : null;
+    const saved = await recordMetaOrganicPost(platform, payload, { status: "failed", error_message: message, meta_response: safeMetaResponse });
+    const nextStatus = platform === "instagram" && connection.status === "connected" ? "connected" : "error";
+    const profileId = safeMetaResponse?.instagram_profile?.user_id || safeMetaResponse?.instagram_profile?.id || null;
+    await saveMetaConnection({
+      status: nextStatus,
+      last_error: message,
+      ...(platform === "instagram" && profileId ? { instagram_business_account_id: profileId } : {})
+    }).catch(() => null);
     return {
       status: 400,
       payload: {
