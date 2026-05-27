@@ -130,6 +130,11 @@ const SOCIAL_POST_FORMATS = ["image", "carousel", "reel", "video", "link", "text
 const SOCIAL_POST_STATUSES = ["draft", "needs_review", "approved", "scheduled", "publishing", "published", "failed", "rejected", "cancelled"];
 const SOCIAL_MANUAL_PUBLISH_STATUSES = ["approved", "scheduled"];
 const SOCIAL_POST_QUEUE_SQL = "database/social-post-queue.sql";
+const SOCIAL_ASSET_PROVIDERS = ["manual", "runway", "external", "future_stock"];
+const SOCIAL_ASSET_MEDIA_TYPES = ["image", "video"];
+const SOCIAL_ASSET_STATUSES = ["draft", "processing", "ready", "failed", "archived"];
+const SOCIAL_ASSET_LICENSE_STATUSES = ["internal", "licensed", "unknown", "restricted"];
+const SOCIAL_MEDIA_ASSETS_SQL = "database/social-media-assets.sql";
 
 function requestHeader(req, name) {
   const headers = req.headers || {};
@@ -1523,10 +1528,202 @@ function normalizeSocialPostStatus(value, fallback = "draft") {
   return SOCIAL_POST_STATUSES.includes(status) ? status : fallback;
 }
 
+function normalizeSocialAssetProvider(value, fallback = "manual") {
+  const provider = String(value || fallback).trim().toLowerCase();
+  return SOCIAL_ASSET_PROVIDERS.includes(provider) ? provider : fallback;
+}
+
+function normalizeSocialAssetMediaType(value, fallback = "") {
+  const type = String(value || fallback).trim().toLowerCase();
+  return SOCIAL_ASSET_MEDIA_TYPES.includes(type) ? type : "";
+}
+
+function normalizeSocialAssetStatus(value, fallback = "draft") {
+  const status = String(value || fallback).trim().toLowerCase();
+  return SOCIAL_ASSET_STATUSES.includes(status) ? status : fallback;
+}
+
+function normalizeSocialAssetLicenseStatus(value, fallback = "internal") {
+  const status = String(value || fallback).trim().toLowerCase();
+  return SOCIAL_ASSET_LICENSE_STATUSES.includes(status) ? status : fallback;
+}
+
+function socialOptionalNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function socialOptionalInteger(value) {
+  const number = socialOptionalNumber(value);
+  return number === null ? null : Math.round(number);
+}
+
+function normalizeSocialAssetMetadata(value) {
+  if (!value) return null;
+  if (typeof value === "string") {
+    try {
+      return sanitizeMetaPayload(JSON.parse(value));
+    } catch (error) {
+      return { note: sanitizeMetaSecretText(value, 1000) };
+    }
+  }
+  if (typeof value === "object") return sanitizeMetaPayload(value);
+  return null;
+}
+
+function normalizeSocialAssetRow(row = {}) {
+  if (!row) return null;
+  return {
+    id: row.id || null,
+    provider: normalizeSocialAssetProvider(row.provider),
+    provider_asset_id: row.provider_asset_id ? socialSafeText(row.provider_asset_id, 220) : null,
+    provider_job_id: row.provider_job_id ? socialSafeText(row.provider_job_id, 220) : null,
+    media_type: normalizeSocialAssetMediaType(row.media_type),
+    status: normalizeSocialAssetStatus(row.status),
+    title: row.title ? socialSafeText(row.title, 180) : null,
+    description: row.description ? socialSafeText(row.description, 500) : null,
+    public_url: row.public_url ? socialSafeText(row.public_url, 1000) : null,
+    thumbnail_url: row.thumbnail_url ? socialSafeText(row.thumbnail_url, 1000) : null,
+    duration_seconds: socialOptionalNumber(row.duration_seconds),
+    width: socialOptionalInteger(row.width),
+    height: socialOptionalInteger(row.height),
+    ratio: row.ratio ? socialSafeText(row.ratio, 40) : null,
+    mime_type: row.mime_type ? socialSafeText(row.mime_type, 120) : null,
+    file_size_bytes: socialOptionalInteger(row.file_size_bytes),
+    license_status: normalizeSocialAssetLicenseStatus(row.license_status),
+    usage_notes: row.usage_notes ? socialSafeText(row.usage_notes, 500) : null,
+    source_prompt: row.source_prompt ? socialSafeText(row.source_prompt, 1200) : null,
+    metadata: normalizeSocialAssetMetadata(row.metadata),
+    created_at: row.created_at || null,
+    updated_at: row.updated_at || null
+  };
+}
+
+function socialAssetsTableMissing(error) {
+  return /social_media_assets/i.test(String(error?.message || error || ""));
+}
+
+function normalizeSocialAssetInput(input = {}, current = {}) {
+  const mediaType = normalizeSocialAssetMediaType(input.media_type ?? current.media_type);
+  return {
+    provider: normalizeSocialAssetProvider(input.provider ?? current.provider ?? "manual"),
+    provider_asset_id: cleanNullable(input.provider_asset_id ?? current.provider_asset_id ?? null),
+    provider_job_id: cleanNullable(input.provider_job_id ?? current.provider_job_id ?? null),
+    media_type: mediaType,
+    status: normalizeSocialAssetStatus(input.status ?? current.status ?? "draft"),
+    title: cleanNullable(input.title ?? current.title ?? null),
+    description: cleanNullable(input.description ?? current.description ?? null),
+    public_url: cleanNullable(input.public_url ?? current.public_url ?? null),
+    thumbnail_url: cleanNullable(input.thumbnail_url ?? current.thumbnail_url ?? null),
+    duration_seconds: socialOptionalNumber(input.duration_seconds ?? current.duration_seconds ?? null),
+    width: socialOptionalInteger(input.width ?? current.width ?? null),
+    height: socialOptionalInteger(input.height ?? current.height ?? null),
+    ratio: cleanNullable(input.ratio ?? current.ratio ?? null),
+    mime_type: cleanNullable(input.mime_type ?? current.mime_type ?? null),
+    file_size_bytes: socialOptionalInteger(input.file_size_bytes ?? current.file_size_bytes ?? null),
+    license_status: normalizeSocialAssetLicenseStatus(input.license_status ?? current.license_status ?? "internal"),
+    usage_notes: cleanNullable(input.usage_notes ?? current.usage_notes ?? null),
+    source_prompt: cleanNullable(input.source_prompt ?? current.source_prompt ?? null),
+    metadata: normalizeSocialAssetMetadata(input.metadata ?? current.metadata ?? null)
+  };
+}
+
+function validateSocialAssetInput(input = {}) {
+  if (!input.media_type) return "social_asset_media_type_required";
+  if (input.status === "ready" && !publicHttpsMediaUrl(input.public_url)) return "social_asset_public_https_url_required";
+  if (input.public_url && !publicHttpsMediaUrl(input.public_url)) return "social_asset_public_url_must_be_https";
+  if (input.thumbnail_url && !publicHttpsMediaUrl(input.thumbnail_url)) return "social_asset_thumbnail_url_must_be_https";
+  return null;
+}
+
+async function listSocialAssets(url = new URL("https://admin.local/?limit=50"), limitOverride) {
+  const params = new URLSearchParams({
+    select: "*",
+    order: "created_at.desc",
+    limit: String(clampLimit(limitOverride || url.searchParams.get("limit") || 50, 50, 100))
+  });
+  const provider = String(url.searchParams.get("provider") || "").trim().toLowerCase();
+  const mediaType = String(url.searchParams.get("media_type") || url.searchParams.get("type") || "").trim().toLowerCase();
+  const status = String(url.searchParams.get("status") || "").trim().toLowerCase();
+  if (SOCIAL_ASSET_PROVIDERS.includes(provider)) params.set("provider", `eq.${provider}`);
+  if (SOCIAL_ASSET_MEDIA_TYPES.includes(mediaType)) params.set("media_type", `eq.${mediaType}`);
+  if (SOCIAL_ASSET_STATUSES.includes(status)) params.set("status", `eq.${status}`);
+  try {
+    const rows = await supabaseFetch(`social_media_assets?${params.toString()}`);
+    return { assets: (Array.isArray(rows) ? rows : []).map(normalizeSocialAssetRow).filter(Boolean), table_missing: false, error: null };
+  } catch (error) {
+    return { assets: [], table_missing: socialAssetsTableMissing(error), error: sanitizeMetaSecretText(error.message || "social_assets_lookup_failed") };
+  }
+}
+
+async function readSocialAsset(id) {
+  if (!id) return null;
+  const rows = await supabaseFetch(`social_media_assets?id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
+  return normalizeSocialAssetRow(Array.isArray(rows) ? rows[0] || null : rows);
+}
+
+async function createSocialAsset(input = {}) {
+  const now = new Date().toISOString();
+  const body = {
+    ...normalizeSocialAssetInput(input),
+    created_at: now,
+    updated_at: now
+  };
+  const validationError = validateSocialAssetInput(body);
+  if (validationError) return { asset: null, status: 400, error: validationError };
+  try {
+    const rows = await supabaseFetch("social_media_assets", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify([body])
+    });
+    return { asset: normalizeSocialAssetRow(Array.isArray(rows) ? rows[0] || null : rows), table_missing: false, error: null };
+  } catch (error) {
+    return { asset: null, table_missing: socialAssetsTableMissing(error), error: sanitizeMetaSecretText(error.message || "social_asset_create_failed") };
+  }
+}
+
+async function patchSocialAsset(id, patch = {}) {
+  const rows = await supabaseFetch(`social_media_assets?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() })
+  });
+  return normalizeSocialAssetRow(Array.isArray(rows) ? rows[0] || null : rows);
+}
+
+async function updateSocialAsset(id, input = {}) {
+  const current = await readSocialAsset(id);
+  if (!current?.id) return { status: 404, payload: { ok: false, error: "social_asset_not_found" } };
+  const patch = normalizeSocialAssetInput(input, current);
+  const validationError = validateSocialAssetInput(patch);
+  if (validationError) return { status: 400, payload: { ok: false, error: validationError, asset: current } };
+  const asset = await patchSocialAsset(id, patch);
+  return { status: 200, payload: { ok: true, asset } };
+}
+
+async function transitionSocialAsset(id, action) {
+  const asset = await readSocialAsset(id);
+  if (!asset?.id) return { status: 404, payload: { ok: false, error: "social_asset_not_found" } };
+  if (action === "archive") {
+    const updated = await patchSocialAsset(id, { status: "archived" });
+    return { status: 200, payload: { ok: true, asset: updated } };
+  }
+  if (action === "validate" || action === "ready") {
+    const validationError = validateSocialAssetInput({ ...asset, status: "ready" });
+    if (validationError) return { status: 400, payload: { ok: false, error: validationError, asset } };
+    const updated = await patchSocialAsset(id, { status: "ready" });
+    return { status: 200, payload: { ok: true, asset: updated } };
+  }
+  return { status: 400, payload: { ok: false, error: "social_asset_action_not_supported" } };
+}
+
 function normalizeSocialPostRow(row = {}) {
   if (!row) return null;
   const platform = normalizeSocialPlatform(row.platform);
   const metaResponse = sanitizeMetaPayload(row.meta_response || {});
+  const mediaAsset = row.media_asset || row.social_media_assets || null;
   return {
     id: row.id || null,
     platform,
@@ -1538,6 +1735,8 @@ function normalizeSocialPostRow(row = {}) {
     caption: socialSafeText(row.caption || "", 2200),
     media_url: row.media_url ? socialSafeText(row.media_url, 1000) : "",
     image_url: row.media_url ? socialSafeText(row.media_url, 1000) : "",
+    media_asset_id: row.media_asset_id || null,
+    media_asset: mediaAsset ? normalizeSocialAssetRow(mediaAsset) : null,
     target_url: row.target_url ? socialSafeText(row.target_url, 1000) : "",
     source_url: row.target_url ? socialSafeText(row.target_url, 1000) : "",
     utm_source: socialSafeText(row.utm_source || platform, 120),
@@ -1586,6 +1785,7 @@ function normalizeSocialPostInput(input = {}, current = {}) {
     topic: socialSafeText(input.topic ?? current.topic ?? "", 180),
     caption: socialSafeText(input.caption ?? current.caption ?? "", 2200),
     media_url: cleanNullable(input.media_url ?? current.media_url ?? ""),
+    media_asset_id: cleanNullable(input.media_asset_id ?? current.media_asset_id ?? null),
     target_url: cleanNullable(input.target_url ?? current.target_url ?? ""),
     utm_source: socialSafeText(input.utm_source ?? current.utm_source ?? platform, 120) || platform,
     utm_campaign: socialSafeText(input.utm_campaign ?? current.utm_campaign ?? "organic_social", 120) || "organic_social",
@@ -1642,6 +1842,38 @@ function publicHttpsMediaUrl(value) {
   } catch (error) {
     return false;
   }
+}
+
+async function resolveSocialPostMedia(post = {}) {
+  const mediaAssetId = post.media_asset_id || post.media_asset?.id || "";
+  if (!mediaAssetId) {
+    return { ok: true, post, asset: null, media_url: post.media_url || "" };
+  }
+  let asset = post.media_asset || null;
+  if (!asset?.id) {
+    try {
+      asset = await readSocialAsset(mediaAssetId);
+    } catch (error) {
+      return { ok: false, reason: socialAssetsTableMissing(error) ? "social_media_assets_table_missing" : "social_media_asset_not_found", post };
+    }
+  }
+  if (!asset?.id) return { ok: false, reason: "social_media_asset_not_found", post };
+  if (asset.status !== "ready") return { ok: false, reason: "social_media_asset_not_ready", post: { ...post, media_asset: asset }, asset };
+  if (!publicHttpsMediaUrl(asset.public_url)) return { ok: false, reason: "social_media_asset_public_url_required", post: { ...post, media_asset: asset }, asset };
+  if (post.platform === "instagram" && asset.media_type !== "image") {
+    return { ok: false, reason: "social_instagram_video_asset_not_supported_yet", post: { ...post, media_asset: asset }, asset };
+  }
+  return {
+    ok: true,
+    asset,
+    media_url: asset.public_url,
+    post: {
+      ...post,
+      media_url: asset.public_url,
+      image_url: asset.public_url,
+      media_asset: asset
+    }
+  };
 }
 
 async function readSocialPublishingChannels() {
@@ -1727,19 +1959,24 @@ async function publishSocialPostNow(id) {
   const post = await readSocialPost(id);
   if (!post?.id) return { status: 404, payload: { ok: false, error: "social_post_not_found" } };
   const { channels, metaConnectionState } = await readSocialPublishingChannels();
-  const validation = socialManualPublishValidation(post, channels);
-  if (!validation.ok) {
-    return { status: 400, payload: { ok: false, error: validation.reason, post } };
+  const mediaResolution = await resolveSocialPostMedia(post);
+  if (!mediaResolution.ok) {
+    return { status: 400, payload: { ok: false, error: mediaResolution.reason, post: mediaResolution.post || post } };
   }
-  if (post.platform !== "instagram") {
-    return { status: 400, payload: { ok: false, error: socialChannelBlockReason(post, channels) || "social_channel_not_validated", post } };
+  const publishablePost = mediaResolution.post;
+  const validation = socialManualPublishValidation(publishablePost, channels);
+  if (!validation.ok) {
+    return { status: 400, payload: { ok: false, error: validation.reason, post: publishablePost } };
+  }
+  if (publishablePost.platform !== "instagram") {
+    return { status: 400, payload: { ok: false, error: socialChannelBlockReason(publishablePost, channels) || "social_channel_not_validated", post: publishablePost } };
   }
   const connection = metaConnectionState.connection;
   let accessToken;
   try {
     accessToken = await loadMetaInstagramAccessToken(connection);
   } catch (error) {
-    return { status: 400, payload: { ok: false, error: sanitizeMetaSecretText(error.message || "meta_instagram_access_token_missing"), post } };
+    return { status: 400, payload: { ok: false, error: sanitizeMetaSecretText(error.message || "meta_instagram_access_token_missing"), post: publishablePost } };
   }
   await patchSocialPost(id, { status: "publishing", error_message: null });
   try {
@@ -1748,9 +1985,9 @@ async function publishSocialPostNow(id) {
       platform: "instagram",
       accessToken,
       instagramBusinessAccountId: connection.instagram_business_account_id || config.instagramBusinessAccountId || config.instagramPublishAccountId,
-      caption: post.caption,
-      imageUrl: post.media_url,
-      link: post.target_url || "",
+      caption: publishablePost.caption,
+      imageUrl: publishablePost.media_url,
+      link: publishablePost.target_url || "",
       env: process.env
     });
     const updated = await patchSocialPost(id, {
@@ -1804,6 +2041,42 @@ async function handleSocialPosts(req, url) {
     const id = String(url.searchParams.get("id") || "").trim();
     if (!id) return { status: 400, payload: { ok: false, error: "social_post_id_required" } };
     return updateSocialPost(id, await readJsonBody(req));
+  }
+  return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+}
+
+async function handleSocialAssets(req, url) {
+  if (req.method === "GET") {
+    const result = await listSocialAssets(url);
+    return {
+      status: 200,
+      payload: {
+        ok: !result.error || result.table_missing,
+        assets: result.assets,
+        table_missing: result.table_missing,
+        pending_sql: result.table_missing ? SOCIAL_MEDIA_ASSETS_SQL : null,
+        error: result.table_missing ? "social_media_assets_table_missing" : result.error
+      }
+    };
+  }
+  if (req.method === "POST") {
+    const body = await readJsonBody(req);
+    const action = String(url.searchParams.get("action") || body.action || "").trim();
+    const id = String(url.searchParams.get("id") || body.id || "").trim();
+    if (action) {
+      if (!id) return { status: 400, payload: { ok: false, error: "social_asset_id_required" } };
+      return transitionSocialAsset(id, action);
+    }
+    const result = await createSocialAsset(body);
+    if (result.status) return { status: result.status, payload: { ok: false, error: result.error } };
+    if (result.table_missing) return { status: 503, payload: { ok: false, error: "social_media_assets_table_missing", pending_sql: SOCIAL_MEDIA_ASSETS_SQL } };
+    if (result.error) return { status: 500, payload: { ok: false, error: result.error } };
+    return { status: 201, payload: { ok: true, asset: result.asset } };
+  }
+  if (req.method === "PATCH") {
+    const id = String(url.searchParams.get("id") || "").trim();
+    if (!id) return { status: 400, payload: { ok: false, error: "social_asset_id_required" } };
+    return updateSocialAsset(id, await readJsonBody(req));
   }
   return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
 }
@@ -2198,6 +2471,8 @@ function socialPostPreview(post = {}, channel = post.platform || "linkedin") {
     caption: socialSafeText(caption, 2200),
     media_url: mediaUrl ? socialSafeText(mediaUrl, 1000) : null,
     image_url: mediaUrl ? socialSafeText(mediaUrl, 1000) : null,
+    media_asset_id: post.media_asset_id || post.media_asset?.id || null,
+    media_asset: post.media_asset ? normalizeSocialAssetRow(post.media_asset) : null,
     target_url: targetUrl ? socialSafeText(targetUrl, 1000) : null,
     source_url: targetUrl ? socialSafeText(targetUrl, 1000) : null,
     topic: socialSafeText(post.topic || post.source_slug || "", 180),
@@ -2459,6 +2734,7 @@ async function handleSocialStatus(req) {
     metaPostsState,
     metaRunsState,
     socialPostsState,
+    socialAssetsState,
     linkedinConnectionState,
     linkedinSettingsState,
     linkedinPostsState,
@@ -2470,6 +2746,7 @@ async function handleSocialStatus(req) {
     listMetaPosts(new URL("https://admin.local/?limit=20"), 20),
     listMetaRuns(5),
     listSocialPosts(new URL("https://admin.local/?limit=50"), 50),
+    listSocialAssets(new URL("https://admin.local/?limit=50"), 50),
     readLinkedInConnectionState(),
     readLinkedInSettings(),
     listLinkedInPosts(new URL("https://admin.local/?limit=20"), 20),
@@ -2487,6 +2764,7 @@ async function handleSocialStatus(req) {
   const metaPosts = metaPostsState.posts || [];
   const linkedinPosts = linkedinPostsState.posts || [];
   const socialPosts = socialPostsState.posts || [];
+  const socialAssets = socialAssetsState.assets || [];
   const posts = [
     ...socialPosts.map((post) => socialPostPreview(post, post.platform || post.channel || "social")),
     ...(socialPosts.length ? [] : [
@@ -2551,6 +2829,7 @@ async function handleSocialStatus(req) {
         linkedin: socialMetricPlaceholder("linkedin"),
         tiktok: socialMetricPlaceholder("tiktok")
       },
+      assets: socialAssets,
       posts,
       logs,
       autopublisher: {
@@ -2584,6 +2863,9 @@ async function handleSocialStatus(req) {
       storage: {
         social_posts_table_missing: socialPostsState.table_missing,
         social_posts_error: socialPostsState.error,
+        social_media_assets_table_missing: socialAssetsState.table_missing,
+        social_media_assets_error: socialAssetsState.error,
+        social_media_assets_pending_sql: socialAssetsState.table_missing ? SOCIAL_MEDIA_ASSETS_SQL : null,
         pending_sql: socialPostsState.table_missing ? SOCIAL_POST_QUEUE_SQL : null
       }
     }
@@ -4430,6 +4712,10 @@ async function handleAdminRequest(req, res) {
     }
     if (resource === "social/posts") {
       const result = await handleSocialPosts(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "social/assets") {
+      const result = await handleSocialAssets(req, url);
       return json(res, result.status, result.payload);
     }
     if (resource === "meta" || resource.startsWith("meta/")) {

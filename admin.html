@@ -532,9 +532,67 @@
                 <p class="admin-empty-state">Carga el estado social para ver Instagram, Facebook, LinkedIn y TikTok.</p>
               </div>
             </section>
-            <section class="admin-social-section" aria-label="Parametros">
+            <section class="admin-social-section" aria-label="Assets">
               <div class="admin-linkedin-card-head">
-                <span>03 &middot; Cola Social</span>
+                <span>03 &middot; Assets</span>
+                <div class="admin-row-actions">
+                  <label class="admin-social-filter">
+                    <span>Tipo</span>
+                    <select data-social-asset-type>
+                      <option value="all">Todos</option>
+                      <option value="image">Imagen</option>
+                      <option value="video">V&iacute;deo</option>
+                    </select>
+                  </label>
+                  <label class="admin-social-filter">
+                    <span>Proveedor</span>
+                    <select data-social-asset-provider>
+                      <option value="all">Todos</option>
+                      <option value="manual">Manual</option>
+                      <option value="runway">Runway</option>
+                      <option value="external">Externo</option>
+                      <option value="future_stock">Stock futuro</option>
+                    </select>
+                  </label>
+                  <label class="admin-social-filter">
+                    <span>Estado</span>
+                    <select data-social-asset-status>
+                      <option value="all">Todos</option>
+                      <option value="draft">Draft</option>
+                      <option value="processing">Processing</option>
+                      <option value="ready">Ready</option>
+                      <option value="failed">Failed</option>
+                      <option value="archived">Archived</option>
+                    </select>
+                  </label>
+                  <button class="admin-button tiny" type="button" data-social-create-asset>Crear asset manual</button>
+                </div>
+              </div>
+              <div class="admin-table-wrap">
+                <table class="admin-table admin-social-assets-table">
+                  <thead>
+                    <tr>
+                      <th>Preview</th>
+                      <th>T&iacute;tulo</th>
+                      <th>Tipo</th>
+                      <th>Estado</th>
+                      <th>Proveedor</th>
+                      <th>Public URL</th>
+                      <th>Duraci&oacute;n</th>
+                      <th>Licencia</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody data-social-asset-rows></tbody>
+                </table>
+              </div>
+              <div class="admin-social-preview" data-social-asset-editor>
+                <p class="admin-empty-state">Selecciona un asset o crea uno manual para editar la biblioteca social.</p>
+              </div>
+            </section>
+            <section class="admin-social-section" aria-label="Cola Social">
+              <div class="admin-linkedin-card-head">
+                <span>04 &middot; Cola Social</span>
                 <div class="admin-row-actions">
                   <label class="admin-social-filter">
                     <span>Canal</span>
@@ -583,7 +641,7 @@
             </section>
             <section class="admin-social-section" aria-label="Vista previa del post">
               <div class="admin-linkedin-card-head">
-                <span>04 &middot; Vista previa del post</span>
+                <span>05 &middot; Vista previa del post</span>
                 <strong>Acci&oacute;n manual</strong>
               </div>
               <div class="admin-social-preview" data-social-preview>
@@ -592,14 +650,14 @@
             </section>
             <section class="admin-social-section" aria-label="Parametros">
               <div class="admin-linkedin-card-head">
-                <span>05 &middot; Par&aacute;metros</span>
+                <span>06 &middot; Par&aacute;metros</span>
                 <strong>Solo lectura en esta fase</strong>
               </div>
               <div class="admin-social-settings-grid" data-social-settings></div>
             </section>
             <section class="admin-social-section" aria-label="Metricas">
               <div class="admin-linkedin-card-head">
-                <span>06 &middot; M&eacute;tricas</span>
+                <span>07 &middot; M&eacute;tricas</span>
                 <strong>Sin datos inventados</strong>
               </div>
               <div class="admin-table-wrap">
@@ -641,7 +699,7 @@
             </section>
             <section class="admin-social-section" aria-label="Logs">
               <div class="admin-linkedin-card-head">
-                <span>07 &middot; Logs</span>
+                <span>08 &middot; Logs</span>
                 <strong>Sin tokens ni secretos</strong>
               </div>
               <div class="admin-table-wrap">
