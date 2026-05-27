@@ -839,6 +839,66 @@ test("Meta organic status usa la misma proteccion admin que BackOffice", async (
   assert.equal(authorizedMetaStatus.payload.error, "supabase_not_configured");
 });
 
+test("Meta organic status queda neutro sin ultimo intento o meta_response", async () => {
+  const previousFetch = global.fetch;
+  const env = {
+    ...validEnv,
+    SUPABASE_URL: "https://supabase.test",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+  };
+  const connection = {
+    ...validConnection,
+    status: "connected",
+    instagram_business_account_id: "26828053596835680",
+    scopes: [...IG_PUBLISH_SCOPES],
+    access_token_encrypted: "encrypted-ig-token",
+    user_access_token_encrypted: "encrypted-ig-token",
+    page_access_token_encrypted: null,
+    last_error: null
+  };
+  let postRows = [];
+
+  global.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes("/marketing_meta_connections?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([connection]) };
+    }
+    if (href.includes("/marketing_meta_posts?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify(postRows) };
+    }
+    throw new Error(`unexpected_fetch:${href}`);
+  };
+
+  try {
+    const emptyResult = await callAdminResource("meta/status", { authorization: "Bearer admin-test-token" }, env);
+    assert.equal(emptyResult.statusCode, 200);
+    assert.equal(emptyResult.payload.status, "connected");
+    assert.equal(emptyResult.payload.last_attempt, null);
+    assert.equal(emptyResult.payload.last_error, null);
+    assert.equal(emptyResult.payload.storage.posts_error, null);
+    assert.deepEqual(emptyResult.payload.missing_scopes, []);
+    assert.equal(emptyResult.payload.instagram_account_id, "26828053596835680");
+
+    postRows = [{
+      id: "post_1",
+      source_type: "meta_organic_spike",
+      platform: "instagram",
+      status: "published",
+      created_at: "2026-05-27T10:00:00.000Z",
+      error_message: null,
+      meta_response: null
+    }];
+
+    const nullMetaResponseResult = await callAdminResource("meta/status", { authorization: "Bearer admin-test-token" }, env);
+    assert.equal(nullMetaResponseResult.statusCode, 200);
+    assert.equal(nullMetaResponseResult.payload.status, "connected");
+    assert.equal(nullMetaResponseResult.payload.last_error, null);
+    assert.equal(nullMetaResponseResult.payload.last_attempt.meta_response, null);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
 test("endpoint legacy meta/connect queda blindado a Instagram-only por defecto", async () => {
   const { statusCode, payload } = await callLegacyMetaConnect("scopes=pages_show_list,instagram_basic,instagram_content_publish");
   assert.equal(statusCode, 200);

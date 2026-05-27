@@ -1598,6 +1598,7 @@ async function handleLinkedIn(req, url, resource) {
 }
 
 function normalizeMetaPostRow(row = {}) {
+  if (!row) return null;
   return {
     ...row,
     meta_response: parseJsonMaybe(row.meta_response, row.meta_response || null)

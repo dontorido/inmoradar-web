@@ -266,6 +266,8 @@ Instagram usa Content Publishing API con Instagram Login:
 
 El flujo Instagram usa endpoints `graph.instagram.com/{INSTAGRAM_GRAPH_VERSION}` y un token de usuario de Instagram. Requiere una cuenta Business/Creator, permisos concedidos y una imagen publica. Si falta imagen publica o cuenta de Instagram, el post queda `failed` o `skipped`; no se publica contenido roto.
 
+El `user_id` devuelto por Instagram Login en `POST https://api.instagram.com/oauth/access_token` es el identificador operativo que esta spike guarda como `instagram_business_account_id` y usa para publicar con ese token. Puede no coincidir con el asset ID visible en Business Settings o con el ID de Instagram conectado a una Page. Por ejemplo, si el callback devuelve `26828053596835680`, ese es el ID que se debe usar en este flujo; `1784143546309305` puede seguir apareciendo como asset ID en Business Settings.
+
 Ejemplo UTM:
 
 ```txt
