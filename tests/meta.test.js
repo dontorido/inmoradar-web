@@ -134,6 +134,24 @@ function parseInstagramLoginUrl(url) {
   };
 }
 
+const IG_PUBLISH_SCOPES = ["instagram_business_basic", "instagram_business_content_publish"];
+const IG_FORBIDDEN_OAUTH_SCOPES = [
+  "instagram_business_manage_messages",
+  "instagram_manage_comments",
+  "instagram_business_manage_insights"
+];
+
+function assertOnlyInstagramPublishScopes(url) {
+  const { parsed, nextUrl } = parseInstagramLoginUrl(url);
+  const expected = IG_PUBLISH_SCOPES.join(",");
+  assert.equal(parsed.searchParams.get("scope"), expected);
+  assert.equal(nextUrl.searchParams.get("scope"), expected);
+  const decoded = decodeURIComponent(url);
+  for (const scope of IG_FORBIDDEN_OAUTH_SCOPES) {
+    assert.equal(decoded.includes(scope), false, `unexpected Instagram OAuth scope: ${scope}`);
+  }
+}
+
 async function callMetaOAuthStartRedirect(query = "", env = validEnv) {
   return withEnv({ ADMIN_IMPORT_TOKEN: "admin-test-token", ...env }, async () => {
     const { res, body } = createRawResponse();
@@ -395,6 +413,7 @@ test("OAuth Instagram Login usa URL de insercion con accounts/login y next third
   assert.equal(parsed.searchParams.has("force_authentication"), true);
   assert.equal(parsed.searchParams.get("platform_app_id"), "14386908146755569");
   assert.equal(parsed.searchParams.get("platform_app_id") === validEnv.META_APP_ID, false);
+  assertOnlyInstagramPublishScopes(url);
   assert.equal(nextUrl.pathname, "/oauth/authorize/third_party/");
   assert.equal(nextUrl.searchParams.get("client_id"), "14386908146755569");
   assert.equal(nextUrl.searchParams.get("redirect_uri"), "https://www.inmoradar.app/api/meta/oauth/callback");
@@ -407,6 +426,29 @@ test("OAuth Instagram Login usa URL de insercion con accounts/login y next third
   assert.deepEqual(scopes, ["instagram_business_basic", "instagram_business_content_publish"]);
 });
 
+test("OAuth Instagram fuerza scopes minimos aunque la URL oficial traiga mensajes comentarios o insights", async () => {
+  const broadScope = "instagram_business_basic,instagram_business_manage_messages,instagram_manage_comments,instagram_business_content_publish,instagram_business_manage_insights";
+  const officialUrl = `https://www.instagram.com/accounts/login/?force_authentication&platform_app_id=14386908146755569&scope=${encodeURIComponent(broadScope)}&logger_id=official-logger&next=${encodeURIComponent(`/oauth/authorize/third_party/?client_id=14386908146755569&redirect_uri=${encodeURIComponent("https://example.com/callback")}&response_type=code&scope=${encodeURIComponent(broadScope)}&config_id=official-config`)}`;
+  const { url, scopes } = buildInstagramAuthorizationUrl({
+    state: "state",
+    env: { ...validEnv, INSTAGRAM_OFFICIAL_EMBED_URL: officialUrl }
+  });
+  const { parsed, nextUrl } = parseInstagramLoginUrl(url);
+
+  assertOnlyInstagramPublishScopes(url);
+  assert.equal(parsed.searchParams.get("logger_id"), "official-logger");
+  assert.equal(nextUrl.searchParams.get("config_id"), "official-config");
+  assert.equal(nextUrl.searchParams.get("client_id"), "14386908146755569");
+  assert.equal(nextUrl.searchParams.get("redirect_uri"), "https://www.inmoradar.app/api/meta/oauth/callback");
+  assert.equal(nextUrl.searchParams.get("response_type"), "code");
+  assert.deepEqual(scopes, IG_PUBLISH_SCOPES);
+
+  const started = await callMetaOAuthStart("target=instagram", { ...validEnv, INSTAGRAM_OFFICIAL_EMBED_URL: officialUrl });
+  assert.equal(started.statusCode, 200);
+  assertOnlyInstagramPublishScopes(started.payload.url);
+  assert.deepEqual(started.payload.scopes, IG_PUBLISH_SCOPES);
+});
+
 test("OAuth Instagram conserva extras de la URL oficial y permite comparar diferencias", () => {
   const officialUrl = "https://www.instagram.com/accounts/login/?force_authentication&platform_app_id=14386908146755569&logger_id=official-logger&next=%2Foauth%2Fauthorize%2Fthird_party%2F%3Fconfig_id%3Dofficial-config%26client_id%3D14386908146755569%26redirect_uri%3Dhttps%253A%252F%252Fexample.com%252Fcallback%26response_type%3Dcode%26scope%3Dinstagram_business_basic%252Cinstagram_business_content_publish";
   const { url } = buildInstagramAuthorizationUrl({
@@ -414,6 +456,7 @@ test("OAuth Instagram conserva extras de la URL oficial y permite comparar difer
     env: { ...validEnv, INSTAGRAM_OFFICIAL_EMBED_URL: officialUrl }
   });
   const { parsed, nextUrl } = parseInstagramLoginUrl(url);
+  assertOnlyInstagramPublishScopes(url);
   assert.equal(parsed.searchParams.get("logger_id"), "official-logger");
   assert.equal(parsed.searchParams.get("platform_app_id"), "14386908146755569");
   assert.equal(nextUrl.searchParams.get("config_id"), "official-config");

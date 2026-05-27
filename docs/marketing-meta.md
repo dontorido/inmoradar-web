@@ -133,6 +133,8 @@ con `client_id=INSTAGRAM_APP_ID`, `redirect_uri=INSTAGRAM_REDIRECT_URI`, `respon
 
 Si Meta incluye parametros extra en la URL oficial de insercion, copia esa URL completa en `INSTAGRAM_OFFICIAL_EMBED_URL` o `INSTAGRAM_BUSINESS_LOGIN_URL`. El backend la usa como plantilla, conserva extras como `config_id`, `logger_id`, `auth_type` o `display`, y fuerza solo `platform_app_id`, `client_id`, `redirect_uri`, `response_type`, `scope` y `state`.
 
+Para esta spike de publicacion test, el scope de Instagram se limita siempre a `instagram_business_basic,instagram_business_content_publish`, incluso si la URL oficial de Meta trae permisos adicionales. No se piden `instagram_business_manage_messages`, `instagram_manage_comments` ni `instagram_business_manage_insights`; mensajes, comentarios e insights quedan fuera de esta prueba.
+
 El arranque OAuth loguea una version saneada de la URL generada y, si existe `INSTAGRAM_OFFICIAL_EMBED_URL`, una comparativa de diferencias por parametro. El `state` se enmascara en logs.
 
 Por defecto `INSTAGRAM_OAUTH_STATE_MODE=query` envia el `state` firmado dentro del `next`. Si la URL oficial de Meta no admite `state`, se puede probar `INSTAGRAM_OAUTH_STATE_MODE=cookie`: el backend omite `state` del `next`, guarda el mismo estado firmado en una cookie `HttpOnly; Secure; SameSite=Lax` limitada al callback y lo valida al volver. Esta variante mantiene una proteccion CSRF razonable para la spike, aunque el modo recomendado sigue siendo `query` si Meta lo acepta.
