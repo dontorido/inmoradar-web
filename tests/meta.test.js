@@ -207,6 +207,19 @@ async function callAdminResource(resource, headers = {}, env = validEnv) {
   });
 }
 
+async function callAdminMethodResource(resource, { method = "GET", query = "", body = {}, headers = {}, env = validEnv } = {}) {
+  return withEnv({ ADMIN_IMPORT_TOKEN: "admin-test-token", ...env }, async () => {
+    const { res, payload } = createJsonResponse();
+    await adminHandler({
+      method,
+      url: `/api/admin?resource=${encodeURIComponent(resource)}${query ? `&${query.replace(/^&/, "")}` : ""}`,
+      headers: { authorization: "Bearer admin-test-token", host: "www.inmoradar.app", ...headers },
+      body
+    }, res);
+    return { statusCode: res.statusCode, payload: payload() };
+  });
+}
+
 async function callAdminPostResource(resource, body = {}, headers = {}, env = validEnv) {
   return withEnv({ ADMIN_IMPORT_TOKEN: "admin-test-token", ...env }, async () => {
     const { res, payload } = createJsonResponse();
@@ -1364,14 +1377,30 @@ test("Social status resume canales sin activar autopublisher ni exponer secretos
   };
   const queuedFacebookPost = {
     id: "post_fb_1",
-    source_type: "seo_landing",
+    source: "manual",
     platform: "facebook",
-    status: "queued",
+    format: "image",
+    status: "scheduled",
     caption: "Facebook draft pendiente de permisos",
+    media_url: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg",
     created_at: "2026-05-27T10:00:00.000Z",
     scheduled_for: "2026-05-27T12:00:00.000Z",
     error_message: null,
     meta_response: null
+  };
+  const socialInstagramPost = {
+    id: "social_ig_1",
+    source: "manual",
+    platform: "instagram",
+    format: "image",
+    status: "published",
+    caption: "Instagram publicado desde cola",
+    media_url: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg",
+    created_at: "2026-05-27T10:05:00.000Z",
+    published_at: "2026-05-27T10:06:00.000Z",
+    published_media_id: "ig-media-id",
+    error_message: null,
+    meta_response: { published_media_id: "ig-media-id" }
   };
 
   global.fetch = async (url, options = {}) => {
@@ -1389,6 +1418,9 @@ test("Social status resume canales sin activar autopublisher ni exponer secretos
     }
     if (href.includes("/marketing_meta_posts?")) {
       return { ok: true, status: 200, text: async () => JSON.stringify([successfulInstagramPost, queuedFacebookPost]) };
+    }
+    if (href.includes("/social_posts?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([socialInstagramPost, queuedFacebookPost]) };
     }
     if (href.includes("/meta_autopublisher_runs?")) {
       return { ok: true, status: 200, text: async () => JSON.stringify([]) };
@@ -1425,7 +1457,7 @@ test("Social status resume canales sin activar autopublisher ni exponer secretos
     assert.equal(result.payload.summary.publishing_validated_channels, 1);
     assert.equal(result.payload.summary.queued_posts, 1);
     assert.equal(result.payload.posts.some((post) => post.channel === "instagram" && post.published_media_id === "ig-media-id"), true);
-    assert.equal(result.payload.posts.some((post) => post.channel === "facebook" && post.status === "queued"), true);
+    assert.equal(result.payload.posts.some((post) => post.channel === "facebook" && post.status === "scheduled"), true);
     assert.equal(result.payload.summary.cards.some((card) => card.key === "autopublisher_global" && card.value === "OFF"), true);
     const serialized = JSON.stringify(result.payload);
     assert.equal(serialized.includes("secret-token"), false);
@@ -1433,6 +1465,334 @@ test("Social status resume canales sin activar autopublisher ni exponer secretos
   } finally {
     global.fetch = previousFetch;
   }
+});
+
+test("Social post queue crea, edita y transiciona borradores sin autopublisher", async () => {
+  const previousFetch = global.fetch;
+  const env = {
+    ...validEnv,
+    SUPABASE_URL: "https://supabase.test",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+  };
+  const rows = [];
+  const writes = [];
+
+  global.fetch = async (url, options = {}) => {
+    const href = String(url);
+    const method = options.method || "GET";
+    if (href.includes("/meta_autopublisher_runs") && method !== "GET") throw new Error("unexpected_autopublisher_write");
+    if (href.includes("/social_posts")) {
+      const parsed = new URL(href);
+      const idFilter = parsed.searchParams.get("id");
+      const id = idFilter ? idFilter.replace(/^eq\./, "") : "";
+      if (method === "GET") {
+        return { ok: true, status: 200, text: async () => JSON.stringify(id ? rows.filter((row) => row.id === id) : rows) };
+      }
+      if (method === "POST") {
+        const row = { id: `social_${rows.length + 1}`, ...JSON.parse(options.body)[0] };
+        rows.unshift(row);
+        writes.push({ method, row });
+        return { ok: true, status: 201, text: async () => JSON.stringify([row]) };
+      }
+      if (method === "PATCH") {
+        const patch = JSON.parse(options.body);
+        const index = rows.findIndex((row) => row.id === id);
+        rows[index] = { ...rows[index], ...patch };
+        writes.push({ method, id, patch });
+        return { ok: true, status: 200, text: async () => JSON.stringify([rows[index]]) };
+      }
+    }
+    throw new Error(`unexpected_fetch:${href}`);
+  };
+
+  try {
+    const created = await callAdminMethodResource("social/posts", {
+      method: "POST",
+      body: { platform: "instagram", format: "image", topic: "test cola" },
+      env
+    });
+    assert.equal(created.statusCode, 201);
+    assert.equal(created.payload.post.status, "draft");
+    assert.equal(created.payload.post.platform, "instagram");
+
+    const id = created.payload.post.id;
+    const updated = await callAdminMethodResource("social/posts", {
+      method: "PATCH",
+      query: `id=${id}`,
+      body: {
+        caption: "Caption revisado",
+        media_url: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg",
+        target_url: "https://www.inmoradar.app",
+        scheduled_at: "2026-05-27T12:00:00.000Z"
+      },
+      env
+    });
+    assert.equal(updated.statusCode, 200);
+    assert.equal(updated.payload.post.caption, "Caption revisado");
+
+    const approved = await callAdminMethodResource("social/posts", {
+      method: "POST",
+      query: `action=approve&id=${id}`,
+      body: {},
+      env
+    });
+    assert.equal(approved.statusCode, 200);
+    assert.equal(approved.payload.post.status, "scheduled");
+    assert.equal(Boolean(approved.payload.post.approved_at), true);
+
+    const rejected = await callAdminMethodResource("social/posts", {
+      method: "POST",
+      query: `action=reject&id=${id}`,
+      body: { reason: "copy_no_encaja" },
+      env
+    });
+    assert.equal(rejected.statusCode, 200);
+    assert.equal(rejected.payload.post.status, "rejected");
+    assert.equal(rejected.payload.post.error_message, "copy_no_encaja");
+
+    const second = await callAdminMethodResource("social/posts", {
+      method: "POST",
+      body: { platform: "facebook", caption: "Otro borrador" },
+      env
+    });
+    const cancelled = await callAdminMethodResource("social/posts", {
+      method: "POST",
+      query: `action=cancel&id=${second.payload.post.id}`,
+      body: {},
+      env
+    });
+    assert.equal(cancelled.payload.post.status, "cancelled");
+    assert.equal(writes.some((write) => write.method === "POST"), true);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test("Social post queue bloquea canales no validados y contenido incompleto", async () => {
+  const previousFetch = global.fetch;
+  const env = {
+    ...validEnv,
+    SUPABASE_URL: "https://supabase.test",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+  };
+  const encrypted = encryptToken("IGQ" + "q".repeat(80), env);
+  const connection = {
+    ...validConnection,
+    status: "connected",
+    instagram_business_account_id: "26828053596835680",
+    scopes: [...IG_PUBLISH_SCOPES],
+    access_token_encrypted: encrypted,
+    user_access_token_encrypted: encrypted,
+    page_access_token_encrypted: null,
+    last_error: null
+  };
+  const organicSuccess = {
+    id: "organic_1",
+    source_type: "meta_organic_spike",
+    platform: "instagram",
+    status: "published",
+    published_at: "2026-05-27T10:00:00.000Z",
+    external_post_id: "ig-media-id",
+    meta_response: { published_media_id: "ig-media-id" }
+  };
+  const rows = [
+    { id: "fb_1", platform: "facebook", format: "image", status: "approved", caption: "FB", media_url: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg" },
+    { id: "ig_draft", platform: "instagram", format: "image", status: "draft", caption: "IG", media_url: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg" },
+    { id: "ig_no_caption", platform: "instagram", format: "image", status: "approved", caption: "", media_url: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg" },
+    { id: "ig_no_media", platform: "instagram", format: "image", status: "approved", caption: "IG", media_url: "" }
+  ];
+  let graphCalls = 0;
+
+  global.fetch = async (url, options = {}) => {
+    const href = String(url);
+    const method = options.method || "GET";
+    if (href.startsWith("https://graph.instagram.com")) graphCalls += 1;
+    if (href.includes("/social_posts")) {
+      const parsed = new URL(href);
+      const id = String(parsed.searchParams.get("id") || "").replace(/^eq\./, "");
+      if (method === "GET") return { ok: true, status: 200, text: async () => JSON.stringify(rows.filter((row) => row.id === id)) };
+      if (method === "PATCH") return { ok: true, status: 200, text: async () => JSON.stringify([rows.find((row) => row.id === id)]) };
+    }
+    if (href.includes("/marketing_meta_connections?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([connection]) };
+    }
+    if (href.includes("/marketing_meta_posts?") && href.includes("source_type=eq.meta_organic_spike")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([organicSuccess]) };
+    }
+    if (href.includes("/marketing_linkedin_connections?") || href.includes("/marketing_linkedin_settings?") || href.includes("/marketing_linkedin_posts?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([]) };
+    }
+    throw new Error(`unexpected_fetch:${href}`);
+  };
+
+  try {
+    const facebook = await callAdminMethodResource("social/posts", { method: "POST", query: "action=publish-now&id=fb_1", body: {}, env });
+    assert.equal(facebook.statusCode, 400);
+    assert.equal(facebook.payload.error, "pending_page_permissions");
+
+    const draft = await callAdminMethodResource("social/posts", { method: "POST", query: "action=publish-now&id=ig_draft", body: {}, env });
+    assert.equal(draft.statusCode, 400);
+    assert.equal(draft.payload.error, "social_post_status_not_publishable");
+
+    const missingCaption = await callAdminMethodResource("social/posts", { method: "POST", query: "action=publish-now&id=ig_no_caption", body: {}, env });
+    assert.equal(missingCaption.statusCode, 400);
+    assert.equal(missingCaption.payload.error, "social_caption_required");
+
+    const missingMedia = await callAdminMethodResource("social/posts", { method: "POST", query: "action=publish-now&id=ig_no_media", body: {}, env });
+    assert.equal(missingMedia.statusCode, 400);
+    assert.equal(missingMedia.payload.error, "social_public_https_media_url_required");
+    assert.equal(graphCalls, 0);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test("Social post queue publica manualmente Instagram aprobado sin activar automatismos", async () => {
+  const previousFetch = global.fetch;
+  const token = "IGQ" + "z".repeat(80);
+  const env = {
+    ...validEnv,
+    SUPABASE_URL: "https://supabase.test",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+    INSTAGRAM_PUBLISH_RETRY_DELAYS_MS: "0"
+  };
+  const encrypted = encryptToken(token, env);
+  const connection = {
+    ...validConnection,
+    status: "connected",
+    instagram_business_account_id: "26828053596835680",
+    scopes: [...IG_PUBLISH_SCOPES],
+    access_token_encrypted: encrypted,
+    user_access_token_encrypted: encrypted,
+    page_access_token_encrypted: null,
+    last_error: null
+  };
+  const organicSuccess = {
+    id: "organic_1",
+    source_type: "meta_organic_spike",
+    platform: "instagram",
+    status: "published",
+    published_at: "2026-05-27T10:00:00.000Z",
+    external_post_id: "ig-media-id",
+    meta_response: { published_media_id: "ig-media-id" }
+  };
+  const row = {
+    id: "ig_queue_1",
+    platform: "instagram",
+    format: "image",
+    status: "approved",
+    caption: "Publicacion manual desde cola",
+    media_url: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg",
+    target_url: "https://www.inmoradar.app",
+    created_at: "2026-05-27T10:00:00.000Z"
+  };
+  let graphCalls = 0;
+  let autopublisherTouched = false;
+
+  global.fetch = async (url, options = {}) => {
+    const href = String(url);
+    const method = options.method || "GET";
+    if (href.includes("autopublisher_runs")) autopublisherTouched = true;
+    if (href.includes("/social_posts")) {
+      const parsed = new URL(href);
+      const id = String(parsed.searchParams.get("id") || "").replace(/^eq\./, "");
+      if (method === "GET") return { ok: true, status: 200, text: async () => JSON.stringify(id === row.id ? [row] : []) };
+      if (method === "PATCH") {
+        Object.assign(row, JSON.parse(options.body));
+        return { ok: true, status: 200, text: async () => JSON.stringify([row]) };
+      }
+    }
+    if (href.includes("/marketing_meta_connections?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([connection]) };
+    }
+    if (href.includes("/marketing_meta_posts?") && href.includes("source_type=eq.meta_organic_spike")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([organicSuccess]) };
+    }
+    if (href.includes("/marketing_linkedin_connections?") || href.includes("/marketing_linkedin_settings?") || href.includes("/marketing_linkedin_posts?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([]) };
+    }
+    if (href.startsWith("https://graph.instagram.com/v23.0/me?")) {
+      graphCalls += 1;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ id: "26828053596835680", user_id: "1784143546309305", username: "inmoradares", account_type: "BUSINESS" }) };
+    }
+    if (href.startsWith("https://graph.instagram.com/v23.0/me/media_publish")) {
+      graphCalls += 1;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ id: "ig-published-from-queue" }) };
+    }
+    if (href.startsWith("https://graph.instagram.com/v23.0/me/media")) {
+      graphCalls += 1;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ id: "ig-container-id" }) };
+    }
+    if (href.startsWith("https://graph.instagram.com/v23.0/ig-published-from-queue?")) {
+      graphCalls += 1;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ id: "ig-published-from-queue", permalink: "https://www.instagram.com/p/test/" }) };
+    }
+    throw new Error(`unexpected_fetch:${href}`);
+  };
+
+  try {
+    const result = await callAdminMethodResource("social/posts", {
+      method: "POST",
+      query: `action=publish-now&id=${row.id}`,
+      body: {},
+      env
+    });
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.payload.post.status, "published");
+    assert.equal(result.payload.post.published_media_id, "ig-published-from-queue");
+    assert.equal(result.payload.post.meta_response.published_media_id, "ig-published-from-queue");
+    assert.equal(graphCalls >= 3, true);
+    assert.equal(autopublisherTouched, false);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test("Social post queue avisa con SQL pendiente si falta tabla", async () => {
+  const previousFetch = global.fetch;
+  const env = {
+    ...validEnv,
+    SUPABASE_URL: "https://supabase.test",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+  };
+  global.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes("/social_posts")) {
+      return { ok: false, status: 404, text: async () => JSON.stringify({ message: "relation social_posts does not exist" }) };
+    }
+    throw new Error(`unexpected_fetch:${href}`);
+  };
+  try {
+    const list = await callAdminMethodResource("social/posts", { method: "GET", env });
+    assert.equal(list.statusCode, 200);
+    assert.equal(list.payload.table_missing, true);
+    assert.equal(list.payload.pending_sql, "database/social-post-queue.sql");
+
+    const create = await callAdminMethodResource("social/posts", {
+      method: "POST",
+      body: { platform: "instagram" },
+      env
+    });
+    assert.equal(create.statusCode, 503);
+    assert.equal(create.payload.error, "social_posts_table_missing");
+    assert.equal(create.payload.pending_sql, "database/social-post-queue.sql");
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test("Social posts endpoints estan protegidos por admin token", async () => {
+  const { res, payload } = createJsonResponse();
+  await withEnv({ ADMIN_IMPORT_TOKEN: "admin-test-token", ...validEnv }, async () => {
+    await adminHandler({
+      method: "POST",
+      url: "/api/admin?resource=social/posts",
+      headers: { host: "www.inmoradar.app" },
+      body: { platform: "instagram" }
+    }, res);
+  });
+  assert.equal(res.statusCode, 401);
+  assert.equal(payload().error, "unauthorized");
 });
 
 test("Meta organic status usa la misma proteccion admin que BackOffice", async () => {

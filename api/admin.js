@@ -125,6 +125,11 @@ const { logRequestMetric } = require("../lib/observability/request-metrics");
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at,source_data_json";
 const META_OAUTH_STATE_COOKIE = "inmoradar_meta_oauth_state";
+const SOCIAL_POST_PLATFORMS = ["instagram", "facebook", "linkedin", "tiktok"];
+const SOCIAL_POST_FORMATS = ["image", "carousel", "reel", "video", "link", "text"];
+const SOCIAL_POST_STATUSES = ["draft", "needs_review", "approved", "scheduled", "publishing", "published", "failed", "rejected", "cancelled"];
+const SOCIAL_MANUAL_PUBLISH_STATUSES = ["approved", "scheduled"];
+const SOCIAL_POST_QUEUE_SQL = "database/social-post-queue.sql";
 
 function requestHeader(req, name) {
   const headers = req.headers || {};
@@ -1503,6 +1508,306 @@ function cleanNullable(value) {
   return text || null;
 }
 
+function normalizeSocialPlatform(value) {
+  const platform = String(value || "instagram").trim().toLowerCase();
+  return SOCIAL_POST_PLATFORMS.includes(platform) ? platform : "instagram";
+}
+
+function normalizeSocialFormat(value) {
+  const format = String(value || "image").trim().toLowerCase();
+  return SOCIAL_POST_FORMATS.includes(format) ? format : "image";
+}
+
+function normalizeSocialPostStatus(value, fallback = "draft") {
+  const status = String(value || fallback).trim().toLowerCase();
+  return SOCIAL_POST_STATUSES.includes(status) ? status : fallback;
+}
+
+function normalizeSocialPostRow(row = {}) {
+  if (!row) return null;
+  const platform = normalizeSocialPlatform(row.platform);
+  const metaResponse = sanitizeMetaPayload(row.meta_response || {});
+  return {
+    id: row.id || null,
+    platform,
+    channel: platform,
+    format: normalizeSocialFormat(row.format),
+    status: normalizeSocialPostStatus(row.status),
+    source: socialSafeText(row.source || "manual", 120),
+    topic: socialSafeText(row.topic || "", 180),
+    caption: socialSafeText(row.caption || "", 2200),
+    media_url: row.media_url ? socialSafeText(row.media_url, 1000) : "",
+    image_url: row.media_url ? socialSafeText(row.media_url, 1000) : "",
+    target_url: row.target_url ? socialSafeText(row.target_url, 1000) : "",
+    source_url: row.target_url ? socialSafeText(row.target_url, 1000) : "",
+    utm_source: socialSafeText(row.utm_source || platform, 120),
+    utm_campaign: socialSafeText(row.utm_campaign || "organic_social", 120),
+    scheduled_at: row.scheduled_at || null,
+    published_at: row.published_at || null,
+    published_media_id: row.published_media_id || metaResponse.published_media_id || metaResponse.id || null,
+    error_message: row.error_message ? socialSafeText(row.error_message, 500) : null,
+    meta_response: metaResponse,
+    created_at: row.created_at || null,
+    updated_at: row.updated_at || null,
+    approved_at: row.approved_at || null,
+    approved_by: row.approved_by || null
+  };
+}
+
+function socialPostsTableMissing(error) {
+  return /social_posts/i.test(String(error?.message || error || ""));
+}
+
+async function listSocialPosts(url = new URL("https://admin.local/?limit=50"), limitOverride) {
+  const params = new URLSearchParams({
+    select: "*",
+    order: "created_at.desc",
+    limit: String(clampLimit(limitOverride || url.searchParams.get("limit") || 50, 50, 100))
+  });
+  const platform = String(url.searchParams.get("platform") || "").trim().toLowerCase();
+  const status = String(url.searchParams.get("status") || "").trim().toLowerCase();
+  if (SOCIAL_POST_PLATFORMS.includes(platform)) params.set("platform", `eq.${platform}`);
+  if (SOCIAL_POST_STATUSES.includes(status)) params.set("status", `eq.${status}`);
+  try {
+    const rows = await supabaseFetch(`social_posts?${params.toString()}`);
+    return { posts: (Array.isArray(rows) ? rows : []).map(normalizeSocialPostRow).filter(Boolean), table_missing: false, error: null };
+  } catch (error) {
+    return { posts: [], table_missing: socialPostsTableMissing(error), error: sanitizeMetaSecretText(error.message || "social_posts_lookup_failed") };
+  }
+}
+
+function normalizeSocialPostInput(input = {}, current = {}) {
+  const platform = normalizeSocialPlatform(input.platform ?? current.platform);
+  const format = normalizeSocialFormat(input.format ?? current.format);
+  return {
+    platform,
+    format,
+    source: socialSafeText(input.source ?? current.source ?? "manual", 120) || "manual",
+    topic: socialSafeText(input.topic ?? current.topic ?? "", 180),
+    caption: socialSafeText(input.caption ?? current.caption ?? "", 2200),
+    media_url: cleanNullable(input.media_url ?? current.media_url ?? ""),
+    target_url: cleanNullable(input.target_url ?? current.target_url ?? ""),
+    utm_source: socialSafeText(input.utm_source ?? current.utm_source ?? platform, 120) || platform,
+    utm_campaign: socialSafeText(input.utm_campaign ?? current.utm_campaign ?? "organic_social", 120) || "organic_social",
+    scheduled_at: cleanNullable(input.scheduled_at ?? current.scheduled_at ?? null)
+  };
+}
+
+async function createSocialPost(input = {}) {
+  const now = new Date().toISOString();
+  const body = {
+    ...normalizeSocialPostInput(input),
+    status: "draft",
+    created_at: now,
+    updated_at: now
+  };
+  try {
+    const rows = await supabaseFetch("social_posts", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify([body])
+    });
+    return { post: normalizeSocialPostRow(Array.isArray(rows) ? rows[0] || null : rows), table_missing: false, error: null };
+  } catch (error) {
+    return { post: null, table_missing: socialPostsTableMissing(error), error: sanitizeMetaSecretText(error.message || "social_post_create_failed") };
+  }
+}
+
+async function readSocialPost(id) {
+  const rows = await supabaseFetch(`social_posts?id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
+  return normalizeSocialPostRow(Array.isArray(rows) ? rows[0] || null : rows);
+}
+
+async function patchSocialPost(id, patch = {}) {
+  const rows = await supabaseFetch(`social_posts?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() })
+  });
+  return normalizeSocialPostRow(Array.isArray(rows) ? rows[0] || null : rows);
+}
+
+async function updateSocialPost(id, input = {}) {
+  const current = await readSocialPost(id);
+  if (!current?.id) return { status: 404, payload: { ok: false, error: "social_post_not_found" } };
+  const patch = normalizeSocialPostInput(input, current);
+  const post = await patchSocialPost(id, patch);
+  return { status: 200, payload: { ok: true, post } };
+}
+
+function publicHttpsMediaUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "https:" && !/\.vercel\.app$/i.test(url.hostname);
+  } catch (error) {
+    return false;
+  }
+}
+
+async function readSocialPublishingChannels() {
+  const [metaConnectionState, metaLastAttemptState, linkedinConnectionState, linkedinSettingsState, linkedinPostsState] = await Promise.all([
+    readMetaConnectionState(),
+    latestMetaOrganicPost(),
+    readLinkedInConnectionState(),
+    readLinkedInSettings(),
+    listLinkedInPosts(new URL("https://admin.local/?limit=1"), 1)
+  ]);
+  const metaOrganic = metaOrganicStatusPayload(metaConnectionState, metaLastAttemptState);
+  return {
+    metaConnectionState,
+    metaOrganic,
+    channels: {
+      instagram: buildInstagramSocialChannel(metaOrganic),
+      facebook: buildFacebookSocialChannel(metaOrganic),
+      linkedin: buildLinkedInSocialChannel(linkedinConnectionState, linkedinSettingsState, linkedinPostsState),
+      tiktok: buildTikTokSocialChannel()
+    }
+  };
+}
+
+function socialChannelBlockReason(post, channels = {}) {
+  const platform = normalizeSocialPlatform(post?.platform);
+  const channel = channels[platform] || {};
+  if (platform === "facebook") return "pending_page_permissions";
+  if (platform === "linkedin") return "pending_integration";
+  if (platform === "tiktok") return "pending_integration";
+  if (!(channel.status === "validated" || channel.publishing === "validated")) return "instagram_not_validated";
+  return null;
+}
+
+function socialManualPublishValidation(post, channels = {}) {
+  if (!post?.id) return { ok: false, reason: "social_post_not_found" };
+  const status = normalizeSocialPostStatus(post.status);
+  if (["cancelled", "rejected", "published", "publishing"].includes(status)) {
+    return { ok: false, reason: `social_post_${status}` };
+  }
+  if (!SOCIAL_MANUAL_PUBLISH_STATUSES.includes(status)) return { ok: false, reason: "social_post_status_not_publishable" };
+  if (!String(post.caption || "").trim()) return { ok: false, reason: "social_caption_required" };
+  if (!publicHttpsMediaUrl(post.media_url)) return { ok: false, reason: "social_public_https_media_url_required" };
+  const channelReason = socialChannelBlockReason(post, channels);
+  if (channelReason) return { ok: false, reason: channelReason };
+  return { ok: true, reason: null };
+}
+
+async function transitionSocialPost(id, action, body = {}) {
+  const post = await readSocialPost(id);
+  if (!post?.id) return { status: 404, payload: { ok: false, error: "social_post_not_found" } };
+  if (action === "needs-review" || action === "needs_review" || action === "request_review") {
+    const updated = await patchSocialPost(id, { status: "needs_review", error_message: null });
+    return { status: 200, payload: { ok: true, post: updated } };
+  }
+  if (action === "approve") {
+    const nextStatus = post.scheduled_at ? "scheduled" : "approved";
+    const updated = await patchSocialPost(id, {
+      status: nextStatus,
+      approved_at: new Date().toISOString(),
+      approved_by: socialSafeText(body.approved_by || "backoffice", 120),
+      error_message: null
+    });
+    return { status: 200, payload: { ok: true, post: updated } };
+  }
+  if (action === "reject") {
+    const updated = await patchSocialPost(id, {
+      status: "rejected",
+      error_message: socialSafeText(body.reason || "rejected_by_backoffice", 300)
+    });
+    return { status: 200, payload: { ok: true, post: updated } };
+  }
+  if (action === "cancel") {
+    const updated = await patchSocialPost(id, {
+      status: "cancelled",
+      error_message: socialSafeText(body.reason || "cancelled_by_backoffice", 300)
+    });
+    return { status: 200, payload: { ok: true, post: updated } };
+  }
+  return { status: 400, payload: { ok: false, error: "social_action_not_supported" } };
+}
+
+async function publishSocialPostNow(id) {
+  const post = await readSocialPost(id);
+  if (!post?.id) return { status: 404, payload: { ok: false, error: "social_post_not_found" } };
+  const { channels, metaConnectionState } = await readSocialPublishingChannels();
+  const validation = socialManualPublishValidation(post, channels);
+  if (!validation.ok) {
+    return { status: 400, payload: { ok: false, error: validation.reason, post } };
+  }
+  if (post.platform !== "instagram") {
+    return { status: 400, payload: { ok: false, error: socialChannelBlockReason(post, channels) || "social_channel_not_validated", post } };
+  }
+  const connection = metaConnectionState.connection;
+  let accessToken;
+  try {
+    accessToken = await loadMetaInstagramAccessToken(connection);
+  } catch (error) {
+    return { status: 400, payload: { ok: false, error: sanitizeMetaSecretText(error.message || "meta_instagram_access_token_missing"), post } };
+  }
+  await patchSocialPost(id, { status: "publishing", error_message: null });
+  try {
+    const config = metaConfig(process.env);
+    const result = await publishMetaToPlatform({
+      platform: "instagram",
+      accessToken,
+      instagramBusinessAccountId: connection.instagram_business_account_id || config.instagramBusinessAccountId || config.instagramPublishAccountId,
+      caption: post.caption,
+      imageUrl: post.media_url,
+      link: post.target_url || "",
+      env: process.env
+    });
+    const updated = await patchSocialPost(id, {
+      status: "published",
+      published_at: new Date().toISOString(),
+      published_media_id: result.external_post_id || result.meta_response?.published_media_id || null,
+      meta_response: result.meta_response,
+      error_message: null
+    });
+    return { status: 200, payload: { ok: true, post: updated, result: sanitizeMetaPayload(result) } };
+  } catch (error) {
+    const message = sanitizeMetaSecretText(error.message || "social_instagram_publish_failed");
+    const updated = await patchSocialPost(id, {
+      status: "failed",
+      error_message: message,
+      meta_response: sanitizeMetaPayload(error.meta_response || error.payload || {})
+    });
+    return { status: 400, payload: { ok: false, error: message, post: updated } };
+  }
+}
+
+async function handleSocialPosts(req, url) {
+  if (req.method === "GET") {
+    const result = await listSocialPosts(url);
+    return {
+      status: result.table_missing ? 200 : 200,
+      payload: {
+        ok: !result.error || result.table_missing,
+        posts: result.posts,
+        table_missing: result.table_missing,
+        pending_sql: result.table_missing ? SOCIAL_POST_QUEUE_SQL : null,
+        error: result.table_missing ? "social_posts_table_missing" : result.error
+      }
+    };
+  }
+  if (req.method === "POST") {
+    const body = await readJsonBody(req);
+    const action = String(url.searchParams.get("action") || body.action || "").trim();
+    const id = String(url.searchParams.get("id") || body.id || "").trim();
+    if (action) {
+      if (!id) return { status: 400, payload: { ok: false, error: "social_post_id_required" } };
+      if (action === "publish-now" || action === "publish_now") return publishSocialPostNow(id);
+      return transitionSocialPost(id, action, body);
+    }
+    const result = await createSocialPost(body);
+    if (result.table_missing) return { status: 503, payload: { ok: false, error: "social_posts_table_missing", pending_sql: SOCIAL_POST_QUEUE_SQL } };
+    if (result.error) return { status: 500, payload: { ok: false, error: result.error } };
+    return { status: 201, payload: { ok: true, post: result.post } };
+  }
+  if (req.method === "PATCH") {
+    const id = String(url.searchParams.get("id") || "").trim();
+    if (!id) return { status: 400, payload: { ok: false, error: "social_post_id_required" } };
+    return updateSocialPost(id, await readJsonBody(req));
+  }
+  return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+}
+
 async function handleLinkedInPostAction(body = {}) {
   const id = body.id;
   const action = String(body.action || "").trim();
@@ -1872,7 +2177,7 @@ function socialSafeText(value, maxLength = 500) {
 
 function socialPublishedMediaId(post = {}) {
   const response = post.meta_response || {};
-  return response.published_media_id || post.external_post_id || response.id || null;
+  return post.published_media_id || response.published_media_id || post.external_post_id || response.id || null;
 }
 
 function socialPostDate(post = {}) {
@@ -1881,15 +2186,23 @@ function socialPostDate(post = {}) {
 
 function socialPostPreview(post = {}, channel = post.platform || "linkedin") {
   const caption = post.caption || post.text || post.body || post.hook || "";
+  const mediaUrl = post.media_url || post.image_url || "";
+  const targetUrl = post.target_url || post.source_url || post.destination_url || "";
   return {
     id: post.id || null,
     channel,
     date: socialPostDate(post),
     status: post.status || "draft",
-    format: post.image_url ? "image" : channel === "linkedin" ? "text" : "link",
+    format: post.format || (mediaUrl ? "image" : channel === "linkedin" ? "text" : "link"),
     caption_preview: socialSafeText(caption, 180),
-    image_url: post.image_url ? socialSafeText(post.image_url, 500) : null,
-    source_url: post.source_url || post.destination_url || null,
+    caption: socialSafeText(caption, 2200),
+    media_url: mediaUrl ? socialSafeText(mediaUrl, 1000) : null,
+    image_url: mediaUrl ? socialSafeText(mediaUrl, 1000) : null,
+    target_url: targetUrl ? socialSafeText(targetUrl, 1000) : null,
+    source_url: targetUrl ? socialSafeText(targetUrl, 1000) : null,
+    topic: socialSafeText(post.topic || post.source_slug || "", 180),
+    source: socialSafeText(post.source || post.source_type || "manual", 120),
+    scheduled_at: post.scheduled_at || null,
     published_media_id: socialPublishedMediaId(post),
     error_message: post.error_message ? socialSafeText(post.error_message, 300) : null
   };
@@ -2097,11 +2410,8 @@ function socialReadonlySettings(metaSettings = {}, linkedinSettings = {}) {
   };
 }
 
-function buildSocialSummary({ channels = {}, metaPosts = [], linkedinPosts = [], now = new Date() } = {}) {
-  const allPosts = [
-    ...metaPosts.map((post) => ({ ...post, channel: post.platform || "meta" })),
-    ...linkedinPosts.map((post) => ({ ...post, channel: "linkedin" }))
-  ];
+function buildSocialSummary({ channels = {}, socialPosts = [], now = new Date() } = {}) {
+  const allPosts = socialPosts.map((post) => ({ ...post, channel: post.platform || post.channel || "social" }));
   const publishedStatuses = new Set(["published", "manually_published"]);
   const scheduledStatuses = new Set(["scheduled", "queued"]);
   const pendingStatuses = new Set(["pending_review", "draft", "image_pending", "ready"]);
@@ -2148,6 +2458,7 @@ async function handleSocialStatus(req) {
     metaSettingsState,
     metaPostsState,
     metaRunsState,
+    socialPostsState,
     linkedinConnectionState,
     linkedinSettingsState,
     linkedinPostsState,
@@ -2158,6 +2469,7 @@ async function handleSocialStatus(req) {
     readMetaSettings(),
     listMetaPosts(new URL("https://admin.local/?limit=20"), 20),
     listMetaRuns(5),
+    listSocialPosts(new URL("https://admin.local/?limit=50"), 50),
     readLinkedInConnectionState(),
     readLinkedInSettings(),
     listLinkedInPosts(new URL("https://admin.local/?limit=20"), 20),
@@ -2174,11 +2486,23 @@ async function handleSocialStatus(req) {
   };
   const metaPosts = metaPostsState.posts || [];
   const linkedinPosts = linkedinPostsState.posts || [];
+  const socialPosts = socialPostsState.posts || [];
   const posts = [
-    ...metaPosts.map((post) => socialPostPreview(post, post.platform || "meta")),
-    ...linkedinPosts.map((post) => socialPostPreview(post, "linkedin"))
+    ...socialPosts.map((post) => socialPostPreview(post, post.platform || post.channel || "social")),
+    ...(socialPosts.length ? [] : [
+      ...metaPosts.map((post) => socialPostPreview(post, post.platform || "meta")),
+      ...linkedinPosts.map((post) => socialPostPreview(post, "linkedin"))
+    ])
   ].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 12);
   const logs = [
+    ...socialPosts.slice(0, 5).map((post) => socialLogEntry({
+      channel: post.platform,
+      event: "social_queue",
+      status: post.status,
+      at: post.updated_at || post.created_at,
+      message: post.error_message || post.topic || "Cola editorial social",
+      reference_id: post.published_media_id || post.id
+    })),
     socialLogEntry({
       channel: "instagram",
       event: "oauth_status",
@@ -2218,7 +2542,7 @@ async function handleSocialStatus(req) {
     status: 200,
     payload: {
       ok: true,
-      summary: buildSocialSummary({ channels, metaPosts, linkedinPosts }),
+      summary: buildSocialSummary({ channels, socialPosts }),
       channels,
       settings: socialReadonlySettings(metaSettingsState.settings, linkedinSettingsState.settings),
       metrics: {
@@ -2256,6 +2580,11 @@ async function handleSocialStatus(req) {
           }
         },
         tiktok: { storage: { configured: false } }
+      },
+      storage: {
+        social_posts_table_missing: socialPostsState.table_missing,
+        social_posts_error: socialPostsState.error,
+        pending_sql: socialPostsState.table_missing ? SOCIAL_POST_QUEUE_SQL : null
       }
     }
   };
@@ -4097,6 +4426,10 @@ async function handleAdminRequest(req, res) {
     }
     if (resource === "social/status") {
       const result = await handleSocialStatus(req);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "social/posts") {
+      const result = await handleSocialPosts(req, url);
       return json(res, result.status, result.payload);
     }
     if (resource === "meta" || resource.startsWith("meta/")) {

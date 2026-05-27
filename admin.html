@@ -535,16 +535,34 @@
             <section class="admin-social-section" aria-label="Parametros">
               <div class="admin-linkedin-card-head">
                 <span>03 &middot; Cola Social</span>
-                <label class="admin-social-filter">
-                  <span>Canal</span>
-                  <select data-social-queue-platform>
-                    <option value="all">Todos</option>
-                    <option value="instagram">Instagram</option>
-                    <option value="facebook">Facebook</option>
-                    <option value="linkedin">LinkedIn</option>
-                    <option value="tiktok">TikTok</option>
-                  </select>
-                </label>
+                <div class="admin-row-actions">
+                  <label class="admin-social-filter">
+                    <span>Canal</span>
+                    <select data-social-queue-platform>
+                      <option value="all">Todos</option>
+                      <option value="instagram">Instagram</option>
+                      <option value="facebook">Facebook</option>
+                      <option value="linkedin">LinkedIn</option>
+                      <option value="tiktok">TikTok</option>
+                    </select>
+                  </label>
+                  <label class="admin-social-filter">
+                    <span>Estado</span>
+                    <select data-social-queue-status>
+                      <option value="all">Todos</option>
+                      <option value="draft">Draft</option>
+                      <option value="needs_review">Needs review</option>
+                      <option value="approved">Approved</option>
+                      <option value="scheduled">Scheduled</option>
+                      <option value="publishing">Publishing</option>
+                      <option value="published">Published</option>
+                      <option value="failed">Failed</option>
+                      <option value="rejected">Rejected</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </label>
+                  <button class="admin-button tiny" type="button" data-social-create-draft>Crear borrador</button>
+                </div>
               </div>
               <div class="admin-table-wrap">
                 <table class="admin-table admin-social-queue-table">
@@ -555,6 +573,7 @@
                       <th>Estado</th>
                       <th>Formato</th>
                       <th>Post</th>
+                      <th>Programado</th>
                       <th>Published ID</th>
                     </tr>
                   </thead>

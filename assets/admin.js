@@ -273,7 +273,9 @@ const state = {
     posts: [],
     logs: [],
     autopublisher: {},
+    storage: {},
     queuePlatform: "all",
+    queueStatus: "all",
     selectedPostId: ""
   },
   alerts: []
@@ -373,6 +375,8 @@ const els = {
   socialSummary: document.querySelector("[data-social-summary]"),
   socialChannels: document.querySelector("[data-social-channels]"),
   socialQueuePlatform: document.querySelector("[data-social-queue-platform]"),
+  socialQueueStatus: document.querySelector("[data-social-queue-status]"),
+  socialCreateDraft: document.querySelector("[data-social-create-draft]"),
   socialQueueRows: document.querySelector("[data-social-queue-rows]"),
   socialPreview: document.querySelector("[data-social-preview]"),
   socialSettings: document.querySelector("[data-social-settings]"),
@@ -2875,12 +2879,17 @@ function metaStatusLabel(value) {
     expired: "Token expirado",
     error: "Error",
     draft: "Draft",
+    needs_review: "Needs review",
+    approved: "Approved",
+    scheduled: "Scheduled",
     queued: "Queued",
     publishing: "Publicando",
     published: "Publicado",
     success: "Validado",
     failed: "Error",
-    skipped: "Omitido"
+    skipped: "Omitido",
+    rejected: "Rejected",
+    cancelled: "Cancelled"
   };
   return map[String(value || "").toLowerCase()] || value || "-";
 }
@@ -3043,8 +3052,13 @@ function socialChannelLabel(value) {
 
 function filteredSocialPosts() {
   const platform = state.social.queuePlatform || "all";
+  const status = state.social.queueStatus || "all";
   const posts = state.social.posts || [];
-  return platform === "all" ? posts : posts.filter((post) => post.channel === platform);
+  return posts.filter((post) => {
+    const platformMatch = platform === "all" || post.channel === platform || post.platform === platform;
+    const statusMatch = status === "all" || post.status === status;
+    return platformMatch && statusMatch;
+  });
 }
 
 function selectedSocialPost() {
@@ -3059,7 +3073,19 @@ function socialChannelIsValidated(channelKey) {
 function socialPostCanPublish(post) {
   if (!post || !post.id) return false;
   if (!socialChannelIsValidated(post.channel)) return false;
-  return !["published", "manually_published", "publishing", "skipped", "cancelled"].includes(String(post.status || "").toLowerCase());
+  if (!["approved", "scheduled"].includes(String(post.status || "").toLowerCase())) return false;
+  if (!String(post.caption || post.caption_preview || "").trim()) return false;
+  if (!isPublicSocialMediaUrl(post.media_url || post.image_url)) return false;
+  return true;
+}
+
+function isPublicSocialMediaUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "https:" && !/\.vercel\.app$/i.test(url.hostname);
+  } catch (error) {
+    return false;
+  }
 }
 
 function renderSocial(payload = {}) {
@@ -3070,11 +3096,15 @@ function renderSocial(payload = {}) {
   state.social.posts = payload.posts || [];
   state.social.logs = payload.logs || [];
   state.social.autopublisher = payload.autopublisher || {};
+  state.social.storage = payload.storage || {};
   state.meta.organic = payload.sources?.meta?.organic || state.meta.organic || {};
   state.meta.connection = state.meta.organic.connection || state.meta.connection;
   updateMetaConnectLabels(state.meta.organic);
   if (els.socialQueuePlatform) {
     state.social.queuePlatform = els.socialQueuePlatform.value || state.social.queuePlatform || "all";
+  }
+  if (els.socialQueueStatus) {
+    state.social.queueStatus = els.socialQueueStatus.value || state.social.queueStatus || "all";
   }
   const visiblePosts = filteredSocialPosts();
   if (!visiblePosts.some((post) => post.id === state.social.selectedPostId)) {
@@ -3175,10 +3205,17 @@ function renderSocialChannels() {
 
 function renderSocialQueue() {
   if (!els.socialQueueRows) return;
+  if (state.social.storage?.social_posts_table_missing) {
+    els.socialQueueRows.innerHTML = `<tr><td colspan="7">Falta la tabla social_posts. Propuesta SQL: ${escapeHtml(state.social.storage.pending_sql || "database/social-post-queue.sql")}</td></tr>`;
+    state.social.selectedPostId = "";
+    renderSocialPreview();
+    return;
+  }
   const rows = filteredSocialPosts();
   if (!rows.length) {
     const channel = state.social.queuePlatform === "all" ? "Social" : socialChannelLabel(state.social.queuePlatform);
-    els.socialQueueRows.innerHTML = `<tr><td colspan="6">Sin publicaciones en cola para ${escapeHtml(channel)}.</td></tr>`;
+    const status = state.social.queueStatus === "all" ? "todos los estados" : metaStatusLabel(state.social.queueStatus);
+    els.socialQueueRows.innerHTML = `<tr><td colspan="7">Sin publicaciones en cola para ${escapeHtml(channel)} / ${escapeHtml(status)}.</td></tr>`;
     state.social.selectedPostId = "";
     renderSocialPreview();
     return;
@@ -3195,6 +3232,7 @@ function renderSocialQueue() {
         <td>${chip(metaStatusLabel(post.status), statusTone(post.status))}</td>
         <td>${escapeHtml(post.format || "-")}</td>
         <td>${escapeHtml(post.caption_preview || "-")}</td>
+        <td>${escapeHtml(formatDate(post.scheduled_at))}</td>
         <td><code>${escapeHtml(post.published_media_id || "-")}</code></td>
       </tr>
     `;
@@ -3205,37 +3243,66 @@ function renderSocialPreview() {
   if (!els.socialPreview) return;
   const post = selectedSocialPost();
   if (!post) {
-    els.socialPreview.innerHTML = '<p class="admin-empty-state">Selecciona una publicacion compatible con el filtro para ver la vista previa.</p>';
+    const missing = state.social.storage?.social_posts_table_missing
+      ? `Falta la tabla social_posts. Aplica ${state.social.storage.pending_sql || "database/social-post-queue.sql"} para activar la cola editorial.`
+      : "Selecciona una publicacion compatible con el filtro o crea un borrador nuevo.";
+    els.socialPreview.innerHTML = `<p class="admin-empty-state">${escapeHtml(missing)}</p>`;
     return;
   }
   const channel = state.social.channels?.[post.channel] || {};
   const canPublish = socialPostCanPublish(post);
-  const disabledReason = socialChannelIsValidated(post.channel)
-    ? "No disponible para este estado"
-    : `${socialChannelLabel(post.channel)} no esta validado para publicar`;
+  const channelValidated = socialChannelIsValidated(post.channel);
+  const status = String(post.status || "").toLowerCase();
+  const terminal = ["publishing", "published", "cancelled", "rejected"].includes(status);
+  const disabledReason = !channelValidated
+    ? `${socialChannelLabel(post.channel)} no esta validado para publicar`
+    : !["approved", "scheduled"].includes(status)
+      ? "Solo se publica manualmente si esta approved o scheduled"
+      : !String(post.caption || post.caption_preview || "").trim()
+        ? "Falta caption"
+        : !isPublicSocialMediaUrl(post.media_url || post.image_url)
+          ? "Falta media_url HTTPS publica"
+          : "No disponible para este estado";
   els.socialPreview.innerHTML = `
     <article class="admin-linkedin-card">
       <div class="admin-linkedin-card-head">
         <span>${escapeHtml(socialChannelLabel(post.channel))}</span>
         ${chip(channel.label || socialStatusLabel(channel.status), socialStatusTone(channel.status))}
       </div>
-      <div class="admin-social-preview-body">
-        <div>
-          <div class="admin-linkedin-status-row"><span>Destino</span><strong>${escapeHtml(socialChannelLabel(post.channel))}</strong></div>
-          <div class="admin-linkedin-status-row"><span>Estado</span><strong>${escapeHtml(metaStatusLabel(post.status))}</strong></div>
-          <div class="admin-linkedin-status-row"><span>Formato</span><strong>${escapeHtml(post.format || "-")}</strong></div>
+      <form class="admin-linkedin-form admin-social-editor" data-social-editor-form data-social-id="${escapeHtml(post.id || "")}">
+        <input type="hidden" name="id" value="${escapeHtml(post.id || "")}">
+        <label><span>Plataforma</span><select name="platform">
+          ${["instagram", "facebook", "linkedin", "tiktok"].map((value) => `<option value="${value}"${post.channel === value ? " selected" : ""}>${socialChannelLabel(value)}</option>`).join("")}
+        </select></label>
+        <label><span>Formato</span><select name="format">
+          ${["image", "carousel", "reel", "video", "link", "text"].map((value) => `<option value="${value}"${post.format === value ? " selected" : ""}>${value}</option>`).join("")}
+        </select></label>
+        <label><span>Estado</span><input value="${escapeHtml(metaStatusLabel(post.status))}" readonly></label>
+        <label><span>Fecha programada</span><input name="scheduled_at" type="datetime-local" value="${escapeHtml(toLocalDatetimeValue(post.scheduled_at))}"></label>
+        <label class="admin-linkedin-wide"><span>Tema</span><input name="topic" value="${escapeHtml(post.topic || "")}" placeholder="Idea o briefing interno"></label>
+        <label class="admin-linkedin-wide"><span>Caption</span><textarea name="caption" rows="6" placeholder="Copy del post">${escapeHtml(post.caption || "")}</textarea></label>
+        <label class="admin-linkedin-wide"><span>Media URL</span><input name="media_url" type="url" value="${escapeHtml(post.media_url || post.image_url || "")}" placeholder="https://www.inmoradar.app/assets/..."></label>
+        <label class="admin-linkedin-wide"><span>Target URL</span><input name="target_url" type="url" value="${escapeHtml(post.target_url || post.source_url || "")}" placeholder="https://www.inmoradar.app"></label>
+        <label><span>UTM source</span><input name="utm_source" value="${escapeHtml(post.utm_source || post.channel || "")}"></label>
+        <label><span>UTM campaign</span><input name="utm_campaign" value="${escapeHtml(post.utm_campaign || "organic_social")}"></label>
+        <div class="admin-social-preview-copy admin-linkedin-wide">
+          <span>Preview</span>
+          <p>${escapeHtml(post.caption || post.caption_preview || "Sin copy disponible.")}</p>
+        </div>
+        <div class="admin-linkedin-editor-actions admin-linkedin-wide">
+          <button class="admin-button tiny" type="submit">Guardar cambios</button>
+          <button class="admin-button tiny ghost" type="button" data-social-post-action="needs-review"${terminal ? " disabled" : ""}>Enviar a revision</button>
+          <button class="admin-button tiny ghost" type="button" data-social-post-action="approve"${terminal ? " disabled" : ""}>Aprobar</button>
+          <button class="admin-button tiny ghost" type="button" data-social-post-action="reject"${["published", "publishing"].includes(status) ? " disabled" : ""}>Rechazar</button>
+          <button class="admin-button tiny ghost" type="button" data-social-post-action="cancel"${["published", "publishing"].includes(status) ? " disabled" : ""}>Cancelar</button>
+          <button class="admin-button tiny" type="button" data-social-manual-publish data-social-channel="${escapeHtml(post.channel || "")}"${canPublish ? "" : " disabled"}>Publicar ahora en ${escapeHtml(socialChannelLabel(post.channel))}</button>
+        </div>
+        <small class="admin-subtle admin-linkedin-wide">${escapeHtml(canPublish ? "Accion manual con confirmacion. No activa autopublisher." : disabledReason)}</small>
+        <div class="admin-linkedin-status admin-linkedin-wide">
           <div class="admin-linkedin-status-row"><span>Published media ID</span><code>${escapeHtml(post.published_media_id || "-")}</code></div>
           <div class="admin-linkedin-status-row"><span>Error</span><strong>${escapeHtml(post.error_message || "-")}</strong></div>
         </div>
-        <div class="admin-social-preview-copy">
-          <span>Copy</span>
-          <p>${escapeHtml(post.caption_preview || "Sin copy disponible.")}</p>
-        </div>
-      </div>
-      <div class="admin-row-actions">
-        <button class="admin-button tiny" type="button" data-social-manual-publish data-social-channel="${escapeHtml(post.channel || "")}"${canPublish ? "" : " disabled"}>Publicar ahora en ${escapeHtml(socialChannelLabel(post.channel))}</button>
-        <small class="admin-subtle">${escapeHtml(canPublish ? "Accion manual con confirmacion." : disabledReason)}</small>
-      </div>
+      </form>
     </article>
   `;
   bindSocialDynamicActions();
@@ -3353,6 +3420,96 @@ function bindSocialDynamicActions() {
     publishButton.dataset.boundSocialAction = "true";
     publishButton.addEventListener("click", () => runSocialManualPublish().catch((error) => showStatus(error.message, "bad")));
   }
+  const editorForm = els.socialPreview?.querySelector("[data-social-editor-form]");
+  if (editorForm && !editorForm.dataset.boundSocialAction) {
+    editorForm.dataset.boundSocialAction = "true";
+    editorForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      saveSocialPost().catch((error) => showStatus(error.message, "bad"));
+    });
+    editorForm.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-social-post-action]");
+      if (!button) return;
+      runSocialPostAction(button.dataset.socialPostAction).catch((error) => showStatus(error.message, "bad"));
+    });
+  }
+}
+
+function socialEditorForm() {
+  return els.socialPreview?.querySelector("[data-social-editor-form]") || null;
+}
+
+function collectSocialPostInput() {
+  const form = socialEditorForm();
+  if (!form) return {};
+  const data = new FormData(form);
+  return {
+    id: String(data.get("id") || ""),
+    platform: String(data.get("platform") || "instagram"),
+    format: String(data.get("format") || "image"),
+    topic: String(data.get("topic") || ""),
+    caption: String(data.get("caption") || ""),
+    media_url: String(data.get("media_url") || ""),
+    target_url: String(data.get("target_url") || ""),
+    utm_source: String(data.get("utm_source") || ""),
+    utm_campaign: String(data.get("utm_campaign") || "organic_social"),
+    scheduled_at: fromLocalDatetimeValue(String(data.get("scheduled_at") || ""))
+  };
+}
+
+async function createSocialDraft() {
+  if (state.social.storage?.social_posts_table_missing) {
+    throw new Error(`Falta social_posts. Aplica ${state.social.storage.pending_sql || "database/social-post-queue.sql"}.`);
+  }
+  const platform = state.social.queuePlatform && state.social.queuePlatform !== "all" ? state.social.queuePlatform : "instagram";
+  showStatus(`Creando borrador ${socialChannelLabel(platform)}...`);
+  const payload = await api("/api/social/posts", {
+    method: "POST",
+    body: JSON.stringify({
+      platform,
+      format: platform === "linkedin" ? "text" : "image",
+      source: "manual",
+      utm_source: platform,
+      utm_campaign: "organic_social"
+    })
+  });
+  await loadSocial();
+  state.social.selectedPostId = payload.post?.id || state.social.selectedPostId;
+  renderSocialQueue();
+  renderSocialPreview();
+  showStatus("Borrador social creado.", "good");
+}
+
+async function saveSocialPost() {
+  const input = collectSocialPostInput();
+  if (!input.id) throw new Error("Selecciona un post social primero.");
+  showStatus("Guardando post social...");
+  const payload = await api(`/api/social/posts?id=${encodeURIComponent(input.id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+  await loadSocial();
+  state.social.selectedPostId = payload.post?.id || input.id;
+  renderSocialQueue();
+  renderSocialPreview();
+  showStatus("Post social guardado.", "good");
+}
+
+async function runSocialPostAction(action) {
+  const post = selectedSocialPost();
+  if (!post?.id) throw new Error("Selecciona un post social primero.");
+  const labels = { "needs-review": "enviar a revision", approve: "aprobar", reject: "rechazar", cancel: "cancelar" };
+  if ((action === "reject" || action === "cancel") && !window.confirm(`${labels[action]} este post social?`)) return;
+  showStatus(`Social: ${labels[action] || action}...`);
+  const payload = await api(`/api/social/posts?action=${encodeURIComponent(action)}&id=${encodeURIComponent(post.id)}`, {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+  await loadSocial();
+  state.social.selectedPostId = payload.post?.id || post.id;
+  renderSocialQueue();
+  renderSocialPreview();
+  showStatus("Accion de cola social completada.", "good");
 }
 
 async function runSocialManualPublish() {
@@ -3361,13 +3518,15 @@ async function runSocialManualPublish() {
   if (!socialPostCanPublish(post)) throw new Error(`${socialChannelLabel(post.channel)} no esta validado para publicar este post.`);
   const destination = socialChannelLabel(post.channel);
   if (!window.confirm(`Publicar ahora manualmente en ${destination}?`)) return;
-  if (post.channel === "instagram" || post.channel === "facebook") {
-    await runMetaAction("publish_now", post.id);
-    await loadSocial();
-    showStatus(`Publicacion manual enviada a ${destination}.`, "good");
-    return;
-  }
-  throw new Error(`${destination} no tiene publicacion manual habilitada desde Social.`);
+  const payload = await api(`/api/social/posts?action=publish-now&id=${encodeURIComponent(post.id)}`, {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+  await loadSocial();
+  state.social.selectedPostId = payload.post?.id || post.id;
+  renderSocialQueue();
+  renderSocialPreview();
+  showStatus(`Publicacion manual enviada a ${destination}.`, "good");
 }
 
 function renderMetaPages(pages = state.meta.pages || []) {
@@ -6753,6 +6912,18 @@ if (els.socialQueuePlatform) {
     renderSocialQueue();
     renderSocialPreview();
   });
+}
+if (els.socialQueueStatus) {
+  els.socialQueueStatus.addEventListener("change", () => {
+    state.social.queueStatus = els.socialQueueStatus.value || "all";
+    const rows = filteredSocialPosts();
+    state.social.selectedPostId = rows[0]?.id || "";
+    renderSocialQueue();
+    renderSocialPreview();
+  });
+}
+if (els.socialCreateDraft) {
+  els.socialCreateDraft.addEventListener("click", () => createSocialDraft().catch((error) => showStatus(error.message, "bad")));
 }
 if (els.socialQueueRows) {
   els.socialQueueRows.addEventListener("click", (event) => {
