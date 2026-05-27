@@ -1221,6 +1221,10 @@ test("BackOffice conecta Instagram con target explicito y sin endpoint legacy", 
   assert.doesNotMatch(adminHtml, />Conectar Meta<\/button>/);
   assert.match(adminJs, /\/api\/meta\/oauth\/start\?target=/);
   assert.match(adminJs, /dataset\.metaConnectTarget \|\| "instagram"/);
+  assert.match(adminJs, /Reconectar Instagram/);
+  assert.match(adminJs, /Instagram publishing/);
+  assert.match(adminJs, /Published media ID/);
+  assert.match(adminJs, /Pendiente permisos Page/);
   assert.doesNotMatch(adminJs, /\/api\/admin\?resource=meta\/connect/);
   assert.match(adminJs, /adminPreviewAuthMessage/);
   assert.match(adminJs, /metaOrganicStatusErrorPayload/);
@@ -1304,6 +1308,33 @@ test("Meta organic status queda neutro sin ultimo intento o meta_response", asyn
     assert.equal(nullMetaResponseResult.payload.status, "connected");
     assert.equal(nullMetaResponseResult.payload.last_error, null);
     assert.equal(nullMetaResponseResult.payload.last_attempt.meta_response, null);
+    assert.equal(nullMetaResponseResult.payload.instagram_publishing.validated, false);
+    assert.equal(nullMetaResponseResult.payload.instagram_publishing.status, "pending_manual_test");
+
+    postRows = [{
+      id: "post_2",
+      source_type: "meta_organic_spike",
+      platform: "instagram",
+      status: "published",
+      created_at: "2026-05-27T10:05:00.000Z",
+      published_at: "2026-05-27T10:06:00.000Z",
+      external_post_id: "ig-media-id",
+      error_message: null,
+      meta_response: {
+        published_media_id: "ig-media-id",
+        final_stage: "publish_media_container",
+        status: "success"
+      }
+    }];
+
+    const validatedResult = await callAdminResource("meta/status", { authorization: "Bearer admin-test-token" }, env);
+    assert.equal(validatedResult.statusCode, 200);
+    assert.equal(validatedResult.payload.instagram_publishing.validated, true);
+    assert.equal(validatedResult.payload.instagram_publishing.status, "validated");
+    assert.equal(validatedResult.payload.instagram_publishing.published_media_id, "ig-media-id");
+    assert.equal(validatedResult.payload.instagram_publishing.last_attempt_at, "2026-05-27T10:06:00.000Z");
+    assert.equal(validatedResult.payload.facebook_page_publishing.status, "pending_page_permissions");
+    assert.equal(validatedResult.payload.facebook_page_publishing.available, false);
   } finally {
     global.fetch = previousFetch;
   }

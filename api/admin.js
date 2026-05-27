@@ -1816,6 +1816,13 @@ async function saveDetectedMetaOrganicConnection(token, pages = [], target = "in
 
 function metaOrganicStatusPayload(connectionState, lastAttemptState = {}, extra = {}) {
   const summary = summarizeMetaConnection(connectionState.connection, process.env);
+  const lastAttempt = lastAttemptState.post || null;
+  const lastMetaResponse = lastAttempt?.meta_response || {};
+  const publishedMediaId = lastMetaResponse.published_media_id || lastAttempt?.external_post_id || lastMetaResponse.id || null;
+  const instagramPublishingValidated =
+    lastAttempt?.platform === "instagram" &&
+    lastAttempt?.status === "published" &&
+    Boolean(publishedMediaId);
   return {
     ok: true,
     connected: summary.status === "connected",
@@ -1826,8 +1833,18 @@ function metaOrganicStatusPayload(connectionState, lastAttemptState = {}, extra 
     facebook_page_id: summary.facebook_page_id,
     facebook_page_name: summary.facebook_page_name,
     instagram_account_id: summary.instagram_business_account_id,
+    instagram_publishing: {
+      status: instagramPublishingValidated ? "validated" : "pending_manual_test",
+      validated: instagramPublishingValidated,
+      published_media_id: publishedMediaId,
+      last_attempt_at: lastAttempt?.published_at || lastAttempt?.created_at || null
+    },
+    facebook_page_publishing: {
+      status: summary.facebook_publish_available ? "available" : "pending_page_permissions",
+      available: summary.facebook_publish_available
+    },
     last_error: summary.last_error || connectionState.error || null,
-    last_attempt: lastAttemptState.post || null,
+    last_attempt: lastAttempt,
     env: metaEnvStatus(process.env),
     organic_env: validateMetaOrganicEnv(process.env),
     storage: {
