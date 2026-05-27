@@ -5248,6 +5248,34 @@
   gap: 8px;
 }
 
+.admin-social-section {
+  border-top: 1px solid rgba(9, 9, 11, .1);
+}
+
+.admin-social-section:first-of-type {
+  border-top: 0;
+}
+
+.admin-social-channel-grid,
+.admin-social-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-social-channel-grid .admin-linkedin-card,
+.admin-social-settings-grid .admin-linkedin-card {
+  border-bottom: 1px solid rgba(9, 9, 11, .1);
+}
+
+.admin-social-metrics-table {
+  min-width: 1240px;
+}
+
+.admin-social-posts-table,
+.admin-social-logs-table {
+  min-width: 980px;
+}
+
 .admin-floating-tooltip {
   position: fixed;
   z-index: 10000;
@@ -5276,7 +5304,9 @@
 @media (max-width: 1180px) {
   .admin-marketing-dashboard,
   .admin-linkedin-grid,
-  .admin-linkedin-grid-editor {
+  .admin-linkedin-grid-editor,
+  .admin-social-channel-grid,
+  .admin-social-settings-grid {
     grid-template-columns: 1fr;
   }
 

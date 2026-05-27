@@ -1857,6 +1857,403 @@ function metaOrganicStatusPayload(connectionState, lastAttemptState = {}, extra 
   };
 }
 
+function isRecentIso(value, days = 7, now = new Date()) {
+  if (!value) return false;
+  const timestamp = new Date(value).getTime();
+  const end = new Date(now).getTime();
+  if (!Number.isFinite(timestamp) || !Number.isFinite(end)) return false;
+  return timestamp >= end - days * 86400000 && timestamp <= end + 60000;
+}
+
+function socialSafeText(value, maxLength = 500) {
+  if (value === null || value === undefined || value === "") return "";
+  return sanitizeMetaSecretText(sanitizeErrorMessage(value || "", maxLength), maxLength);
+}
+
+function socialPublishedMediaId(post = {}) {
+  const response = post.meta_response || {};
+  return response.published_media_id || post.external_post_id || response.id || null;
+}
+
+function socialPostDate(post = {}) {
+  return post.published_at || post.manually_published_at || post.scheduled_at || post.created_at || null;
+}
+
+function socialPostPreview(post = {}, channel = post.platform || "linkedin") {
+  const caption = post.caption || post.text || post.body || post.hook || "";
+  return {
+    id: post.id || null,
+    channel,
+    date: socialPostDate(post),
+    status: post.status || "draft",
+    format: post.image_url ? "image" : channel === "linkedin" ? "text" : "link",
+    caption_preview: socialSafeText(caption, 180),
+    published_media_id: socialPublishedMediaId(post),
+    error_message: post.error_message ? socialSafeText(post.error_message, 300) : null
+  };
+}
+
+function socialLogEntry(input = {}) {
+  return {
+    channel: input.channel || "social",
+    event: input.event || "status",
+    status: input.status || "info",
+    at: input.at || null,
+    message: input.message ? socialSafeText(input.message, 500) : null,
+    reference_id: input.reference_id || null,
+    meta_response: input.meta_response ? sanitizeMetaPayload(input.meta_response) : null
+  };
+}
+
+function socialMetricPlaceholder(channel, label = "Pendiente integracion") {
+  return {
+    channel,
+    followers_current: null,
+    followers_7d_ago: null,
+    followers_30d_ago: null,
+    follower_growth_7d: null,
+    follower_growth_30d: null,
+    posts_published: null,
+    impressions: null,
+    engagement: null,
+    clicks: null,
+    ctr: null,
+    traffic_to_web: null,
+    publishing_errors: null,
+    status: label
+  };
+}
+
+function sanitizeSocialOrganicPayload(payload = {}) {
+  const lastAttempt = payload.last_attempt
+    ? {
+        ...payload.last_attempt,
+        caption: socialSafeText(payload.last_attempt.caption, 180),
+        error_message: payload.last_attempt.error_message ? socialSafeText(payload.last_attempt.error_message, 300) : null,
+        meta_response: sanitizeMetaPayload(payload.last_attempt.meta_response || {})
+      }
+    : null;
+  return {
+    ...payload,
+    connection: sanitizeMetaPayload(payload.connection || {}),
+    last_attempt: lastAttempt
+  };
+}
+
+function socialChannelStatusLabel(status) {
+  return {
+    not_configured: "No configurado",
+    connected: "Conectado",
+    validated: "Validado",
+    pending_permissions: "Pendiente permisos",
+    disabled: "Desactivado",
+    error: "Error"
+  }[status] || "Pendiente integracion";
+}
+
+function buildInstagramSocialChannel(metaOrganic = {}) {
+  const connection = metaOrganic.connection || {};
+  const missingScopes = metaOrganic.missing_scopes || connection.missing_scopes || [];
+  const publishing = metaOrganic.instagram_publishing || {};
+  const connected = metaOrganic.status === "connected" && Boolean(metaOrganic.instagram_account_id) && !missingScopes.length;
+  const validated = publishing.validated === true;
+  const status = validated
+    ? "validated"
+    : connected
+      ? "connected"
+      : missingScopes.length
+        ? "pending_permissions"
+        : metaOrganic.last_error
+          ? "error"
+          : "not_configured";
+  return {
+    key: "instagram",
+    name: "Instagram",
+    status,
+    label: socialChannelStatusLabel(status),
+    oauth: connected ? "connected" : socialChannelStatusLabel(status),
+    publishing: validated ? "validated" : "pending_manual_test",
+    business_status: validated ? "Publishing validado" : connected ? "OAuth conectado, pendiente test manual" : socialChannelStatusLabel(status),
+    account_id: metaOrganic.instagram_account_id || null,
+    permissions: metaOrganic.permissions || connection.scopes || [],
+    missing_scopes: missingScopes,
+    published_media_id: publishing.published_media_id || null,
+    last_attempt_at: publishing.last_attempt_at || null,
+    last_error: metaOrganic.last_error || null,
+    actions: ["reconnect_instagram", "publish_test_instagram"]
+  };
+}
+
+function buildFacebookSocialChannel(metaOrganic = {}) {
+  const connection = metaOrganic.connection || {};
+  const publishing = metaOrganic.facebook_page_publishing || {};
+  const available = publishing.available === true || connection.facebook_publish_available === true;
+  const hasPage = Boolean(metaOrganic.facebook_page_id || connection.facebook_page_id);
+  const status = available ? "connected" : hasPage || metaOrganic.status === "connected" ? "pending_permissions" : "not_configured";
+  return {
+    key: "facebook",
+    name: "Facebook",
+    status,
+    label: status === "pending_permissions" ? "Pendiente permisos Page" : socialChannelStatusLabel(status),
+    oauth: hasPage ? "connected" : "not_configured",
+    publishing: available ? "available" : "not_validated",
+    business_status: available ? "Page lista para publicar" : "Pendiente permisos Page",
+    page_id: metaOrganic.facebook_page_id || connection.facebook_page_id || null,
+    page_name: metaOrganic.facebook_page_name || connection.facebook_page_name || null,
+    last_error: metaOrganic.last_error || null,
+    actions: ["connect_facebook_page"]
+  };
+}
+
+function buildLinkedInSocialChannel(connectionState = {}, settingsState = {}, postsState = {}) {
+  const connection = summarizeConnection(connectionState.connection, process.env);
+  const settings = settingsState.settings || defaultLinkedInSettings();
+  const tableMissing = connectionState.table_missing || settingsState.table_missing || postsState.table_missing;
+  const config = linkedinConfig(process.env);
+  const effectiveAutopost = config.autopostEnabled && settings.autopost_enabled === true;
+  const connected = connection.status === "connected" || connection.automatic_available === true;
+  const status = tableMissing
+    ? "not_configured"
+    : connected
+      ? "connected"
+      : effectiveAutopost
+        ? "pending_permissions"
+        : "disabled";
+  return {
+    key: "linkedin",
+    name: "LinkedIn",
+    status,
+    label: tableMissing ? "Pendiente integracion" : connected ? "Conectado / draft only" : "Draft only / autopost_disabled",
+    oauth: connected ? "connected" : "not_configured",
+    publishing: "draft_only",
+    business_status: "Draft/manual; no publicar desde Social",
+    company_url: settings.linkedin_company_url || config.companyUrl || LINKEDIN_COMPANY_URL,
+    last_attempt_at: postsState.posts?.[0]?.created_at || null,
+    last_error: connection.last_error || connectionState.error || postsState.error || null,
+    actions: []
+  };
+}
+
+function buildTikTokSocialChannel() {
+  return {
+    key: "tiktok",
+    name: "TikTok",
+    status: "not_configured",
+    label: "Pendiente integracion",
+    oauth: "not_configured",
+    publishing: "not_available",
+    business_status: "Pendiente integracion",
+    actions: []
+  };
+}
+
+function socialReadonlySettings(metaSettings = {}, linkedinSettings = {}) {
+  return {
+    global: {
+      autopublisher_enabled: false,
+      autopublisher_status: "OFF",
+      requires_human_approval: true,
+      safe_mode: true,
+      max_posts_per_day_total: 2,
+      max_posts_per_day_per_channel: 1,
+      allowed_hours: "09:00-20:00",
+      avoid_weekends: true,
+      default_utm_campaign: "organic_social",
+      persistence: "read_only_defaults"
+    },
+    channels: {
+      instagram: {
+        max_per_day: 1,
+        max_per_week: 5,
+        manual_test_allowed: true,
+        autopublishing: false,
+        planned_formats: ["image", "carousel", "reel_future"]
+      },
+      facebook: {
+        max_per_day: 1,
+        max_per_week: 3,
+        autopublishing: false,
+        note: "Pendiente permisos Page"
+      },
+      linkedin: {
+        max_per_day: Number(linkedinSettings.max_posts_per_day || 1),
+        max_per_week: 3,
+        autopublishing: false,
+        note: "Draft/manual hasta nueva fase"
+      },
+      tiktok: {
+        max_per_day: 0,
+        max_per_week: 0,
+        autopublishing: false,
+        note: "Pendiente integracion"
+      }
+    },
+    source_settings: {
+      meta_autopost_enabled: metaSettings.autopost_enabled === true,
+      linkedin_autopost_enabled: linkedinSettings.autopost_enabled === true
+    }
+  };
+}
+
+function buildSocialSummary({ channels = {}, metaPosts = [], linkedinPosts = [], now = new Date() } = {}) {
+  const allPosts = [
+    ...metaPosts.map((post) => ({ ...post, channel: post.platform || "meta" })),
+    ...linkedinPosts.map((post) => ({ ...post, channel: "linkedin" }))
+  ];
+  const publishedStatuses = new Set(["published", "manually_published"]);
+  const scheduledStatuses = new Set(["scheduled", "queued"]);
+  const pendingStatuses = new Set(["pending_review", "draft", "image_pending", "ready"]);
+  const connectedChannels = Object.values(channels).filter((channel) => ["connected", "validated"].includes(channel.status)).length;
+  const validatedChannels = Object.values(channels).filter((channel) => channel.status === "validated" || channel.publishing === "validated").length;
+  const published7d = allPosts.filter((post) => publishedStatuses.has(post.status) && isRecentIso(socialPostDate(post), 7, now)).length;
+  const scheduled = allPosts.filter((post) => scheduledStatuses.has(post.status)).length;
+  const pendingReview = allPosts.filter((post) => pendingStatuses.has(post.status)).length;
+  const errors7d = allPosts.filter((post) => post.status === "failed" && isRecentIso(post.updated_at || post.created_at, 7, now)).length;
+  return {
+    connected_channels: connectedChannels,
+    publishing_validated_channels: validatedChannels,
+    published_posts_7d: published7d,
+    scheduled_posts: scheduled,
+    pending_review_posts: pendingReview,
+    errors_7d: errors7d,
+    followers_total: null,
+    followers_growth_7d: null,
+    followers_growth_30d: null,
+    social_web_traffic: null,
+    cards: [
+      { key: "connected_channels", label: "Canales conectados", value: connectedChannels, hint: "Instagram, Facebook, LinkedIn, TikTok" },
+      { key: "validated_channels", label: "Validados para publicar", value: validatedChannels, hint: "Manual u OAuth probado" },
+      { key: "published_posts_7d", label: "Publicados 7d", value: published7d, hint: "Datos reales disponibles" },
+      { key: "scheduled_posts", label: "Programados", value: scheduled, hint: scheduled ? "Revisar cola" : "Sin datos todavia" },
+      { key: "pending_review_posts", label: "Pendientes revision", value: pendingReview, hint: pendingReview ? "Necesitan aprobacion" : "Sin datos todavia" },
+      { key: "errors_7d", label: "Errores 7d", value: errors7d, hint: errors7d ? "Revisar logs" : "Sin datos todavia" },
+      { key: "followers_total", label: "Seguidores totales", value: "Pendiente integracion", hint: "No inventado" },
+      { key: "social_web_traffic", label: "Trafico social web", value: "Pendiente integracion", hint: "UTM futuro" }
+    ]
+  };
+}
+
+async function handleSocialStatus(req) {
+  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const [
+    metaConnectionState,
+    metaLastAttemptState,
+    metaSettingsState,
+    metaPostsState,
+    metaRunsState,
+    linkedinConnectionState,
+    linkedinSettingsState,
+    linkedinPostsState,
+    linkedinRunsState
+  ] = await Promise.all([
+    readMetaConnectionState(),
+    latestMetaOrganicPost(),
+    readMetaSettings(),
+    listMetaPosts(new URL("https://admin.local/?limit=20"), 20),
+    listMetaRuns(5),
+    readLinkedInConnectionState(),
+    readLinkedInSettings(),
+    listLinkedInPosts(new URL("https://admin.local/?limit=20"), 20),
+    listLinkedInRuns(5)
+  ]);
+
+  const metaOrganic = metaOrganicStatusPayload(metaConnectionState, metaLastAttemptState);
+  const safeMetaOrganic = sanitizeSocialOrganicPayload(metaOrganic);
+  const channels = {
+    instagram: buildInstagramSocialChannel(metaOrganic),
+    facebook: buildFacebookSocialChannel(metaOrganic),
+    linkedin: buildLinkedInSocialChannel(linkedinConnectionState, linkedinSettingsState, linkedinPostsState),
+    tiktok: buildTikTokSocialChannel()
+  };
+  const metaPosts = metaPostsState.posts || [];
+  const linkedinPosts = linkedinPostsState.posts || [];
+  const posts = [
+    ...metaPosts.map((post) => socialPostPreview(post, post.platform || "meta")),
+    ...linkedinPosts.map((post) => socialPostPreview(post, "linkedin"))
+  ].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 12);
+  const logs = [
+    socialLogEntry({
+      channel: "instagram",
+      event: "oauth_status",
+      status: metaOrganic.status,
+      at: metaOrganic.instagram_publishing?.last_attempt_at,
+      message: metaOrganic.last_error || "Instagram OAuth conectado",
+      reference_id: metaOrganic.instagram_account_id
+    }),
+    ...(metaOrganic.last_attempt ? [socialLogEntry({
+      channel: metaOrganic.last_attempt.platform || "instagram",
+      event: "publish_test",
+      status: metaOrganic.last_attempt.status || "unknown",
+      at: socialPostDate(metaOrganic.last_attempt),
+      message: metaOrganic.last_attempt.error_message || "Ultimo publish test",
+      reference_id: socialPublishedMediaId(metaOrganic.last_attempt),
+      meta_response: metaOrganic.last_attempt.meta_response
+    })] : []),
+    ...metaRunsState.runs.slice(0, 4).map((run) => socialLogEntry({
+      channel: run.platform || "meta",
+      event: "meta_autopublisher",
+      status: run.status || "skipped",
+      at: run.finished_at || run.created_at,
+      message: run.error_message || "autopublisher_desactivado",
+      reference_id: run.id
+    })),
+    ...linkedinRunsState.runs.slice(0, 3).map((run) => socialLogEntry({
+      channel: "linkedin",
+      event: "linkedin_autopublisher",
+      status: run.status || "skipped",
+      at: run.finished_at || run.created_at,
+      message: run.error_message || "autopost_disabled",
+      reference_id: run.id
+    }))
+  ].slice(0, 12);
+
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      summary: buildSocialSummary({ channels, metaPosts, linkedinPosts }),
+      channels,
+      settings: socialReadonlySettings(metaSettingsState.settings, linkedinSettingsState.settings),
+      metrics: {
+        instagram: socialMetricPlaceholder("instagram"),
+        facebook: socialMetricPlaceholder("facebook"),
+        linkedin: socialMetricPlaceholder("linkedin"),
+        tiktok: socialMetricPlaceholder("tiktok")
+      },
+      posts,
+      logs,
+      autopublisher: {
+        enabled: false,
+        status: "OFF",
+        reason: "autopost_disabled",
+        cron_status: "disabled"
+      },
+      sources: {
+        meta: {
+          organic: safeMetaOrganic,
+          summary: metaPostsSummary(metaPosts),
+          storage: {
+            connection_table_missing: metaConnectionState.table_missing,
+            settings_table_missing: metaSettingsState.table_missing,
+            posts_table_missing: metaPostsState.table_missing,
+            runs_table_missing: metaRunsState.table_missing
+          }
+        },
+        linkedin: {
+          summary: linkedInPostsSummary(linkedinPosts),
+          storage: {
+            connection_table_missing: linkedinConnectionState.table_missing,
+            settings_table_missing: linkedinSettingsState.table_missing,
+            posts_table_missing: linkedinPostsState.table_missing,
+            runs_table_missing: linkedinRunsState.table_missing
+          }
+        },
+        tiktok: { storage: { configured: false } }
+      }
+    }
+  };
+}
+
 async function createMetaRun(triggerType = "cron", platform = "multi") {
   try {
     const rows = await supabaseFetch("meta_autopublisher_runs", {
@@ -2310,7 +2707,7 @@ async function handleMetaOrganicOAuthStart(req, res, url) {
   if (!envStatus.ok) {
     return json(res, 500, { ok: false, error: "meta_oauth_not_configured", missing: envStatus.missing });
   }
-  const returnTo = url.searchParams.get("return_to") || "/backoffice/marketing/meta";
+  const returnTo = url.searchParams.get("return_to") || "/backoffice/marketing/social";
   const scopes = metaOrganicOAuthScopes({ target, env: process.env });
   const state = encodeOrganicOAuthState({ returnTo, target });
   console.log(`[Meta Organic OAuth] target=${target} scope=${scopes.join(",")}`);
@@ -2333,14 +2730,14 @@ async function handleMetaOrganicOAuthStart(req, res, url) {
 
 async function handleMetaOrganicOAuthCallback(req, res, url) {
   if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
-  let state = { returnTo: "/backoffice/marketing/meta" };
+  let state = { returnTo: "/backoffice/marketing/social" };
   const rawState = url.searchParams.get("state") || readMetaOAuthStateCookie(req);
   if (readMetaOAuthStateCookie(req)) clearMetaOAuthStateCookie(res);
   try {
     if (!rawState) throw new Error("meta_oauth_state_required");
     state = decodeOrganicOAuthState(rawState);
   } catch (error) {
-    return redirect(res, relativeWithQuery("/backoffice/marketing/meta", {
+    return redirect(res, relativeWithQuery("/backoffice/marketing/social", {
       meta_oauth: "error",
       meta_error: sanitizeMetaSecretText(error.message || error)
     }));
@@ -3689,6 +4086,10 @@ async function handleAdminRequest(req, res) {
     }
     if (resource === "linkedin" || resource.startsWith("linkedin/")) {
       const result = await handleLinkedIn(req, url, resource);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "social/status") {
+      const result = await handleSocialStatus(req);
       return json(res, result.status, result.payload);
     }
     if (resource === "meta" || resource.startsWith("meta/")) {

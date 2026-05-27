@@ -13,8 +13,8 @@ const INITIAL_MARKETING_SUBSECTION = INITIAL_ADMIN_PATH.includes("/backoffice/ma
   ? "marketing-viraliza"
   : INITIAL_ADMIN_PATH.includes("/backoffice/marketing/linkedin")
     ? "marketing-linkedin"
-    : INITIAL_ADMIN_PATH.includes("/backoffice/marketing/meta")
-      ? "marketing-meta"
+    : INITIAL_ADMIN_PATH.includes("/backoffice/marketing/social") || INITIAL_ADMIN_PATH.includes("/backoffice/marketing/meta")
+      ? "marketing-social"
       : "";
 const DEFAULT_VIDEO_PROPERTY_DATA = Object.freeze({
   ciudad: "Madrid",
@@ -265,6 +265,15 @@ const state = {
     lastPublication: null,
     manualNotice: ""
   },
+  social: {
+    summary: {},
+    channels: {},
+    settings: {},
+    metrics: {},
+    posts: [],
+    logs: [],
+    autopublisher: {}
+  },
   alerts: []
 };
 
@@ -358,6 +367,13 @@ const els = {
   metaRows: document.querySelector("[data-meta-post-rows]"),
   metaGeneratePlatform: document.querySelector("[data-meta-generate-platform]"),
   metaCopyCaption: document.querySelector("[data-meta-copy-caption]"),
+  socialRefresh: document.querySelector("[data-social-refresh]"),
+  socialSummary: document.querySelector("[data-social-summary]"),
+  socialChannels: document.querySelector("[data-social-channels]"),
+  socialSettings: document.querySelector("[data-social-settings]"),
+  socialMetrics: document.querySelector("[data-social-metrics]"),
+  socialPosts: document.querySelector("[data-social-post-rows]"),
+  socialLogs: document.querySelector("[data-social-logs]"),
 
   kpiForm: document.querySelector("[data-kpi-form]"),
   kpiReset: document.querySelector("[data-kpi-reset]"),
@@ -2991,6 +3007,236 @@ function renderMetaOrganicStatus(payload = state.meta.organic || {}) {
   `;
 }
 
+function socialStatusTone(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "validated" || normalized === "connected") return "published";
+  if (normalized === "pending_permissions") return "warn";
+  if (normalized === "error") return "bad";
+  return "draft";
+}
+
+function socialStatusLabel(status) {
+  return {
+    not_configured: "No configurado",
+    connected: "Conectado",
+    validated: "Validado",
+    pending_permissions: "Pendiente permisos",
+    disabled: "Desactivado",
+    error: "Error"
+  }[String(status || "").toLowerCase()] || "Pendiente integracion";
+}
+
+function renderSocial(payload = {}) {
+  state.social.summary = payload.summary || {};
+  state.social.channels = payload.channels || {};
+  state.social.settings = payload.settings || {};
+  state.social.metrics = payload.metrics || {};
+  state.social.posts = payload.posts || [];
+  state.social.logs = payload.logs || [];
+  state.social.autopublisher = payload.autopublisher || {};
+  state.meta.organic = payload.sources?.meta?.organic || state.meta.organic || {};
+  state.meta.connection = state.meta.organic.connection || state.meta.connection;
+  updateMetaConnectLabels(state.meta.organic);
+  renderSocialSummary();
+  renderSocialChannels();
+  renderSocialSettings();
+  renderSocialMetrics();
+  renderSocialPosts();
+  renderSocialLogs();
+}
+
+function renderSocialSummary() {
+  if (!els.socialSummary) return;
+  const cards = state.social.summary?.cards || [];
+  els.socialSummary.innerHTML = cards.map((item) => stat(item.label, item.value, {
+    id: `social-${item.key}`,
+    hint: item.hint
+  })).join("");
+}
+
+function renderSocialChannels() {
+  if (!els.socialChannels) return;
+  const channels = state.social.channels || {};
+  const instagram = channels.instagram || {};
+  const facebook = channels.facebook || {};
+  const linkedin = channels.linkedin || {};
+  const tiktok = channels.tiktok || {};
+  const row = (label, value, asCode = false) => `
+    <div class="admin-linkedin-status-row">
+      <span>${escapeHtml(label)}</span>
+      ${asCode ? `<code>${escapeHtml(value || "-")}</code>` : `<strong>${escapeHtml(value || "-")}</strong>`}
+    </div>
+  `;
+  els.socialChannels.innerHTML = `
+    <article class="admin-linkedin-card">
+      <div class="admin-linkedin-card-head">
+        <span>Instagram</span>
+        <div class="admin-row-actions">
+          <button class="admin-button tiny ghost" type="button" data-meta-connect data-meta-connect-target="instagram">Reconectar Instagram</button>
+          <button class="admin-button tiny" type="button" data-meta-organic-publish-instagram>Publicar test Instagram</button>
+        </div>
+      </div>
+      <div class="admin-linkedin-status">
+        <div class="admin-linkedin-status-row"><span>Estado</span>${chip(instagram.label || socialStatusLabel(instagram.status), socialStatusTone(instagram.status))}</div>
+        ${row("OAuth", instagram.oauth === "connected" ? "Conectado" : socialStatusLabel(instagram.status))}
+        ${row("Publishing", instagram.publishing === "validated" ? "Validado" : "Pendiente test manual")}
+        ${row("Instagram ID", instagram.account_id, true)}
+        ${row("Published media ID", instagram.published_media_id, true)}
+        ${row("Ultimo intento", formatDate(instagram.last_attempt_at))}
+      </div>
+    </article>
+    <article class="admin-linkedin-card">
+      <div class="admin-linkedin-card-head">
+        <span>Facebook</span>
+        <div class="admin-row-actions">
+          <button class="admin-button tiny ghost" type="button" data-meta-connect-facebook data-meta-connect-target="facebook">Conectar Facebook Page</button>
+          <button class="admin-button tiny ghost" type="button" disabled>Test Facebook pendiente</button>
+        </div>
+      </div>
+      <div class="admin-linkedin-status">
+        <div class="admin-linkedin-status-row"><span>Estado</span>${chip(facebook.label || socialStatusLabel(facebook.status), socialStatusTone(facebook.status))}</div>
+        ${row("Publishing", facebook.publishing === "available" ? "Disponible" : "No validado")}
+        ${row("Page", facebook.page_name || "Pendiente permisos Page")}
+        ${row("Page ID", facebook.page_id, true)}
+        ${row("Nota", facebook.business_status || "Pendiente permisos Page")}
+      </div>
+    </article>
+    <article class="admin-linkedin-card">
+      <div class="admin-linkedin-card-head"><span>LinkedIn</span></div>
+      <div class="admin-linkedin-status">
+        <div class="admin-linkedin-status-row"><span>Estado</span>${chip(linkedin.label || socialStatusLabel(linkedin.status), socialStatusTone(linkedin.status))}</div>
+        ${row("Publishing", "Draft/manual")}
+        ${row("Autopublisher", "Desactivado")}
+        ${row("Company", linkedin.company_url || "-")}
+        ${row("Ultimo intento", formatDate(linkedin.last_attempt_at))}
+      </div>
+    </article>
+    <article class="admin-linkedin-card">
+      <div class="admin-linkedin-card-head"><span>TikTok</span></div>
+      <div class="admin-linkedin-status">
+        <div class="admin-linkedin-status-row"><span>Estado</span>${chip(tiktok.label || "Pendiente integracion", "draft")}</div>
+        ${row("Publishing", "No disponible")}
+        ${row("Autopublisher", "Desactivado")}
+        ${row("Nota", tiktok.business_status || "Pendiente integracion")}
+      </div>
+    </article>
+  `;
+  els.metaConnect = document.querySelector("[data-meta-connect]");
+  els.metaConnectFacebook = document.querySelector("[data-meta-connect-facebook]");
+  els.metaOrganicPublishInstagram = document.querySelector("[data-meta-organic-publish-instagram]");
+  bindSocialDynamicActions();
+  updateMetaConnectLabels(state.meta.organic);
+}
+
+function renderSocialSettings() {
+  if (!els.socialSettings) return;
+  const global = state.social.settings?.global || {};
+  const channels = state.social.settings?.channels || {};
+  const item = (label, value) => `
+    <div class="admin-linkedin-status-row">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
+  els.socialSettings.innerHTML = `
+    <article class="admin-linkedin-card">
+      <div class="admin-linkedin-card-head"><span>Global</span>${chip("Autopublisher OFF", "draft")}</div>
+      <div class="admin-linkedin-status">
+        ${item("Requiere aprobacion humana", global.requires_human_approval ? "ON" : "OFF")}
+        ${item("Modo seguro", global.safe_mode ? "ON" : "OFF")}
+        ${item("Max posts/dia total", global.max_posts_per_day_total ?? "2")}
+        ${item("Max posts/dia canal", global.max_posts_per_day_per_channel ?? "1")}
+        ${item("Horario permitido", global.allowed_hours || "09:00-20:00")}
+        ${item("No fines de semana", global.avoid_weekends ? "ON" : "Configurable")}
+        ${item("UTM campaign", global.default_utm_campaign || "organic_social")}
+      </div>
+    </article>
+    <article class="admin-linkedin-card">
+      <div class="admin-linkedin-card-head"><span>Por canal</span></div>
+      <div class="admin-linkedin-status">
+        ${Object.entries(channels).map(([key, value]) => item(
+          key,
+          `${value.max_per_day ?? 0}/dia / ${value.max_per_week ?? 0}/semana / autopublicacion OFF`
+        )).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderSocialMetrics() {
+  if (!els.socialMetrics) return;
+  const metrics = Object.values(state.social.metrics || {});
+  els.socialMetrics.innerHTML = metrics.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.channel || "-")}</td>
+      <td>${escapeHtml(item.followers_current ?? "Pendiente integracion")}</td>
+      <td>${escapeHtml(item.follower_growth_7d ?? "Sin datos todavia")}</td>
+      <td>${escapeHtml(item.follower_growth_30d ?? "Sin datos todavia")}</td>
+      <td>${escapeHtml(item.posts_published ?? "Sin datos todavia")}</td>
+      <td>${escapeHtml(item.impressions ?? "Pendiente integracion")}</td>
+      <td>${escapeHtml(item.engagement ?? "Pendiente integracion")}</td>
+      <td>${escapeHtml(item.clicks ?? "Pendiente integracion")}</td>
+      <td>${escapeHtml(item.ctr ?? "Pendiente integracion")}</td>
+      <td>${escapeHtml(item.traffic_to_web ?? "Pendiente integracion")}</td>
+      <td>${escapeHtml(item.publishing_errors ?? "Sin datos todavia")}</td>
+    </tr>
+  `).join("");
+}
+
+function renderSocialPosts() {
+  if (!els.socialPosts) return;
+  const rows = state.social.posts || [];
+  if (!rows.length) {
+    els.socialPosts.innerHTML = '<tr><td colspan="7">Sin posts sociales todavia.</td></tr>';
+    return;
+  }
+  els.socialPosts.innerHTML = rows.map((post) => `
+    <tr>
+      <td>${escapeHtml(post.channel || "-")}</td>
+      <td>${escapeHtml(formatDate(post.date))}</td>
+      <td>${chip(metaStatusLabel(post.status), statusTone(post.status))}</td>
+      <td>${escapeHtml(post.format || "-")}</td>
+      <td>${escapeHtml(post.caption_preview || "-")}</td>
+      <td><code>${escapeHtml(post.published_media_id || "-")}</code></td>
+      <td><span class="admin-linkedin-error">${escapeHtml(post.error_message || "-")}</span></td>
+    </tr>
+  `).join("");
+}
+
+function renderSocialLogs() {
+  if (!els.socialLogs) return;
+  const logs = state.social.logs || [];
+  if (!logs.length) {
+    els.socialLogs.innerHTML = '<tr><td colspan="6">Sin logs sociales todavia.</td></tr>';
+    return;
+  }
+  els.socialLogs.innerHTML = logs.map((log) => `
+    <tr>
+      <td>${escapeHtml(formatDate(log.at))}</td>
+      <td>${escapeHtml(log.channel || "-")}</td>
+      <td>${escapeHtml(log.event || "-")}</td>
+      <td>${chip(metaStatusLabel(log.status), statusTone(log.status))}</td>
+      <td>${escapeHtml(log.message || "-")}</td>
+      <td><code>${escapeHtml(log.reference_id || "-")}</code></td>
+    </tr>
+  `).join("");
+}
+
+function bindSocialDynamicActions() {
+  if (els.metaConnect && !els.metaConnect.dataset.boundSocialAction) {
+    els.metaConnect.dataset.boundSocialAction = "true";
+    els.metaConnect.addEventListener("click", () => connectMeta(els.metaConnect.dataset.metaConnectTarget || "instagram").catch((error) => showStatus(error.message, "bad")));
+  }
+  if (els.metaConnectFacebook && !els.metaConnectFacebook.dataset.boundSocialAction) {
+    els.metaConnectFacebook.dataset.boundSocialAction = "true";
+    els.metaConnectFacebook.addEventListener("click", () => connectMeta(els.metaConnectFacebook.dataset.metaConnectTarget || "facebook").catch((error) => showStatus(error.message, "bad")));
+  }
+  if (els.metaOrganicPublishInstagram && !els.metaOrganicPublishInstagram.dataset.boundSocialAction) {
+    els.metaOrganicPublishInstagram.dataset.boundSocialAction = "true";
+    els.metaOrganicPublishInstagram.addEventListener("click", () => publishMetaOrganicTest("instagram").catch((error) => showStatus(error.message, "bad")));
+  }
+}
+
 function renderMetaPages(pages = state.meta.pages || []) {
   if (!els.metaPages) return;
   const current = state.meta.connection?.facebook_page_id || "";
@@ -3116,6 +3362,12 @@ async function loadMeta() {
   renderMetaOrganicStatus(organic);
 }
 
+async function loadSocial() {
+  if (!els.socialSummary) return;
+  const payload = await api("/api/social/status");
+  renderSocial(payload);
+}
+
 async function saveMetaSettings() {
   showStatus("Guardando ajustes de Meta...");
   const payload = await api("/api/admin?resource=meta/settings", {
@@ -3222,6 +3474,7 @@ async function loadMetaOrganicStatus() {
   state.meta.organic = payload;
   if (payload.connection) state.meta.connection = payload.connection;
   renderMetaOrganicStatus(payload);
+  await loadSocial().catch(() => null);
   showStatus(payload.auth_error ? payload.last_error : "Estado de Meta organico actualizado.", payload.auth_error ? "bad" : "good");
 }
 
@@ -3229,7 +3482,7 @@ async function publishMetaOrganicTest(platform) {
   const endpoint = platform === "instagram" ? "/api/meta/publish-test-instagram" : "/api/meta/publish-test-facebook";
   showStatus(`Publicando test ${platform === "instagram" ? "Instagram" : "Facebook"}...`);
   const payload = await api(endpoint, { method: "POST", body: JSON.stringify({}) });
-  await loadMeta();
+  await Promise.all([loadMeta(), loadSocial()]);
   const externalId = payload.result?.external_post_id || payload.post?.external_post_id || "";
   showStatus(externalId ? `Test Meta publicado: ${externalId}` : "Test Meta publicado.", "good");
 }
@@ -3248,10 +3501,11 @@ async function handleMetaOAuthCallbackFromUrl() {
       const authPayload = metaOrganicStatusErrorPayload({ status: 401, message: "unauthorized" });
       state.meta.organic = authPayload;
       renderMetaOrganicStatus(authPayload);
+      renderSocial({ sources: { meta: { organic: authPayload } } });
       showStatus(metaOAuth === "error" ? `Meta OAuth: ${error || "error"}` : adminPreviewAuthMessage(), metaOAuth === "error" ? "bad" : "neutral");
       return;
     }
-    await loadMeta();
+    await Promise.all([loadMeta(), loadSocial()]);
     showStatus(metaOAuth === "error" ? `Meta OAuth: ${error || "error"}` : "Meta conectado. Revisa Page, Instagram y permisos.", metaOAuth === "error" ? "bad" : "good");
     return;
   }
@@ -3274,7 +3528,7 @@ async function handleMetaOAuthCallbackFromUrl() {
   params.delete("state");
   const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash || ""}`;
   window.history.replaceState({}, document.title, next);
-  await loadMeta();
+  await Promise.all([loadMeta(), loadSocial()]);
   showStatus("Meta conectado. Carga Pages para seleccionar Facebook Page.", "good");
 }
 
@@ -5920,6 +6174,7 @@ async function loadAll() {
       loadSeoAutogeneration(),
       loadLinkedIn(),
       loadMeta(),
+      loadSocial(),
       loadKpis(),
       loadParking(),
       loadServiceStatus(),
@@ -6353,6 +6608,9 @@ if (els.metaRows) {
     const post = state.meta.posts.find((item) => item.id === row.dataset.metaPostId);
     if (post) fillMetaEditor(post);
   });
+}
+if (els.socialRefresh) {
+  els.socialRefresh.addEventListener("click", () => loadSocial().catch((error) => showStatus(error.message, "bad")));
 }
 els.kpiForm.addEventListener("submit", (event) => {
   event.preventDefault();
