@@ -3,6 +3,7 @@ const ALERT_DISMISS_PREFIX = "inmoradar_admin_alert_dismissed:";
 const VIDEO_PROJECT_KEY = "inmoradar_social_video_project";
 const RELEASE_TARGETS = ["web", "extension", "backoffice"];
 const MAX_RELEASE_FILE_BYTES = 3 * 1024 * 1024;
+const SOCIAL_ASSET_UPLOAD_MAX_CLIENT_BYTES = 100 * 1024 * 1024;
 const ANALYTICS_DEFAULT_DAYS = 7;
 const ANALYTICS_MAX_RANGE_DAYS = 90;
 const EXTENSION_USAGE_DEFAULT_PRESET = "30d";
@@ -279,6 +280,7 @@ const state = {
     assetProvider: "all",
     assetStatus: "all",
     selectedAssetId: "",
+    uploadPreviewUrl: "",
     queuePlatform: "all",
     queueStatus: "all",
     selectedPostId: ""
@@ -382,7 +384,14 @@ const els = {
   socialAssetType: document.querySelector("[data-social-asset-type]"),
   socialAssetProvider: document.querySelector("[data-social-asset-provider]"),
   socialAssetStatus: document.querySelector("[data-social-asset-status]"),
+  socialShowUpload: document.querySelector("[data-social-show-upload]"),
+  socialShowRunwayImport: document.querySelector("[data-social-show-runway-import]"),
   socialCreateAsset: document.querySelector("[data-social-create-asset]"),
+  socialAssetUploadForm: document.querySelector("[data-social-asset-upload-form]"),
+  socialAssetUploadFile: document.querySelector("[data-social-asset-upload-file]"),
+  socialAssetUploadPreview: document.querySelector("[data-social-asset-upload-preview]"),
+  socialRunwayAssetForm: document.querySelector("[data-social-runway-asset-form]"),
+  socialRunwayJobId: document.querySelector("[data-social-runway-job-id]"),
   socialAssetRows: document.querySelector("[data-social-asset-rows]"),
   socialAssetEditor: document.querySelector("[data-social-asset-editor]"),
   socialQueuePlatform: document.querySelector("[data-social-queue-platform]"),
@@ -436,6 +445,7 @@ const els = {
   videoRunwayRender: document.querySelector("[data-video-runway-render]"),
   videoRunwayPoll: document.querySelector("[data-video-runway-poll]"),
   videoRunwayImport: document.querySelector("[data-video-runway-import]"),
+  videoRunwayAsset: document.querySelector("[data-video-runway-asset]"),
   videoReadiness: document.querySelector("[data-video-readiness]"),
   viralizaGenerate: document.querySelector("[data-viraliza-generate]"),
   viralizaMode: document.querySelector("[data-viraliza-mode]"),
@@ -3288,7 +3298,40 @@ function socialAssetPreview(asset = {}) {
   }
   return `
     <div class="admin-linkedin-thumb admin-social-video-thumb">
-      ${asset.thumbnail_url ? `<img src="${escapeHtml(asset.thumbnail_url)}" alt="Thumbnail video">` : "<span>VIDEO</span>"}
+      ${asset.thumbnail_url ? `<img src="${escapeHtml(asset.thumbnail_url)}" alt="Thumbnail video">` : asset.public_url ? `<video src="${escapeHtml(asset.public_url)}" muted playsinline controls preload="metadata"></video>` : "<span>VIDEO</span>"}
+    </div>
+  `;
+}
+
+function clearSocialAssetUploadPreview() {
+  if (state.social.uploadPreviewUrl) {
+    URL.revokeObjectURL(state.social.uploadPreviewUrl);
+    state.social.uploadPreviewUrl = "";
+  }
+  if (els.socialAssetUploadPreview) {
+    els.socialAssetUploadPreview.innerHTML = '<p class="admin-empty-state">Selecciona una imagen o video para ver nombre, tamano y MIME antes de subir.</p>';
+  }
+}
+
+function renderSocialAssetUploadPreview(file) {
+  if (!els.socialAssetUploadPreview) return;
+  if (!file || !file.name) {
+    clearSocialAssetUploadPreview();
+    return;
+  }
+  if (state.social.uploadPreviewUrl) URL.revokeObjectURL(state.social.uploadPreviewUrl);
+  state.social.uploadPreviewUrl = file.type?.startsWith("image/") ? URL.createObjectURL(file) : "";
+  const visual = state.social.uploadPreviewUrl
+    ? `<img class="admin-linkedin-thumb" src="${escapeHtml(state.social.uploadPreviewUrl)}" alt="Preview local del asset">`
+    : `<div class="admin-linkedin-thumb admin-social-video-thumb"><span>${file.type?.startsWith("video/") ? "VIDEO" : "FILE"}</span></div>`;
+  els.socialAssetUploadPreview.innerHTML = `
+    <div class="admin-social-upload-preview-row">
+      ${visual}
+      <div class="admin-linkedin-status">
+        <div class="admin-linkedin-status-row"><span>Archivo</span><strong>${escapeHtml(file.name)}</strong></div>
+        <div class="admin-linkedin-status-row"><span>Tamano</span><strong>${escapeHtml(formatBytes(file.size))}</strong></div>
+        <div class="admin-linkedin-status-row"><span>MIME</span><code>${escapeHtml(file.type || "application/octet-stream")}</code></div>
+      </div>
     </div>
   `;
 }
@@ -3341,7 +3384,7 @@ function renderSocialAssetEditor() {
   if (!asset) {
     const missing = state.social.storage?.social_media_assets_table_missing
       ? `Falta la tabla social_media_assets. Aplica ${state.social.storage.social_media_assets_pending_sql || "database/social-media-assets.sql"} para activar la biblioteca.`
-      : "Selecciona un asset o crea uno manual para editar la biblioteca social.";
+      : "Selecciona un asset, sube un archivo o crea un asset por URL para editar la biblioteca social.";
     els.socialAssetEditor.innerHTML = `<p class="admin-empty-state">${escapeHtml(missing)}</p>`;
     return;
   }
@@ -3714,19 +3757,96 @@ function collectSocialAssetInput() {
   };
 }
 
+async function collectSocialAssetUploadInput() {
+  const form = els.socialAssetUploadForm;
+  if (!form) return {};
+  const data = new FormData(form);
+  const file = data.get("file");
+  if (!file || !file.name) throw new Error("Selecciona un archivo para subir.");
+  if (file.size > SOCIAL_ASSET_UPLOAD_MAX_CLIENT_BYTES) {
+    throw new Error("Archivo demasiado grande para subir desde BackOffice. Usa un asset mas ligero o storage directo.");
+  }
+  const buffer = await file.arrayBuffer();
+  return {
+    filename: file.name,
+    mime_type: file.type || "application/octet-stream",
+    file_size_bytes: file.size,
+    title: String(data.get("title") || file.name || "").trim(),
+    description: String(data.get("description") || "").trim(),
+    usage_notes: String(data.get("usage_notes") || "").trim(),
+    content_base64: arrayBufferToBase64(buffer)
+  };
+}
+
+async function uploadSocialAsset() {
+  if (state.social.storage?.social_media_assets_table_missing) {
+    throw new Error(`Falta social_media_assets. Aplica ${state.social.storage.social_media_assets_pending_sql || "database/social-media-assets.sql"}.`);
+  }
+  const input = await collectSocialAssetUploadInput();
+  showStatus(`Subiendo asset ${input.filename}...`);
+  const payload = await api("/api/social/assets/upload", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+  if (els.socialAssetUploadForm) els.socialAssetUploadForm.reset();
+  clearSocialAssetUploadPreview();
+  await loadSocial();
+  state.social.selectedAssetId = payload.asset?.id || state.social.selectedAssetId;
+  renderSocialAssets();
+  renderSocialAssetEditor();
+  renderSocialPreview();
+  showStatus("Asset subido y registrado en biblioteca.", "good");
+}
+
+function currentRunwayAssetJobId() {
+  return String(state.video.runwayJob?.id || state.video.lastProject?.last_job_id || "").trim();
+}
+
+function collectSocialRunwayAssetInput(form = els.socialRunwayAssetForm) {
+  const data = form ? new FormData(form) : new FormData();
+  const jobId = String(data.get("job_id") || currentRunwayAssetJobId()).trim();
+  if (!jobId) throw new Error("Indica un Runway job ID terminado.");
+  return {
+    job_id: jobId,
+    title: String(data.get("title") || state.video.lastProject?.title || "Video Runway").trim(),
+    usage_notes: String(data.get("usage_notes") || "").trim(),
+    source_prompt: String(data.get("source_prompt") || state.video.lastProject?.global_ai_prompt || "").trim()
+  };
+}
+
+async function createSocialAssetFromRunway(input = null) {
+  if (state.social.storage?.social_media_assets_table_missing) {
+    throw new Error(`Falta social_media_assets. Aplica ${state.social.storage.social_media_assets_pending_sql || "database/social-media-assets.sql"}.`);
+  }
+  const payloadInput = input || collectSocialRunwayAssetInput();
+  showStatus(`Importando output Runway ${payloadInput.job_id} a la biblioteca social...`);
+  const payload = await api("/api/social/assets/from-runway", {
+    method: "POST",
+    body: JSON.stringify(payloadInput)
+  });
+  await loadSocial();
+  state.social.selectedAssetId = payload.asset?.id || state.social.selectedAssetId;
+  renderSocialAssets();
+  renderSocialAssetEditor();
+  renderSocialPreview();
+  const status = payload.asset?.status === "ready" ? "ready con public_url estable" : "pendiente de public_url estable";
+  showStatus(`Asset Runway registrado (${status}).`, payload.asset?.status === "ready" ? "good" : "neutral");
+  return payload;
+}
+
 async function createSocialAsset() {
   if (state.social.storage?.social_media_assets_table_missing) {
     throw new Error(`Falta social_media_assets. Aplica ${state.social.storage.social_media_assets_pending_sql || "database/social-media-assets.sql"}.`);
   }
   const mediaType = state.social.assetType && state.social.assetType !== "all" ? state.social.assetType : "image";
-  showStatus("Creando asset social manual...");
+  showStatus("Creando asset social por URL...");
   const payload = await api("/api/social/assets", {
     method: "POST",
     body: JSON.stringify({
       provider: "manual",
       media_type: mediaType,
       status: "draft",
-      title: "Asset manual"
+      title: "Asset por URL"
     })
   });
   await loadSocial();
@@ -3734,7 +3854,7 @@ async function createSocialAsset() {
   renderSocialAssets();
   renderSocialAssetEditor();
   renderSocialPreview();
-  showStatus("Asset social creado.", "good");
+  showStatus("Asset por URL creado.", "good");
 }
 
 async function saveSocialAsset() {
@@ -5185,6 +5305,7 @@ function setRunwayActions() {
   if (els.videoRunwayRender) els.videoRunwayRender.disabled = !hasProject || !hasEstimate || isBusy;
   if (els.videoRunwayPoll) els.videoRunwayPoll.disabled = !hasJob || isBusy || hasResult;
   if (els.videoRunwayImport) els.videoRunwayImport.disabled = !hasResult || isBusy;
+  if (els.videoRunwayAsset) els.videoRunwayAsset.disabled = !hasResult || isBusy;
 }
 
 function runwayReadiness(config = state.video.runwayConfig || {}) {
@@ -5433,6 +5554,32 @@ async function importRunwayClip() {
     renderVideoReadiness();
     setRunwayStatus("Clip Runway cargado como fondo. Ya puedes componer el vídeo final con marca InmoRadar.", "good");
     showStatus("Clip Runway cargado como fondo.", "good");
+  } finally {
+    setVideoBusy(false);
+    setRunwayActions();
+  }
+}
+
+async function saveRunwayClipAsSocialAsset() {
+  const jobId = state.video.runwayJob?.id;
+  if (!jobId) return;
+  setVideoBusy(true, "Guardando output Runway como asset social.");
+  setRunwayStatus("Trabajando: copiando el output Runway al bucket social-assets si sigue disponible...", "working");
+  try {
+    const payload = await createSocialAssetFromRunway({
+      job_id: jobId,
+      title: state.video.lastProject?.title || `Runway ${jobId}`,
+      usage_notes: "Asset creado desde Social Video Studio. Publicacion de video pendiente de fase posterior.",
+      source_prompt: state.video.lastProject?.global_ai_prompt || ""
+    });
+    const ready = payload.asset?.status === "ready";
+    setRunwayStatus(
+      ready
+        ? "Output Runway guardado como asset social ready. Puedes asociarlo a un borrador; publicar video queda bloqueado por ahora."
+        : "Asset Runway creado, pero aun falta public_url estable. Puedes verlo en Marketing > Social > Assets.",
+      ready ? "good" : "neutral"
+    );
+    showStatus("Asset Runway registrado en Marketing Social.", ready ? "good" : "neutral");
   } finally {
     setVideoBusy(false);
     setRunwayActions();
@@ -7283,6 +7430,39 @@ if (els.socialAssetStatus) {
 if (els.socialCreateAsset) {
   els.socialCreateAsset.addEventListener("click", () => createSocialAsset().catch((error) => showStatus(error.message, "bad")));
 }
+if (els.socialShowUpload) {
+  els.socialShowUpload.addEventListener("click", () => {
+    els.socialAssetUploadForm?.scrollIntoView({ behavior: "smooth", block: "start" });
+    els.socialAssetUploadFile?.focus();
+    els.socialAssetUploadFile?.click();
+  });
+}
+if (els.socialShowRunwayImport) {
+  els.socialShowRunwayImport.addEventListener("click", () => {
+    if (els.socialRunwayJobId && currentRunwayAssetJobId() && !els.socialRunwayJobId.value) {
+      els.socialRunwayJobId.value = currentRunwayAssetJobId();
+    }
+    els.socialRunwayAssetForm?.scrollIntoView({ behavior: "smooth", block: "start" });
+    els.socialRunwayJobId?.focus();
+  });
+}
+if (els.socialAssetUploadFile) {
+  els.socialAssetUploadFile.addEventListener("change", () => {
+    renderSocialAssetUploadPreview(els.socialAssetUploadFile.files?.[0] || null);
+  });
+}
+if (els.socialAssetUploadForm) {
+  els.socialAssetUploadForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    uploadSocialAsset().catch((error) => showStatus(error.message, "bad"));
+  });
+}
+if (els.socialRunwayAssetForm) {
+  els.socialRunwayAssetForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    createSocialAssetFromRunway().catch((error) => showStatus(error.message, "bad"));
+  });
+}
 if (els.socialAssetRows) {
   els.socialAssetRows.addEventListener("click", (event) => {
     const actionButton = event.target.closest("[data-social-asset-action]");
@@ -7480,6 +7660,13 @@ if (els.videoRunwayPoll) {
 
 if (els.videoRunwayImport) {
   els.videoRunwayImport.addEventListener("click", () => importRunwayClip().catch((error) => {
+    setVideoBusy(false);
+    setRunwayStatus(runwayErrorMessage(error), "bad");
+  }));
+}
+
+if (els.videoRunwayAsset) {
+  els.videoRunwayAsset.addEventListener("click", () => saveRunwayClipAsSocialAsset().catch((error) => {
     setVideoBusy(false);
     setRunwayStatus(runwayErrorMessage(error), "bad");
   }));

@@ -1308,6 +1308,20 @@ test("BackOffice Social conecta Instagram con target explicito y sin endpoint le
   assert.match(adminHtml, /data-social-channels/);
   assert.match(adminHtml, /data-social-asset-rows/);
   assert.match(adminHtml, /data-social-asset-editor/);
+  assert.match(adminHtml, /data-social-show-upload/);
+  assert.match(adminHtml, /data-social-show-runway-import/);
+  assert.match(adminHtml, /data-social-asset-upload-form/);
+  assert.match(adminHtml, /data-social-asset-upload-file/);
+  assert.match(adminHtml, /data-social-asset-upload-preview/);
+  assert.match(adminHtml, /data-social-runway-asset-form/);
+  assert.match(adminHtml, /data-social-runway-job-id/);
+  assert.match(adminHtml, /data-video-runway-asset/);
+  assert.match(adminHtml, /Subir asset/);
+  assert.match(adminHtml, /Importar desde Runway/);
+  assert.match(adminHtml, /Crear asset desde Runway/);
+  assert.match(adminHtml, /Crear asset por URL/);
+  assert.match(adminHtml, /type="file"/);
+  assert.doesNotMatch(adminHtml, />Crear asset manual<\/button>/);
   assert.match(adminHtml, /data-social-queue-platform/);
   assert.match(adminHtml, /data-social-queue-rows/);
   assert.match(adminHtml, /data-social-preview/);
@@ -1324,6 +1338,13 @@ test("BackOffice Social conecta Instagram con target explicito y sin endpoint le
   assert.match(adminJs, /data-meta-connect-facebook data-meta-connect-target="facebook"[^>]*>Conectar Facebook Page<\/button>/);
   assert.match(adminJs, /function renderSocialQueue/);
   assert.match(adminJs, /function renderSocialAssets/);
+  assert.match(adminJs, /function renderSocialAssetUploadPreview/);
+  assert.match(adminJs, /function uploadSocialAsset/);
+  assert.match(adminJs, /function createSocialAssetFromRunway/);
+  assert.match(adminJs, /function saveRunwayClipAsSocialAsset/);
+  assert.match(adminJs, /\/api\/social\/assets\/upload/);
+  assert.match(adminJs, /\/api\/social\/assets\/from-runway/);
+  assert.match(adminJs, /socialAssetUploadFile\.files/);
   assert.match(adminJs, /function chooseSocialAssetForPost/);
   assert.match(adminJs, /function renderSocialPreview/);
   assert.match(adminJs, /function runSocialManualPublish/);
@@ -1559,6 +1580,304 @@ test("Social media assets crea lista valida ready y sanea metadata", async () =>
   }
 });
 
+test("Social assets upload valida mime tamano sube a Storage y crea asset publico", async () => {
+  const previousFetch = global.fetch;
+  const env = {
+    ...validEnv,
+    SUPABASE_URL: "https://supabase.test",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+    SOCIAL_ASSET_MAX_IMAGE_MB: "0.000001"
+  };
+  const rows = [];
+  let storageUpload = null;
+
+  global.fetch = async (url, options = {}) => {
+    const href = String(url);
+    const method = options.method || "GET";
+    if (href.includes("/storage/v1/object/social-assets/")) {
+      storageUpload = { href, options };
+      assert.equal(method, "POST");
+      assert.equal(options.headers.apikey, "service-role-test");
+      assert.equal(options.headers.authorization, "Bearer service-role-test");
+      assert.equal(options.headers["content-type"], "image/png");
+      assert.equal(String(options.body).includes("service-role-test"), false);
+      return { ok: true, status: 200, text: async () => JSON.stringify({ Key: "social-assets/2026/05/test.png" }) };
+    }
+    if (href.includes("/social_media_assets")) {
+      const parsed = new URL(href);
+      const id = String(parsed.searchParams.get("id") || "").replace(/^eq\./, "");
+      if (method === "GET") {
+        return { ok: true, status: 200, text: async () => JSON.stringify(id ? rows.filter((row) => row.id === id) : rows) };
+      }
+      if (method === "POST") {
+        const row = { id: "55555555-5555-4555-8555-555555555555", ...JSON.parse(options.body)[0] };
+        rows.unshift(row);
+        return { ok: true, status: 201, text: async () => JSON.stringify([row]) };
+      }
+    }
+    throw new Error(`unexpected_fetch:${href}`);
+  };
+
+  try {
+    const invalidMime = await callAdminMethodResource("social/assets/upload", {
+      method: "POST",
+      body: {
+        filename: "asset.gif",
+        mime_type: "image/gif",
+        content_base64: Buffer.from("gif").toString("base64")
+      },
+      env
+    });
+    assert.equal(invalidMime.statusCode, 400);
+    assert.equal(invalidMime.payload.error, "social_asset_upload_mime_not_allowed");
+
+    const tooLarge = await callAdminMethodResource("social/assets/upload", {
+      method: "POST",
+      body: {
+        filename: "big.png",
+        mime_type: "image/png",
+        content_base64: Buffer.from("xx").toString("base64")
+      },
+      env
+    });
+    assert.equal(tooLarge.statusCode, 400);
+    assert.equal(tooLarge.payload.error, "social_asset_upload_too_large");
+
+    const uploaded = await callAdminMethodResource("social/assets/upload", {
+      method: "POST",
+      body: {
+        filename: "../Logo InmoRadar.png",
+        mime_type: "image/png",
+        title: "Logo upload",
+        description: "Imagen subida",
+        usage_notes: "Uso interno",
+        content_base64: Buffer.from("x").toString("base64"),
+        metadata: {
+          access_token: "secret-token",
+          note: "safe"
+        }
+      },
+      env
+    });
+    assert.equal(uploaded.statusCode, 201);
+    assert.equal(uploaded.payload.asset.status, "ready");
+    assert.equal(uploaded.payload.asset.provider, "manual");
+    assert.equal(uploaded.payload.asset.media_type, "image");
+    assert.equal(uploaded.payload.asset.mime_type, "image/png");
+    assert.equal(uploaded.payload.asset.file_size_bytes, 1);
+    assert.match(uploaded.payload.asset.public_url, /^https:\/\/supabase\.test\/storage\/v1\/object\/public\/social-assets\/\d{4}\/\d{2}\//);
+    assert.equal(uploaded.payload.asset.thumbnail_url, uploaded.payload.asset.public_url);
+    assert.equal(JSON.stringify(uploaded.payload).includes("service-role-test"), false);
+    assert.equal(JSON.stringify(uploaded.payload).includes("secret-token"), false);
+    assert.equal(Boolean(storageUpload), true);
+    assert.match(storageUpload.href, /\/storage\/v1\/object\/social-assets\/\d{4}\/\d{2}\/[0-9a-f-]+-Logo-InmoRadar\.png$/);
+
+    const list = await callAdminMethodResource("social/assets", { method: "GET", env });
+    assert.equal(list.statusCode, 200);
+    assert.equal(list.payload.assets.some((asset) => asset.id === uploaded.payload.asset.id), true);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test("Social assets from Runway copia output terminado a Storage y crea asset ready", async () => {
+  const previousFetch = global.fetch;
+  const env = {
+    ...validEnv,
+    SUPABASE_URL: "https://supabase.test",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+    SOCIAL_ASSET_MAX_VIDEO_MB: "1"
+  };
+  const rows = [];
+  const videoBytes = Buffer.from("runway-video");
+  const jobs = [{
+    id: "77777777-7777-4777-8777-777777777777",
+    project_id: "sv_test",
+    provider: "runway",
+    provider_task_id: "task-runway-1",
+    status: "succeeded",
+    model: "gen4.5",
+    duration_seconds: 5,
+    ratio: "720:1280",
+    prompt_text: "Prompt seguro",
+    estimated_credits: 60,
+    estimated_cost_usd: 0.6,
+    result_url: "https://runway.test/output/final.mp4?access_token=secret-runway-token",
+    raw_response: { output: ["https://runway.test/output/final.mp4?access_token=secret-runway-token"] },
+    created_at: "2026-05-27T10:00:00.000Z",
+    updated_at: "2026-05-27T10:01:00.000Z"
+  }];
+  const projects = [{
+    id: "sv_test",
+    title: "Video Runway",
+    topic_label: "Chollo o humo",
+    status: "ai_clip_ready",
+    duration_seconds: 24,
+    last_job_id: jobs[0].id,
+    project_json: { global_ai_prompt: "Prompt proyecto" }
+  }];
+  let storageUpload = null;
+  let projectPatched = false;
+
+  global.fetch = async (url, options = {}) => {
+    const href = String(url);
+    const method = options.method || "GET";
+    if (href.includes("api.dev.runwayml.com")) throw new Error("unexpected_runway_api_call");
+    if (href.startsWith("https://runway.test/output/final.mp4")) {
+      assert.equal(method, "GET");
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get(name) {
+            const key = String(name).toLowerCase();
+            if (key === "content-type") return "video/mp4";
+            if (key === "content-length") return String(videoBytes.length);
+            return "";
+          }
+        },
+        arrayBuffer: async () => videoBytes.buffer.slice(videoBytes.byteOffset, videoBytes.byteOffset + videoBytes.byteLength)
+      };
+    }
+    if (href.includes("/storage/v1/object/social-assets/runway/")) {
+      storageUpload = { href, options };
+      assert.equal(method, "POST");
+      assert.equal(options.headers.apikey, "service-role-test");
+      assert.equal(options.headers.authorization, "Bearer service-role-test");
+      assert.equal(options.headers["content-type"], "video/mp4");
+      return { ok: true, status: 200, text: async () => JSON.stringify({ Key: "social-assets/runway/2026/05/runway.mp4" }) };
+    }
+    if (href.includes("/social_video_jobs?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify(jobs) };
+    }
+    if (href.includes("/social_video_projects?")) {
+      if (method === "PATCH") {
+        projectPatched = true;
+        return { ok: true, status: 200, text: async () => JSON.stringify([{ ...projects[0], ...JSON.parse(options.body) }]) };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify(projects) };
+    }
+    if (href.includes("/social_media_assets")) {
+      if (method === "POST") {
+        const row = { id: "88888888-8888-4888-8888-888888888888", ...JSON.parse(options.body)[0] };
+        rows.unshift(row);
+        return { ok: true, status: 201, text: async () => JSON.stringify([row]) };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify(rows) };
+    }
+    throw new Error(`unexpected_fetch:${href}`);
+  };
+
+  try {
+    const imported = await callAdminMethodResource("social/assets/from-runway", {
+      method: "POST",
+      body: {
+        job_id: jobs[0].id,
+        title: "Runway listo",
+        usage_notes: "Uso interno",
+        source_prompt: "Prompt override"
+      },
+      env
+    });
+    assert.equal(imported.statusCode, 201);
+    assert.equal(imported.payload.asset.provider, "runway");
+    assert.equal(imported.payload.asset.provider_job_id, jobs[0].id);
+    assert.equal(imported.payload.asset.provider_asset_id, "task-runway-1");
+    assert.equal(imported.payload.asset.media_type, "video");
+    assert.equal(imported.payload.asset.status, "ready");
+    assert.equal(imported.payload.asset.mime_type, "video/mp4");
+    assert.equal(imported.payload.asset.file_size_bytes, videoBytes.length);
+    assert.match(imported.payload.asset.public_url, /^https:\/\/supabase\.test\/storage\/v1\/object\/public\/social-assets\/runway\/\d{4}\/\d{2}\//);
+    assert.equal(imported.payload.copied_to_storage, true);
+    assert.equal(Boolean(storageUpload), true);
+    assert.match(storageUpload.href, /\/storage\/v1\/object\/social-assets\/runway\/\d{4}\/\d{2}\/[0-9a-f-]+-runway-/);
+    assert.equal(projectPatched, true);
+    const serialized = JSON.stringify(imported.payload);
+    assert.equal(serialized.includes("secret-runway-token"), false);
+    assert.equal(serialized.includes("service-role-test"), false);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test("Social assets from Runway bloquea jobs no completados y deja sin publicar outputs sin URL", async () => {
+  const previousFetch = global.fetch;
+  const env = {
+    ...validEnv,
+    SUPABASE_URL: "https://supabase.test",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+  };
+  const jobs = {
+    queued: {
+      id: "99999999-9999-4999-8999-999999999999",
+      provider: "runway",
+      status: "running",
+      model: "gen4.5",
+      duration_seconds: 5,
+      ratio: "720:1280",
+      prompt_text: "Prompt queued"
+    },
+    completedNoUrl: {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      provider: "runway",
+      status: "succeeded",
+      model: "gen4.5",
+      duration_seconds: 5,
+      ratio: "720:1280",
+      prompt_text: "Prompt completed",
+      result_url: null
+    }
+  };
+  const rows = [];
+  let storageCalls = 0;
+
+  global.fetch = async (url, options = {}) => {
+    const href = String(url);
+    const method = options.method || "GET";
+    if (href.includes("/storage/v1/object/social-assets/")) storageCalls += 1;
+    if (href.includes("/social_video_jobs?")) {
+      const parsed = new URL(href);
+      const id = String(parsed.searchParams.get("id") || "").replace(/^eq\./, "");
+      return { ok: true, status: 200, text: async () => JSON.stringify(jobs[id === jobs.queued.id ? "queued" : "completedNoUrl"] ? [jobs[id === jobs.queued.id ? "queued" : "completedNoUrl"]] : []) };
+    }
+    if (href.includes("/social_media_assets")) {
+      if (method === "POST") {
+        const row = { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", ...JSON.parse(options.body)[0] };
+        rows.unshift(row);
+        return { ok: true, status: 201, text: async () => JSON.stringify([row]) };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify(rows) };
+    }
+    throw new Error(`unexpected_fetch:${href}`);
+  };
+
+  try {
+    const blocked = await callAdminMethodResource("social/assets/from-runway", {
+      method: "POST",
+      body: { job_id: jobs.queued.id },
+      env
+    });
+    assert.equal(blocked.statusCode, 400);
+    assert.equal(blocked.payload.error, "runway_job_not_completed");
+    assert.equal(storageCalls, 0);
+
+    const pending = await callAdminMethodResource("social/assets/from-runway", {
+      method: "POST",
+      body: { job_id: jobs.completedNoUrl.id },
+      env
+    });
+    assert.equal(pending.statusCode, 201);
+    assert.equal(pending.payload.asset.provider, "runway");
+    assert.equal(pending.payload.asset.status, "processing");
+    assert.equal(pending.payload.asset.public_url, null);
+    assert.equal(pending.payload.copied_to_storage, false);
+    assert.equal(pending.payload.warning, "runway_output_public_url_missing");
+    assert.equal(storageCalls, 0);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
 test("Social post queue crea, edita y transiciona borradores sin autopublisher", async () => {
   const previousFetch = global.fetch;
   const env = {
@@ -1738,15 +2057,25 @@ test("Social post queue bloquea canales no validados y contenido incompleto", as
     { id: "ig_draft", platform: "instagram", format: "image", status: "draft", caption: "IG", media_url: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg" },
     { id: "ig_no_caption", platform: "instagram", format: "image", status: "approved", caption: "", media_url: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg" },
     { id: "ig_no_media", platform: "instagram", format: "image", status: "approved", caption: "IG", media_url: "" },
-    { id: "ig_asset_processing", platform: "instagram", format: "image", status: "approved", caption: "IG asset", media_url: "", media_asset_id: "33333333-3333-4333-8333-333333333333" }
+    { id: "ig_asset_processing", platform: "instagram", format: "image", status: "approved", caption: "IG asset", media_url: "", media_asset_id: "33333333-3333-4333-8333-333333333333" },
+    { id: "ig_asset_video", platform: "instagram", format: "video", status: "approved", caption: "IG video", media_url: "", media_asset_id: "33333333-3333-4333-8333-444444444444" }
   ];
-  const asset = {
-    id: "33333333-3333-4333-8333-333333333333",
-    provider: "manual",
-    media_type: "image",
-    status: "processing",
-    public_url: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg"
-  };
+  const assets = [
+    {
+      id: "33333333-3333-4333-8333-333333333333",
+      provider: "manual",
+      media_type: "image",
+      status: "processing",
+      public_url: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg"
+    },
+    {
+      id: "33333333-3333-4333-8333-444444444444",
+      provider: "manual",
+      media_type: "video",
+      status: "ready",
+      public_url: "https://www.inmoradar.app/assets/social/test-video.mp4"
+    }
+  ];
   let graphCalls = 0;
 
   global.fetch = async (url, options = {}) => {
@@ -1760,7 +2089,9 @@ test("Social post queue bloquea canales no validados y contenido incompleto", as
       if (method === "PATCH") return { ok: true, status: 200, text: async () => JSON.stringify([rows.find((row) => row.id === id)]) };
     }
     if (href.includes("/social_media_assets")) {
-      return { ok: true, status: 200, text: async () => JSON.stringify([asset]) };
+      const parsed = new URL(href);
+      const id = String(parsed.searchParams.get("id") || "").replace(/^eq\./, "");
+      return { ok: true, status: 200, text: async () => JSON.stringify(assets.filter((asset) => !id || asset.id === id)) };
     }
     if (href.includes("/marketing_meta_connections?")) {
       return { ok: true, status: 200, text: async () => JSON.stringify([connection]) };
@@ -1794,6 +2125,10 @@ test("Social post queue bloquea canales no validados y contenido incompleto", as
     const notReadyAsset = await callAdminMethodResource("social/posts", { method: "POST", query: "action=publish-now&id=ig_asset_processing", body: {}, env });
     assert.equal(notReadyAsset.statusCode, 400);
     assert.equal(notReadyAsset.payload.error, "social_media_asset_not_ready");
+
+    const videoAsset = await callAdminMethodResource("social/posts", { method: "POST", query: "action=publish-now&id=ig_asset_video", body: {}, env });
+    assert.equal(videoAsset.statusCode, 400);
+    assert.equal(videoAsset.payload.error, "social_instagram_video_asset_not_supported_yet");
     assert.equal(graphCalls, 0);
   } finally {
     global.fetch = previousFetch;
@@ -2067,6 +2402,30 @@ test("Social posts y assets endpoints estan protegidos por admin token", async (
   });
   assert.equal(assetRes.statusCode, 401);
   assert.equal(assetPayload().error, "unauthorized");
+
+  const { res: uploadRes, payload: uploadPayload } = createJsonResponse();
+  await withEnv({ ADMIN_IMPORT_TOKEN: "admin-test-token", ...validEnv }, async () => {
+    await adminHandler({
+      method: "POST",
+      url: "/api/admin?resource=social/assets/upload",
+      headers: { host: "www.inmoradar.app" },
+      body: { mime_type: "image/png", content_base64: "eA==" }
+    }, uploadRes);
+  });
+  assert.equal(uploadRes.statusCode, 401);
+  assert.equal(uploadPayload().error, "unauthorized");
+
+  const { res: runwayRes, payload: runwayPayload } = createJsonResponse();
+  await withEnv({ ADMIN_IMPORT_TOKEN: "admin-test-token", ...validEnv }, async () => {
+    await adminHandler({
+      method: "POST",
+      url: "/api/admin?resource=social/assets/from-runway",
+      headers: { host: "www.inmoradar.app" },
+      body: { job_id: "77777777-7777-4777-8777-777777777777" }
+    }, runwayRes);
+  });
+  assert.equal(runwayRes.statusCode, 401);
+  assert.equal(runwayPayload().error, "unauthorized");
 });
 
 test("Meta organic status usa la misma proteccion admin que BackOffice", async () => {

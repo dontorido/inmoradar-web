@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const { assertAdmin, fetchWithTimeout, handleCors, hasSupabaseConfig, json, readRawBody, sanitizeErrorMessage, supabaseFetch } = require("./_utils");
 const { createAdminRouter, dispatchAdminRoute } = require("./_admin/router");
 const { createAnalyticsHandlers } = require("./_admin/handlers/analytics");
@@ -135,6 +136,15 @@ const SOCIAL_ASSET_MEDIA_TYPES = ["image", "video"];
 const SOCIAL_ASSET_STATUSES = ["draft", "processing", "ready", "failed", "archived"];
 const SOCIAL_ASSET_LICENSE_STATUSES = ["internal", "licensed", "unknown", "restricted"];
 const SOCIAL_MEDIA_ASSETS_SQL = "database/social-media-assets.sql";
+const SOCIAL_ASSETS_STORAGE_SQL = "database/social-assets-storage.sql";
+const SOCIAL_ASSETS_STORAGE_BUCKET = "social-assets";
+const SOCIAL_ASSET_ALLOWED_MIME_TYPES = {
+  "image/jpeg": { media_type: "image", extension: "jpg" },
+  "image/png": { media_type: "image", extension: "png" },
+  "image/webp": { media_type: "image", extension: "webp" },
+  "video/mp4": { media_type: "video", extension: "mp4" },
+  "video/webm": { media_type: "video", extension: "webm" }
+};
 
 function requestHeader(req, name) {
   const headers = req.headers || {};
@@ -1637,6 +1647,380 @@ function validateSocialAssetInput(input = {}) {
   return null;
 }
 
+function socialAssetUploadLimitBytes(mediaType, env = process.env) {
+  const envKey = mediaType === "video" ? "SOCIAL_ASSET_MAX_VIDEO_MB" : "SOCIAL_ASSET_MAX_IMAGE_MB";
+  const fallbackMb = mediaType === "video" ? 100 : 10;
+  const parsed = Number.parseFloat(String(env[envKey] || fallbackMb));
+  const megabytes = Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMb;
+  return Math.floor(megabytes * 1024 * 1024);
+}
+
+function safeSocialAssetFilename(filename = "", mimeType = "application/octet-stream") {
+  const mime = SOCIAL_ASSET_ALLOWED_MIME_TYPES[mimeType] || {};
+  const fallbackExt = mime.extension || "bin";
+  const withoutPath = String(filename || `asset.${fallbackExt}`).split(/[\\/]/).pop() || `asset.${fallbackExt}`;
+  const clean = withoutPath
+    .normalize("NFKD")
+    .replace(/[^\w.\-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^\.+/, "")
+    .replace(/^[-.]+|[-.]+$/g, "")
+    .slice(0, 120);
+  const hasExtension = /\.[a-z0-9]{2,8}$/i.test(clean);
+  return hasExtension ? clean : `${clean || "asset"}.${fallbackExt}`;
+}
+
+function socialAssetStorageObjectPath(filename, now = new Date(), prefix = "") {
+  const yyyy = String(now.getUTCFullYear());
+  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const cleanPrefix = String(prefix || "")
+    .split("/")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => safeSocialAssetFilename(part, "application/octet-stream").replace(/\.[a-z0-9]{2,8}$/i, ""))
+    .filter(Boolean)
+    .join("/");
+  const path = `${yyyy}/${mm}/${crypto.randomUUID()}-${filename}`;
+  return cleanPrefix ? `${cleanPrefix}/${path}` : path;
+}
+
+function encodedStoragePath(path) {
+  return String(path || "")
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
+function supabaseStorageBaseUrl(env = process.env) {
+  return String(env.SUPABASE_URL || "").replace(/\/+$/, "").replace(/\/rest\/v1$/, "");
+}
+
+function supabaseStorageObjectPublicUrl(bucket, objectPath, env = process.env) {
+  return `${supabaseStorageBaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodedStoragePath(objectPath)}`;
+}
+
+function supabaseStorageHeaders(contentType, env = process.env) {
+  const key = env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const headers = {
+    apikey: key,
+    "content-type": contentType,
+    "cache-control": "31536000"
+  };
+  if (!String(key).startsWith("sb_secret_") && !String(key).startsWith("sb_publishable_")) {
+    headers.authorization = `Bearer ${key}`;
+  }
+  return headers;
+}
+
+function parseSocialUploadBase64(body = {}) {
+  const dataUrl = String(body.data_url || body.file_data_url || "");
+  if (dataUrl) {
+    const match = dataUrl.match(/^data:([^;,]+);base64,(.+)$/i);
+    if (!match) return { error: "social_asset_upload_data_url_invalid" };
+    return { mime_type: match[1].toLowerCase(), content_base64: match[2] };
+  }
+  return {
+    mime_type: String(body.mime_type || body.content_type || "").trim().toLowerCase(),
+    content_base64: String(body.content_base64 || body.base64 || "").trim()
+  };
+}
+
+function normalizeSocialAssetUploadInput(body = {}, env = process.env) {
+  const parsed = parseSocialUploadBase64(body);
+  if (parsed.error) return { error: parsed.error };
+  const mimeConfig = SOCIAL_ASSET_ALLOWED_MIME_TYPES[parsed.mime_type];
+  if (!mimeConfig) return { error: "social_asset_upload_mime_not_allowed" };
+  if (!parsed.content_base64) return { error: "social_asset_upload_content_required" };
+  let buffer;
+  try {
+    buffer = Buffer.from(parsed.content_base64, "base64");
+  } catch (error) {
+    return { error: "social_asset_upload_base64_invalid" };
+  }
+  if (!buffer.length || buffer.toString("base64").replace(/=+$/, "") !== parsed.content_base64.replace(/\s/g, "").replace(/=+$/, "")) {
+    return { error: "social_asset_upload_base64_invalid" };
+  }
+  const limitBytes = socialAssetUploadLimitBytes(mimeConfig.media_type, env);
+  if (buffer.length > limitBytes) {
+    return {
+      error: "social_asset_upload_too_large",
+      limit_bytes: limitBytes,
+      file_size_bytes: buffer.length
+    };
+  }
+  const filename = safeSocialAssetFilename(body.filename || body.name || "", parsed.mime_type);
+  return {
+    buffer,
+    filename,
+    mime_type: parsed.mime_type,
+    media_type: mimeConfig.media_type,
+    file_size_bytes: buffer.length,
+    title: socialSafeText(body.title || filename, 180),
+    description: cleanNullable(body.description),
+    usage_notes: cleanNullable(body.usage_notes),
+    metadata: normalizeSocialAssetMetadata({
+      ...(body.metadata && typeof body.metadata === "object" ? body.metadata : {}),
+      original_filename: filename,
+      uploaded_via: "backoffice",
+      storage_bucket: SOCIAL_ASSETS_STORAGE_BUCKET
+    })
+  };
+}
+
+async function uploadSocialAssetBufferToStorage(input, env = process.env, fetchImpl = fetchWithTimeout) {
+  const objectPath = socialAssetStorageObjectPath(input.filename, new Date(), input.storage_prefix || "");
+  const url = `${supabaseStorageBaseUrl(env)}/storage/v1/object/${encodeURIComponent(SOCIAL_ASSETS_STORAGE_BUCKET)}/${encodedStoragePath(objectPath)}`;
+  const response = await fetchImpl(url, {
+    method: "POST",
+    headers: {
+      ...supabaseStorageHeaders(input.mime_type, env),
+      "x-upsert": "false"
+    },
+    body: input.buffer,
+    timeoutMs: Number(env.SOCIAL_ASSET_STORAGE_TIMEOUT_MS || 30000)
+  });
+  const text = await response.text();
+  let payload = {};
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch (error) {
+    payload = { raw_response: sanitizeMetaSecretText(text || "", 600) };
+  }
+  if (!response.ok) {
+    throw new Error(sanitizeMetaSecretText(`Supabase Storage ${response.status}: ${JSON.stringify(payload)}`, 800));
+  }
+  return {
+    bucket: SOCIAL_ASSETS_STORAGE_BUCKET,
+    object_path: objectPath,
+    storage_path: `${SOCIAL_ASSETS_STORAGE_BUCKET}/${objectPath}`,
+    public_url: supabaseStorageObjectPublicUrl(SOCIAL_ASSETS_STORAGE_BUCKET, objectPath, env),
+    storage_response: sanitizeMetaPayload(payload)
+  };
+}
+
+async function uploadSocialAsset(body = {}, env = process.env) {
+  const input = normalizeSocialAssetUploadInput(body, env);
+  if (input.error) return { status: 400, payload: { ok: false, error: input.error, limit_bytes: input.limit_bytes, file_size_bytes: input.file_size_bytes } };
+  try {
+    const storage = await uploadSocialAssetBufferToStorage(input, env);
+    const result = await createSocialAsset({
+      provider: "manual",
+      media_type: input.media_type,
+      status: "ready",
+      title: input.title,
+      description: input.description,
+      public_url: storage.public_url,
+      thumbnail_url: input.media_type === "image" ? storage.public_url : null,
+      mime_type: input.mime_type,
+      file_size_bytes: input.file_size_bytes,
+      license_status: "internal",
+      usage_notes: input.usage_notes,
+      metadata: {
+        ...input.metadata,
+        storage_bucket: storage.bucket,
+        storage_path: storage.storage_path,
+        storage_object_path: storage.object_path,
+        storage_response: storage.storage_response
+      }
+    });
+    if (result.status) return { status: result.status, payload: { ok: false, error: result.error } };
+    if (result.table_missing) return { status: 503, payload: { ok: false, error: "social_media_assets_table_missing", pending_sql: SOCIAL_MEDIA_ASSETS_SQL } };
+    if (result.error) return { status: 500, payload: { ok: false, error: result.error } };
+    return { status: 201, payload: { ok: true, asset: result.asset, storage: { bucket: storage.bucket, path: storage.storage_path, public_url: storage.public_url } } };
+  } catch (error) {
+    return { status: 500, payload: { ok: false, error: "social_asset_upload_failed", message: sanitizeMetaSecretText(error.message || "social_asset_upload_failed", 800) } };
+  }
+}
+
+function normalizeResponseMimeType(value = "", fallbackUrl = "") {
+  const contentType = String(value || "").split(";")[0].trim().toLowerCase();
+  if (SOCIAL_ASSET_ALLOWED_MIME_TYPES[contentType]) return contentType;
+  const pathname = (() => {
+    try {
+      return new URL(String(fallbackUrl || "")).pathname.toLowerCase();
+    } catch {
+      return String(fallbackUrl || "").toLowerCase();
+    }
+  })();
+  if (pathname.endsWith(".webm")) return "video/webm";
+  return "video/mp4";
+}
+
+function runwayJobCompleted(status) {
+  return ["succeeded", "success", "completed", "complete"].includes(String(status || "").trim().toLowerCase());
+}
+
+function sanitizeRunwayOutputUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return "";
+  }
+}
+
+async function responseBufferWithLimit(response, limitBytes) {
+  if (response.body && typeof response.body.getReader === "function") {
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      total += chunk.length;
+      if (total > limitBytes) throw new Error("social_asset_upload_too_large");
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks, total);
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length > limitBytes) throw new Error("social_asset_upload_too_large");
+  return buffer;
+}
+
+async function copyRunwayOutputToSocialAssetStorage(job, env = process.env, fetchImpl = fetchWithTimeout) {
+  const resultUrl = String(job?.result_url || "").trim();
+  if (!publicHttpsMediaUrl(resultUrl)) throw new Error("runway_output_https_url_required");
+  const response = await fetchImpl(resultUrl, {
+    timeoutMs: Number(env.SOCIAL_ASSET_RUNWAY_COPY_TIMEOUT_MS || 60000)
+  });
+  if (!response.ok) {
+    throw new Error(`runway_output_fetch_failed_${response.status || "unknown"}`);
+  }
+  const mimeType = normalizeResponseMimeType(response.headers?.get?.("content-type") || "", resultUrl);
+  const mimeConfig = SOCIAL_ASSET_ALLOWED_MIME_TYPES[mimeType];
+  if (!mimeConfig || mimeConfig.media_type !== "video") throw new Error("runway_output_mime_not_allowed");
+  const limitBytes = socialAssetUploadLimitBytes("video", env);
+  const contentLength = Number(response.headers?.get?.("content-length") || 0);
+  if (Number.isFinite(contentLength) && contentLength > limitBytes) {
+    throw new Error("social_asset_upload_too_large");
+  }
+  const buffer = await responseBufferWithLimit(response, limitBytes);
+  const extension = SOCIAL_ASSET_ALLOWED_MIME_TYPES[mimeType]?.extension || "mp4";
+  const storage = await uploadSocialAssetBufferToStorage(
+    {
+      buffer,
+      filename: safeSocialAssetFilename(`runway-${job.id || job.provider_task_id || "output"}.${extension}`, mimeType),
+      mime_type: mimeType,
+      storage_prefix: "runway"
+    },
+    env,
+    fetchImpl
+  );
+  return {
+    ...storage,
+    mime_type: mimeType,
+    file_size_bytes: buffer.length
+  };
+}
+
+async function resolveRunwayJobForAsset(body = {}) {
+  const jobId = String(body.job_id || body.provider_job_id || "").trim();
+  const projectId = String(body.project_id || "").trim();
+  let project = null;
+  let job = null;
+  if (jobId) {
+    job = await readSocialVideoJob(jobId);
+  }
+  if (!job && projectId) {
+    project = await readSocialVideoProject(projectId);
+    if (project?.last_job_id) job = await readSocialVideoJob(project.last_job_id);
+  } else if (job?.project_id) {
+    project = await readSocialVideoProject(job.project_id).catch(() => null);
+  }
+  return { job, project };
+}
+
+function runwayAssetMetadata(job = {}, project = {}, storage = null, copyError = null) {
+  return normalizeSocialAssetMetadata({
+    source: "social_video_studio",
+    provider: "runway",
+    project_id: job.project_id || project?.id || null,
+    runway_job_id: job.id || null,
+    provider_task_id: job.provider_task_id || null,
+    runway_status: job.status || null,
+    model: job.model || null,
+    ratio: job.ratio || null,
+    estimated_credits: job.estimated_credits || null,
+    estimated_cost_usd: job.estimated_cost_usd || null,
+    copied_to_storage: Boolean(storage?.public_url),
+    storage_bucket: storage?.bucket || null,
+    storage_path: storage?.storage_path || null,
+    runway_result_url_hint: sanitizeRunwayOutputUrl(job.result_url),
+    copy_error: copyError ? sanitizeMetaSecretText(copyError, 240) : null
+  });
+}
+
+async function createSocialAssetFromRunway(body = {}, env = process.env) {
+  const { job, project } = await resolveRunwayJobForAsset(body);
+  if (!job?.id) return { status: 404, payload: { ok: false, error: "social_video_job_not_found" } };
+  if (!runwayJobCompleted(job.status)) {
+    return {
+      status: 400,
+      payload: {
+        ok: false,
+        error: "runway_job_not_completed",
+        job: socialVideoJobPayload(job).job
+      }
+    };
+  }
+
+  let storage = null;
+  let copyError = null;
+  if (job.result_url) {
+    try {
+      storage = await copyRunwayOutputToSocialAssetStorage(job, env);
+    } catch (error) {
+      copyError = error.message || "runway_output_copy_failed";
+    }
+  } else {
+    copyError = "runway_output_public_url_missing";
+  }
+
+  const title = socialSafeText(body.title || project?.title || `Runway ${job.id}`, 180);
+  const result = await createSocialAsset({
+    provider: "runway",
+    provider_job_id: job.id,
+    provider_asset_id: job.provider_task_id || null,
+    media_type: "video",
+    status: storage?.public_url ? "ready" : "processing",
+    title,
+    description: cleanNullable(body.description || project?.topic_label || null),
+    public_url: storage?.public_url || null,
+    thumbnail_url: null,
+    duration_seconds: socialOptionalNumber(body.duration_seconds || job.duration_seconds),
+    ratio: cleanNullable(job.ratio || project?.project_json?.format?.aspect_ratio || null),
+    mime_type: storage?.mime_type || "video/mp4",
+    file_size_bytes: storage?.file_size_bytes || null,
+    license_status: "internal",
+    usage_notes: cleanNullable(body.usage_notes || "Output Runway importado desde Social Video Studio"),
+    source_prompt: cleanNullable(body.source_prompt || job.prompt_text || project?.project_json?.global_ai_prompt || null),
+    metadata: runwayAssetMetadata(job, project, storage, copyError)
+  });
+  if (result.status) return { status: result.status, payload: { ok: false, error: result.error } };
+  if (result.table_missing) return { status: 503, payload: { ok: false, error: "social_media_assets_table_missing", pending_sql: SOCIAL_MEDIA_ASSETS_SQL } };
+  if (result.error) return { status: 500, payload: { ok: false, error: result.error } };
+  if (job.project_id) {
+    await safePatchSocialVideoProject(job.project_id, {
+      status: result.asset?.status === "ready" ? "ai_clip_ready" : "ai_clip_queued",
+      has_ai_clip: Boolean(job.result_url),
+      last_job_id: job.id,
+      failure: copyError || null
+    }).catch(() => null);
+  }
+  return {
+    status: 201,
+    payload: {
+      ok: true,
+      asset: result.asset,
+      storage: storage ? { bucket: storage.bucket, path: storage.storage_path, public_url: storage.public_url } : null,
+      copied_to_storage: Boolean(storage?.public_url),
+      warning: storage ? null : sanitizeMetaSecretText(copyError || "runway_output_not_copied", 240)
+    }
+  };
+}
+
 async function listSocialAssets(url = new URL("https://admin.local/?limit=50"), limitOverride) {
   const params = new URLSearchParams({
     select: "*",
@@ -2079,6 +2463,16 @@ async function handleSocialAssets(req, url) {
     return updateSocialAsset(id, await readJsonBody(req));
   }
   return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+}
+
+async function handleSocialAssetUpload(req) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  return uploadSocialAsset(await readJsonBody(req));
+}
+
+async function handleSocialAssetFromRunway(req) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  return createSocialAssetFromRunway(await readJsonBody(req));
 }
 
 async function handleLinkedInPostAction(body = {}) {
@@ -2866,6 +3260,8 @@ async function handleSocialStatus(req) {
         social_media_assets_table_missing: socialAssetsState.table_missing,
         social_media_assets_error: socialAssetsState.error,
         social_media_assets_pending_sql: socialAssetsState.table_missing ? SOCIAL_MEDIA_ASSETS_SQL : null,
+        social_assets_storage_bucket: SOCIAL_ASSETS_STORAGE_BUCKET,
+        social_assets_storage_sql: SOCIAL_ASSETS_STORAGE_SQL,
         pending_sql: socialPostsState.table_missing ? SOCIAL_POST_QUEUE_SQL : null
       }
     }
@@ -3737,6 +4133,17 @@ async function readSocialVideoJob(id) {
     limit: "1"
   });
   const rows = await supabaseFetch(`social_video_jobs?${params.toString()}`);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function readSocialVideoProject(id) {
+  if (!id) return null;
+  const params = new URLSearchParams({
+    id: `eq.${id}`,
+    select: "*",
+    limit: "1"
+  });
+  const rows = await supabaseFetch(`social_video_projects?${params.toString()}`);
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 
@@ -4716,6 +5123,14 @@ async function handleAdminRequest(req, res) {
     }
     if (resource === "social/assets") {
       const result = await handleSocialAssets(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "social/assets/upload") {
+      const result = await handleSocialAssetUpload(req);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "social/assets/from-runway") {
+      const result = await handleSocialAssetFromRunway(req);
       return json(res, result.status, result.payload);
     }
     if (resource === "meta" || resource.startsWith("meta/")) {
