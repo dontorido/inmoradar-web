@@ -425,12 +425,14 @@ test("Instagram requiere imagen publica", async () => {
 
 test("publica Instagram con /me en Graph Instagram y token de Instagram Login", async () => {
   const calls = [];
+  const waits = [];
   const result = await publishInstagramPost({
     accessToken: "ig-user-token",
     instagramBusinessAccountId: "",
     caption: "caption",
     imageUrl: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg",
     env: validEnv,
+    sleepImpl: async (ms) => waits.push(ms),
     fetchImpl: async (url, options = {}) => {
       calls.push({ url, body: options.body });
       if (url.includes("/me?")) {
@@ -456,6 +458,11 @@ test("publica Instagram con /me en Graph Instagram y token de Instagram Login", 
   assert.equal(result.meta_response.instagram_profile.username, "inmoradares");
   assert.equal(result.meta_response.publishing_user_id, "1784143546309305");
   assert.equal(result.meta_response.publish_target, "me");
+  assert.equal(result.meta_response.creation_id, "ig-container-id");
+  assert.equal(result.meta_response.published_media_id, "ig-media-id");
+  assert.equal(result.meta_response.status, "success");
+  assert.equal(result.meta_response.final_stage, "publish_media_container");
+  assert.deepEqual(waits, [2000]);
 });
 
 test("Instagram permite INSTAGRAM_PUBLISH_ACCOUNT_ID explicito tras diagnostico /me", async () => {
@@ -466,6 +473,7 @@ test("Instagram permite INSTAGRAM_PUBLISH_ACCOUNT_ID explicito tras diagnostico 
     caption: "caption",
     imageUrl: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg",
     env: { ...validEnv, INSTAGRAM_PUBLISH_ACCOUNT_ID: "explicit-publish-id" },
+    sleepImpl: async () => {},
     fetchImpl: async (url, options = {}) => {
       calls.push({ url, body: options.body });
       if (url.includes("/me?")) {
@@ -483,6 +491,139 @@ test("Instagram permite INSTAGRAM_PUBLISH_ACCOUNT_ID explicito tras diagnostico 
   assert.match(calls[0].url, /^https:\/\/graph\.instagram\.com\/v23\.0\/me\?/);
   assert.match(calls[1].url, /^https:\/\/graph\.instagram\.com\/v23\.0\/explicit-publish-id\/media/);
   assert.match(calls[2].url, /^https:\/\/graph\.instagram\.com\/v23\.0\/explicit-publish-id\/media_publish/);
+});
+
+test("Instagram reintenta media_publish si el container aun no esta listo y registra exito", async () => {
+  const calls = [];
+  const waits = [];
+  let publishAttempts = 0;
+  const result = await publishInstagramPost({
+    accessToken: "ig-user-token",
+    instagramBusinessAccountId: "26828053596835680",
+    caption: "caption",
+    imageUrl: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg",
+    env: validEnv,
+    sleepImpl: async (ms) => waits.push(ms),
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, body: options.body });
+      if (url.includes("/me?")) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ id: "26828053596835680", user_id: "17841443546309305", username: "inmoradares", account_type: "BUSINESS" }) };
+      }
+      if (url.includes("/media_publish")) {
+        publishAttempts += 1;
+        if (publishAttempts < 3) {
+          return {
+            ok: false,
+            status: 400,
+            text: async () => JSON.stringify({
+              error: {
+                message: "Media ID is not available",
+                code: 9007,
+                error_subcode: 2207027,
+                error_user_msg: "The media is not ready for publishing, please wait for a moment"
+              }
+            })
+          };
+        }
+        return { ok: true, status: 200, text: async () => JSON.stringify({ id: "ig-media-id" }) };
+      }
+      if (url.includes("/ig-media-id")) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ id: "ig-media-id", permalink: "https://www.instagram.com/p/test/" }) };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ id: "ig-container-id" }) };
+    }
+  });
+  assert.equal(publishAttempts, 3);
+  assert.deepEqual(waits, [2000, 4000, 6000]);
+  assert.equal(result.external_post_id, "ig-media-id");
+  assert.equal(result.meta_response.publish_attempts, 3);
+  assert.equal(result.meta_response.status, "success");
+  assert.equal(result.meta_response.published_media_id, "ig-media-id");
+  assert.equal(calls.filter((call) => call.url.includes("/media_publish")).length, 3);
+});
+
+test("Instagram no reintenta media_publish para errores no transitorios", async () => {
+  const waits = [];
+  let publishAttempts = 0;
+  await assert.rejects(
+    () => publishInstagramPost({
+      accessToken: "ig-user-token",
+      instagramBusinessAccountId: "26828053596835680",
+      caption: "caption",
+      imageUrl: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg",
+      env: validEnv,
+      sleepImpl: async (ms) => waits.push(ms),
+      fetchImpl: async (url) => {
+        if (url.includes("/me?")) {
+          return { ok: true, status: 200, text: async () => JSON.stringify({ id: "26828053596835680", user_id: "17841443546309305", username: "inmoradares", account_type: "BUSINESS" }) };
+        }
+        if (url.includes("/media_publish")) {
+          publishAttempts += 1;
+          return {
+            ok: false,
+            status: 400,
+            text: async () => JSON.stringify({ error: { message: "Permission denied", code: 10 } })
+          };
+        }
+        return { ok: true, status: 200, text: async () => JSON.stringify({ id: "ig-container-id" }) };
+      }
+    }),
+    (error) => {
+      assert.match(error.message, /meta_instagram_publish_failed_400:publish_media_container:Permission denied/);
+      assert.equal(error.meta_response.error_code, 10);
+      return true;
+    }
+  );
+  assert.equal(publishAttempts, 1);
+  assert.deepEqual(waits, [2000]);
+});
+
+test("Instagram agota retries si media_publish sigue sin estar listo", async () => {
+  const token = "IGQ" + "z".repeat(120);
+  const waits = [];
+  let publishAttempts = 0;
+  await assert.rejects(
+    () => publishInstagramPost({
+      accessToken: token,
+      instagramBusinessAccountId: "26828053596835680",
+      caption: "caption",
+      imageUrl: "https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg",
+      env: validEnv,
+      sleepImpl: async (ms) => waits.push(ms),
+      fetchImpl: async (url) => {
+        if (url.includes("/me?")) {
+          return { ok: true, status: 200, text: async () => JSON.stringify({ id: "26828053596835680", user_id: "17841443546309305", username: "inmoradares", account_type: "BUSINESS" }) };
+        }
+        if (url.includes("/media_publish")) {
+          publishAttempts += 1;
+          return {
+            ok: false,
+            status: 400,
+            text: async () => JSON.stringify({
+              error: {
+                message: `The media is not ready for publishing access_token=${token}`,
+                code: 9007,
+                error_subcode: 2207027
+              }
+            })
+          };
+        }
+        return { ok: true, status: 200, text: async () => JSON.stringify({ id: "ig-container-id" }) };
+      }
+    }),
+    (error) => {
+      assert.equal(error.message, "meta_instagram_publish_failed_400:publish_media_container:media_not_ready_after_retries");
+      assert.equal(error.message.includes(token), false);
+      assert.equal(JSON.stringify(error.meta_response).includes(token), false);
+      assert.equal(error.meta_response.stage, "publish_media_container");
+      assert.equal(error.meta_response.error_code, 9007);
+      assert.equal(error.meta_response.error_subcode, 2207027);
+      assert.equal(error.meta_response.error_message, "media_not_ready_after_retries");
+      return true;
+    }
+  );
+  assert.equal(publishAttempts, 3);
+  assert.deepEqual(waits, [2000, 4000, 6000]);
 });
 
 test("Instagram sanea errores de create_media_container y no loguea tokens", async () => {
@@ -594,6 +735,88 @@ test("publish-test Instagram guarda diagnostico saneado sin tocar Facebook Page"
     assert.equal(patchedConnection.instagram_business_account_id, "1784143546309305");
     assert.match(patchedConnection.last_error, /create_media_container/);
     assert.equal(fetchedUrls.some((href) => href.includes("graph.facebook.com") || href.includes("/feed")), false);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test("publish-test Instagram guarda last_error saneado cuando agota retries de media_publish", async () => {
+  const previousFetch = global.fetch;
+  const token = "IGQ" + "r".repeat(120);
+  const env = {
+    ...validEnv,
+    SUPABASE_URL: "https://supabase.test",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test",
+    INSTAGRAM_PUBLISH_RETRY_DELAYS_MS: "0,0,0"
+  };
+  const encrypted = encryptToken(token, env);
+  const connection = {
+    ...validConnection,
+    id: "connection_1",
+    status: "connected",
+    instagram_business_account_id: "26828053596835678",
+    scopes: [...IG_PUBLISH_SCOPES],
+    access_token_encrypted: encrypted,
+    user_access_token_encrypted: encrypted,
+    page_access_token_encrypted: null,
+    last_error: null
+  };
+  let insertedPost = null;
+  let patchedConnection = null;
+  let publishAttempts = 0;
+
+  global.fetch = async (url, options = {}) => {
+    const href = String(url);
+    if (href.includes("/marketing_meta_posts") && options.method === "POST") {
+      insertedPost = JSON.parse(options.body)[0];
+      return { ok: true, status: 201, text: async () => JSON.stringify([{ id: "post_1", ...insertedPost }]) };
+    }
+    if (href.includes("/marketing_meta_connections?id=") && options.method === "PATCH") {
+      patchedConnection = JSON.parse(options.body);
+      return { ok: true, status: 200, text: async () => JSON.stringify([{ ...connection, ...patchedConnection }]) };
+    }
+    if (href.includes("/marketing_meta_connections?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([connection]) };
+    }
+    if (href.startsWith("https://graph.instagram.com/v23.0/me?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ id: "26828053596835678", user_id: "17841443546309305", username: "inmoradares", account_type: "BUSINESS" }) };
+    }
+    if (href.startsWith("https://graph.instagram.com/v23.0/me/media_publish")) {
+      publishAttempts += 1;
+      return {
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({
+          error: {
+            message: `Media ID is not available access_token=${token}`,
+            code: 9007,
+            error_subcode: 2207027,
+            error_user_msg: "The media is not ready for publishing, please wait for a moment"
+          }
+        })
+      };
+    }
+    if (href.startsWith("https://graph.instagram.com/v23.0/me/media")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ id: "ig-container-id" }) };
+    }
+    throw new Error(`unexpected_fetch:${href}`);
+  };
+
+  try {
+    const result = await callAdminPostResource("meta/publish-test-instagram", {}, {}, env);
+    assert.equal(result.statusCode, 400);
+    assert.equal(result.payload.message, "meta_instagram_publish_failed_400:publish_media_container:media_not_ready_after_retries");
+    assert.equal(result.payload.message.includes(token), false);
+    assert.equal(insertedPost.status, "failed");
+    assert.equal(insertedPost.error_message, "meta_instagram_publish_failed_400:publish_media_container:media_not_ready_after_retries");
+    assert.equal(insertedPost.meta_response.stage, "publish_media_container");
+    assert.equal(insertedPost.meta_response.creation_id, "ig-container-id");
+    assert.equal(insertedPost.meta_response.error_message, "media_not_ready_after_retries");
+    assert.equal(JSON.stringify(insertedPost).includes(token), false);
+    assert.equal(patchedConnection.status, "connected");
+    assert.equal(patchedConnection.last_error, "meta_instagram_publish_failed_400:publish_media_container:media_not_ready_after_retries");
+    assert.equal(patchedConnection.last_error.includes(token), false);
+    assert.equal(publishAttempts, 3);
   } finally {
     global.fetch = previousFetch;
   }

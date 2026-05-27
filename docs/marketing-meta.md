@@ -282,6 +282,8 @@ POST https://graph.instagram.com/{INSTAGRAM_GRAPH_VERSION}/me/media
 POST https://graph.instagram.com/{INSTAGRAM_GRAPH_VERSION}/me/media_publish
 ```
 
+Tras crear el media container, el backend registra el `creation_id`, espera antes de publicar y reintenta `media_publish` solo si Instagram indica que el media aun no esta listo (`code=9007`, `error_subcode=2207027`, `Media ID is not available` o `not ready for publishing`). Los intentos usan esperas limitadas de 2s, 4s y 6s. Si se agotan, `last_error` queda como `meta_instagram_publish_failed_400:publish_media_container:media_not_ready_after_retries` y el `meta_response` conserva el diagnostico saneado sin tokens.
+
 Esto evita mezclar el asset ID visible en Business Settings con el ID app-scoped de Instagram Login. El `id` devuelto por Instagram Login en `POST https://api.instagram.com/oauth/access_token` o por `GET /me` puede no coincidir con el asset ID visible en Business Settings o con el ID de Instagram conectado a una Page. Por ejemplo, si el callback o `/me` devuelve `26828053596835680`, ese es un ID del token de Instagram Login; `1784143546309305` puede seguir apareciendo como asset ID en Business Settings o como `user_id` si Meta lo devuelve en `/me`.
 
 Si Meta exige publicar contra un ID explicito, configura en Vercel:
