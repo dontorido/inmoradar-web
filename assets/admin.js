@@ -280,6 +280,7 @@ const state = {
     assetProvider: "all",
     assetStatus: "all",
     selectedAssetId: "",
+    uploadPreviewUrl: "",
     queuePlatform: "all",
     queueStatus: "all",
     selectedPostId: ""
@@ -383,8 +384,11 @@ const els = {
   socialAssetType: document.querySelector("[data-social-asset-type]"),
   socialAssetProvider: document.querySelector("[data-social-asset-provider]"),
   socialAssetStatus: document.querySelector("[data-social-asset-status]"),
+  socialShowUpload: document.querySelector("[data-social-show-upload]"),
   socialCreateAsset: document.querySelector("[data-social-create-asset]"),
   socialAssetUploadForm: document.querySelector("[data-social-asset-upload-form]"),
+  socialAssetUploadFile: document.querySelector("[data-social-asset-upload-file]"),
+  socialAssetUploadPreview: document.querySelector("[data-social-asset-upload-preview]"),
   socialAssetRows: document.querySelector("[data-social-asset-rows]"),
   socialAssetEditor: document.querySelector("[data-social-asset-editor]"),
   socialQueuePlatform: document.querySelector("[data-social-queue-platform]"),
@@ -3295,6 +3299,39 @@ function socialAssetPreview(asset = {}) {
   `;
 }
 
+function clearSocialAssetUploadPreview() {
+  if (state.social.uploadPreviewUrl) {
+    URL.revokeObjectURL(state.social.uploadPreviewUrl);
+    state.social.uploadPreviewUrl = "";
+  }
+  if (els.socialAssetUploadPreview) {
+    els.socialAssetUploadPreview.innerHTML = '<p class="admin-empty-state">Selecciona una imagen o video para ver nombre, tamano y MIME antes de subir.</p>';
+  }
+}
+
+function renderSocialAssetUploadPreview(file) {
+  if (!els.socialAssetUploadPreview) return;
+  if (!file || !file.name) {
+    clearSocialAssetUploadPreview();
+    return;
+  }
+  if (state.social.uploadPreviewUrl) URL.revokeObjectURL(state.social.uploadPreviewUrl);
+  state.social.uploadPreviewUrl = file.type?.startsWith("image/") ? URL.createObjectURL(file) : "";
+  const visual = state.social.uploadPreviewUrl
+    ? `<img class="admin-linkedin-thumb" src="${escapeHtml(state.social.uploadPreviewUrl)}" alt="Preview local del asset">`
+    : `<div class="admin-linkedin-thumb admin-social-video-thumb"><span>${file.type?.startsWith("video/") ? "VIDEO" : "FILE"}</span></div>`;
+  els.socialAssetUploadPreview.innerHTML = `
+    <div class="admin-social-upload-preview-row">
+      ${visual}
+      <div class="admin-linkedin-status">
+        <div class="admin-linkedin-status-row"><span>Archivo</span><strong>${escapeHtml(file.name)}</strong></div>
+        <div class="admin-linkedin-status-row"><span>Tamano</span><strong>${escapeHtml(formatBytes(file.size))}</strong></div>
+        <div class="admin-linkedin-status-row"><span>MIME</span><code>${escapeHtml(file.type || "application/octet-stream")}</code></div>
+      </div>
+    </div>
+  `;
+}
+
 function renderSocialAssets() {
   if (!els.socialAssetRows) return;
   if (state.social.storage?.social_media_assets_table_missing) {
@@ -3343,7 +3380,7 @@ function renderSocialAssetEditor() {
   if (!asset) {
     const missing = state.social.storage?.social_media_assets_table_missing
       ? `Falta la tabla social_media_assets. Aplica ${state.social.storage.social_media_assets_pending_sql || "database/social-media-assets.sql"} para activar la biblioteca.`
-      : "Selecciona un asset o crea uno manual para editar la biblioteca social.";
+      : "Selecciona un asset, sube un archivo o crea un asset por URL para editar la biblioteca social.";
     els.socialAssetEditor.innerHTML = `<p class="admin-empty-state">${escapeHtml(missing)}</p>`;
     return;
   }
@@ -3748,6 +3785,7 @@ async function uploadSocialAsset() {
     body: JSON.stringify(input)
   });
   if (els.socialAssetUploadForm) els.socialAssetUploadForm.reset();
+  clearSocialAssetUploadPreview();
   await loadSocial();
   state.social.selectedAssetId = payload.asset?.id || state.social.selectedAssetId;
   renderSocialAssets();
@@ -3761,14 +3799,14 @@ async function createSocialAsset() {
     throw new Error(`Falta social_media_assets. Aplica ${state.social.storage.social_media_assets_pending_sql || "database/social-media-assets.sql"}.`);
   }
   const mediaType = state.social.assetType && state.social.assetType !== "all" ? state.social.assetType : "image";
-  showStatus("Creando asset social manual...");
+  showStatus("Creando asset social por URL...");
   const payload = await api("/api/social/assets", {
     method: "POST",
     body: JSON.stringify({
       provider: "manual",
       media_type: mediaType,
       status: "draft",
-      title: "Asset manual"
+      title: "Asset por URL"
     })
   });
   await loadSocial();
@@ -3776,7 +3814,7 @@ async function createSocialAsset() {
   renderSocialAssets();
   renderSocialAssetEditor();
   renderSocialPreview();
-  showStatus("Asset social creado.", "good");
+  showStatus("Asset por URL creado.", "good");
 }
 
 async function saveSocialAsset() {
@@ -7324,6 +7362,18 @@ if (els.socialAssetStatus) {
 }
 if (els.socialCreateAsset) {
   els.socialCreateAsset.addEventListener("click", () => createSocialAsset().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.socialShowUpload) {
+  els.socialShowUpload.addEventListener("click", () => {
+    els.socialAssetUploadForm?.scrollIntoView({ behavior: "smooth", block: "start" });
+    els.socialAssetUploadFile?.focus();
+    els.socialAssetUploadFile?.click();
+  });
+}
+if (els.socialAssetUploadFile) {
+  els.socialAssetUploadFile.addEventListener("change", () => {
+    renderSocialAssetUploadPreview(els.socialAssetUploadFile.files?.[0] || null);
+  });
 }
 if (els.socialAssetUploadForm) {
   els.socialAssetUploadForm.addEventListener("submit", (event) => {

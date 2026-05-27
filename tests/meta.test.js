@@ -1308,7 +1308,14 @@ test("BackOffice Social conecta Instagram con target explicito y sin endpoint le
   assert.match(adminHtml, /data-social-channels/);
   assert.match(adminHtml, /data-social-asset-rows/);
   assert.match(adminHtml, /data-social-asset-editor/);
+  assert.match(adminHtml, /data-social-show-upload/);
   assert.match(adminHtml, /data-social-asset-upload-form/);
+  assert.match(adminHtml, /data-social-asset-upload-file/);
+  assert.match(adminHtml, /data-social-asset-upload-preview/);
+  assert.match(adminHtml, /Subir asset/);
+  assert.match(adminHtml, /Crear asset por URL/);
+  assert.match(adminHtml, /type="file"/);
+  assert.doesNotMatch(adminHtml, />Crear asset manual<\/button>/);
   assert.match(adminHtml, /data-social-queue-platform/);
   assert.match(adminHtml, /data-social-queue-rows/);
   assert.match(adminHtml, /data-social-preview/);
@@ -1325,7 +1332,10 @@ test("BackOffice Social conecta Instagram con target explicito y sin endpoint le
   assert.match(adminJs, /data-meta-connect-facebook data-meta-connect-target="facebook"[^>]*>Conectar Facebook Page<\/button>/);
   assert.match(adminJs, /function renderSocialQueue/);
   assert.match(adminJs, /function renderSocialAssets/);
+  assert.match(adminJs, /function renderSocialAssetUploadPreview/);
   assert.match(adminJs, /function uploadSocialAsset/);
+  assert.match(adminJs, /\/api\/social\/assets\/upload/);
+  assert.match(adminJs, /socialAssetUploadFile\.files/);
   assert.match(adminJs, /function chooseSocialAssetForPost/);
   assert.match(adminJs, /function renderSocialPreview/);
   assert.match(adminJs, /function runSocialManualPublish/);
