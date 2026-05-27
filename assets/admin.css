@@ -5239,7 +5239,8 @@
   object-fit: cover;
 }
 
-.admin-social-upload-form {
+.admin-social-upload-form,
+.admin-social-runway-form {
   margin: 14px 0 18px;
   padding: 14px;
   border: 1px solid rgba(9, 9, 11, .1);

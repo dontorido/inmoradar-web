@@ -566,6 +566,7 @@
                     </select>
                   </label>
                   <button class="admin-button tiny" type="button" data-social-show-upload>Subir asset</button>
+                  <button class="admin-button tiny ghost" type="button" data-social-show-runway-import>Importar desde Runway</button>
                   <button class="admin-button tiny ghost" type="button" data-social-create-asset>Crear asset por URL</button>
                 </div>
               </div>
@@ -584,6 +585,20 @@
                 <div class="admin-linkedin-editor-actions admin-linkedin-wide">
                   <button class="admin-button tiny" type="submit">Subir asset</button>
                   <small class="admin-subtle">Se sube a Supabase Storage bucket social-assets y se registra como asset ready. No publica nada.</small>
+                </div>
+              </form>
+              <form class="admin-linkedin-form admin-social-runway-form" data-social-runway-asset-form>
+                <div class="admin-linkedin-card-head admin-linkedin-wide">
+                  <span>Runway → biblioteca social</span>
+                  <strong>No lanza jobs nuevos</strong>
+                </div>
+                <label><span>Runway job ID</span><input name="job_id" placeholder="UUID del job terminado" data-social-runway-job-id></label>
+                <label><span>T&iacute;tulo</span><input name="title" placeholder="V&iacute;deo Runway para Social"></label>
+                <label class="admin-linkedin-wide"><span>Notas de uso</span><input name="usage_notes" placeholder="Contexto, licencia interna o restricciones"></label>
+                <label class="admin-linkedin-wide"><span>Prompt/origen</span><input name="source_prompt" placeholder="Opcional; si se deja vac&iacute;o se usa el prompt del job"></label>
+                <div class="admin-linkedin-editor-actions admin-linkedin-wide">
+                  <button class="admin-button tiny" type="submit">Crear asset desde Runway</button>
+                  <small class="admin-subtle">Copia el output terminado al bucket social-assets si la URL de Runway sigue disponible. No publica v&iacute;deo.</small>
                 </div>
               </form>
               <div class="admin-table-wrap">
@@ -1580,6 +1595,7 @@
                   <button class="admin-button tiny" type="button" data-video-runway-render disabled>Generar clip Runway</button>
                   <button class="admin-button tiny ghost" type="button" data-video-runway-poll disabled>Comprobar estado</button>
                   <button class="admin-button tiny ghost" type="button" data-video-runway-import disabled>Usar clip IA</button>
+                  <button class="admin-button tiny ghost" type="button" data-video-runway-asset disabled>Guardar como asset social</button>
                 </div>
               </section>
             </section>

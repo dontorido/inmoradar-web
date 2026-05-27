@@ -60,3 +60,45 @@ El backend bloquea renders si:
 ## Nota tecnica
 
 El clip de Runway se descarga mediante el backend y se convierte en un `ObjectURL` local para que el canvas pueda usarlo como fondo sin problemas de CORS durante el export.
+
+## Puente a Social Media Assets
+
+Fase 2C.3 anade el puente manual:
+
+```txt
+Runway job terminado -> social_media_asset -> borrador social
+```
+
+Endpoint protegido:
+
+```txt
+POST /api/social/assets/from-runway
+```
+
+Entrada minima:
+
+```json
+{
+  "job_id": "uuid-del-job",
+  "title": "Titulo opcional",
+  "usage_notes": "Notas opcionales",
+  "source_prompt": "Prompt opcional"
+}
+```
+
+El backend localiza el job en `public.social_video_jobs`, exige que este completado y no lanza ningun job nuevo. Si `result_url` sigue disponible, descarga el binario desde backend y lo sube al bucket publico `social-assets` bajo:
+
+```txt
+runway/{yyyy}/{mm}/{uuid}-runway-{job_id}.mp4
+```
+
+Despues crea un registro en `public.social_media_assets` con:
+
+- `provider='runway'`
+- `provider_job_id=<social_video_jobs.id>`
+- `provider_asset_id=<provider_task_id>`
+- `media_type='video'`
+- `status='ready'` si se obtuvo `public_url` estable en Supabase Storage
+- `status='processing'` si el job termino pero aun falta una URL publica estable
+
+La publicacion de video sigue bloqueada en esta fase. Un asset Runway se puede asociar a un borrador social, pero `publish-now` de Instagram devuelve bloqueo hasta implementar publicacion real de video.

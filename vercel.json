@@ -34,6 +34,7 @@
     { "source": "/api/admin/social/status", "destination": "/api/admin?resource=social/status" },
     { "source": "/api/social/status", "destination": "/api/admin?resource=social/status" },
     { "source": "/api/social/posts", "destination": "/api/admin?resource=social/posts" },
+    { "source": "/api/social/assets/from-runway", "destination": "/api/admin?resource=social/assets/from-runway" },
     { "source": "/api/social/assets", "destination": "/api/admin?resource=social/assets" },
     { "source": "/api/social/assets/upload", "destination": "/api/admin?resource=social/assets/upload" },
     { "source": "/backoffice/marketing/social", "destination": "/admin.html" },

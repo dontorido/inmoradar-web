@@ -1670,10 +1670,18 @@ function safeSocialAssetFilename(filename = "", mimeType = "application/octet-st
   return hasExtension ? clean : `${clean || "asset"}.${fallbackExt}`;
 }
 
-function socialAssetStorageObjectPath(filename, now = new Date()) {
+function socialAssetStorageObjectPath(filename, now = new Date(), prefix = "") {
   const yyyy = String(now.getUTCFullYear());
   const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
-  return `${yyyy}/${mm}/${crypto.randomUUID()}-${filename}`;
+  const cleanPrefix = String(prefix || "")
+    .split("/")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => safeSocialAssetFilename(part, "application/octet-stream").replace(/\.[a-z0-9]{2,8}$/i, ""))
+    .filter(Boolean)
+    .join("/");
+  const path = `${yyyy}/${mm}/${crypto.randomUUID()}-${filename}`;
+  return cleanPrefix ? `${cleanPrefix}/${path}` : path;
 }
 
 function encodedStoragePath(path) {
@@ -1760,7 +1768,7 @@ function normalizeSocialAssetUploadInput(body = {}, env = process.env) {
 }
 
 async function uploadSocialAssetBufferToStorage(input, env = process.env, fetchImpl = fetchWithTimeout) {
-  const objectPath = socialAssetStorageObjectPath(input.filename);
+  const objectPath = socialAssetStorageObjectPath(input.filename, new Date(), input.storage_prefix || "");
   const url = `${supabaseStorageBaseUrl(env)}/storage/v1/object/${encodeURIComponent(SOCIAL_ASSETS_STORAGE_BUCKET)}/${encodedStoragePath(objectPath)}`;
   const response = await fetchImpl(url, {
     method: "POST",
@@ -1822,6 +1830,195 @@ async function uploadSocialAsset(body = {}, env = process.env) {
   } catch (error) {
     return { status: 500, payload: { ok: false, error: "social_asset_upload_failed", message: sanitizeMetaSecretText(error.message || "social_asset_upload_failed", 800) } };
   }
+}
+
+function normalizeResponseMimeType(value = "", fallbackUrl = "") {
+  const contentType = String(value || "").split(";")[0].trim().toLowerCase();
+  if (SOCIAL_ASSET_ALLOWED_MIME_TYPES[contentType]) return contentType;
+  const pathname = (() => {
+    try {
+      return new URL(String(fallbackUrl || "")).pathname.toLowerCase();
+    } catch {
+      return String(fallbackUrl || "").toLowerCase();
+    }
+  })();
+  if (pathname.endsWith(".webm")) return "video/webm";
+  return "video/mp4";
+}
+
+function runwayJobCompleted(status) {
+  return ["succeeded", "success", "completed", "complete"].includes(String(status || "").trim().toLowerCase());
+}
+
+function sanitizeRunwayOutputUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return "";
+  }
+}
+
+async function responseBufferWithLimit(response, limitBytes) {
+  if (response.body && typeof response.body.getReader === "function") {
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      total += chunk.length;
+      if (total > limitBytes) throw new Error("social_asset_upload_too_large");
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks, total);
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length > limitBytes) throw new Error("social_asset_upload_too_large");
+  return buffer;
+}
+
+async function copyRunwayOutputToSocialAssetStorage(job, env = process.env, fetchImpl = fetchWithTimeout) {
+  const resultUrl = String(job?.result_url || "").trim();
+  if (!publicHttpsMediaUrl(resultUrl)) throw new Error("runway_output_https_url_required");
+  const response = await fetchImpl(resultUrl, {
+    timeoutMs: Number(env.SOCIAL_ASSET_RUNWAY_COPY_TIMEOUT_MS || 60000)
+  });
+  if (!response.ok) {
+    throw new Error(`runway_output_fetch_failed_${response.status || "unknown"}`);
+  }
+  const mimeType = normalizeResponseMimeType(response.headers?.get?.("content-type") || "", resultUrl);
+  const mimeConfig = SOCIAL_ASSET_ALLOWED_MIME_TYPES[mimeType];
+  if (!mimeConfig || mimeConfig.media_type !== "video") throw new Error("runway_output_mime_not_allowed");
+  const limitBytes = socialAssetUploadLimitBytes("video", env);
+  const contentLength = Number(response.headers?.get?.("content-length") || 0);
+  if (Number.isFinite(contentLength) && contentLength > limitBytes) {
+    throw new Error("social_asset_upload_too_large");
+  }
+  const buffer = await responseBufferWithLimit(response, limitBytes);
+  const extension = SOCIAL_ASSET_ALLOWED_MIME_TYPES[mimeType]?.extension || "mp4";
+  const storage = await uploadSocialAssetBufferToStorage(
+    {
+      buffer,
+      filename: safeSocialAssetFilename(`runway-${job.id || job.provider_task_id || "output"}.${extension}`, mimeType),
+      mime_type: mimeType,
+      storage_prefix: "runway"
+    },
+    env,
+    fetchImpl
+  );
+  return {
+    ...storage,
+    mime_type: mimeType,
+    file_size_bytes: buffer.length
+  };
+}
+
+async function resolveRunwayJobForAsset(body = {}) {
+  const jobId = String(body.job_id || body.provider_job_id || "").trim();
+  const projectId = String(body.project_id || "").trim();
+  let project = null;
+  let job = null;
+  if (jobId) {
+    job = await readSocialVideoJob(jobId);
+  }
+  if (!job && projectId) {
+    project = await readSocialVideoProject(projectId);
+    if (project?.last_job_id) job = await readSocialVideoJob(project.last_job_id);
+  } else if (job?.project_id) {
+    project = await readSocialVideoProject(job.project_id).catch(() => null);
+  }
+  return { job, project };
+}
+
+function runwayAssetMetadata(job = {}, project = {}, storage = null, copyError = null) {
+  return normalizeSocialAssetMetadata({
+    source: "social_video_studio",
+    provider: "runway",
+    project_id: job.project_id || project?.id || null,
+    runway_job_id: job.id || null,
+    provider_task_id: job.provider_task_id || null,
+    runway_status: job.status || null,
+    model: job.model || null,
+    ratio: job.ratio || null,
+    estimated_credits: job.estimated_credits || null,
+    estimated_cost_usd: job.estimated_cost_usd || null,
+    copied_to_storage: Boolean(storage?.public_url),
+    storage_bucket: storage?.bucket || null,
+    storage_path: storage?.storage_path || null,
+    runway_result_url_hint: sanitizeRunwayOutputUrl(job.result_url),
+    copy_error: copyError ? sanitizeMetaSecretText(copyError, 240) : null
+  });
+}
+
+async function createSocialAssetFromRunway(body = {}, env = process.env) {
+  const { job, project } = await resolveRunwayJobForAsset(body);
+  if (!job?.id) return { status: 404, payload: { ok: false, error: "social_video_job_not_found" } };
+  if (!runwayJobCompleted(job.status)) {
+    return {
+      status: 400,
+      payload: {
+        ok: false,
+        error: "runway_job_not_completed",
+        job: socialVideoJobPayload(job).job
+      }
+    };
+  }
+
+  let storage = null;
+  let copyError = null;
+  if (job.result_url) {
+    try {
+      storage = await copyRunwayOutputToSocialAssetStorage(job, env);
+    } catch (error) {
+      copyError = error.message || "runway_output_copy_failed";
+    }
+  } else {
+    copyError = "runway_output_public_url_missing";
+  }
+
+  const title = socialSafeText(body.title || project?.title || `Runway ${job.id}`, 180);
+  const result = await createSocialAsset({
+    provider: "runway",
+    provider_job_id: job.id,
+    provider_asset_id: job.provider_task_id || null,
+    media_type: "video",
+    status: storage?.public_url ? "ready" : "processing",
+    title,
+    description: cleanNullable(body.description || project?.topic_label || null),
+    public_url: storage?.public_url || null,
+    thumbnail_url: null,
+    duration_seconds: socialOptionalNumber(body.duration_seconds || job.duration_seconds),
+    ratio: cleanNullable(job.ratio || project?.project_json?.format?.aspect_ratio || null),
+    mime_type: storage?.mime_type || "video/mp4",
+    file_size_bytes: storage?.file_size_bytes || null,
+    license_status: "internal",
+    usage_notes: cleanNullable(body.usage_notes || "Output Runway importado desde Social Video Studio"),
+    source_prompt: cleanNullable(body.source_prompt || job.prompt_text || project?.project_json?.global_ai_prompt || null),
+    metadata: runwayAssetMetadata(job, project, storage, copyError)
+  });
+  if (result.status) return { status: result.status, payload: { ok: false, error: result.error } };
+  if (result.table_missing) return { status: 503, payload: { ok: false, error: "social_media_assets_table_missing", pending_sql: SOCIAL_MEDIA_ASSETS_SQL } };
+  if (result.error) return { status: 500, payload: { ok: false, error: result.error } };
+  if (job.project_id) {
+    await safePatchSocialVideoProject(job.project_id, {
+      status: result.asset?.status === "ready" ? "ai_clip_ready" : "ai_clip_queued",
+      has_ai_clip: Boolean(job.result_url),
+      last_job_id: job.id,
+      failure: copyError || null
+    }).catch(() => null);
+  }
+  return {
+    status: 201,
+    payload: {
+      ok: true,
+      asset: result.asset,
+      storage: storage ? { bucket: storage.bucket, path: storage.storage_path, public_url: storage.public_url } : null,
+      copied_to_storage: Boolean(storage?.public_url),
+      warning: storage ? null : sanitizeMetaSecretText(copyError || "runway_output_not_copied", 240)
+    }
+  };
 }
 
 async function listSocialAssets(url = new URL("https://admin.local/?limit=50"), limitOverride) {
@@ -2271,6 +2468,11 @@ async function handleSocialAssets(req, url) {
 async function handleSocialAssetUpload(req) {
   if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
   return uploadSocialAsset(await readJsonBody(req));
+}
+
+async function handleSocialAssetFromRunway(req) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  return createSocialAssetFromRunway(await readJsonBody(req));
 }
 
 async function handleLinkedInPostAction(body = {}) {
@@ -3934,6 +4136,17 @@ async function readSocialVideoJob(id) {
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 
+async function readSocialVideoProject(id) {
+  if (!id) return null;
+  const params = new URLSearchParams({
+    id: `eq.${id}`,
+    select: "*",
+    limit: "1"
+  });
+  const rows = await supabaseFetch(`social_video_projects?${params.toString()}`);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
 async function insertSocialVideoJob(job) {
   const rows = await supabaseFetch("social_video_jobs", {
     method: "POST",
@@ -4914,6 +5127,10 @@ async function handleAdminRequest(req, res) {
     }
     if (resource === "social/assets/upload") {
       const result = await handleSocialAssetUpload(req);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "social/assets/from-runway") {
+      const result = await handleSocialAssetFromRunway(req);
       return json(res, result.status, result.payload);
     }
     if (resource === "meta" || resource.startsWith("meta/")) {
