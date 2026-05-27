@@ -13,8 +13,8 @@ const INITIAL_MARKETING_SUBSECTION = INITIAL_ADMIN_PATH.includes("/backoffice/ma
   ? "marketing-viraliza"
   : INITIAL_ADMIN_PATH.includes("/backoffice/marketing/linkedin")
     ? "marketing-linkedin"
-    : INITIAL_ADMIN_PATH.includes("/backoffice/marketing/meta")
-      ? "marketing-meta"
+    : INITIAL_ADMIN_PATH.includes("/backoffice/marketing/social") || INITIAL_ADMIN_PATH.includes("/backoffice/marketing/meta")
+      ? "marketing-social"
       : "";
 const DEFAULT_VIDEO_PROPERTY_DATA = Object.freeze({
   ciudad: "Madrid",
@@ -265,6 +265,17 @@ const state = {
     lastPublication: null,
     manualNotice: ""
   },
+  social: {
+    summary: {},
+    channels: {},
+    settings: {},
+    metrics: {},
+    posts: [],
+    logs: [],
+    autopublisher: {},
+    queuePlatform: "all",
+    selectedPostId: ""
+  },
   alerts: []
 };
 
@@ -358,6 +369,16 @@ const els = {
   metaRows: document.querySelector("[data-meta-post-rows]"),
   metaGeneratePlatform: document.querySelector("[data-meta-generate-platform]"),
   metaCopyCaption: document.querySelector("[data-meta-copy-caption]"),
+  socialRefresh: document.querySelector("[data-social-refresh]"),
+  socialSummary: document.querySelector("[data-social-summary]"),
+  socialChannels: document.querySelector("[data-social-channels]"),
+  socialQueuePlatform: document.querySelector("[data-social-queue-platform]"),
+  socialQueueRows: document.querySelector("[data-social-queue-rows]"),
+  socialPreview: document.querySelector("[data-social-preview]"),
+  socialSettings: document.querySelector("[data-social-settings]"),
+  socialMetrics: document.querySelector("[data-social-metrics]"),
+  socialPosts: document.querySelector("[data-social-post-rows]"),
+  socialLogs: document.querySelector("[data-social-logs]"),
 
   kpiForm: document.querySelector("[data-kpi-form]"),
   kpiReset: document.querySelector("[data-kpi-reset]"),
@@ -2991,6 +3012,364 @@ function renderMetaOrganicStatus(payload = state.meta.organic || {}) {
   `;
 }
 
+function socialStatusTone(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "validated" || normalized === "connected") return "published";
+  if (normalized === "pending_permissions") return "warn";
+  if (normalized === "error") return "bad";
+  return "draft";
+}
+
+function socialStatusLabel(status) {
+  return {
+    not_configured: "No configurado",
+    connected: "Conectado",
+    validated: "Validado",
+    pending_permissions: "Pendiente permisos",
+    disabled: "Desactivado",
+    error: "Error"
+  }[String(status || "").toLowerCase()] || "Pendiente integracion";
+}
+
+function socialChannelLabel(value) {
+  return {
+    instagram: "Instagram",
+    facebook: "Facebook",
+    linkedin: "LinkedIn",
+    tiktok: "TikTok",
+    meta: "Meta"
+  }[String(value || "").toLowerCase()] || value || "-";
+}
+
+function filteredSocialPosts() {
+  const platform = state.social.queuePlatform || "all";
+  const posts = state.social.posts || [];
+  return platform === "all" ? posts : posts.filter((post) => post.channel === platform);
+}
+
+function selectedSocialPost() {
+  return (state.social.posts || []).find((post) => post.id === state.social.selectedPostId) || null;
+}
+
+function socialChannelIsValidated(channelKey) {
+  const channel = state.social.channels?.[channelKey] || {};
+  return channel.status === "validated" || channel.publishing === "validated" || channel.publishing === "available";
+}
+
+function socialPostCanPublish(post) {
+  if (!post || !post.id) return false;
+  if (!socialChannelIsValidated(post.channel)) return false;
+  return !["published", "manually_published", "publishing", "skipped", "cancelled"].includes(String(post.status || "").toLowerCase());
+}
+
+function renderSocial(payload = {}) {
+  state.social.summary = payload.summary || {};
+  state.social.channels = payload.channels || {};
+  state.social.settings = payload.settings || {};
+  state.social.metrics = payload.metrics || {};
+  state.social.posts = payload.posts || [];
+  state.social.logs = payload.logs || [];
+  state.social.autopublisher = payload.autopublisher || {};
+  state.meta.organic = payload.sources?.meta?.organic || state.meta.organic || {};
+  state.meta.connection = state.meta.organic.connection || state.meta.connection;
+  updateMetaConnectLabels(state.meta.organic);
+  if (els.socialQueuePlatform) {
+    state.social.queuePlatform = els.socialQueuePlatform.value || state.social.queuePlatform || "all";
+  }
+  const visiblePosts = filteredSocialPosts();
+  if (!visiblePosts.some((post) => post.id === state.social.selectedPostId)) {
+    state.social.selectedPostId = visiblePosts[0]?.id || "";
+  }
+  renderSocialSummary();
+  renderSocialChannels();
+  renderSocialQueue();
+  renderSocialPreview();
+  renderSocialSettings();
+  renderSocialMetrics();
+  renderSocialPosts();
+  renderSocialLogs();
+}
+
+function renderSocialSummary() {
+  if (!els.socialSummary) return;
+  const cards = state.social.summary?.cards || [];
+  els.socialSummary.innerHTML = cards.map((item) => stat(item.label, item.value, {
+    id: `social-${item.key}`,
+    hint: item.hint
+  })).join("");
+}
+
+function renderSocialChannels() {
+  if (!els.socialChannels) return;
+  const channels = state.social.channels || {};
+  const instagram = channels.instagram || {};
+  const facebook = channels.facebook || {};
+  const linkedin = channels.linkedin || {};
+  const tiktok = channels.tiktok || {};
+  const row = (label, value, asCode = false) => `
+    <div class="admin-linkedin-status-row">
+      <span>${escapeHtml(label)}</span>
+      ${asCode ? `<code>${escapeHtml(value || "-")}</code>` : `<strong>${escapeHtml(value || "-")}</strong>`}
+    </div>
+  `;
+  els.socialChannels.innerHTML = `
+    <article class="admin-linkedin-card">
+      <div class="admin-linkedin-card-head">
+        <span>Instagram</span>
+        <div class="admin-row-actions">
+          <button class="admin-button tiny ghost" type="button" data-meta-connect data-meta-connect-target="instagram">Reconectar Instagram</button>
+          <button class="admin-button tiny" type="button" data-meta-organic-publish-instagram>Publicar test Instagram</button>
+        </div>
+      </div>
+      <div class="admin-linkedin-status">
+        <div class="admin-linkedin-status-row"><span>Estado</span>${chip(instagram.label || socialStatusLabel(instagram.status), socialStatusTone(instagram.status))}</div>
+        ${row("OAuth", instagram.oauth === "connected" ? "Conectado" : socialStatusLabel(instagram.status))}
+        ${row("Publishing", instagram.publishing === "validated" ? "Validado" : "Pendiente test manual")}
+        ${row("Instagram ID", instagram.account_id, true)}
+        ${row("Published media ID", instagram.published_media_id, true)}
+        ${row("Ultimo intento", formatDate(instagram.last_attempt_at))}
+      </div>
+    </article>
+    <article class="admin-linkedin-card">
+      <div class="admin-linkedin-card-head">
+        <span>Facebook</span>
+        <div class="admin-row-actions">
+          <button class="admin-button tiny ghost" type="button" data-meta-connect-facebook data-meta-connect-target="facebook">Conectar Facebook Page</button>
+          <button class="admin-button tiny ghost" type="button" disabled>Test Facebook pendiente</button>
+        </div>
+      </div>
+      <div class="admin-linkedin-status">
+        <div class="admin-linkedin-status-row"><span>Estado</span>${chip(facebook.label || socialStatusLabel(facebook.status), socialStatusTone(facebook.status))}</div>
+        ${row("Publishing", facebook.publishing === "available" ? "Disponible" : "No validado")}
+        ${row("Page", facebook.page_name || "Pendiente permisos Page")}
+        ${row("Page ID", facebook.page_id, true)}
+        ${row("Nota", facebook.business_status || "Pendiente permisos Page")}
+      </div>
+    </article>
+    <article class="admin-linkedin-card">
+      <div class="admin-linkedin-card-head"><span>LinkedIn</span></div>
+      <div class="admin-linkedin-status">
+        <div class="admin-linkedin-status-row"><span>Estado</span>${chip(linkedin.label || socialStatusLabel(linkedin.status), socialStatusTone(linkedin.status))}</div>
+        ${row("Publishing", "Draft/manual")}
+        ${row("Autopublisher", "Desactivado")}
+        ${row("Company", linkedin.company_url || "-")}
+        ${row("Ultimo intento", formatDate(linkedin.last_attempt_at))}
+      </div>
+    </article>
+    <article class="admin-linkedin-card">
+      <div class="admin-linkedin-card-head"><span>TikTok</span></div>
+      <div class="admin-linkedin-status">
+        <div class="admin-linkedin-status-row"><span>Estado</span>${chip(tiktok.label || "Pendiente integracion", "draft")}</div>
+        ${row("Publishing", "No disponible")}
+        ${row("Autopublisher", "Desactivado")}
+        ${row("Nota", tiktok.business_status || "Pendiente integracion")}
+      </div>
+    </article>
+  `;
+  els.metaConnect = document.querySelector("[data-meta-connect]");
+  els.metaConnectFacebook = document.querySelector("[data-meta-connect-facebook]");
+  els.metaOrganicPublishInstagram = document.querySelector("[data-meta-organic-publish-instagram]");
+  bindSocialDynamicActions();
+  updateMetaConnectLabels(state.meta.organic);
+}
+
+function renderSocialQueue() {
+  if (!els.socialQueueRows) return;
+  const rows = filteredSocialPosts();
+  if (!rows.length) {
+    const channel = state.social.queuePlatform === "all" ? "Social" : socialChannelLabel(state.social.queuePlatform);
+    els.socialQueueRows.innerHTML = `<tr><td colspan="6">Sin publicaciones en cola para ${escapeHtml(channel)}.</td></tr>`;
+    state.social.selectedPostId = "";
+    renderSocialPreview();
+    return;
+  }
+  if (!rows.some((post) => post.id === state.social.selectedPostId)) {
+    state.social.selectedPostId = rows[0].id || "";
+  }
+  els.socialQueueRows.innerHTML = rows.map((post) => {
+    const active = post.id === state.social.selectedPostId;
+    return `
+      <tr class="${active ? "is-selected" : ""}" data-social-queue-post-id="${escapeHtml(post.id || "")}">
+        <td>${chip(socialChannelLabel(post.channel), post.channel === "instagram" ? "published" : post.channel === "facebook" ? "warn" : "draft")}</td>
+        <td>${escapeHtml(formatDate(post.date))}</td>
+        <td>${chip(metaStatusLabel(post.status), statusTone(post.status))}</td>
+        <td>${escapeHtml(post.format || "-")}</td>
+        <td>${escapeHtml(post.caption_preview || "-")}</td>
+        <td><code>${escapeHtml(post.published_media_id || "-")}</code></td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function renderSocialPreview() {
+  if (!els.socialPreview) return;
+  const post = selectedSocialPost();
+  if (!post) {
+    els.socialPreview.innerHTML = '<p class="admin-empty-state">Selecciona una publicacion compatible con el filtro para ver la vista previa.</p>';
+    return;
+  }
+  const channel = state.social.channels?.[post.channel] || {};
+  const canPublish = socialPostCanPublish(post);
+  const disabledReason = socialChannelIsValidated(post.channel)
+    ? "No disponible para este estado"
+    : `${socialChannelLabel(post.channel)} no esta validado para publicar`;
+  els.socialPreview.innerHTML = `
+    <article class="admin-linkedin-card">
+      <div class="admin-linkedin-card-head">
+        <span>${escapeHtml(socialChannelLabel(post.channel))}</span>
+        ${chip(channel.label || socialStatusLabel(channel.status), socialStatusTone(channel.status))}
+      </div>
+      <div class="admin-social-preview-body">
+        <div>
+          <div class="admin-linkedin-status-row"><span>Destino</span><strong>${escapeHtml(socialChannelLabel(post.channel))}</strong></div>
+          <div class="admin-linkedin-status-row"><span>Estado</span><strong>${escapeHtml(metaStatusLabel(post.status))}</strong></div>
+          <div class="admin-linkedin-status-row"><span>Formato</span><strong>${escapeHtml(post.format || "-")}</strong></div>
+          <div class="admin-linkedin-status-row"><span>Published media ID</span><code>${escapeHtml(post.published_media_id || "-")}</code></div>
+          <div class="admin-linkedin-status-row"><span>Error</span><strong>${escapeHtml(post.error_message || "-")}</strong></div>
+        </div>
+        <div class="admin-social-preview-copy">
+          <span>Copy</span>
+          <p>${escapeHtml(post.caption_preview || "Sin copy disponible.")}</p>
+        </div>
+      </div>
+      <div class="admin-row-actions">
+        <button class="admin-button tiny" type="button" data-social-manual-publish data-social-channel="${escapeHtml(post.channel || "")}"${canPublish ? "" : " disabled"}>Publicar ahora en ${escapeHtml(socialChannelLabel(post.channel))}</button>
+        <small class="admin-subtle">${escapeHtml(canPublish ? "Accion manual con confirmacion." : disabledReason)}</small>
+      </div>
+    </article>
+  `;
+  bindSocialDynamicActions();
+}
+
+function renderSocialSettings() {
+  if (!els.socialSettings) return;
+  const global = state.social.settings?.global || {};
+  const channels = state.social.settings?.channels || {};
+  const item = (label, value) => `
+    <div class="admin-linkedin-status-row">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
+  els.socialSettings.innerHTML = `
+    <article class="admin-linkedin-card">
+      <div class="admin-linkedin-card-head"><span>Global</span>${chip("Autopublisher OFF", "draft")}</div>
+      <div class="admin-linkedin-status">
+        ${item("Requiere aprobacion humana", global.requires_human_approval ? "ON" : "OFF")}
+        ${item("Modo seguro", global.safe_mode ? "ON" : "OFF")}
+        ${item("Max posts/dia total", global.max_posts_per_day_total ?? "2")}
+        ${item("Max posts/dia canal", global.max_posts_per_day_per_channel ?? "1")}
+        ${item("Horario permitido", global.allowed_hours || "09:00-20:00")}
+        ${item("No fines de semana", global.avoid_weekends ? "ON" : "Configurable")}
+        ${item("UTM campaign", global.default_utm_campaign || "organic_social")}
+      </div>
+    </article>
+    <article class="admin-linkedin-card">
+      <div class="admin-linkedin-card-head"><span>Por canal</span></div>
+      <div class="admin-linkedin-status">
+        ${Object.entries(channels).map(([key, value]) => item(
+          key,
+          `${value.max_per_day ?? 0}/dia / ${value.max_per_week ?? 0}/semana / autopublicacion OFF`
+        )).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderSocialMetrics() {
+  if (!els.socialMetrics) return;
+  const metrics = Object.values(state.social.metrics || {});
+  els.socialMetrics.innerHTML = metrics.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.channel || "-")}</td>
+      <td>${escapeHtml(item.followers_current ?? "Pendiente integracion")}</td>
+      <td>${escapeHtml(item.follower_growth_7d ?? "Sin datos todavia")}</td>
+      <td>${escapeHtml(item.follower_growth_30d ?? "Sin datos todavia")}</td>
+      <td>${escapeHtml(item.posts_published ?? "Sin datos todavia")}</td>
+      <td>${escapeHtml(item.impressions ?? "Pendiente integracion")}</td>
+      <td>${escapeHtml(item.engagement ?? "Pendiente integracion")}</td>
+      <td>${escapeHtml(item.clicks ?? "Pendiente integracion")}</td>
+      <td>${escapeHtml(item.ctr ?? "Pendiente integracion")}</td>
+      <td>${escapeHtml(item.traffic_to_web ?? "Pendiente integracion")}</td>
+      <td>${escapeHtml(item.publishing_errors ?? "Sin datos todavia")}</td>
+    </tr>
+  `).join("");
+}
+
+function renderSocialPosts() {
+  if (!els.socialPosts) return;
+  const rows = state.social.posts || [];
+  if (!rows.length) {
+    els.socialPosts.innerHTML = '<tr><td colspan="7">Sin posts sociales todavia.</td></tr>';
+    return;
+  }
+  els.socialPosts.innerHTML = rows.map((post) => `
+    <tr>
+      <td>${escapeHtml(post.channel || "-")}</td>
+      <td>${escapeHtml(formatDate(post.date))}</td>
+      <td>${chip(metaStatusLabel(post.status), statusTone(post.status))}</td>
+      <td>${escapeHtml(post.format || "-")}</td>
+      <td>${escapeHtml(post.caption_preview || "-")}</td>
+      <td><code>${escapeHtml(post.published_media_id || "-")}</code></td>
+      <td><span class="admin-linkedin-error">${escapeHtml(post.error_message || "-")}</span></td>
+    </tr>
+  `).join("");
+}
+
+function renderSocialLogs() {
+  if (!els.socialLogs) return;
+  const logs = state.social.logs || [];
+  if (!logs.length) {
+    els.socialLogs.innerHTML = '<tr><td colspan="6">Sin logs sociales todavia.</td></tr>';
+    return;
+  }
+  els.socialLogs.innerHTML = logs.map((log) => `
+    <tr>
+      <td>${escapeHtml(formatDate(log.at))}</td>
+      <td>${escapeHtml(log.channel || "-")}</td>
+      <td>${escapeHtml(log.event || "-")}</td>
+      <td>${chip(metaStatusLabel(log.status), statusTone(log.status))}</td>
+      <td>${escapeHtml(log.message || "-")}</td>
+      <td><code>${escapeHtml(log.reference_id || "-")}</code></td>
+    </tr>
+  `).join("");
+}
+
+function bindSocialDynamicActions() {
+  if (els.metaConnect && !els.metaConnect.dataset.boundSocialAction) {
+    els.metaConnect.dataset.boundSocialAction = "true";
+    els.metaConnect.addEventListener("click", () => connectMeta(els.metaConnect.dataset.metaConnectTarget || "instagram").catch((error) => showStatus(error.message, "bad")));
+  }
+  if (els.metaConnectFacebook && !els.metaConnectFacebook.dataset.boundSocialAction) {
+    els.metaConnectFacebook.dataset.boundSocialAction = "true";
+    els.metaConnectFacebook.addEventListener("click", () => connectMeta(els.metaConnectFacebook.dataset.metaConnectTarget || "facebook").catch((error) => showStatus(error.message, "bad")));
+  }
+  if (els.metaOrganicPublishInstagram && !els.metaOrganicPublishInstagram.dataset.boundSocialAction) {
+    els.metaOrganicPublishInstagram.dataset.boundSocialAction = "true";
+    els.metaOrganicPublishInstagram.addEventListener("click", () => publishMetaOrganicTest("instagram").catch((error) => showStatus(error.message, "bad")));
+  }
+  const publishButton = els.socialPreview?.querySelector("[data-social-manual-publish]");
+  if (publishButton && !publishButton.dataset.boundSocialAction) {
+    publishButton.dataset.boundSocialAction = "true";
+    publishButton.addEventListener("click", () => runSocialManualPublish().catch((error) => showStatus(error.message, "bad")));
+  }
+}
+
+async function runSocialManualPublish() {
+  const post = selectedSocialPost();
+  if (!post) throw new Error("Selecciona una publicacion social primero.");
+  if (!socialPostCanPublish(post)) throw new Error(`${socialChannelLabel(post.channel)} no esta validado para publicar este post.`);
+  const destination = socialChannelLabel(post.channel);
+  if (!window.confirm(`Publicar ahora manualmente en ${destination}?`)) return;
+  if (post.channel === "instagram" || post.channel === "facebook") {
+    await runMetaAction("publish_now", post.id);
+    await loadSocial();
+    showStatus(`Publicacion manual enviada a ${destination}.`, "good");
+    return;
+  }
+  throw new Error(`${destination} no tiene publicacion manual habilitada desde Social.`);
+}
+
 function renderMetaPages(pages = state.meta.pages || []) {
   if (!els.metaPages) return;
   const current = state.meta.connection?.facebook_page_id || "";
@@ -3116,15 +3495,21 @@ async function loadMeta() {
   renderMetaOrganicStatus(organic);
 }
 
+async function loadSocial() {
+  if (!els.socialSummary) return;
+  const payload = await api("/api/social/status");
+  renderSocial(payload);
+}
+
 async function saveMetaSettings() {
-  showStatus("Guardando ajustes de Meta...");
+  showStatus("Guardando ajustes de Instagram/Facebook...");
   const payload = await api("/api/admin?resource=meta/settings", {
     method: "POST",
     body: JSON.stringify({ settings: collectMetaSettings() })
   });
   state.meta.settings = payload.settings || state.meta.settings;
   renderMetaSettings();
-  showStatus("Ajustes de Meta guardados.", "good");
+  showStatus("Ajustes de Instagram/Facebook guardados.", "good");
 }
 
 async function pauseMetaAutopublisher() {
@@ -3132,14 +3517,14 @@ async function pauseMetaAutopublisher() {
   const field = els.metaSettingsForm.elements.autopost_enabled;
   if (field) field.value = "false";
   await saveMetaSettings();
-  showStatus("Meta Autopublisher pausado.", "good");
+  showStatus("Autopublisher social pausado.", "good");
 }
 
 async function connectMeta(target = "instagram") {
   const normalizedTarget = target === "facebook" ? "facebook" : "instagram";
   const url = `/api/meta/oauth/start?target=${encodeURIComponent(normalizedTarget)}`;
   console.info(`[Meta Organic OAuth] target=${normalizedTarget} url=${url}`);
-  showStatus(`Conectando Meta (${normalizedTarget})...`);
+  showStatus(`Conectando ${socialChannelLabel(normalizedTarget)}...`);
   window.location.href = url;
 }
 
@@ -3180,7 +3565,7 @@ async function testMetaConnection() {
 
 async function generateNextMetaPost() {
   const platform = els.metaGeneratePlatform?.value || "facebook";
-  showStatus(`Generando contenido Meta para ${platform}...`);
+  showStatus(`Generando contenido social para ${socialChannelLabel(platform)}...`);
   const payload = await api("/api/admin?resource=meta/posts", {
     method: "POST",
     body: JSON.stringify({ action: "generate_next", platform })
@@ -3188,25 +3573,25 @@ async function generateNextMetaPost() {
   await loadMeta();
   const post = payload.post || currentMetaPost();
   if (post) fillMetaEditor(post);
-  showStatus(payload.skipped ? `Meta omitido: ${payload.reason}` : "Borrador Meta generado.", payload.skipped ? "neutral" : "good");
+  showStatus(payload.skipped ? `Social omitido: ${payload.reason}` : "Borrador social generado.", payload.skipped ? "neutral" : "good");
 }
 
 async function saveMetaPost() {
   const input = collectMetaPost();
-  if (!input.id) throw new Error("Selecciona un post Meta primero.");
-  showStatus("Guardando post Meta...");
+  if (!input.id) throw new Error("Selecciona un post social primero.");
+  showStatus("Guardando post social...");
   const payload = await api("/api/admin?resource=meta/posts", {
     method: "PUT",
     body: JSON.stringify(input)
   });
   await loadMeta();
   fillMetaEditor(payload.post || currentMetaPost());
-  showStatus("Post Meta guardado.", "good");
+  showStatus("Post social guardado.", "good");
 }
 
 async function runMetaAction(action, id = state.meta.currentPostId) {
-  if (!id) throw new Error("Selecciona un post Meta primero.");
-  showStatus(`Meta: ${action}...`);
+  if (!id) throw new Error("Selecciona un post social primero.");
+  showStatus(`Social: ${action}...`);
   const payload = await api("/api/admin?resource=meta/posts", {
     method: "POST",
     body: JSON.stringify({ action, id })
@@ -3214,7 +3599,7 @@ async function runMetaAction(action, id = state.meta.currentPostId) {
   await loadMeta();
   const post = payload.post || currentMetaPost();
   if (post) fillMetaEditor(post);
-  showStatus(payload.ok === false ? (payload.error || "Meta no publicado.") : "Accion Meta completada.", payload.ok === false ? "bad" : "good");
+  showStatus(payload.ok === false ? (payload.error || "Post social no publicado.") : "Accion social completada.", payload.ok === false ? "bad" : "good");
 }
 
 async function loadMetaOrganicStatus() {
@@ -3222,16 +3607,17 @@ async function loadMetaOrganicStatus() {
   state.meta.organic = payload;
   if (payload.connection) state.meta.connection = payload.connection;
   renderMetaOrganicStatus(payload);
-  showStatus(payload.auth_error ? payload.last_error : "Estado de Meta organico actualizado.", payload.auth_error ? "bad" : "good");
+  await loadSocial().catch(() => null);
+  showStatus(payload.auth_error ? payload.last_error : "Estado de Instagram/Facebook actualizado.", payload.auth_error ? "bad" : "good");
 }
 
 async function publishMetaOrganicTest(platform) {
   const endpoint = platform === "instagram" ? "/api/meta/publish-test-instagram" : "/api/meta/publish-test-facebook";
   showStatus(`Publicando test ${platform === "instagram" ? "Instagram" : "Facebook"}...`);
   const payload = await api(endpoint, { method: "POST", body: JSON.stringify({}) });
-  await loadMeta();
+  await Promise.all([loadMeta(), loadSocial()]);
   const externalId = payload.result?.external_post_id || payload.post?.external_post_id || "";
-  showStatus(externalId ? `Test Meta publicado: ${externalId}` : "Test Meta publicado.", "good");
+  showStatus(externalId ? `Test ${socialChannelLabel(platform)} publicado: ${externalId}` : `Test ${socialChannelLabel(platform)} publicado.`, "good");
 }
 
 async function handleMetaOAuthCallbackFromUrl() {
@@ -3248,10 +3634,11 @@ async function handleMetaOAuthCallbackFromUrl() {
       const authPayload = metaOrganicStatusErrorPayload({ status: 401, message: "unauthorized" });
       state.meta.organic = authPayload;
       renderMetaOrganicStatus(authPayload);
+      renderSocial({ sources: { meta: { organic: authPayload } } });
       showStatus(metaOAuth === "error" ? `Meta OAuth: ${error || "error"}` : adminPreviewAuthMessage(), metaOAuth === "error" ? "bad" : "neutral");
       return;
     }
-    await loadMeta();
+    await Promise.all([loadMeta(), loadSocial()]);
     showStatus(metaOAuth === "error" ? `Meta OAuth: ${error || "error"}` : "Meta conectado. Revisa Page, Instagram y permisos.", metaOAuth === "error" ? "bad" : "good");
     return;
   }
@@ -3274,7 +3661,7 @@ async function handleMetaOAuthCallbackFromUrl() {
   params.delete("state");
   const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash || ""}`;
   window.history.replaceState({}, document.title, next);
-  await loadMeta();
+  await Promise.all([loadMeta(), loadSocial()]);
   showStatus("Meta conectado. Carga Pages para seleccionar Facebook Page.", "good");
 }
 
@@ -5920,6 +6307,7 @@ async function loadAll() {
       loadSeoAutogeneration(),
       loadLinkedIn(),
       loadMeta(),
+      loadSocial(),
       loadKpis(),
       loadParking(),
       loadServiceStatus(),
@@ -6352,6 +6740,27 @@ if (els.metaRows) {
     if (!row) return;
     const post = state.meta.posts.find((item) => item.id === row.dataset.metaPostId);
     if (post) fillMetaEditor(post);
+  });
+}
+if (els.socialRefresh) {
+  els.socialRefresh.addEventListener("click", () => loadSocial().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.socialQueuePlatform) {
+  els.socialQueuePlatform.addEventListener("change", () => {
+    state.social.queuePlatform = els.socialQueuePlatform.value || "all";
+    const rows = filteredSocialPosts();
+    state.social.selectedPostId = rows[0]?.id || "";
+    renderSocialQueue();
+    renderSocialPreview();
+  });
+}
+if (els.socialQueueRows) {
+  els.socialQueueRows.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-social-queue-post-id]");
+    if (!row) return;
+    state.social.selectedPostId = row.dataset.socialQueuePostId || "";
+    renderSocialQueue();
+    renderSocialPreview();
   });
 }
 els.kpiForm.addEventListener("submit", (event) => {

@@ -1282,22 +1282,157 @@ test("OAuth organico no mezcla scopes aunque pidan target meta/all", async () =>
   assert.equal(scope.includes("pages_manage_posts"), false);
 });
 
-test("BackOffice conecta Instagram con target explicito y sin endpoint legacy", () => {
+test("BackOffice Social conecta Instagram con target explicito y sin endpoint legacy", () => {
   const adminHtml = fs.readFileSync(path.join(__dirname, "..", "admin.html"), "utf8");
   const adminJs = fs.readFileSync(path.join(__dirname, "..", "assets", "admin.js"), "utf8");
+  const loadSocialSource = adminJs.slice(
+    adminJs.indexOf("async function loadSocial"),
+    adminJs.indexOf("async function saveMetaSettings")
+  );
 
-  assert.match(adminHtml, /data-meta-connect-target="instagram"[^>]*>Conectar Instagram<\/button>/);
-  assert.match(adminHtml, /data-meta-connect-target="facebook"[^>]*>Conectar Facebook Page<\/button>/);
+  assert.match(adminHtml, /data-admin-subsection-button="marketing-social"/);
+  assert.match(adminHtml, /data-social-summary/);
+  assert.match(adminHtml, /data-social-channels/);
+  assert.match(adminHtml, /data-social-queue-platform/);
+  assert.match(adminHtml, /data-social-queue-rows/);
+  assert.match(adminHtml, /data-social-preview/);
+  assert.match(adminHtml, /data-social-settings/);
+  assert.match(adminHtml, /data-social-metrics/);
+  assert.match(adminHtml, /data-social-logs/);
+  assert.match(adminHtml, /Cola Social/);
+  assert.match(adminHtml, /Vista previa del post/);
+  assert.doesNotMatch(adminHtml, /Cola Meta/);
+  assert.doesNotMatch(adminHtml, /Preview y publicaci/);
+  assert.doesNotMatch(adminHtml, />Conectar Instagram<\/button>/);
+  assert.match(adminJs, /data-meta-connect-target="instagram"[^>]*>Reconectar Instagram<\/button>/);
+  assert.match(adminJs, /data-meta-connect-facebook data-meta-connect-target="facebook"[^>]*>Conectar Facebook Page<\/button>/);
+  assert.match(adminJs, /function renderSocialQueue/);
+  assert.match(adminJs, /function renderSocialPreview/);
+  assert.match(adminJs, /function runSocialManualPublish/);
+  assert.match(adminJs, /window\.confirm\(`Publicar ahora manualmente en \$\{destination\}\?`\)/);
+  assert.match(adminJs, /Publicar ahora en \$\{escapeHtml\(socialChannelLabel\(post\.channel\)\)\}/);
+  assert.match(adminJs, /socialChannelIsValidated\(post\.channel\)/);
   assert.doesNotMatch(adminHtml, />Conectar Meta<\/button>/);
   assert.match(adminJs, /\/api\/meta\/oauth\/start\?target=/);
   assert.match(adminJs, /dataset\.metaConnectTarget \|\| "instagram"/);
+  assert.match(loadSocialSource, /\/api\/social\/status/);
+  assert.doesNotMatch(loadSocialSource, /publish-test/);
   assert.match(adminJs, /Reconectar Instagram/);
   assert.match(adminJs, /Instagram publishing/);
   assert.match(adminJs, /Published media ID/);
   assert.match(adminJs, /Pendiente permisos Page/);
+  assert.match(adminJs, /Autopublisher OFF/);
   assert.doesNotMatch(adminJs, /\/api\/admin\?resource=meta\/connect/);
   assert.match(adminJs, /adminPreviewAuthMessage/);
   assert.match(adminJs, /metaOrganicStatusErrorPayload/);
+});
+
+test("Social status resume canales sin activar autopublisher ni exponer secretos", async () => {
+  const previousFetch = global.fetch;
+  const env = {
+    ...validEnv,
+    META_AUTOPOST_ENABLED: "false",
+    SUPABASE_URL: "https://supabase.test",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+  };
+  const metaConnection = {
+    ...validConnection,
+    status: "connected",
+    facebook_page_id: null,
+    facebook_page_name: null,
+    instagram_business_account_id: "1784143546309305",
+    scopes: [...IG_PUBLISH_SCOPES],
+    page_access_token_encrypted: null,
+    last_error: null
+  };
+  const successfulInstagramPost = {
+    id: "post_ig_1",
+    source_type: "meta_organic_spike",
+    platform: "instagram",
+    status: "published",
+    caption: "Probando publicacion automatica access_token=secret-token",
+    created_at: "2026-05-27T10:05:00.000Z",
+    published_at: "2026-05-27T10:06:00.000Z",
+    external_post_id: "ig-media-id",
+    error_message: null,
+    meta_response: {
+      published_media_id: "ig-media-id",
+      access_token: "secret-token",
+      final_stage: "publish_media_container",
+      status: "success"
+    }
+  };
+  const queuedFacebookPost = {
+    id: "post_fb_1",
+    source_type: "seo_landing",
+    platform: "facebook",
+    status: "queued",
+    caption: "Facebook draft pendiente de permisos",
+    created_at: "2026-05-27T10:00:00.000Z",
+    scheduled_for: "2026-05-27T12:00:00.000Z",
+    error_message: null,
+    meta_response: null
+  };
+
+  global.fetch = async (url, options = {}) => {
+    const href = String(url);
+    const method = options.method || "GET";
+    if (method !== "GET") throw new Error(`unexpected_write:${href}`);
+    if (href.includes("/marketing_meta_connections?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([metaConnection]) };
+    }
+    if (href.includes("/marketing_meta_settings?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([]) };
+    }
+    if (href.includes("/marketing_meta_posts?") && href.includes("source_type=eq.meta_organic_spike")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([successfulInstagramPost]) };
+    }
+    if (href.includes("/marketing_meta_posts?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([successfulInstagramPost, queuedFacebookPost]) };
+    }
+    if (href.includes("/meta_autopublisher_runs?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([]) };
+    }
+    if (href.includes("/marketing_linkedin_connections?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([]) };
+    }
+    if (href.includes("/marketing_linkedin_settings?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([]) };
+    }
+    if (href.includes("/marketing_linkedin_posts?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([]) };
+    }
+    if (href.includes("/linkedin_autopublisher_runs?")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([]) };
+    }
+    throw new Error(`unexpected_fetch:${href}`);
+  };
+
+  try {
+    const result = await callAdminResource("social/status", { authorization: "Bearer admin-test-token" }, env);
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.payload.ok, true);
+    assert.equal(result.payload.channels.instagram.status, "validated");
+    assert.equal(result.payload.channels.instagram.publishing, "validated");
+    assert.equal(result.payload.channels.instagram.published_media_id, "ig-media-id");
+    assert.equal(result.payload.channels.facebook.status, "pending_permissions");
+    assert.equal(result.payload.channels.facebook.publishing, "not_validated");
+    assert.equal(result.payload.channels.linkedin.status, "disabled");
+    assert.equal(result.payload.channels.tiktok.status, "not_configured");
+    assert.equal(result.payload.settings.global.autopublisher_enabled, false);
+    assert.equal(result.payload.autopublisher.enabled, false);
+    assert.equal(result.payload.autopublisher.reason, "autopost_disabled");
+    assert.equal(result.payload.summary.publishing_validated_channels, 1);
+    assert.equal(result.payload.summary.queued_posts, 1);
+    assert.equal(result.payload.posts.some((post) => post.channel === "instagram" && post.published_media_id === "ig-media-id"), true);
+    assert.equal(result.payload.posts.some((post) => post.channel === "facebook" && post.status === "queued"), true);
+    assert.equal(result.payload.summary.cards.some((card) => card.key === "autopublisher_global" && card.value === "OFF"), true);
+    const serialized = JSON.stringify(result.payload);
+    assert.equal(serialized.includes("secret-token"), false);
+    assert.equal(serialized.includes("access_token=secret-token"), false);
+  } finally {
+    global.fetch = previousFetch;
+  }
 });
 
 test("Meta organic status usa la misma proteccion admin que BackOffice", async () => {

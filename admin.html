@@ -225,10 +225,10 @@
                 <strong>LinkedIn</strong>
                 <small>Imagen, copy y cola diaria</small>
               </button>
-              <button class="admin-tab admin-marketing-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-meta" data-testid="admin-subsection-marketing-meta" aria-pressed="false">
+              <button class="admin-tab admin-marketing-tab" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-social" data-testid="admin-subsection-marketing-social" aria-pressed="false">
                 <span>06</span>
-                <strong>Meta</strong>
-                <small>Facebook, Instagram y SEO social</small>
+                <strong>Social</strong>
+                <small>Instagram, Facebook, LinkedIn y TikTok</small>
               </button>
             </div>
           </div>
@@ -271,9 +271,9 @@
               </section>
               <section>
                 <span>05</span>
-                <strong>Meta</strong>
-                <p>Publica landings SEO en Facebook Page e Instagram profesional con OAuth, permisos y kill switch.</p>
-                <button class="admin-button tiny ghost" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-meta">Abrir Meta</button>
+                <strong>Social</strong>
+                <p>Controla canales propios, tests manuales, permisos y estados sin activar autopublicaci&oacute;n.</p>
+                <button class="admin-button tiny ghost" type="button" data-admin-subsection-group="marketing" data-admin-subsection-button="marketing-social">Abrir Social</button>
               </section>
             </div>
           </article>
@@ -503,115 +503,143 @@
           </article>
         </section>
 
-        <section class="admin-subsection-panel admin-linkedin-panel admin-meta-panel" data-admin-subsection-panel="marketing-meta" hidden>
+        <section class="admin-subsection-panel admin-linkedin-panel admin-social-panel" data-admin-subsection-panel="marketing-social" hidden>
           <article class="admin-panel">
             <div class="admin-panel-head">
               <div>
-                <span class="admin-kicker muted">Marketing &middot; Meta</span>
-                <h2>Meta / Publicaci&oacute;n org&aacute;nica</h2>
-                <p class="admin-panel-sub">Conexi&oacute;n OAuth y prueba controlada de posts org&aacute;nicos en Facebook Page e Instagram profesional.</p>
+                <span class="admin-kicker muted">Marketing &middot; Social</span>
+                <h2>Social</h2>
+                <p class="admin-panel-sub">Dashboard de canales propios para Instagram, Facebook, LinkedIn y TikTok. Solo lectura y acciones manuales controladas; autopublisher desactivado.</p>
               </div>
               <div class="admin-row-actions">
-                <button class="admin-button tiny ghost" type="button" data-meta-refresh title="Recarga estado, ajustes, cola y runs.">Actualizar</button>
-                <button class="admin-button tiny ghost" type="button" data-meta-test title="Comprueba permisos y conexion sin publicar.">Probar conexi&oacute;n</button>
-                <button class="admin-button tiny ghost" type="button" data-meta-load-pages title="Lista Pages gestionadas desde OAuth.">Cargar Pages</button>
-                <button class="admin-button tiny" type="button" data-meta-generate-next title="Crea un borrador desde la siguiente landing elegible.">Generar pr&oacute;ximo contenido</button>
-                <button class="admin-button tiny ghost" type="button" data-meta-pause title="Pausa el autopublisher manteniendo tokens y trazabilidad.">Pausar</button>
+                <button class="admin-button tiny ghost" type="button" data-social-refresh>Actualizar Social</button>
+                <button class="admin-button tiny ghost" type="button" data-meta-organic-refresh>Actualizar Instagram/Facebook</button>
               </div>
             </div>
-            <div class="admin-linkedin-notice" data-meta-notice></div>
-            <section class="admin-linkedin-grid">
-              <article class="admin-linkedin-card">
-                <div class="admin-linkedin-card-head">
-                  <span>00 &middot; Spike org&aacute;nica</span>
-                  <div class="admin-row-actions">
-                    <button class="admin-button tiny ghost" type="button" data-meta-organic-refresh>Estado</button>
-                    <button class="admin-button tiny" type="button" data-meta-organic-publish-facebook>Publicar test Facebook</button>
-                    <button class="admin-button tiny" type="button" data-meta-organic-publish-instagram>Publicar test Instagram</button>
-                  </div>
-                </div>
-                <div class="admin-linkedin-status" data-meta-organic-status></div>
-              </article>
+            <section class="admin-social-section" aria-label="Resumen Social">
+              <div class="admin-linkedin-card-head">
+                <span>01 &middot; Resumen Social</span>
+                <strong>Autopublisher OFF</strong>
+              </div>
+              <section class="admin-stat-grid compact admin-linkedin-summary" data-social-summary></section>
             </section>
-            <section class="admin-linkedin-grid">
-              <article class="admin-linkedin-card">
-                <div class="admin-linkedin-card-head">
-                  <span>01 &middot; Conexi&oacute;n Meta</span>
-                  <div class="admin-row-actions">
-                    <button class="admin-button tiny ghost" type="button" data-meta-connect data-meta-connect-target="instagram" title="Abre Meta para autorizar Instagram Business.">Conectar Instagram</button>
-                    <button class="admin-button tiny ghost" type="button" data-meta-connect-facebook data-meta-connect-target="facebook" title="Autoriza Facebook Page solo si la app tiene permisos de Pages disponibles.">Conectar Facebook Page</button>
-                    <button class="admin-button tiny ghost" type="button" data-meta-disconnect title="Desconecta tokens guardados.">Desconectar</button>
-                  </div>
-                </div>
-                <div class="admin-linkedin-status" data-meta-connection></div>
-                <form class="admin-linkedin-form" data-meta-page-form>
-                  <label class="admin-linkedin-wide"><span>Facebook Page</span><select name="page_id" data-meta-pages><option value="">Cargar Pages</option></select></label>
-                  <button class="admin-button tiny" type="submit">Guardar Page</button>
-                </form>
-              </article>
-              <article class="admin-linkedin-card">
-                <div class="admin-linkedin-card-head">
-                  <span>02 &middot; Ajustes</span>
-                  <button class="admin-button tiny" type="submit" form="admin-meta-settings-form">Guardar ajustes</button>
-                </div>
-                <form class="admin-linkedin-form" id="admin-meta-settings-form" data-meta-settings-form>
-                  <label><span>Autopublisher</span><select name="autopost_enabled"><option value="false">Desactivado</option><option value="true">Activado</option></select></label>
-                  <label><span>Facebook</span><select name="facebook_enabled"><option value="true">Activo</option><option value="false">Pausado</option></select></label>
-                  <label><span>Instagram</span><select name="instagram_enabled"><option value="true">Activo</option><option value="false">Pausado</option></select></label>
-                  <label><span>Frecuencia</span><select name="frequency_days"><option value="1">Cada d&iacute;a</option><option value="2">Cada 2 d&iacute;as</option><option value="3">Cada 3 d&iacute;as</option><option value="7">Semanal</option></select></label>
-                  <label><span>Max / d&iacute;a</span><input name="max_per_day" type="number" min="1" max="5" value="1"></label>
-                  <label><span>Hora</span><input name="preferred_time" type="time" value="10:00"></label>
-                  <label><span>Zona horaria</span><input name="timezone" value="Europe/Madrid"></label>
-                  <label><span>Contenido</span><select name="content_mode"><option value="seo_landings">Landings SEO</option></select></label>
-                </form>
-              </article>
+            <section class="admin-social-section" aria-label="Canales">
+              <div class="admin-linkedin-card-head">
+                <span>02 &middot; Canales</span>
+                <strong>Acciones manuales</strong>
+              </div>
+              <div class="admin-social-channel-grid" data-social-channels>
+                <p class="admin-empty-state">Carga el estado social para ver Instagram, Facebook, LinkedIn y TikTok.</p>
+              </div>
             </section>
-            <section class="admin-linkedin-grid admin-linkedin-grid-editor">
-              <article class="admin-linkedin-card admin-linkedin-queue-card">
-                <div class="admin-linkedin-card-head">
-                  <span>03 &middot; Cola Meta</span>
-                  <label class="admin-range-control"><span>Plataforma</span><select data-meta-generate-platform><option value="facebook">Facebook</option><option value="instagram">Instagram</option></select></label>
-                </div>
-                <section class="admin-stat-grid compact admin-linkedin-summary" data-meta-summary></section>
-                <div class="admin-table-wrap">
-                  <table class="admin-table admin-linkedin-table">
-                    <thead>
-                      <tr>
-                        <th>Fecha</th>
-                        <th>Plataforma</th>
-                        <th>Fuente</th>
-                        <th>Estado</th>
-                        <th>Publicado</th>
-                        <th>Error</th>
-                        <th>Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody data-meta-post-rows></tbody>
-                  </table>
-                </div>
-                <p class="admin-table-hint">Desliza horizontalmente para ver todas las columnas.</p>
-              </article>
-              <article class="admin-linkedin-card admin-linkedin-editor-card">
-                <div class="admin-linkedin-card-head">
-                  <span>04 &middot; Preview y publicaci&oacute;n</span>
-                </div>
-                <form class="admin-linkedin-form admin-linkedin-editor" data-meta-editor-form>
-                  <input type="hidden" name="id">
-                  <label><span>Plataforma</span><input name="platform" readonly></label>
-                  <label><span>Estado</span><select name="status"><option value="draft">Draft</option><option value="queued">Queued</option><option value="publishing">Publicando</option><option value="published">Publicado</option><option value="failed">Error</option><option value="skipped">Omitido</option></select></label>
-                  <label class="admin-linkedin-wide"><span>Fuente</span><input name="source_url" readonly></label>
-                  <label class="admin-linkedin-wide"><span>Caption</span><textarea name="caption" rows="10"></textarea></label>
-                  <label class="admin-linkedin-wide"><span>Imagen p&uacute;blica</span><input name="image_url" placeholder="https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg"></label>
-                  <div class="admin-linkedin-editor-actions">
-                    <button class="admin-button tiny" type="submit">Guardar borrador</button>
-                    <button class="admin-button tiny ghost" type="button" data-meta-post-action="generate_image">Generar preview SVG</button>
-                    <button class="admin-button tiny" type="button" data-meta-post-action="publish_now">Publicar ahora</button>
-                    <button class="admin-button tiny ghost" type="button" data-meta-copy-caption>Copiar caption</button>
-                    <button class="admin-button tiny ghost" type="button" data-meta-post-action="retry">Reintentar</button>
-                    <button class="admin-button tiny ghost" type="button" data-meta-post-action="skip">Omitir</button>
-                  </div>
-                </form>
-              </article>
+            <section class="admin-social-section" aria-label="Parametros">
+              <div class="admin-linkedin-card-head">
+                <span>03 &middot; Cola Social</span>
+                <label class="admin-social-filter">
+                  <span>Canal</span>
+                  <select data-social-queue-platform>
+                    <option value="all">Todos</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="facebook">Facebook</option>
+                    <option value="linkedin">LinkedIn</option>
+                    <option value="tiktok">TikTok</option>
+                  </select>
+                </label>
+              </div>
+              <div class="admin-table-wrap">
+                <table class="admin-table admin-social-queue-table">
+                  <thead>
+                    <tr>
+                      <th>Canal</th>
+                      <th>Fecha</th>
+                      <th>Estado</th>
+                      <th>Formato</th>
+                      <th>Post</th>
+                      <th>Published ID</th>
+                    </tr>
+                  </thead>
+                  <tbody data-social-queue-rows></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="admin-social-section" aria-label="Vista previa del post">
+              <div class="admin-linkedin-card-head">
+                <span>04 &middot; Vista previa del post</span>
+                <strong>Acci&oacute;n manual</strong>
+              </div>
+              <div class="admin-social-preview" data-social-preview>
+                <p class="admin-empty-state">Selecciona una publicaci&oacute;n de la cola para ver el destino y las acciones disponibles.</p>
+              </div>
+            </section>
+            <section class="admin-social-section" aria-label="Parametros">
+              <div class="admin-linkedin-card-head">
+                <span>05 &middot; Par&aacute;metros</span>
+                <strong>Solo lectura en esta fase</strong>
+              </div>
+              <div class="admin-social-settings-grid" data-social-settings></div>
+            </section>
+            <section class="admin-social-section" aria-label="Metricas">
+              <div class="admin-linkedin-card-head">
+                <span>06 &middot; M&eacute;tricas</span>
+                <strong>Sin datos inventados</strong>
+              </div>
+              <div class="admin-table-wrap">
+                <table class="admin-table admin-social-metrics-table">
+                  <thead>
+                    <tr>
+                      <th>Canal</th>
+                      <th>Seguidores</th>
+                      <th>Growth 7d</th>
+                      <th>Growth 30d</th>
+                      <th>Posts</th>
+                      <th>Impresiones</th>
+                      <th>Engagement</th>
+                      <th>Clics</th>
+                      <th>CTR</th>
+                      <th>Tr&aacute;fico web</th>
+                      <th>Errores</th>
+                    </tr>
+                  </thead>
+                  <tbody data-social-metrics></tbody>
+                </table>
+              </div>
+              <div class="admin-table-wrap">
+                <table class="admin-table admin-social-posts-table">
+                  <thead>
+                    <tr>
+                      <th>Canal</th>
+                      <th>Fecha</th>
+                      <th>Estado</th>
+                      <th>Formato</th>
+                      <th>Caption</th>
+                      <th>Published media ID</th>
+                      <th>Error</th>
+                    </tr>
+                  </thead>
+                  <tbody data-social-post-rows></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="admin-social-section" aria-label="Logs">
+              <div class="admin-linkedin-card-head">
+                <span>07 &middot; Logs</span>
+                <strong>Sin tokens ni secretos</strong>
+              </div>
+              <div class="admin-table-wrap">
+                <table class="admin-table admin-social-logs-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Canal</th>
+                      <th>Evento</th>
+                      <th>Estado</th>
+                      <th>Mensaje</th>
+                      <th>Referencia</th>
+                    </tr>
+                  </thead>
+                  <tbody data-social-logs></tbody>
+                </table>
+              </div>
             </section>
           </article>
         </section>
