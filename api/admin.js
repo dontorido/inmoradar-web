@@ -83,12 +83,14 @@ const {
 const {
   META_MANUAL_MODE_NOTICE,
   META_PLATFORMS,
-  buildAuthorizationUrl: buildMetaAuthorizationUrl,
+  buildOrganicAuthorizationUrl,
   buildMetaPost,
   decryptToken: decryptMetaToken,
   defaultSettings: defaultMetaSettings,
+  diffInstagramAuthorizationUrls,
   encryptToken: encryptMetaToken,
   exchangeAuthorizationCode: exchangeMetaAuthorizationCode,
+  exchangeInstagramAuthorizationCode,
   fetchManagedPages,
   generateMetaImageSvg,
   imageUrlForLanding,
@@ -98,17 +100,31 @@ const {
   normalizeSettings: normalizeMetaSettings,
   pickNextLanding,
   publishToPlatform: publishMetaToPlatform,
+  redactInstagramAuthorizationUrl,
   sanitizeSecretText: sanitizeMetaSecretText,
+  sanitizeMetaPayload,
   sanitizePage,
   selectManagedPage,
   shouldRunAutopublisher: shouldRunMetaAutopublisher,
+  summarizeInstagramAuthorizationUrl,
   summarizeConnection: summarizeMetaConnection,
   validatePublishInput: validateMetaPublishInput,
   withUtm
 } = require("../lib/meta/services");
+const {
+  META_ORGANIC_SOURCE_TYPE,
+  buildFacebookOrganicTestPost,
+  buildInstagramOrganicTestPost,
+  decodeOrganicOAuthState,
+  encodeOrganicOAuthState,
+  metaOrganicOAuthScopes,
+  normalizeOAuthTarget,
+  validateMetaOrganicEnv
+} = require("../lib/meta/organic");
 const { logRequestMetric } = require("../lib/observability/request-metrics");
 const LANDING_SELECT =
   "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at,source_data_json";
+const META_OAUTH_STATE_COOKIE = "inmoradar_meta_oauth_state";
 
 function requestHeader(req, name) {
   const headers = req.headers || {};
@@ -116,6 +132,39 @@ function requestHeader(req, name) {
   const lowerName = String(name).toLowerCase();
   const entry = Object.entries(headers).find(([key]) => String(key).toLowerCase() === lowerName);
   return entry ? entry[1] : "";
+}
+
+function responseHeaderValue(res, name) {
+  const lowerName = String(name || "").toLowerCase();
+  if (typeof res.getHeader === "function") return res.getHeader(name) || res.getHeader(lowerName);
+  return res.headers?.[lowerName] || res.headers?.[name];
+}
+
+function appendResponseHeader(res, name, value) {
+  const current = responseHeaderValue(res, name);
+  if (!current) return res.setHeader(name, value);
+  const next = Array.isArray(current) ? [...current, value] : [current, value];
+  return res.setHeader(name, next);
+}
+
+function parseCookieHeader(value) {
+  return String(value || "")
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce((acc, part) => {
+      const index = part.indexOf("=");
+      const key = index >= 0 ? part.slice(0, index).trim() : part;
+      const rawValue = index >= 0 ? part.slice(index + 1) : "";
+      if (key) {
+        try {
+          acc[key] = decodeURIComponent(rawValue || "");
+        } catch (error) {
+          acc[key] = rawValue || "";
+        }
+      }
+      return acc;
+    }, {});
 }
 
 function cleanRequestToken(value) {
@@ -444,6 +493,41 @@ function routeFromRequest(req) {
 
   const pathname = url.pathname.replace(/^\/api\/admin\/?/, "").replace(/\/+$/, "");
   return { url, resource: pathname || "summary" };
+}
+
+function redirect(res, target, status = 302) {
+  res.statusCode = status;
+  res.setHeader("location", target);
+  res.setHeader("cache-control", "no-store, max-age=0");
+  res.end("");
+}
+
+function setMetaOAuthStateCookie(res, state) {
+  appendResponseHeader(
+    res,
+    "set-cookie",
+    `${META_OAUTH_STATE_COOKIE}=${encodeURIComponent(state)}; Path=/api/meta/oauth/callback; Max-Age=1800; HttpOnly; Secure; SameSite=Lax`
+  );
+}
+
+function clearMetaOAuthStateCookie(res) {
+  appendResponseHeader(
+    res,
+    "set-cookie",
+    `${META_OAUTH_STATE_COOKIE}=; Path=/api/meta/oauth/callback; Max-Age=0; HttpOnly; Secure; SameSite=Lax`
+  );
+}
+
+function readMetaOAuthStateCookie(req) {
+  return parseCookieHeader(requestHeader(req, "cookie"))[META_OAUTH_STATE_COOKIE] || "";
+}
+
+function relativeWithQuery(path, params = {}) {
+  const target = new URL(path, "https://www.inmoradar.app");
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") target.searchParams.set(key, String(value));
+  });
+  return `${target.pathname}${target.search}${target.hash}`;
 }
 
 async function handleSummary() {
@@ -1515,6 +1599,7 @@ async function handleLinkedIn(req, url, resource) {
 }
 
 function normalizeMetaPostRow(row = {}) {
+  if (!row) return null;
   return {
     ...row,
     meta_response: parseJsonMaybe(row.meta_response, row.meta_response || null)
@@ -1624,6 +1709,154 @@ async function listMetaRuns(limit = 5) {
   }
 }
 
+async function latestMetaOrganicPost() {
+  try {
+    const params = new URLSearchParams({
+      select: "*",
+      source_type: `eq.${META_ORGANIC_SOURCE_TYPE}`,
+      order: "created_at.desc",
+      limit: "1"
+    });
+    const rows = await supabaseFetch(`marketing_meta_posts?${params.toString()}`);
+    return { post: normalizeMetaPostRow(Array.isArray(rows) ? rows[0] || null : rows), table_missing: false, error: null };
+  } catch (error) {
+    return {
+      post: null,
+      table_missing: /marketing_meta_posts/.test(error.message),
+      error: sanitizeMetaSecretText(error.message || error)
+    };
+  }
+}
+
+async function recordMetaOrganicPost(platform, payload = {}, patch = {}) {
+  if (!hasSupabaseConfig()) return { post: null, persisted: false, table_missing: false, error: "supabase_not_configured" };
+  const row = {
+    source_type: META_ORGANIC_SOURCE_TYPE,
+    source_slug: "organic-test",
+    source_url: payload.source_url || payload.link || metaConfig(process.env).siteUrl,
+    platform,
+    status: patch.status || "failed",
+    caption: payload.caption || "",
+    image_url: payload.image_url || null,
+    published_url: patch.published_url || null,
+    external_post_id: patch.external_post_id || null,
+    published_at: patch.published_at || null,
+    error_message: patch.error_message || null,
+    utm_source: platform,
+    utm_medium: "social",
+    utm_campaign: "organic_publish_spike",
+    city: null,
+    template_type: "organic_test",
+    meta_response: patch.meta_response || null
+  };
+  try {
+    const rows = await supabaseFetch("marketing_meta_posts", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify([row])
+    });
+    return { post: normalizeMetaPostRow(Array.isArray(rows) ? rows[0] || null : rows), persisted: true, table_missing: false, error: null };
+  } catch (error) {
+    return {
+      post: null,
+      persisted: false,
+      table_missing: /marketing_meta_posts/.test(error.message),
+      error: sanitizeMetaSecretText(error.message || error)
+    };
+  }
+}
+
+function selectedMetaPageFromPages(pages = [], env = process.env) {
+  const config = metaConfig(env);
+  if (config.facebookPageId) return selectManagedPage(pages, config.facebookPageId);
+  if (config.facebookPageName) {
+    const wanted = config.facebookPageName.trim().toLowerCase();
+    const byName = pages.find((page) => String(page.name || "").trim().toLowerCase() === wanted);
+    if (byName) return byName;
+  }
+  const inmoradarPage = pages.find((page) => /inmoradar/i.test(String(page.name || "")));
+  if (inmoradarPage) return inmoradarPage;
+  return pages.length === 1 ? pages[0] : null;
+}
+
+async function saveDetectedMetaOrganicConnection(token, pages = [], target = "instagram") {
+  const currentState = await readMetaConnectionState();
+  const current = currentState.connection || {};
+  const normalizedTarget = normalizeOAuthTarget(target);
+  const page = selectedMetaPageFromPages(pages);
+  const instagram = page?.instagram_business_account || null;
+  const config = metaConfig(process.env);
+  const pageMissingReason = config.facebookPageId && !page ? "meta_configured_page_not_found" : "meta_page_selection_required";
+  const instagramAccountId = normalizedTarget === "instagram"
+    ? token.user_id || current.instagram_business_account_id || config.instagramBusinessAccountId || null
+    : instagram?.id || current.instagram_business_account_id || config.instagramBusinessAccountId || null;
+  const facebookPageId = page?.id || current.facebook_page_id || null;
+  const facebookPageName = page?.name || current.facebook_page_name || null;
+  const mergedScopes = [...new Set([...(Array.isArray(current.scopes) ? current.scopes : []), ...(Array.isArray(token.scopes) ? token.scopes : [])])];
+  const hasPageToken = page?.access_token || current.page_access_token_encrypted;
+  const connected = normalizedTarget === "facebook"
+    ? Boolean(facebookPageId && hasPageToken)
+    : Boolean(instagramAccountId && token.access_token);
+  const connection = await saveMetaConnection({
+    status: connected ? "connected" : normalizedTarget === "facebook" ? "needs_page" : "needs_instagram",
+    facebook_page_id: facebookPageId,
+    facebook_page_name: facebookPageName,
+    instagram_business_account_id: instagramAccountId,
+    access_token_encrypted: current.access_token_encrypted || encryptMetaToken(token.access_token),
+    user_access_token_encrypted: normalizedTarget === "facebook"
+      ? current.user_access_token_encrypted || encryptMetaToken(token.access_token)
+      : encryptMetaToken(token.access_token),
+    page_access_token_encrypted: page?.access_token ? encryptMetaToken(page.access_token) : current.page_access_token_encrypted || null,
+    token_expires_at: token.token_expires_at,
+    scopes: mergedScopes,
+    last_error: connected ? null : normalizedTarget === "facebook" ? pageMissingReason : "missing_instagram_business_account_id"
+  });
+  return { connection, page };
+}
+
+function metaOrganicStatusPayload(connectionState, lastAttemptState = {}, extra = {}) {
+  const summary = summarizeMetaConnection(connectionState.connection, process.env);
+  const lastAttempt = lastAttemptState.post || null;
+  const lastMetaResponse = lastAttempt?.meta_response || {};
+  const publishedMediaId = lastMetaResponse.published_media_id || lastAttempt?.external_post_id || lastMetaResponse.id || null;
+  const instagramPublishingValidated =
+    lastAttempt?.platform === "instagram" &&
+    lastAttempt?.status === "published" &&
+    Boolean(publishedMediaId);
+  return {
+    ok: true,
+    connected: summary.status === "connected",
+    status: summary.status,
+    connection: summary,
+    permissions: summary.scopes,
+    missing_scopes: summary.missing_scopes,
+    facebook_page_id: summary.facebook_page_id,
+    facebook_page_name: summary.facebook_page_name,
+    instagram_account_id: summary.instagram_business_account_id,
+    instagram_publishing: {
+      status: instagramPublishingValidated ? "validated" : "pending_manual_test",
+      validated: instagramPublishingValidated,
+      published_media_id: publishedMediaId,
+      last_attempt_at: lastAttempt?.published_at || lastAttempt?.created_at || null
+    },
+    facebook_page_publishing: {
+      status: summary.facebook_publish_available ? "available" : "pending_page_permissions",
+      available: summary.facebook_publish_available
+    },
+    last_error: summary.last_error || connectionState.error || null,
+    last_attempt: lastAttempt,
+    env: metaEnvStatus(process.env),
+    organic_env: validateMetaOrganicEnv(process.env),
+    storage: {
+      connection_table_missing: connectionState.table_missing,
+      posts_table_missing: lastAttemptState.table_missing,
+      connection_error: connectionState.error,
+      posts_error: lastAttemptState.error
+    },
+    ...extra
+  };
+}
+
 async function createMetaRun(triggerType = "cron", platform = "multi") {
   try {
     const rows = await supabaseFetch("meta_autopublisher_runs", {
@@ -1649,6 +1882,19 @@ async function finishMetaRun(run, patch = {}) {
   } catch (error) {
     return patch;
   }
+}
+
+function metaAutopublisherDisabledResult() {
+  return {
+    ok: true,
+    skipped: true,
+    reason: "autopost_disabled",
+    status: "skipped",
+    skipped_count: 1,
+    published_count: 0,
+    failed_count: 0,
+    error_message: "autopost_disabled"
+  };
 }
 
 async function listEligibleMetaLandings(limit = 50) {
@@ -1714,6 +1960,13 @@ async function loadMetaAccessToken(connection) {
   return accessToken;
 }
 
+async function loadMetaInstagramAccessToken(connection) {
+  const encrypted = connection?.user_access_token_encrypted || connection?.access_token_encrypted;
+  const accessToken = decryptMetaToken(encrypted);
+  if (!accessToken) throw new Error("meta_instagram_access_token_missing");
+  return accessToken;
+}
+
 async function loadMetaUserAccessToken(connection) {
   const encrypted = connection?.user_access_token_encrypted || connection?.access_token_encrypted;
   const accessToken = decryptMetaToken(encrypted);
@@ -1743,21 +1996,22 @@ async function publishMetaPostById(id) {
     const nextStatus = /missing|required|disabled|false|not_ready|env|frequency|max/.test(message) ? "skipped" : "failed";
     return await patchMetaPost(id, { status: nextStatus, error_message: message });
   }
+  const platform = String(post.platform || "").toLowerCase();
   let accessToken;
   try {
-    accessToken = await loadMetaAccessToken(connection);
+    accessToken = platform === "instagram" ? await loadMetaInstagramAccessToken(connection) : await loadMetaAccessToken(connection);
   } catch (error) {
     return await patchMetaPost(id, { status: "skipped", error_message: sanitizeMetaSecretText(error.message || "meta_access_token_missing") });
   }
   await patchMetaPost(id, { status: "publishing", error_message: null });
   try {
-    const platform = String(post.platform || "").toLowerCase();
     const link = withUtm(post.source_url, platform, { city: post.city, slug: post.source_slug }, process.env);
+    const config = metaConfig(process.env);
     const result = await publishMetaToPlatform({
       platform,
       accessToken,
-      pageId: connection.facebook_page_id || process.env.META_FACEBOOK_PAGE_ID,
-      instagramBusinessAccountId: connection.instagram_business_account_id || process.env.META_INSTAGRAM_BUSINESS_ACCOUNT_ID,
+      pageId: connection.facebook_page_id || config.facebookPageId,
+      instagramBusinessAccountId: connection.instagram_business_account_id || config.instagramBusinessAccountId || config.instagramPublishAccountId,
       caption: post.caption,
       link,
       imageUrl: post.image_url,
@@ -1781,23 +2035,47 @@ async function publishMetaPostById(id) {
 }
 
 async function runMetaAutopublisherScheduler({ triggerType = "cron" } = {}) {
-  const run = await createMetaRun(triggerType, "multi");
-  const finish = (patch) => finishMetaRun(run, patch).then(() => patch);
+  const config = metaConfig(process.env);
+  if (!config.autopostEnabled) {
+    console.log("[Meta Autopublisher] skipped: autopost_disabled");
+    return metaAutopublisherDisabledResult();
+  }
+
   if (!hasSupabaseConfig()) {
     console.log("[Meta Autopublisher] skipped: supabase_not_configured");
-    return finish({ status: "skipped", skipped_count: 1, published_count: 0, failed_count: 0, error_message: "supabase_not_configured" });
+    return { status: "skipped", skipped_count: 1, published_count: 0, failed_count: 0, error_message: "supabase_not_configured" };
   }
-  const [settingsState, connectionState, postsState] = await Promise.all([
-    readMetaSettings(),
-    readMetaConnectionState(),
-    listMetaPosts(new URL("https://admin.local/?limit=100"), 100)
-  ]);
-  if (settingsState.table_missing || connectionState.table_missing || postsState.table_missing) {
+
+  const run = await createMetaRun(triggerType, "multi");
+  const finish = (patch) => finishMetaRun(run, patch).then(() => patch);
+  const finishDisabled = () => finish({ status: "skipped", skipped_count: 1, published_count: 0, failed_count: 0, error_message: "autopost_disabled" })
+    .then((result) => ({ ...result, ok: true, skipped: true, reason: "autopost_disabled" }));
+  const settingsState = await readMetaSettings();
+  if (settingsState.table_missing) {
     console.log("[Meta Autopublisher] skipped: table_missing");
     return finish({ status: "skipped", skipped_count: 1, published_count: 0, failed_count: 0, error_message: "table_missing" });
   }
-  if (settingsState.error || connectionState.error || postsState.error) {
-    const message = sanitizeMetaSecretText(settingsState.error || connectionState.error || postsState.error);
+  if (settingsState.error) {
+    const message = sanitizeMetaSecretText(settingsState.error);
+    console.warn(`[Meta Autopublisher] failed: ${message}`);
+    return finish({ status: "failed", skipped_count: 0, published_count: 0, failed_count: 1, error_message: message });
+  }
+  const settings = settingsState.settings;
+  if (!settings.autopost_enabled) {
+    console.log("[Meta Autopublisher] skipped: autopost_disabled");
+    return finishDisabled();
+  }
+
+  const [connectionState, postsState] = await Promise.all([
+    readMetaConnectionState(),
+    listMetaPosts(new URL("https://admin.local/?limit=100"), 100)
+  ]);
+  if (connectionState.table_missing || postsState.table_missing) {
+    console.log("[Meta Autopublisher] skipped: table_missing");
+    return finish({ status: "skipped", skipped_count: 1, published_count: 0, failed_count: 0, error_message: "table_missing" });
+  }
+  if (connectionState.error || postsState.error) {
+    const message = sanitizeMetaSecretText(connectionState.error || postsState.error);
     console.warn(`[Meta Autopublisher] failed: ${message}`);
     return finish({ status: "failed", skipped_count: 0, published_count: 0, failed_count: 1, error_message: message });
   }
@@ -1809,7 +2087,6 @@ async function runMetaAutopublisherScheduler({ triggerType = "cron" } = {}) {
     console.warn(`[Meta Autopublisher] failed: ${message}`);
     return finish({ status: "failed", skipped_count: 0, published_count: 0, failed_count: 1, error_message: message });
   }
-  const settings = settingsState.settings;
   const connection = connectionState.connection;
   const platforms = [
     settings.facebook_enabled ? "facebook" : null,
@@ -1937,11 +2214,11 @@ async function handleMetaDashboard(url) {
 
 async function handleMetaConnect(req, url) {
   if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
-  const scopes = String(url.searchParams.get("scopes") || "")
-    .split(/[\s,]+/)
-    .filter(Boolean);
-  const result = buildMetaAuthorizationUrl({ scopes: scopes.length ? scopes : undefined });
-  return { status: 200, payload: { ok: true, ...result } };
+  const target = normalizeOAuthTarget(url.searchParams.get("target") || url.searchParams.get("platform") || "instagram");
+  const scopes = metaOrganicOAuthScopes({ target, env: process.env });
+  console.log(`[Meta Organic OAuth] legacy connect target=${target} scope=${scopes.join(",")}`);
+  const result = buildOrganicAuthorizationUrl({ target, scopes });
+  return { status: 200, payload: { ok: true, ...result, target } };
 }
 
 async function handleMetaCallback(req) {
@@ -2020,6 +2297,168 @@ async function handleMetaTestConnection(req) {
       message: summary.automatic_available ? "Meta automatico disponible." : META_MANUAL_MODE_NOTICE
     }
   };
+}
+
+async function handleMetaOrganicOAuthStart(req, res, url) {
+  if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
+  const target = normalizeOAuthTarget(url.searchParams.get("target") || url.searchParams.get("platform") || "instagram");
+  const envStatus = validateMetaOrganicEnv(process.env, { target });
+  if (target === "instagram") {
+    const instagramAppIdSource = process.env.INSTAGRAM_APP_ID ? "env" : "missing";
+    console.log(`[Meta Organic OAuth] instagram_app_id_source=${instagramAppIdSource} fallback=none`);
+  }
+  if (!envStatus.ok) {
+    return json(res, 500, { ok: false, error: "meta_oauth_not_configured", missing: envStatus.missing });
+  }
+  const returnTo = url.searchParams.get("return_to") || "/backoffice/marketing/meta";
+  const scopes = metaOrganicOAuthScopes({ target, env: process.env });
+  const state = encodeOrganicOAuthState({ returnTo, target });
+  console.log(`[Meta Organic OAuth] target=${target} scope=${scopes.join(",")}`);
+  const result = buildOrganicAuthorizationUrl({ target, state, scopes });
+  if (target === "instagram") {
+    const officialUrl = process.env.INSTAGRAM_OFFICIAL_EMBED_URL || process.env.INSTAGRAM_BUSINESS_LOGIN_URL || process.env.META_INSTAGRAM_OFFICIAL_EMBED_URL || "";
+    console.log(`[Meta Organic OAuth] instagram_authorize_url=${redactInstagramAuthorizationUrl(result.url)}`);
+    console.log(`[Meta Organic OAuth] instagram_authorize_summary=${JSON.stringify(summarizeInstagramAuthorizationUrl(result.url))}`);
+    if (officialUrl) {
+      console.log(`[Meta Organic OAuth] instagram_authorize_diff=${JSON.stringify(diffInstagramAuthorizationUrls(result.url, officialUrl))}`);
+    }
+    if (result.state_mode === "cookie") setMetaOAuthStateCookie(res, state);
+  }
+  if (url.searchParams.get("format") === "json") {
+    if (!assertAdmin(req, res)) return;
+    return json(res, 200, { ok: true, ...result, target, redirect_uri: envStatus.redirect_uri });
+  }
+  return redirect(res, result.url);
+}
+
+async function handleMetaOrganicOAuthCallback(req, res, url) {
+  if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
+  let state = { returnTo: "/backoffice/marketing/meta" };
+  const rawState = url.searchParams.get("state") || readMetaOAuthStateCookie(req);
+  if (readMetaOAuthStateCookie(req)) clearMetaOAuthStateCookie(res);
+  try {
+    if (!rawState) throw new Error("meta_oauth_state_required");
+    state = decodeOrganicOAuthState(rawState);
+  } catch (error) {
+    return redirect(res, relativeWithQuery("/backoffice/marketing/meta", {
+      meta_oauth: "error",
+      meta_error: sanitizeMetaSecretText(error.message || error)
+    }));
+  }
+
+  if (url.searchParams.get("error")) {
+    const message = sanitizeMetaSecretText(url.searchParams.get("error_description") || url.searchParams.get("error_reason") || url.searchParams.get("error"));
+    return redirect(res, relativeWithQuery(state.returnTo, { meta_oauth: "error", meta_error: message }));
+  }
+
+  const code = url.searchParams.get("code");
+  if (!code) return redirect(res, relativeWithQuery(state.returnTo, { meta_oauth: "error", meta_error: "meta_code_required" }));
+  if (!hasSupabaseConfig()) {
+    return redirect(res, relativeWithQuery(state.returnTo, { meta_oauth: "error", meta_error: "supabase_not_configured" }));
+  }
+
+  try {
+    const target = normalizeOAuthTarget(state.target || "instagram");
+    const token = target === "instagram"
+      ? await exchangeInstagramAuthorizationCode({ code })
+      : await exchangeMetaAuthorizationCode({ code });
+    let pages = [];
+    if (target !== "instagram") {
+      try {
+        pages = await fetchManagedPages({ userAccessToken: token.access_token });
+      } catch (error) {
+        pages = [];
+      }
+    }
+    const { connection, page } = await saveDetectedMetaOrganicConnection(token, pages, target);
+    const summary = summarizeMetaConnection(connection, process.env);
+    return redirect(res, relativeWithQuery(state.returnTo, {
+      meta_oauth: target === "facebook" ? (page?.access_token ? "connected" : "needs_page") : "connected",
+      meta_status: summary.status
+    }));
+  } catch (error) {
+    const message = sanitizeMetaSecretText(error.message || error);
+    try {
+      if (hasSupabaseConfig()) await saveMetaConnection({ status: "error", last_error: message });
+    } catch {}
+    return redirect(res, relativeWithQuery(state.returnTo, { meta_oauth: "error", meta_error: message }));
+  }
+}
+
+async function handleMetaOrganicStatus(req) {
+  if (req.method !== "GET") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  const [connectionState, lastAttemptState] = await Promise.all([readMetaConnectionState(), latestMetaOrganicPost()]);
+  return { status: 200, payload: metaOrganicStatusPayload(connectionState, lastAttemptState) };
+}
+
+async function handleMetaOrganicPublishTest(req, platform) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  await readJsonBody(req).catch(() => ({}));
+  if (!hasSupabaseConfig()) {
+    return { status: 500, payload: { ok: false, error: "supabase_not_configured", pending_sql: "database/marketing-meta.sql" } };
+  }
+  const connectionState = await readMetaConnectionState();
+  const connection = connectionState.connection;
+  if (!connection) return { status: 400, payload: { ok: false, error: "meta_connection_missing" } };
+  const config = metaConfig(process.env);
+  const pageId = cleanNullable(connection.facebook_page_id || config.facebookPageId);
+  const instagramAccountId = cleanNullable(connection.instagram_business_account_id || config.instagramBusinessAccountId || config.instagramPublishAccountId);
+  const payload = platform === "facebook" ? buildFacebookOrganicTestPost(process.env) : buildInstagramOrganicTestPost(process.env);
+
+  try {
+    if (platform === "facebook" && !pageId) throw new Error("meta_facebook_page_id_missing");
+    if (platform === "facebook" && !connection.page_access_token_encrypted) throw new Error("meta_facebook_page_access_token_missing");
+    const accessToken = platform === "instagram" ? await loadMetaInstagramAccessToken(connection) : await loadMetaAccessToken(connection);
+    const result = await publishMetaToPlatform({
+      platform,
+      accessToken,
+      pageId,
+      instagramBusinessAccountId: instagramAccountId,
+      caption: payload.caption,
+      link: payload.link,
+      imageUrl: payload.image_url,
+      env: process.env
+    });
+    const saved = await recordMetaOrganicPost(platform, payload, {
+      status: "published",
+      published_at: new Date().toISOString(),
+      external_post_id: result.external_post_id,
+      published_url: result.published_url,
+      meta_response: result.meta_response
+    });
+    const profileId = result.meta_response?.instagram_profile?.user_id || result.meta_response?.instagram_profile?.id || null;
+    await saveMetaConnection({
+      status: "connected",
+      last_error: null,
+      ...(platform === "instagram" && profileId ? { instagram_business_account_id: profileId } : {})
+    }).catch(() => null);
+    return { status: 200, payload: { ok: true, platform, result, post: saved.post, persisted: saved.persisted, storage_error: saved.error || null } };
+  } catch (error) {
+    const message = sanitizeMetaSecretText(sanitizeErrorMessage(error, 800));
+    const safeMetaResponse = error?.meta_response || error?.payload
+      ? sanitizeMetaPayload(error.meta_response || error.payload)
+      : null;
+    const saved = await recordMetaOrganicPost(platform, payload, { status: "failed", error_message: message, meta_response: safeMetaResponse });
+    const nextStatus = platform === "instagram" && connection.status === "connected" ? "connected" : "error";
+    const profileId = safeMetaResponse?.instagram_profile?.user_id || safeMetaResponse?.instagram_profile?.id || null;
+    await saveMetaConnection({
+      status: nextStatus,
+      last_error: message,
+      ...(platform === "instagram" && profileId ? { instagram_business_account_id: profileId } : {})
+    }).catch(() => null);
+    return {
+      status: 400,
+      payload: {
+        ok: false,
+        platform,
+        error: "meta_publish_failed",
+        message,
+        post: saved.post,
+        persisted: saved.persisted,
+        storage_error: saved.error || null
+      }
+    };
+  }
 }
 
 async function handleMetaSettings(req) {
@@ -2101,6 +2540,9 @@ async function handleMeta(req, url, resource) {
   if (resource === "meta/disconnect") return handleMetaDisconnect(req);
   if (resource === "meta/pages") return handleMetaPages(req);
   if (resource === "meta/test-connection") return handleMetaTestConnection(req);
+  if (resource === "meta/status") return handleMetaOrganicStatus(req);
+  if (resource === "meta/publish-test-facebook") return handleMetaOrganicPublishTest(req, "facebook");
+  if (resource === "meta/publish-test-instagram") return handleMetaOrganicPublishTest(req, "instagram");
   if (resource === "meta/settings") return handleMetaSettings(req);
   if (resource === "meta/posts") return handleMetaPosts(req, url);
   return { status: 404, payload: { ok: false, error: "meta_resource_not_found", resource } };
@@ -3197,6 +3639,12 @@ async function handleAdminRequest(req, res) {
       return json(res, 500, { ok: false, error: "meta_daily_failed", message: sanitizeMetaSecretText(error.message || error, 500) });
     }
   }
+  if (resource === "meta/oauth/start") {
+    return handleMetaOrganicOAuthStart(req, res, url);
+  }
+  if (resource === "meta/oauth/callback") {
+    return handleMetaOrganicOAuthCallback(req, res, url);
+  }
   if (resource === "seo-autogenerate/run") {
     if (!assertAdminOrCron(req, res)) return;
     try {
@@ -3213,6 +3661,10 @@ async function handleAdminRequest(req, res) {
     const preSupabaseReadOnly = await dispatchAdminRoute(ADMIN_PRE_SUPABASE_READ_ONLY_ROUTES, { req, url, resource });
     if (preSupabaseReadOnly) {
       return json(res, preSupabaseReadOnly.status, preSupabaseReadOnly.payload);
+    }
+    if (resource === "meta/connect") {
+      const result = await handleMeta(req, url, resource);
+      return json(res, result.status, result.payload);
     }
     if (!hasSupabaseConfig()) {
       return json(res, 500, { ok: false, error: "supabase_not_configured" });

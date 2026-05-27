@@ -3,9 +3,11 @@
 Meta Autopublisher publica contenido de InmoRadar en:
 
 - Facebook Page de InmoRadar.
-- Instagram Business o Creator vinculado a esa Page.
+- Instagram Business o Creator conectado con Instagram API with Instagram Login.
 
 No usa scraping, navegador automatizado, credenciales manuales, perfiles personales, likes, follows, comentarios ni DMs.
+
+La spike organica rapida vive en los endpoints `/api/meta/*` y permite probar OAuth + un post controlado en canales propios sin activar Ads API, campanas, audiencias, pixeles ni automatizacion de interacciones.
 
 El despliegue inicial debe salir siempre con:
 
@@ -22,16 +24,28 @@ META_AUTOPOST_MAX_PER_DAY=1
 META_AUTOPOST_TIME=10:00
 META_AUTOPOST_TIMEZONE=Europe/Madrid
 
+INSTAGRAM_APP_ID=
+INSTAGRAM_APP_SECRET=
+INSTAGRAM_REDIRECT_URI=https://www.inmoradar.app/api/meta/oauth/callback
+INSTAGRAM_GRAPH_VERSION=v23.0
+INSTAGRAM_PUBLISH_ACCOUNT_ID=
+INSTAGRAM_OFFICIAL_EMBED_URL=
+INSTAGRAM_BUSINESS_LOGIN_URL=
+INSTAGRAM_OAUTH_STATE_MODE=query
+
 META_APP_ID=
 META_APP_SECRET=
-META_REDIRECT_URI=https://www.inmoradar.app/admin
+META_REDIRECT_URI=https://www.inmoradar.app/api/meta/oauth/callback
 META_ACCESS_TOKEN_ENCRYPTION_KEY=
 
 META_FACEBOOK_PAGE_ID=
 META_FACEBOOK_PAGE_NAME=
+META_INSTAGRAM_ACCOUNT_ID=
 META_INSTAGRAM_BUSINESS_ACCOUNT_ID=
-META_GRAPH_VERSION=v20.0
+META_GRAPH_VERSION=v23.0
 META_DEFAULT_IMAGE_URL=
+META_TEST_IMAGE_URL=
+META_ENABLE_LEGACY_INSTAGRAM_SCOPES=false
 ```
 
 Tambien deben existir las variables backend ya usadas por BackOffice:
@@ -72,21 +86,101 @@ Estados de posts:
 
 ## Meta Developers
 
-1. Crea o abre la Meta App de InmoRadar.
-2. Configura OAuth redirect URI:
+Hay dos IDs distintos:
+
+- `INSTAGRAM_APP_ID`: identificador de aplicacion de Instagram, por ejemplo `1438690814675569`, visible en `Casos de uso > Administrar mensajes y contenido en Instagram > API de Instagram > Configuracion de la API con el inicio de sesion de Instagram`.
+- `META_APP_ID`: App ID principal de Meta/Facebook, usado solo para Facebook Login y Facebook Page.
+
+No intercambies estos IDs. Instagram Login no debe usar el dialog de Facebook.
+
+### Instagram API with Instagram Login
+
+1. Abre la Meta App de InmoRadar.
+2. En `Casos de uso > Administrar mensajes y contenido en Instagram > API de Instagram > Configuracion de la API con el inicio de sesion de Instagram`, copia:
+
+- Identificador de aplicacion de Instagram -> `INSTAGRAM_APP_ID`.
+- Clave secreta de aplicacion de Instagram -> `INSTAGRAM_APP_SECRET`.
+
+3. Configura OAuth redirect URI de Instagram:
 
 ```txt
-https://www.inmoradar.app/admin
+https://www.inmoradar.app/api/meta/oauth/callback
 ```
 
-3. Activa productos/permisos necesarios para Facebook Login, Pages e Instagram Graph API.
-4. Prepara permisos:
+4. En Vercel, guarda la misma URL en:
+
+```env
+INSTAGRAM_REDIRECT_URI=https://www.inmoradar.app/api/meta/oauth/callback
+```
+
+`INSTAGRAM_APP_ID` no tiene fallback ni valor por defecto: si falta en Vercel, `/api/meta/oauth/start?target=instagram` debe devolver `meta_oauth_not_configured` con `INSTAGRAM_APP_ID` en `missing`.
+
+5. Para la spike inicial de Instagram, prepara permisos:
+
+- `instagram_business_basic`
+- `instagram_business_content_publish`
+
+El OAuth organico por defecto replica la URL de insercion generada por Meta Developers:
+
+```txt
+https://www.instagram.com/accounts/login/?force_authentication&platform_app_id=INSTAGRAM_APP_ID&next=...
+```
+
+El parametro `next` contiene la ruta codificada a:
+
+```txt
+/oauth/authorize/third_party/
+```
+
+con `client_id=INSTAGRAM_APP_ID`, `redirect_uri=INSTAGRAM_REDIRECT_URI`, `response_type=code`, los scopes organicos y el `state` firmado. No usa `https://www.facebook.com/{version}/dialog/oauth`, `https://api.instagram.com/oauth/authorize` ni `https://www.instagram.com/oauth/authorize` como endpoint directo de autorizacion para Instagram.
+
+Si Meta incluye parametros extra en la URL oficial de insercion, copia esa URL completa en `INSTAGRAM_OFFICIAL_EMBED_URL` o `INSTAGRAM_BUSINESS_LOGIN_URL`. El backend la usa como plantilla para el `next`, conserva extras internos como `config_id`, y reconstruye el nivel superior con el patron oficial limpio: `force_authentication`, `platform_app_id=INSTAGRAM_APP_ID` y `next=...`. No conserva `client_id`, `redirect_uri`, `response_type`, `scope`, `force_reauth`, `logger_id`, `auth_type` ni `display` en el nivel superior.
+
+Para esta spike de publicacion test, el scope de Instagram se limita siempre a `instagram_business_basic,instagram_business_content_publish`, incluso si la URL oficial de Meta trae permisos adicionales. No se piden `instagram_business_manage_messages`, `instagram_manage_comments` ni `instagram_business_manage_insights`; mensajes, comentarios e insights quedan fuera de esta prueba.
+
+El arranque OAuth loguea una version saneada de la URL generada y, si existe `INSTAGRAM_OFFICIAL_EMBED_URL`, una comparativa de diferencias por parametro. El `state` se enmascara en logs.
+
+Por defecto `INSTAGRAM_OAUTH_STATE_MODE=query` envia el `state` firmado dentro del `next`. Si la URL oficial de Meta no admite `state`, se puede probar `INSTAGRAM_OAUTH_STATE_MODE=cookie`: el backend omite `state` del `next`, guarda el mismo estado firmado en una cookie `HttpOnly; Secure; SameSite=Lax` limitada al callback y lo valida al volver. Esta variante mantiene una proteccion CSRF razonable para la spike, aunque el modo recomendado sigue siendo `query` si Meta lo acepta.
+
+El intercambio del `code` usa:
+
+```txt
+https://api.instagram.com/oauth/access_token
+```
+
+y luego intenta obtener token de larga duracion con:
+
+```txt
+https://graph.instagram.com/access_token
+```
+
+El flujo Instagram no pide `instagram_basic` ni `instagram_content_publish`; solo se pedirian activando explicitamente `META_ENABLE_LEGACY_INSTAGRAM_SCOPES=true`, que debe quedar apagado para esta app.
+
+### Facebook Page
+
+Para publicar tambien en Facebook Page, configura el App ID principal de Meta/Facebook:
+
+```env
+META_APP_ID=
+META_APP_SECRET=
+META_REDIRECT_URI=https://www.inmoradar.app/api/meta/oauth/callback
+```
+
+La app debe tener disponible el flujo/producto de Pages y estos permisos en un flujo separado:
 
 - `pages_show_list`
 - `pages_read_engagement`
 - `pages_manage_posts`
-- `instagram_basic`
-- `instagram_content_publish`
+
+El flujo Facebook Page usa:
+
+```txt
+https://www.facebook.com/{META_GRAPH_VERSION}/dialog/oauth
+```
+
+con `client_id=META_APP_ID`.
+
+El codigo acepta nombres legacy de Instagram al evaluar permisos ya concedidos, pero no los solicita en OAuth salvo con el flag legacy anterior.
 
 Algunos permisos pueden requerir App Review, verificacion de negocio o configuracion adicional en Meta Developers.
 
@@ -94,14 +188,58 @@ Algunos permisos pueden requerir App Review, verificacion de negocio o configura
 
 En `BackOffice > Marketing > Meta`:
 
-1. Pulsa `Conectar Meta`.
-2. Autoriza con un usuario que gestione la Page.
-3. Pulsa `Cargar Pages`.
-4. Selecciona la Facebook Page de InmoRadar.
-5. Guarda la Page. El sistema detecta `instagram_business_account` si existe.
-6. Usa `Probar conexion` antes de publicar.
+0. En Vercel Preview, entra primero al BackOffice pegando `ADMIN_IMPORT_TOKEN` en ese mismo hostname de Preview. La pagina HTML puede responder `200`, pero `/api/admin` y `/api/meta/status` devuelven `401` hasta que el token admin queda guardado en `sessionStorage` para ese origen.
+1. Pulsa `Conectar Instagram`.
+2. Autoriza con un usuario que gestione la cuenta profesional de Instagram.
+3. Vuelve a `BackOffice > Marketing > Meta`.
+4. Usa `Estado` o `Probar conexion` antes de publicar en Instagram.
+5. Solo cuando la app tenga permisos Page disponibles, pulsa `Conectar Facebook Page`.
+6. Pulsa `Cargar Pages`, selecciona la Facebook Page de InmoRadar y guarda la Page.
 
 El endpoint nunca devuelve tokens al cliente. La lista de Pages se sanea y solo muestra id, nombre, tareas/permisos e Instagram vinculado.
+
+## Spike organica
+
+Endpoints exactos:
+
+- `GET /api/meta/oauth/start?target=instagram`: inicia Instagram Login y redirige a `https://www.instagram.com/accounts/login/` con `platform_app_id=INSTAGRAM_APP_ID`; el parametro `next` apunta a `/oauth/authorize/third_party/`.
+- `GET /api/meta/oauth/start?target=facebook`: inicia Facebook Login y redirige a `https://www.facebook.com/{META_GRAPH_VERSION}/dialog/oauth` con `META_APP_ID`.
+- `GET /api/meta/oauth/callback`: recibe `code`, intercambia token, detecta Pages disponibles y guarda la conexion en `marketing_meta_connections`.
+- `GET /api/meta/status`: protegido por `ADMIN_IMPORT_TOKEN`; devuelve conexion, permisos, Page, Instagram, ultimo intento y ultimo error sin tokens.
+- `POST /api/meta/publish-test-facebook`: protegido por `ADMIN_IMPORT_TOKEN`; publica el test organico en la Page.
+- `POST /api/meta/publish-test-instagram`: protegido por `ADMIN_IMPORT_TOKEN`; crea media container y publica el test organico en Instagram.
+
+Scopes OAuth por defecto:
+
+```txt
+instagram_business_basic,instagram_business_content_publish
+```
+
+Scopes OAuth del flujo separado de Facebook Page:
+
+```txt
+pages_show_list,pages_read_engagement,pages_manage_posts
+```
+
+Copy Facebook:
+
+```txt
+Estamos probando la publicacion automatica de InmoRadar. InmoRadar ayuda a analizar anuncios inmobiliarios antes de contactar.
+```
+
+Link:
+
+```txt
+https://www.inmoradar.app
+```
+
+Caption Instagram:
+
+```txt
+Probando publicacion automatica de InmoRadar. Analiza pisos antes de contactar. Mas informacion en inmoradar.app
+```
+
+Imagen de prueba: `META_TEST_IMAGE_URL` si existe; si no, `https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg`.
 
 ## Publicacion Facebook
 
@@ -121,13 +259,42 @@ Registra `external_post_id`, `published_url` si Meta lo devuelve o se puede cons
 
 ## Publicacion Instagram
 
-Instagram usa Content Publishing API:
+Instagram usa Content Publishing API con Instagram Login:
 
 1. crea media container con `image_url` publica y caption;
 2. publica el container;
 3. intenta recuperar `permalink`.
 
-Instagram requiere una cuenta Business/Creator vinculada a la Page y una imagen publica. Si falta imagen publica o cuenta de Instagram, el post queda `failed` o `skipped`; no se publica contenido roto.
+El flujo Instagram usa endpoints `graph.instagram.com/{INSTAGRAM_GRAPH_VERSION}` y un token de usuario de Instagram. Requiere una cuenta Business/Creator, permisos concedidos y una imagen publica. Si falta imagen publica o cuenta de Instagram, el post queda `failed` o `skipped`; no se publica contenido roto.
+
+Antes de publicar, el backend llama a:
+
+```txt
+GET https://graph.instagram.com/{INSTAGRAM_GRAPH_VERSION}/me?fields=id,username,account_type,user_id
+```
+
+con el token de Instagram Login. Ese diagnostico confirma el usuario que Meta reconoce para el token, y se guarda/loguea sin tokens como `instagram_profile`. Si Meta devuelve `user_id`, se prefiere ese valor como `instagram_business_account_id` operativo; si no, se conserva `id`.
+
+Por defecto, la publicacion usa el alias del token:
+
+```txt
+POST https://graph.instagram.com/{INSTAGRAM_GRAPH_VERSION}/me/media
+POST https://graph.instagram.com/{INSTAGRAM_GRAPH_VERSION}/me/media_publish
+```
+
+Tras crear el media container, el backend registra el `creation_id`, espera antes de publicar y reintenta `media_publish` solo si Instagram indica que el media aun no esta listo (`code=9007`, `error_subcode=2207027`, `Media ID is not available` o `not ready for publishing`). Los intentos usan esperas limitadas de 2s, 4s y 6s. Si se agotan, `last_error` queda como `meta_instagram_publish_failed_400:publish_media_container:media_not_ready_after_retries` y el `meta_response` conserva el diagnostico saneado sin tokens.
+
+Esto evita mezclar el asset ID visible en Business Settings con el ID app-scoped de Instagram Login. El `id` devuelto por Instagram Login en `POST https://api.instagram.com/oauth/access_token` o por `GET /me` puede no coincidir con el asset ID visible en Business Settings o con el ID de Instagram conectado a una Page. Por ejemplo, si el callback o `/me` devuelve `26828053596835680`, ese es un ID del token de Instagram Login; `1784143546309305` puede seguir apareciendo como asset ID en Business Settings o como `user_id` si Meta lo devuelve en `/me`.
+
+Si Meta exige publicar contra un ID explicito, configura en Vercel:
+
+```env
+INSTAGRAM_PUBLISH_ACCOUNT_ID=
+```
+
+Con esa variable, el backend mantiene el diagnostico `GET /me`, pero crea y publica contenedores en `/{INSTAGRAM_PUBLISH_ACCOUNT_ID}/media` y `/{INSTAGRAM_PUBLISH_ACCOUNT_ID}/media_publish`.
+
+La `image_url` de Instagram debe ser HTTPS publica y no depender de un Preview de Vercel protegido. Si no se configura `META_TEST_IMAGE_URL`, el test usa `https://www.inmoradar.app/assets/inmoradar-brand-mark.jpg`.
 
 Ejemplo UTM:
 
@@ -229,6 +396,7 @@ Rollback de datos:
 
 ## Troubleshooting
 
+- `401 unauthorized` en `/api/meta/status` o `/api/admin`: falta `ADMIN_IMPORT_TOKEN` en la sesion del BackOffice para ese host. En Preview hay que pegar el token otra vez porque `sessionStorage` no se comparte con produccion ni con otros dominios `*.vercel.app`. No significa que OAuth haya fallado; significa que el panel no esta autorizado para leer el estado.
 - `missing_permissions:*`: faltan permisos o App Review.
 - `missing_facebook_page_id`: no se ha seleccionado Page.
 - `missing_instagram_business_account_id`: la Page no tiene Instagram profesional vinculado o no fue detectado.

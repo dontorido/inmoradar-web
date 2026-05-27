@@ -260,6 +260,7 @@ const state = {
     pages: [],
     summary: {},
     env: {},
+    organic: null,
     currentPostId: "",
     lastPublication: null,
     manualNotice: ""
@@ -338,11 +339,16 @@ const els = {
   metaRefresh: document.querySelector("[data-meta-refresh]"),
   metaTest: document.querySelector("[data-meta-test]"),
   metaConnect: document.querySelector("[data-meta-connect]"),
+  metaConnectFacebook: document.querySelector("[data-meta-connect-facebook]"),
   metaDisconnect: document.querySelector("[data-meta-disconnect]"),
   metaLoadPages: document.querySelector("[data-meta-load-pages]"),
   metaGenerateNext: document.querySelector("[data-meta-generate-next]"),
   metaPause: document.querySelector("[data-meta-pause]"),
   metaNotice: document.querySelector("[data-meta-notice]"),
+  metaOrganicRefresh: document.querySelector("[data-meta-organic-refresh]"),
+  metaOrganicStatus: document.querySelector("[data-meta-organic-status]"),
+  metaOrganicPublishFacebook: document.querySelector("[data-meta-organic-publish-facebook]"),
+  metaOrganicPublishInstagram: document.querySelector("[data-meta-organic-publish-instagram]"),
   metaConnection: document.querySelector("[data-meta-connection]"),
   metaPages: document.querySelector("[data-meta-pages]"),
   metaPageForm: document.querySelector("[data-meta-page-form]"),
@@ -853,6 +859,24 @@ async function api(path, options = {}) {
   return payload;
 }
 
+function isAdminUnauthorizedError(error) {
+  return error?.status === 401 || error?.payload?.error === "unauthorized" || /unauthorized/i.test(String(error?.message || ""));
+}
+
+function adminPreviewAuthMessage() {
+  return "Sesion admin no autorizada en este Preview. Entra con ADMIN_IMPORT_TOKEN en este mismo host y vuelve a cargar Estado.";
+}
+
+function metaOrganicStatusErrorPayload(error) {
+  const authError = isAdminUnauthorizedError(error);
+  return {
+    ok: false,
+    status: authError ? "admin_unauthorized" : "error",
+    auth_error: authError,
+    last_error: authError ? adminPreviewAuthMessage() : String(error?.message || "meta_status_failed")
+  };
+}
+
 function adminAlertDismissKey(id) {
   return `${ALERT_DISMISS_PREFIX}${id}`;
 }
@@ -1065,9 +1089,9 @@ function statusTone(value) {
   if (["degraded"].includes(normalized)) return "warn";
   if (["down"].includes(normalized)) return "bad";
   if (["unknown"].includes(normalized)) return "draft";
-  if (["published", "active", "on_trial", "connected", "manually_published", "included", "pass", "ok", "indexable"].includes(normalized)) return "published";
+  if (["published", "success", "active", "on_trial", "connected", "manually_published", "included", "pass", "ok", "indexable"].includes(normalized)) return "published";
   if (["ready", "ready_to_publish", "index", "paid", "scheduled", "pending_review"].includes(normalized)) return "ready";
-  if (["cancelled", "expired", "needs_reauth", "needs_connection", "noindex", "unpaid", "payment_failed", "failed", "error", "disconnected", "excluded", "blocked", "fail"].includes(normalized)) return "bad";
+  if (["cancelled", "expired", "needs_reauth", "needs_connection", "admin_unauthorized", "noindex", "unpaid", "payment_failed", "failed", "error", "disconnected", "excluded", "blocked", "fail"].includes(normalized)) return "bad";
   if (["past_due", "publishing"].includes(normalized)) return "warn";
   if (["draft", "image_pending", "needs_review", "manual", "skipped"].includes(normalized)) return "draft";
   if (["archived"].includes(normalized)) return "muted";
@@ -2825,6 +2849,7 @@ function metaStatusLabel(value) {
     needs_instagram: "Sin Instagram",
     needs_permissions: "Faltan permisos",
     needs_reauth: "Reautorizar",
+    admin_unauthorized: "Admin no autorizado",
     connected: "Conectado",
     expired: "Token expirado",
     error: "Error",
@@ -2832,10 +2857,40 @@ function metaStatusLabel(value) {
     queued: "Queued",
     publishing: "Publicando",
     published: "Publicado",
+    success: "Validado",
     failed: "Error",
     skipped: "Omitido"
   };
   return map[String(value || "").toLowerCase()] || value || "-";
+}
+
+function isMetaInstagramConnected(payload = state.meta.organic || {}) {
+  const c = payload.connection || state.meta.connection || {};
+  return (
+    (payload.status || c.status) === "connected" &&
+    Boolean(payload.instagram_account_id || c.instagram_business_account_id) &&
+    !((payload.missing_scopes || c.missing_scopes || []).length)
+  );
+}
+
+function isMetaInstagramPublishingValidated(payload = state.meta.organic || {}) {
+  const last = payload.last_attempt || null;
+  const response = last?.meta_response || {};
+  return (
+    last?.platform === "instagram" &&
+    last?.status === "published" &&
+    Boolean(last.external_post_id || response.published_media_id || response.id)
+  );
+}
+
+function updateMetaConnectLabels(payload = state.meta.organic || {}) {
+  const connected = isMetaInstagramConnected(payload);
+  if (els.metaConnect) {
+    els.metaConnect.textContent = connected ? "Reconectar Instagram" : "Conectar Instagram";
+    els.metaConnect.title = connected
+      ? "Reautoriza Instagram si cambian permisos o expira el token."
+      : "Abre Meta para autorizar Instagram Business.";
+  }
 }
 
 function renderMeta(payload = {}) {
@@ -2850,6 +2905,7 @@ function renderMeta(payload = {}) {
   state.meta.manualNotice = payload.manual_mode_notice || "";
   renderMetaNotice(payload);
   renderMetaConnection();
+  renderMetaOrganicStatus();
   renderMetaSettings();
   renderMetaSummary();
   renderMetaPosts();
@@ -2893,6 +2949,7 @@ function renderMetaConnection() {
     <div class="admin-linkedin-status-row"><span>Facebook Page</span><strong>${escapeHtml(c.facebook_page_name || env.facebook_page_name || "-")}</strong></div>
     <div class="admin-linkedin-status-row"><span>Page ID</span><code>${escapeHtml(c.facebook_page_id || "-")}</code></div>
     <div class="admin-linkedin-status-row"><span>Instagram ID</span><code>${escapeHtml(c.instagram_business_account_id || "-")}</code></div>
+    <div class="admin-linkedin-status-row"><span>Facebook org&aacute;nico</span>${chip(c.facebook_publish_available ? "Disponible" : "Pendiente permisos Page", c.facebook_publish_available ? "published" : "draft")}</div>
     <div class="admin-linkedin-status-row"><span>Autopublisher</span>${chip(autopublisher.enabled ? "Activo" : "Pausado", autopublisher.enabled ? "published" : "draft")}</div>
     <div class="admin-linkedin-status-row"><span>Frecuencia</span><strong>${escapeHtml(`${autopublisher.frequency_days || 1} dia(s)`)}</strong></div>
     <div class="admin-linkedin-status-row"><span>Proximo intento</span><strong>${escapeHtml(formatDate(autopublisher.next_publication))}</strong></div>
@@ -2901,6 +2958,36 @@ function renderMetaConnection() {
     <div class="admin-linkedin-status-row"><span>Ultimo error</span><strong>${escapeHtml(c.last_error || "-")}</strong></div>
     <div class="admin-linkedin-status-row"><span>Ultima publicacion</span><strong>${escapeHtml(formatDate(state.meta.lastPublication?.published_at))}</strong></div>
     <div class="admin-linkedin-status-row"><span>Graph API</span><strong>${escapeHtml(env.graph_version || "-")}</strong></div>
+  `;
+}
+
+function renderMetaOrganicStatus(payload = state.meta.organic || {}) {
+  if (!els.metaOrganicStatus) return;
+  const c = payload.connection || state.meta.connection || {};
+  const env = payload.organic_env || {};
+  const last = payload.last_attempt || null;
+  const storage = payload.storage || {};
+  const response = last?.meta_response || {};
+  const instagramPublishing = payload.instagram_publishing || {};
+  const facebookPublishing = payload.facebook_page_publishing || {};
+  const instagramConnected = isMetaInstagramConnected(payload);
+  const instagramPublishingValidated = instagramPublishing.validated === true || isMetaInstagramPublishingValidated(payload);
+  const lastAttemptDate = last?.published_at || last?.created_at;
+  const publishedMediaId = instagramPublishing.published_media_id || response.published_media_id || last?.external_post_id || response.id || "";
+  updateMetaConnectLabels(payload);
+  els.metaOrganicStatus.innerHTML = `
+    <div class="admin-linkedin-status-row"><span>Instagram OAuth</span>${chip(instagramConnected ? "Conectado" : metaStatusLabel(payload.status || c.status || "disconnected"), instagramConnected ? "published" : statusTone(payload.status || c.status))}</div>
+    <div class="admin-linkedin-status-row"><span>Instagram publishing</span>${chip(instagramPublishingValidated ? "Validado" : "Pendiente test manual", instagramPublishingValidated ? "published" : "draft")}</div>
+    <div class="admin-linkedin-status-row"><span>Facebook Page</span>${chip(facebookPublishing.available || c.facebook_publish_available ? "Disponible" : "Pendiente permisos Page", facebookPublishing.available || c.facebook_publish_available ? "published" : "draft")}</div>
+    <div class="admin-linkedin-status-row"><span>Facebook Page configurada</span><strong>${escapeHtml(payload.facebook_page_name || c.facebook_page_name || "-")}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Page ID</span><code>${escapeHtml(payload.facebook_page_id || c.facebook_page_id || "-")}</code></div>
+    <div class="admin-linkedin-status-row"><span>Instagram ID</span><code>${escapeHtml(payload.instagram_account_id || c.instagram_business_account_id || "-")}</code></div>
+    <div class="admin-linkedin-status-row"><span>Permisos concedidos</span><strong>${escapeHtml((payload.permissions || c.scopes || []).join(", ") || "-")}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Permisos faltantes</span><strong>${escapeHtml((payload.missing_scopes || c.missing_scopes || []).join(", ") || "-")}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Ultimo intento</span><strong>${escapeHtml(last ? `${last.platform || "-"} - ${last.status === "published" ? "success" : metaStatusLabel(last.status)} - ${formatDate(lastAttemptDate)}` : "-")}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Published media ID</span><code>${escapeHtml(publishedMediaId || "-")}</code></div>
+    <div class="admin-linkedin-status-row"><span>Ultimo error</span><strong>${escapeHtml(payload.last_error || last?.error_message || storage.connection_error || storage.posts_error || "-")}</strong></div>
+    <div class="admin-linkedin-status-row"><span>Redirect URI</span><code>${escapeHtml(env.redirect_uri || "-")}</code></div>
   `;
 }
 
@@ -3020,8 +3107,13 @@ function collectMetaPost() {
 
 async function loadMeta() {
   if (!els.metaConnection) return;
-  const payload = await api("/api/admin?resource=meta");
+  const [payload, organic] = await Promise.all([
+    api("/api/admin?resource=meta"),
+    api("/api/meta/status").catch((error) => metaOrganicStatusErrorPayload(error))
+  ]);
+  state.meta.organic = organic;
   renderMeta(payload);
+  renderMetaOrganicStatus(organic);
 }
 
 async function saveMetaSettings() {
@@ -3043,11 +3135,12 @@ async function pauseMetaAutopublisher() {
   showStatus("Meta Autopublisher pausado.", "good");
 }
 
-async function connectMeta() {
-  const payload = await api("/api/admin?resource=meta/connect");
-  if (payload.state) sessionStorage.setItem("inmoradar_meta_oauth_state", payload.state);
-  if (!payload.url) throw new Error("meta_oauth_url_missing");
-  window.location.href = payload.url;
+async function connectMeta(target = "instagram") {
+  const normalizedTarget = target === "facebook" ? "facebook" : "instagram";
+  const url = `/api/meta/oauth/start?target=${encodeURIComponent(normalizedTarget)}`;
+  console.info(`[Meta Organic OAuth] target=${normalizedTarget} url=${url}`);
+  showStatus(`Conectando Meta (${normalizedTarget})...`);
+  window.location.href = url;
 }
 
 async function disconnectMeta() {
@@ -3124,8 +3217,44 @@ async function runMetaAction(action, id = state.meta.currentPostId) {
   showStatus(payload.ok === false ? (payload.error || "Meta no publicado.") : "Accion Meta completada.", payload.ok === false ? "bad" : "good");
 }
 
+async function loadMetaOrganicStatus() {
+  const payload = await api("/api/meta/status").catch((error) => metaOrganicStatusErrorPayload(error));
+  state.meta.organic = payload;
+  if (payload.connection) state.meta.connection = payload.connection;
+  renderMetaOrganicStatus(payload);
+  showStatus(payload.auth_error ? payload.last_error : "Estado de Meta organico actualizado.", payload.auth_error ? "bad" : "good");
+}
+
+async function publishMetaOrganicTest(platform) {
+  const endpoint = platform === "instagram" ? "/api/meta/publish-test-instagram" : "/api/meta/publish-test-facebook";
+  showStatus(`Publicando test ${platform === "instagram" ? "Instagram" : "Facebook"}...`);
+  const payload = await api(endpoint, { method: "POST", body: JSON.stringify({}) });
+  await loadMeta();
+  const externalId = payload.result?.external_post_id || payload.post?.external_post_id || "";
+  showStatus(externalId ? `Test Meta publicado: ${externalId}` : "Test Meta publicado.", "good");
+}
+
 async function handleMetaOAuthCallbackFromUrl() {
   const params = new URLSearchParams(window.location.search || "");
+  const metaOAuth = params.get("meta_oauth");
+  if (metaOAuth) {
+    const error = params.get("meta_error") || "";
+    params.delete("meta_oauth");
+    params.delete("meta_error");
+    params.delete("meta_status");
+    const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash || ""}`;
+    window.history.replaceState({}, document.title, next);
+    if (!state.token) {
+      const authPayload = metaOrganicStatusErrorPayload({ status: 401, message: "unauthorized" });
+      state.meta.organic = authPayload;
+      renderMetaOrganicStatus(authPayload);
+      showStatus(metaOAuth === "error" ? `Meta OAuth: ${error || "error"}` : adminPreviewAuthMessage(), metaOAuth === "error" ? "bad" : "neutral");
+      return;
+    }
+    await loadMeta();
+    showStatus(metaOAuth === "error" ? `Meta OAuth: ${error || "error"}` : "Meta conectado. Revisa Page, Instagram y permisos.", metaOAuth === "error" ? "bad" : "good");
+    return;
+  }
   const code = params.get("code");
   const stateParam = params.get("state");
   if (!code || !state.token) return;
@@ -6154,7 +6283,10 @@ if (els.metaTest) {
   els.metaTest.addEventListener("click", () => testMetaConnection().catch((error) => showStatus(error.message, "bad")));
 }
 if (els.metaConnect) {
-  els.metaConnect.addEventListener("click", () => connectMeta().catch((error) => showStatus(error.message, "bad")));
+  els.metaConnect.addEventListener("click", () => connectMeta(els.metaConnect.dataset.metaConnectTarget || "instagram").catch((error) => showStatus(error.message, "bad")));
+}
+if (els.metaConnectFacebook) {
+  els.metaConnectFacebook.addEventListener("click", () => connectMeta(els.metaConnectFacebook.dataset.metaConnectTarget || "facebook").catch((error) => showStatus(error.message, "bad")));
 }
 if (els.metaDisconnect) {
   els.metaDisconnect.addEventListener("click", () => disconnectMeta().catch((error) => showStatus(error.message, "bad")));
@@ -6167,6 +6299,15 @@ if (els.metaGenerateNext) {
 }
 if (els.metaPause) {
   els.metaPause.addEventListener("click", () => pauseMetaAutopublisher().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.metaOrganicRefresh) {
+  els.metaOrganicRefresh.addEventListener("click", () => loadMetaOrganicStatus().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.metaOrganicPublishFacebook) {
+  els.metaOrganicPublishFacebook.addEventListener("click", () => publishMetaOrganicTest("facebook").catch((error) => showStatus(error.message, "bad")));
+}
+if (els.metaOrganicPublishInstagram) {
+  els.metaOrganicPublishInstagram.addEventListener("click", () => publishMetaOrganicTest("instagram").catch((error) => showStatus(error.message, "bad")));
 }
 if (els.metaSettingsForm) {
   els.metaSettingsForm.addEventListener("submit", (event) => {

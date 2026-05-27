@@ -131,6 +131,8 @@ Todos pasan por `api/admin.js` y requieren `ADMIN_IMPORT_TOKEN`.
 - `GET /api/admin?resource=viraliza/performance`: resume acciones, replies, likes, visitas, installs, top creadores, plataformas, tipos de comentario y recomendaciones.
 - `GET /api/admin?resource=viraliza/learning`: devuelve aprendizaje semanal con winners, losers, insights y siguientes acciones.
 - `POST /api/admin?resource=viraliza/actions`: registra acciones/resultados manuales sobre creadores.
+- `GET/POST /api/admin?resource=meta...`: BackOffice Meta para conexion, Pages, ajustes y cola existente.
+- `GET/POST /api/meta/...`: spike organica protegida para OAuth, estado y posts de prueba en Facebook/Instagram, sin Ads API.
 - `GET /api/admin?resource=social-video/runway-config`: configuracion publica de Runway para UI.
 - `GET/POST /api/admin?resource=social-video/render`: estima, lanza o consulta jobs Runway.
 - `GET /api/admin?resource=social-video/render-content`: descarga proxy del clip resultante para usarlo en canvas.
