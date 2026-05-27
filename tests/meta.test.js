@@ -1293,12 +1293,25 @@ test("BackOffice Social conecta Instagram con target explicito y sin endpoint le
   assert.match(adminHtml, /data-admin-subsection-button="marketing-social"/);
   assert.match(adminHtml, /data-social-summary/);
   assert.match(adminHtml, /data-social-channels/);
+  assert.match(adminHtml, /data-social-queue-platform/);
+  assert.match(adminHtml, /data-social-queue-rows/);
+  assert.match(adminHtml, /data-social-preview/);
   assert.match(adminHtml, /data-social-settings/);
   assert.match(adminHtml, /data-social-metrics/);
   assert.match(adminHtml, /data-social-logs/);
+  assert.match(adminHtml, /Cola Social/);
+  assert.match(adminHtml, /Vista previa del post/);
+  assert.doesNotMatch(adminHtml, /Cola Meta/);
+  assert.doesNotMatch(adminHtml, /Preview y publicaci/);
   assert.doesNotMatch(adminHtml, />Conectar Instagram<\/button>/);
   assert.match(adminJs, /data-meta-connect-target="instagram"[^>]*>Reconectar Instagram<\/button>/);
   assert.match(adminJs, /data-meta-connect-facebook data-meta-connect-target="facebook"[^>]*>Conectar Facebook Page<\/button>/);
+  assert.match(adminJs, /function renderSocialQueue/);
+  assert.match(adminJs, /function renderSocialPreview/);
+  assert.match(adminJs, /function runSocialManualPublish/);
+  assert.match(adminJs, /window\.confirm\(`Publicar ahora manualmente en \$\{destination\}\?`\)/);
+  assert.match(adminJs, /Publicar ahora en \$\{escapeHtml\(socialChannelLabel\(post\.channel\)\)\}/);
+  assert.match(adminJs, /socialChannelIsValidated\(post\.channel\)/);
   assert.doesNotMatch(adminHtml, />Conectar Meta<\/button>/);
   assert.match(adminJs, /\/api\/meta\/oauth\/start\?target=/);
   assert.match(adminJs, /dataset\.metaConnectTarget \|\| "instagram"/);
@@ -1349,6 +1362,17 @@ test("Social status resume canales sin activar autopublisher ni exponer secretos
       status: "success"
     }
   };
+  const queuedFacebookPost = {
+    id: "post_fb_1",
+    source_type: "seo_landing",
+    platform: "facebook",
+    status: "queued",
+    caption: "Facebook draft pendiente de permisos",
+    created_at: "2026-05-27T10:00:00.000Z",
+    scheduled_for: "2026-05-27T12:00:00.000Z",
+    error_message: null,
+    meta_response: null
+  };
 
   global.fetch = async (url, options = {}) => {
     const href = String(url);
@@ -1364,7 +1388,7 @@ test("Social status resume canales sin activar autopublisher ni exponer secretos
       return { ok: true, status: 200, text: async () => JSON.stringify([successfulInstagramPost]) };
     }
     if (href.includes("/marketing_meta_posts?")) {
-      return { ok: true, status: 200, text: async () => JSON.stringify([successfulInstagramPost]) };
+      return { ok: true, status: 200, text: async () => JSON.stringify([successfulInstagramPost, queuedFacebookPost]) };
     }
     if (href.includes("/meta_autopublisher_runs?")) {
       return { ok: true, status: 200, text: async () => JSON.stringify([]) };
@@ -1399,6 +1423,10 @@ test("Social status resume canales sin activar autopublisher ni exponer secretos
     assert.equal(result.payload.autopublisher.enabled, false);
     assert.equal(result.payload.autopublisher.reason, "autopost_disabled");
     assert.equal(result.payload.summary.publishing_validated_channels, 1);
+    assert.equal(result.payload.summary.queued_posts, 1);
+    assert.equal(result.payload.posts.some((post) => post.channel === "instagram" && post.published_media_id === "ig-media-id"), true);
+    assert.equal(result.payload.posts.some((post) => post.channel === "facebook" && post.status === "queued"), true);
+    assert.equal(result.payload.summary.cards.some((card) => card.key === "autopublisher_global" && card.value === "OFF"), true);
     const serialized = JSON.stringify(result.payload);
     assert.equal(serialized.includes("secret-token"), false);
     assert.equal(serialized.includes("access_token=secret-token"), false);

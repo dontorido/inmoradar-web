@@ -5267,6 +5267,66 @@
   border-bottom: 1px solid rgba(9, 9, 11, .1);
 }
 
+.admin-social-filter {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  margin: 0;
+  min-width: 220px;
+}
+
+.admin-social-filter span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.admin-social-queue-table {
+  min-width: 920px;
+}
+
+.admin-social-queue-table tr[data-social-queue-post-id] {
+  cursor: pointer;
+}
+
+.admin-social-queue-table tr.is-selected {
+  background: var(--radar-50);
+}
+
+.admin-social-preview {
+  padding: 0 0 18px;
+}
+
+.admin-social-preview-body {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, .9fr);
+}
+
+.admin-social-preview-copy {
+  display: grid;
+  gap: 8px;
+  border-left: 1px solid rgba(9, 9, 11, .1);
+  padding-left: 16px;
+}
+
+.admin-social-preview-copy span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.admin-social-preview-copy p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .admin-social-metrics-table {
   min-width: 1240px;
 }
@@ -5324,6 +5384,17 @@
   .admin-linkedin-card-head,
   .admin-linkedin-status-row {
     grid-template-columns: 1fr;
+  }
+
+  .admin-social-preview-body {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-social-preview-copy {
+    border-left: 0;
+    border-top: 1px solid rgba(9, 9, 11, .1);
+    padding-left: 0;
+    padding-top: 14px;
   }
 
   .admin-linkedin-card-head {

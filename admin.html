@@ -513,7 +513,7 @@
               </div>
               <div class="admin-row-actions">
                 <button class="admin-button tiny ghost" type="button" data-social-refresh>Actualizar Social</button>
-                <button class="admin-button tiny ghost" type="button" data-meta-organic-refresh>Ver estado Meta</button>
+                <button class="admin-button tiny ghost" type="button" data-meta-organic-refresh>Actualizar Instagram/Facebook</button>
               </div>
             </div>
             <section class="admin-social-section" aria-label="Resumen Social">
@@ -534,14 +534,53 @@
             </section>
             <section class="admin-social-section" aria-label="Parametros">
               <div class="admin-linkedin-card-head">
-                <span>03 &middot; Par&aacute;metros</span>
+                <span>03 &middot; Cola Social</span>
+                <label class="admin-social-filter">
+                  <span>Canal</span>
+                  <select data-social-queue-platform>
+                    <option value="all">Todos</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="facebook">Facebook</option>
+                    <option value="linkedin">LinkedIn</option>
+                    <option value="tiktok">TikTok</option>
+                  </select>
+                </label>
+              </div>
+              <div class="admin-table-wrap">
+                <table class="admin-table admin-social-queue-table">
+                  <thead>
+                    <tr>
+                      <th>Canal</th>
+                      <th>Fecha</th>
+                      <th>Estado</th>
+                      <th>Formato</th>
+                      <th>Post</th>
+                      <th>Published ID</th>
+                    </tr>
+                  </thead>
+                  <tbody data-social-queue-rows></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="admin-social-section" aria-label="Vista previa del post">
+              <div class="admin-linkedin-card-head">
+                <span>04 &middot; Vista previa del post</span>
+                <strong>Acci&oacute;n manual</strong>
+              </div>
+              <div class="admin-social-preview" data-social-preview>
+                <p class="admin-empty-state">Selecciona una publicaci&oacute;n de la cola para ver el destino y las acciones disponibles.</p>
+              </div>
+            </section>
+            <section class="admin-social-section" aria-label="Parametros">
+              <div class="admin-linkedin-card-head">
+                <span>05 &middot; Par&aacute;metros</span>
                 <strong>Solo lectura en esta fase</strong>
               </div>
               <div class="admin-social-settings-grid" data-social-settings></div>
             </section>
             <section class="admin-social-section" aria-label="Metricas">
               <div class="admin-linkedin-card-head">
-                <span>04 &middot; M&eacute;tricas</span>
+                <span>06 &middot; M&eacute;tricas</span>
                 <strong>Sin datos inventados</strong>
               </div>
               <div class="admin-table-wrap">
@@ -583,7 +622,7 @@
             </section>
             <section class="admin-social-section" aria-label="Logs">
               <div class="admin-linkedin-card-head">
-                <span>05 &middot; Logs</span>
+                <span>07 &middot; Logs</span>
                 <strong>Sin tokens ni secretos</strong>
               </div>
               <div class="admin-table-wrap">

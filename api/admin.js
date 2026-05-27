@@ -1888,6 +1888,8 @@ function socialPostPreview(post = {}, channel = post.platform || "linkedin") {
     status: post.status || "draft",
     format: post.image_url ? "image" : channel === "linkedin" ? "text" : "link",
     caption_preview: socialSafeText(caption, 180),
+    image_url: post.image_url ? socialSafeText(post.image_url, 500) : null,
+    source_url: post.source_url || post.destination_url || null,
     published_media_id: socialPublishedMediaId(post),
     error_message: post.error_message ? socialSafeText(post.error_message, 300) : null
   };
@@ -2103,8 +2105,10 @@ function buildSocialSummary({ channels = {}, metaPosts = [], linkedinPosts = [],
   const publishedStatuses = new Set(["published", "manually_published"]);
   const scheduledStatuses = new Set(["scheduled", "queued"]);
   const pendingStatuses = new Set(["pending_review", "draft", "image_pending", "ready"]);
+  const queuedStatuses = new Set(["scheduled", "queued", "pending_review", "draft", "image_pending", "ready"]);
   const connectedChannels = Object.values(channels).filter((channel) => ["connected", "validated"].includes(channel.status)).length;
   const validatedChannels = Object.values(channels).filter((channel) => channel.status === "validated" || channel.publishing === "validated").length;
+  const queuedPosts = allPosts.filter((post) => queuedStatuses.has(post.status)).length;
   const published7d = allPosts.filter((post) => publishedStatuses.has(post.status) && isRecentIso(socialPostDate(post), 7, now)).length;
   const scheduled = allPosts.filter((post) => scheduledStatuses.has(post.status)).length;
   const pendingReview = allPosts.filter((post) => pendingStatuses.has(post.status)).length;
@@ -2112,6 +2116,7 @@ function buildSocialSummary({ channels = {}, metaPosts = [], linkedinPosts = [],
   return {
     connected_channels: connectedChannels,
     publishing_validated_channels: validatedChannels,
+    queued_posts: queuedPosts,
     published_posts_7d: published7d,
     scheduled_posts: scheduled,
     pending_review_posts: pendingReview,
@@ -2123,12 +2128,14 @@ function buildSocialSummary({ channels = {}, metaPosts = [], linkedinPosts = [],
     cards: [
       { key: "connected_channels", label: "Canales conectados", value: connectedChannels, hint: "Instagram, Facebook, LinkedIn, TikTok" },
       { key: "validated_channels", label: "Validados para publicar", value: validatedChannels, hint: "Manual u OAuth probado" },
+      { key: "queued_posts", label: "Posts en cola", value: queuedPosts, hint: queuedPosts ? "Revisar Cola Social" : "Sin datos todavia" },
       { key: "published_posts_7d", label: "Publicados 7d", value: published7d, hint: "Datos reales disponibles" },
       { key: "scheduled_posts", label: "Programados", value: scheduled, hint: scheduled ? "Revisar cola" : "Sin datos todavia" },
       { key: "pending_review_posts", label: "Pendientes revision", value: pendingReview, hint: pendingReview ? "Necesitan aprobacion" : "Sin datos todavia" },
       { key: "errors_7d", label: "Errores 7d", value: errors7d, hint: errors7d ? "Revisar logs" : "Sin datos todavia" },
       { key: "followers_total", label: "Seguidores totales", value: "Pendiente integracion", hint: "No inventado" },
-      { key: "social_web_traffic", label: "Trafico social web", value: "Pendiente integracion", hint: "UTM futuro" }
+      { key: "social_web_traffic", label: "Trafico social web", value: "Pendiente integracion", hint: "UTM futuro" },
+      { key: "autopublisher_global", label: "Autopublisher global", value: "OFF", hint: "Sin scheduler ni cola automatica" }
     ]
   };
 }
