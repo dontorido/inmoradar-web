@@ -536,14 +536,86 @@ test("intercambio Instagram Login usa api.instagram.com y secreto Instagram", as
   const body = new URLSearchParams(calls[0].options.body);
   assert.equal(calls[0].url, "https://api.instagram.com/oauth/access_token");
   assert.equal(calls[0].options.method, "POST");
+  assert.equal(calls[0].options.headers["content-type"], "application/x-www-form-urlencoded");
   assert.equal(body.get("client_id"), IG_APP_ID);
   assert.equal(body.get("client_secret"), "instagram-app-secret");
   assert.equal(body.get("client_secret") === validEnv.META_APP_SECRET, false);
+  assert.equal(body.get("grant_type"), "authorization_code");
   assert.equal(body.get("redirect_uri"), "https://www.inmoradar.app/api/meta/oauth/callback");
+  assert.equal(body.get("code"), "ig-code");
   assert.match(calls[1].url, /^https:\/\/graph\.instagram\.com\/access_token\?/);
   assert.equal(token.access_token, "long-ig-token");
   assert.equal(token.user_id, "1784143546309305");
   assert.deepEqual(token.scopes, ["instagram_business_basic", "instagram_business_content_publish"]);
+});
+
+test("intercambio Instagram Login registra error 400 saneado sin secretos", async () => {
+  const code = "ig-code-secret-value";
+  const appSecret = "instagram-app-secret";
+  const accessToken = "EAAB" + "x".repeat(80);
+  const logs = [];
+  const originalError = console.error;
+  console.error = (message, ...args) => {
+    logs.push([message, ...args].map((entry) => String(entry)).join(" "));
+  };
+
+  try {
+    await assert.rejects(
+      () => exchangeInstagramAuthorizationCode({
+        code,
+        env: { ...validEnv, INSTAGRAM_APP_SECRET: appSecret },
+        fetchImpl: async (url, options = {}) => {
+          const body = new URLSearchParams(options.body);
+          assert.equal(url, "https://api.instagram.com/oauth/access_token");
+          assert.equal(options.method, "POST");
+          assert.equal(options.headers["content-type"], "application/x-www-form-urlencoded");
+          assert.equal(body.get("client_id"), IG_APP_ID);
+          assert.equal(body.get("client_secret"), appSecret);
+          assert.equal(body.get("grant_type"), "authorization_code");
+          assert.equal(body.get("redirect_uri"), validEnv.INSTAGRAM_REDIRECT_URI);
+          assert.equal(body.get("code"), code);
+          return {
+            ok: false,
+            status: 400,
+            text: async () => JSON.stringify({
+              error_type: "OAuthException",
+              error_message: `Invalid authorization code ${code} with secret ${appSecret}`,
+              error_code: 400,
+              access_token: accessToken,
+              refresh_token: "refresh-token-secret"
+            })
+          };
+        }
+      }),
+      (error) => {
+        assert.match(error.message, /^meta_instagram_token_failed_400:/);
+        assert.match(error.message, /Invalid authorization code \[redacted\] with secret \[redacted\]/);
+        assert.equal(error.message.includes(code), false);
+        assert.equal(error.message.includes(appSecret), false);
+        assert.equal(error.message.includes(accessToken), false);
+        return true;
+      }
+    );
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(logs.length, 1);
+  const logLine = logs[0];
+  assert.equal(logLine.includes(code), false);
+  assert.equal(logLine.includes(appSecret), false);
+  assert.equal(logLine.includes(accessToken), false);
+  const payload = JSON.parse(logLine.replace(/^\[Meta Instagram Token Exchange\]\s*/, ""));
+  assert.equal(payload.status, 400);
+  assert.equal(payload.error_type, "OAuthException");
+  assert.equal(payload.error_message, "Invalid authorization code [redacted] with secret [redacted]");
+  assert.equal(payload.error_code, 400);
+  assert.equal(payload.client_id, IG_APP_ID);
+  assert.equal(payload.redirect_uri, validEnv.INSTAGRAM_REDIRECT_URI);
+  assert.equal(payload.grant_type, "authorization_code");
+  assert.equal(payload.instagram_app_secret_present, true);
+  assert.match(payload.response_body, /"access_token":"\[redacted\]"/);
+  assert.match(payload.response_body, /"refresh_token":"\[redacted\]"/);
 });
 
 test("acepta scopes legacy de Instagram como equivalentes para status", () => {
