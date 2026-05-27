@@ -269,6 +269,76 @@ test("no publica si kill switch esta apagado", () => {
   assert.equal(decision.reason, "META_AUTOPOST_ENABLED=false");
 });
 
+test("Meta autopublisher desactivado sale antes de consultar tablas", async () => {
+  const previousFetch = global.fetch;
+  let fetchCalls = 0;
+  global.fetch = async (url) => {
+    fetchCalls += 1;
+    throw new Error(`unexpected_fetch:${String(url)}`);
+  };
+
+  try {
+    const result = await callAdminPostResource("meta/autopublisher/run", {}, {}, {
+      ...validEnv,
+      META_AUTOPOST_ENABLED: "false",
+      SUPABASE_URL: "https://supabase.test",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    });
+
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.payload.ok, true);
+    assert.equal(result.payload.skipped, true);
+    assert.equal(result.payload.reason, "autopost_disabled");
+    assert.equal(result.payload.status, "skipped");
+    assert.equal(result.payload.published_count, 0);
+    assert.equal(result.payload.failed_count, 0);
+    assert.equal(result.payload.error_message, "autopost_disabled");
+    assert.equal(fetchCalls, 0);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test("Meta autopublisher activado puede devolver table_missing", async () => {
+  const previousFetch = global.fetch;
+  const fetchCalls = [];
+  global.fetch = async (url, options = {}) => {
+    const href = String(url);
+    const method = options.method || "GET";
+    fetchCalls.push({ href, method });
+    if (href.includes("/meta_autopublisher_runs") && method === "POST") {
+      return { ok: true, status: 200, text: async () => JSON.stringify([{ id: "run_1" }]) };
+    }
+    if (href.includes("/marketing_meta_settings?")) {
+      return { ok: false, status: 404, text: async () => "marketing_meta_settings missing" };
+    }
+    if (href.includes("/meta_autopublisher_runs?id=eq.run_1") && method === "PATCH") {
+      return { ok: true, status: 200, text: async () => JSON.stringify([{ id: "run_1", status: "skipped" }]) };
+    }
+    throw new Error(`unexpected_fetch:${href}`);
+  };
+
+  try {
+    const result = await callAdminPostResource("meta/autopublisher/run", {}, {}, {
+      ...validEnv,
+      META_AUTOPOST_ENABLED: "true",
+      SUPABASE_URL: "https://supabase.test",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    });
+
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.payload.ok, true);
+    assert.equal(result.payload.skipped, true);
+    assert.equal(result.payload.reason, "table_missing");
+    assert.equal(result.payload.status, "skipped");
+    assert.equal(result.payload.error_message, "table_missing");
+    assert.equal(fetchCalls.some((call) => call.href.includes("/marketing_meta_settings?")), true);
+    assert.equal(fetchCalls.some((call) => call.href.includes("/marketing_meta_posts?")), false);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
 test("no publica si falta conexion", () => {
   const decision = shouldRunAutopublisher({
     posts: [],

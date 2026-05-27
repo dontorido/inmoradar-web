@@ -1884,6 +1884,19 @@ async function finishMetaRun(run, patch = {}) {
   }
 }
 
+function metaAutopublisherDisabledResult() {
+  return {
+    ok: true,
+    skipped: true,
+    reason: "autopost_disabled",
+    status: "skipped",
+    skipped_count: 1,
+    published_count: 0,
+    failed_count: 0,
+    error_message: "autopost_disabled"
+  };
+}
+
 async function listEligibleMetaLandings(limit = 50) {
   const params = new URLSearchParams({
     select: "id,slug,title,meta_title,meta_description,h1,city,template_type,status,index_status,quality_score,canonical_url,published_at,updated_at,last_generated_at,source_data_json",
@@ -2022,23 +2035,47 @@ async function publishMetaPostById(id) {
 }
 
 async function runMetaAutopublisherScheduler({ triggerType = "cron" } = {}) {
-  const run = await createMetaRun(triggerType, "multi");
-  const finish = (patch) => finishMetaRun(run, patch).then(() => patch);
+  const config = metaConfig(process.env);
+  if (!config.autopostEnabled) {
+    console.log("[Meta Autopublisher] skipped: autopost_disabled");
+    return metaAutopublisherDisabledResult();
+  }
+
   if (!hasSupabaseConfig()) {
     console.log("[Meta Autopublisher] skipped: supabase_not_configured");
-    return finish({ status: "skipped", skipped_count: 1, published_count: 0, failed_count: 0, error_message: "supabase_not_configured" });
+    return { status: "skipped", skipped_count: 1, published_count: 0, failed_count: 0, error_message: "supabase_not_configured" };
   }
-  const [settingsState, connectionState, postsState] = await Promise.all([
-    readMetaSettings(),
-    readMetaConnectionState(),
-    listMetaPosts(new URL("https://admin.local/?limit=100"), 100)
-  ]);
-  if (settingsState.table_missing || connectionState.table_missing || postsState.table_missing) {
+
+  const run = await createMetaRun(triggerType, "multi");
+  const finish = (patch) => finishMetaRun(run, patch).then(() => patch);
+  const finishDisabled = () => finish({ status: "skipped", skipped_count: 1, published_count: 0, failed_count: 0, error_message: "autopost_disabled" })
+    .then((result) => ({ ...result, ok: true, skipped: true, reason: "autopost_disabled" }));
+  const settingsState = await readMetaSettings();
+  if (settingsState.table_missing) {
     console.log("[Meta Autopublisher] skipped: table_missing");
     return finish({ status: "skipped", skipped_count: 1, published_count: 0, failed_count: 0, error_message: "table_missing" });
   }
-  if (settingsState.error || connectionState.error || postsState.error) {
-    const message = sanitizeMetaSecretText(settingsState.error || connectionState.error || postsState.error);
+  if (settingsState.error) {
+    const message = sanitizeMetaSecretText(settingsState.error);
+    console.warn(`[Meta Autopublisher] failed: ${message}`);
+    return finish({ status: "failed", skipped_count: 0, published_count: 0, failed_count: 1, error_message: message });
+  }
+  const settings = settingsState.settings;
+  if (!settings.autopost_enabled) {
+    console.log("[Meta Autopublisher] skipped: autopost_disabled");
+    return finishDisabled();
+  }
+
+  const [connectionState, postsState] = await Promise.all([
+    readMetaConnectionState(),
+    listMetaPosts(new URL("https://admin.local/?limit=100"), 100)
+  ]);
+  if (connectionState.table_missing || postsState.table_missing) {
+    console.log("[Meta Autopublisher] skipped: table_missing");
+    return finish({ status: "skipped", skipped_count: 1, published_count: 0, failed_count: 0, error_message: "table_missing" });
+  }
+  if (connectionState.error || postsState.error) {
+    const message = sanitizeMetaSecretText(connectionState.error || postsState.error);
     console.warn(`[Meta Autopublisher] failed: ${message}`);
     return finish({ status: "failed", skipped_count: 0, published_count: 0, failed_count: 1, error_message: message });
   }
@@ -2050,7 +2087,6 @@ async function runMetaAutopublisherScheduler({ triggerType = "cron" } = {}) {
     console.warn(`[Meta Autopublisher] failed: ${message}`);
     return finish({ status: "failed", skipped_count: 0, published_count: 0, failed_count: 1, error_message: message });
   }
-  const settings = settingsState.settings;
   const connection = connectionState.connection;
   const platforms = [
     settings.facebook_enabled ? "facebook" : null,
