@@ -3106,6 +3106,104 @@ function socialAssetIsReady(asset) {
   return Boolean(asset?.status === "ready" && isPublicSocialMediaUrl(asset.public_url));
 }
 
+function socialAssetMimeType(asset) {
+  const explicit = String(asset?.mime_type || "").split(";")[0].trim().toLowerCase();
+  if (explicit) return explicit;
+  try {
+    const pathname = new URL(String(asset?.public_url || "")).pathname.toLowerCase();
+    if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "image/jpeg";
+    if (pathname.endsWith(".png")) return "image/png";
+    if (pathname.endsWith(".webp")) return "image/webp";
+    if (pathname.endsWith(".mp4")) return "video/mp4";
+    if (pathname.endsWith(".webm")) return "video/webm";
+  } catch (error) {
+    return "";
+  }
+  return "";
+}
+
+function socialAssetCompatibilityFor(asset, channel = "instagram") {
+  const normalizedChannel = String(channel || "instagram").toLowerCase();
+  const existing = asset?.compatibility?.[normalizedChannel] || asset?.asset_compatibility;
+  if (existing && existing.channel === normalizedChannel) return existing;
+  const checks = {
+    asset_id: asset?.id || null,
+    media_type: asset?.media_type || "",
+    status: asset?.status || "",
+    public_url_https: isPublicSocialMediaUrl(asset?.public_url),
+    mime_type: socialAssetMimeType(asset) || null,
+    duration_seconds: Number(asset?.duration_seconds || 0) || null,
+    ratio: asset?.ratio || null
+  };
+  const result = (status, publishable, reason) => ({ channel: normalizedChannel, status, publishable, reason, checks });
+  if (normalizedChannel === "facebook") return result("pending_page_permissions", false, "pending_page_permissions");
+  if (normalizedChannel === "linkedin" || normalizedChannel === "tiktok") return result("pending_integration", false, "pending_integration");
+  if (!asset?.id) return result("incompatible", false, "social_media_asset_not_found");
+  if (asset.status !== "ready") return result("incompatible", false, "social_media_asset_not_ready");
+  if (!checks.public_url_https) return result("incompatible", false, "social_media_asset_public_url_required");
+  if (asset.media_type === "image") {
+    if (!checks.mime_type) return result("incompatible", false, "social_instagram_mime_type_required");
+    if (!["image/jpeg", "image/png", "image/webp"].includes(checks.mime_type)) return result("incompatible", false, "social_instagram_image_mime_not_supported");
+    return result("compatible", true, "social_instagram_image_compatible");
+  }
+  if (asset.media_type === "video") {
+    if (!checks.mime_type) return result("incompatible", false, "social_instagram_mime_type_required");
+    if (checks.mime_type !== "video/mp4") return result("incompatible", false, "social_instagram_video_mime_not_supported");
+    if (!checks.duration_seconds) return result("incompatible", false, "social_instagram_video_duration_required");
+    return result("compatible_pending_video_publish_support", false, "compatible_pending_video_publish_support");
+  }
+  return result("incompatible", false, "social_instagram_media_type_not_supported");
+}
+
+function socialAssetCompatibilityTone(compatibility = {}) {
+  if (compatibility.publishable || compatibility.status === "compatible") return "published";
+  if (compatibility.status === "compatible_pending_video_publish_support" || compatibility.status === "pending_page_permissions") return "warn";
+  if (compatibility.status === "pending_integration") return "draft";
+  return "bad";
+}
+
+function socialAssetCompatibilityLabel(compatibility = {}) {
+  const reason = compatibility.reason || compatibility.status || "";
+  return {
+    social_instagram_image_compatible: "Apto para Instagram imagen",
+    compatible_pending_video_publish_support: "Video listo, publicacion pendiente de soporte",
+    pending_page_permissions: "Pendiente permisos Page",
+    pending_integration: "Pendiente integracion",
+    social_media_asset_not_found: "Asset no encontrado",
+    social_media_asset_not_ready: "Asset no esta ready",
+    social_media_asset_public_url_required: "Falta Public URL HTTPS",
+    social_instagram_mime_type_required: "Falta MIME o extension compatible",
+    social_instagram_image_mime_not_supported: "MIME de imagen no soportado",
+    social_instagram_video_mime_not_supported: "Video debe ser MP4",
+    social_instagram_video_duration_required: "Falta duracion del video",
+    social_instagram_media_type_not_supported: "Tipo de asset no soportado"
+  }[reason] || reason || "-";
+}
+
+function renderSocialAssetCompatibility(asset) {
+  const channels = ["instagram", "facebook", "linkedin", "tiktok"];
+  return `
+    <div class="admin-linkedin-status admin-linkedin-wide">
+      <div class="admin-linkedin-status-row"><span>Compatibilidad por canal</span><strong>${escapeHtml(asset?.title || asset?.id || "-")}</strong></div>
+      ${channels.map((channel) => {
+        const compatibility = socialAssetCompatibilityFor(asset, channel);
+        const checks = compatibility.checks || {};
+        const detail = [
+          checks.mime_type || "",
+          checks.duration_seconds ? `${checks.duration_seconds}s` : "",
+          checks.ratio || ""
+        ].filter(Boolean).join(" - ");
+        return `
+          <div class="admin-linkedin-status-row">
+            <span>${escapeHtml(socialChannelLabel(channel))}</span>
+            <strong>${chip(socialAssetCompatibilityLabel(compatibility), socialAssetCompatibilityTone(compatibility))}${detail ? ` <small>${escapeHtml(detail)}</small>` : ""}</strong>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 function effectiveSocialPostAsset(post) {
   return post?.media_asset || socialAssetById(post?.media_asset_id) || null;
 }
@@ -3143,8 +3241,8 @@ function socialPostCanPublish(post) {
   if (!String(post.caption || post.caption_preview || "").trim()) return false;
   const asset = effectiveSocialPostAsset(post);
   if (asset) {
-    if (!socialAssetIsReady(asset)) return false;
-    if (post.channel === "instagram" && asset.media_type !== "image") return false;
+    const compatibility = socialAssetCompatibilityFor(asset, post.channel);
+    if (!compatibility.publishable) return false;
   }
   if (!isPublicSocialMediaUrl(effectiveSocialPostMediaUrl(post))) return false;
   return true;
@@ -3394,6 +3492,7 @@ function renderSocialAssetEditor() {
         <span>${escapeHtml(asset.title || "Asset social")}</span>
         ${chip(metaStatusLabel(asset.status), statusTone(asset.status))}
       </div>
+      ${renderSocialAssetCompatibility(asset)}
       <form class="admin-linkedin-form admin-social-editor" data-social-asset-form data-social-asset-id="${escapeHtml(asset.id || "")}">
         <input type="hidden" name="id" value="${escapeHtml(asset.id || "")}">
         <label><span>Tipo</span><select name="media_type">
@@ -3487,6 +3586,7 @@ function renderSocialPreview() {
   const status = String(post.status || "").toLowerCase();
   const terminal = ["publishing", "published", "cancelled", "rejected"].includes(status);
   const asset = effectiveSocialPostAsset(post);
+  const assetCompatibility = asset ? socialAssetCompatibilityFor(asset, post.channel) : null;
   const effectiveMediaUrl = effectiveSocialPostMediaUrl(post);
   const assetOptions = [
     '<option value="">Sin asset asociado</option>',
@@ -3501,13 +3601,11 @@ function renderSocialPreview() {
       ? "Solo se publica manualmente si esta approved o scheduled"
       : !String(post.caption || post.caption_preview || "").trim()
         ? "Falta caption"
-        : asset && !socialAssetIsReady(asset)
-          ? `Asset asociado no esta ready (${metaStatusLabel(asset.status)})`
-          : asset && post.channel === "instagram" && asset.media_type !== "image"
-            ? "Instagram manual solo admite asset de imagen en esta fase"
-            : !isPublicSocialMediaUrl(effectiveMediaUrl)
-              ? "Falta media_url HTTPS publica o asset ready"
-              : "No disponible para este estado";
+        : asset && assetCompatibility && !assetCompatibility.publishable
+          ? socialAssetCompatibilityLabel(assetCompatibility)
+          : !isPublicSocialMediaUrl(effectiveMediaUrl)
+            ? "Falta media_url HTTPS publica o asset ready"
+            : "No disponible para este estado";
   els.socialPreview.innerHTML = `
     <article class="admin-linkedin-card">
       <div class="admin-linkedin-card-head">
@@ -3546,6 +3644,7 @@ function renderSocialPreview() {
         <small class="admin-subtle admin-linkedin-wide">${escapeHtml(canPublish ? "Accion manual con confirmacion. No activa autopublisher." : disabledReason)}</small>
         <div class="admin-linkedin-status admin-linkedin-wide">
           <div class="admin-linkedin-status-row"><span>Asset asociado</span><strong>${escapeHtml(asset ? `${asset.title || asset.id} (${metaStatusLabel(asset.status)})` : "-")}</strong></div>
+          <div class="admin-linkedin-status-row"><span>Compatibilidad asset/canal</span><strong>${assetCompatibility ? chip(socialAssetCompatibilityLabel(assetCompatibility), socialAssetCompatibilityTone(assetCompatibility)) : "-"}</strong></div>
           <div class="admin-linkedin-status-row"><span>Media efectiva</span><code>${escapeHtml(effectiveMediaUrl || "-")}</code></div>
           <div class="admin-linkedin-status-row"><span>Published media ID</span><code>${escapeHtml(post.published_media_id || "-")}</code></div>
           <div class="admin-linkedin-status-row"><span>Error</span><strong>${escapeHtml(post.error_message || "-")}</strong></div>

@@ -1338,6 +1338,9 @@ test("BackOffice Social conecta Instagram con target explicito y sin endpoint le
   assert.match(adminJs, /data-meta-connect-facebook data-meta-connect-target="facebook"[^>]*>Conectar Facebook Page<\/button>/);
   assert.match(adminJs, /function renderSocialQueue/);
   assert.match(adminJs, /function renderSocialAssets/);
+  assert.match(adminJs, /function renderSocialAssetCompatibility/);
+  assert.match(adminJs, /Compatibilidad por canal/);
+  assert.match(adminJs, /compatible_pending_video_publish_support/);
   assert.match(adminJs, /function renderSocialAssetUploadPreview/);
   assert.match(adminJs, /function uploadSocialAsset/);
   assert.match(adminJs, /function createSocialAssetFromRunway/);
@@ -1566,6 +1569,11 @@ test("Social media assets crea lista valida ready y sanea metadata", async () =>
     const list = await callAdminMethodResource("social/assets", { method: "GET", env });
     assert.equal(list.statusCode, 200);
     assert.equal(list.payload.assets.length, 1);
+    assert.equal(list.payload.assets[0].compatibility.instagram.status, "incompatible");
+    assert.equal(list.payload.assets[0].compatibility.instagram.reason, "social_media_asset_not_ready");
+    assert.equal(list.payload.assets[0].compatibility.facebook.status, "pending_page_permissions");
+    assert.equal(list.payload.assets[0].compatibility.linkedin.status, "pending_integration");
+    assert.equal(list.payload.assets[0].compatibility.tiktok.status, "pending_integration");
 
     const validated = await callAdminMethodResource("social/assets", {
       method: "POST",
@@ -1575,6 +1583,91 @@ test("Social media assets crea lista valida ready y sanea metadata", async () =>
     });
     assert.equal(validated.statusCode, 200);
     assert.equal(validated.payload.asset.status, "ready");
+    assert.equal(validated.payload.asset.compatibility.instagram.status, "compatible");
+    assert.equal(validated.payload.asset.compatibility.instagram.publishable, true);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test("Social asset compatibility valida imagen video y estados no publicables", async () => {
+  const previousFetch = global.fetch;
+  const env = {
+    ...validEnv,
+    SUPABASE_URL: "https://supabase.test",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+  };
+  const rows = [
+    {
+      id: "compat-image",
+      provider: "manual",
+      media_type: "image",
+      status: "ready",
+      public_url: "https://www.inmoradar.app/assets/social/ready-image.jpg",
+      mime_type: "image/jpeg"
+    },
+    {
+      id: "compat-processing",
+      provider: "manual",
+      media_type: "image",
+      status: "processing",
+      public_url: "https://www.inmoradar.app/assets/social/processing.png",
+      mime_type: "image/png"
+    },
+    {
+      id: "compat-no-url",
+      provider: "manual",
+      media_type: "image",
+      status: "ready",
+      public_url: "",
+      mime_type: "image/png"
+    },
+    {
+      id: "compat-video",
+      provider: "runway",
+      media_type: "video",
+      status: "ready",
+      public_url: "https://www.inmoradar.app/assets/social/video.mp4",
+      mime_type: "video/mp4",
+      duration_seconds: 6,
+      ratio: "9:16"
+    }
+  ];
+
+  global.fetch = async (url, options = {}) => {
+    const href = String(url);
+    const method = options.method || "GET";
+    if (method !== "GET") throw new Error(`unexpected_write:${href}`);
+    if (href.includes("/social_media_assets")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify(rows) };
+    }
+    throw new Error(`unexpected_fetch:${href}`);
+  };
+
+  try {
+    const list = await callAdminMethodResource("social/assets", { method: "GET", env });
+    assert.equal(list.statusCode, 200);
+    const byId = Object.fromEntries(list.payload.assets.map((asset) => [asset.id, asset]));
+
+    assert.equal(byId["compat-image"].compatibility.instagram.status, "compatible");
+    assert.equal(byId["compat-image"].compatibility.instagram.publishable, true);
+    assert.equal(byId["compat-image"].compatibility.instagram.reason, "social_instagram_image_compatible");
+
+    assert.equal(byId["compat-processing"].compatibility.instagram.status, "incompatible");
+    assert.equal(byId["compat-processing"].compatibility.instagram.reason, "social_media_asset_not_ready");
+    assert.equal(byId["compat-processing"].compatibility.instagram.publishable, false);
+
+    assert.equal(byId["compat-no-url"].compatibility.instagram.status, "incompatible");
+    assert.equal(byId["compat-no-url"].compatibility.instagram.reason, "social_media_asset_public_url_required");
+
+    assert.equal(byId["compat-video"].compatibility.instagram.status, "compatible_pending_video_publish_support");
+    assert.equal(byId["compat-video"].compatibility.instagram.reason, "compatible_pending_video_publish_support");
+    assert.equal(byId["compat-video"].compatibility.instagram.publishable, false);
+    assert.equal(byId["compat-video"].compatibility.instagram.checks.duration_seconds, 6);
+    assert.equal(byId["compat-video"].compatibility.facebook.status, "pending_page_permissions");
+    assert.equal(byId["compat-video"].compatibility.facebook.reason, "pending_page_permissions");
+    assert.equal(byId["compat-video"].compatibility.linkedin.status, "pending_integration");
+    assert.equal(byId["compat-video"].compatibility.tiktok.status, "pending_integration");
   } finally {
     global.fetch = previousFetch;
   }
@@ -2073,7 +2166,10 @@ test("Social post queue bloquea canales no validados y contenido incompleto", as
       provider: "manual",
       media_type: "video",
       status: "ready",
-      public_url: "https://www.inmoradar.app/assets/social/test-video.mp4"
+      public_url: "https://www.inmoradar.app/assets/social/test-video.mp4",
+      mime_type: "video/mp4",
+      duration_seconds: 5,
+      ratio: "9:16"
     }
   ];
   let graphCalls = 0;
@@ -2128,7 +2224,7 @@ test("Social post queue bloquea canales no validados y contenido incompleto", as
 
     const videoAsset = await callAdminMethodResource("social/posts", { method: "POST", query: "action=publish-now&id=ig_asset_video", body: {}, env });
     assert.equal(videoAsset.statusCode, 400);
-    assert.equal(videoAsset.payload.error, "social_instagram_video_asset_not_supported_yet");
+    assert.equal(videoAsset.payload.error, "compatible_pending_video_publish_support");
     assert.equal(graphCalls, 0);
   } finally {
     global.fetch = previousFetch;
