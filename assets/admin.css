@@ -5228,6 +5228,17 @@
   background: var(--bg);
 }
 
+.admin-social-video-thumb {
+  overflow: hidden;
+}
+
+.admin-social-video-thumb video,
+.admin-social-video-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .admin-linkedin-error {
   display: block;
   max-width: 230px;

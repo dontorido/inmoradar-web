@@ -3,6 +3,7 @@ const ALERT_DISMISS_PREFIX = "inmoradar_admin_alert_dismissed:";
 const VIDEO_PROJECT_KEY = "inmoradar_social_video_project";
 const RELEASE_TARGETS = ["web", "extension", "backoffice"];
 const MAX_RELEASE_FILE_BYTES = 3 * 1024 * 1024;
+const SOCIAL_ASSET_UPLOAD_MAX_CLIENT_BYTES = 100 * 1024 * 1024;
 const ANALYTICS_DEFAULT_DAYS = 7;
 const ANALYTICS_MAX_RANGE_DAYS = 90;
 const EXTENSION_USAGE_DEFAULT_PRESET = "30d";
@@ -383,6 +384,7 @@ const els = {
   socialAssetProvider: document.querySelector("[data-social-asset-provider]"),
   socialAssetStatus: document.querySelector("[data-social-asset-status]"),
   socialCreateAsset: document.querySelector("[data-social-create-asset]"),
+  socialAssetUploadForm: document.querySelector("[data-social-asset-upload-form]"),
   socialAssetRows: document.querySelector("[data-social-asset-rows]"),
   socialAssetEditor: document.querySelector("[data-social-asset-editor]"),
   socialQueuePlatform: document.querySelector("[data-social-queue-platform]"),
@@ -3288,7 +3290,7 @@ function socialAssetPreview(asset = {}) {
   }
   return `
     <div class="admin-linkedin-thumb admin-social-video-thumb">
-      ${asset.thumbnail_url ? `<img src="${escapeHtml(asset.thumbnail_url)}" alt="Thumbnail video">` : "<span>VIDEO</span>"}
+      ${asset.thumbnail_url ? `<img src="${escapeHtml(asset.thumbnail_url)}" alt="Thumbnail video">` : asset.public_url ? `<video src="${escapeHtml(asset.public_url)}" muted playsinline controls preload="metadata"></video>` : "<span>VIDEO</span>"}
     </div>
   `;
 }
@@ -3712,6 +3714,46 @@ function collectSocialAssetInput() {
     usage_notes: String(data.get("usage_notes") || ""),
     source_prompt: String(data.get("source_prompt") || "")
   };
+}
+
+async function collectSocialAssetUploadInput() {
+  const form = els.socialAssetUploadForm;
+  if (!form) return {};
+  const data = new FormData(form);
+  const file = data.get("file");
+  if (!file || !file.name) throw new Error("Selecciona un archivo para subir.");
+  if (file.size > SOCIAL_ASSET_UPLOAD_MAX_CLIENT_BYTES) {
+    throw new Error("Archivo demasiado grande para subir desde BackOffice. Usa un asset mas ligero o storage directo.");
+  }
+  const buffer = await file.arrayBuffer();
+  return {
+    filename: file.name,
+    mime_type: file.type || "application/octet-stream",
+    file_size_bytes: file.size,
+    title: String(data.get("title") || file.name || "").trim(),
+    description: String(data.get("description") || "").trim(),
+    usage_notes: String(data.get("usage_notes") || "").trim(),
+    content_base64: arrayBufferToBase64(buffer)
+  };
+}
+
+async function uploadSocialAsset() {
+  if (state.social.storage?.social_media_assets_table_missing) {
+    throw new Error(`Falta social_media_assets. Aplica ${state.social.storage.social_media_assets_pending_sql || "database/social-media-assets.sql"}.`);
+  }
+  const input = await collectSocialAssetUploadInput();
+  showStatus(`Subiendo asset ${input.filename}...`);
+  const payload = await api("/api/social/assets/upload", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+  if (els.socialAssetUploadForm) els.socialAssetUploadForm.reset();
+  await loadSocial();
+  state.social.selectedAssetId = payload.asset?.id || state.social.selectedAssetId;
+  renderSocialAssets();
+  renderSocialAssetEditor();
+  renderSocialPreview();
+  showStatus("Asset subido y registrado en biblioteca.", "good");
 }
 
 async function createSocialAsset() {
@@ -7282,6 +7324,12 @@ if (els.socialAssetStatus) {
 }
 if (els.socialCreateAsset) {
   els.socialCreateAsset.addEventListener("click", () => createSocialAsset().catch((error) => showStatus(error.message, "bad")));
+}
+if (els.socialAssetUploadForm) {
+  els.socialAssetUploadForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    uploadSocialAsset().catch((error) => showStatus(error.message, "bad"));
+  });
 }
 if (els.socialAssetRows) {
   els.socialAssetRows.addEventListener("click", (event) => {

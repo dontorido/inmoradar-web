@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const { assertAdmin, fetchWithTimeout, handleCors, hasSupabaseConfig, json, readRawBody, sanitizeErrorMessage, supabaseFetch } = require("./_utils");
 const { createAdminRouter, dispatchAdminRoute } = require("./_admin/router");
 const { createAnalyticsHandlers } = require("./_admin/handlers/analytics");
@@ -135,6 +136,15 @@ const SOCIAL_ASSET_MEDIA_TYPES = ["image", "video"];
 const SOCIAL_ASSET_STATUSES = ["draft", "processing", "ready", "failed", "archived"];
 const SOCIAL_ASSET_LICENSE_STATUSES = ["internal", "licensed", "unknown", "restricted"];
 const SOCIAL_MEDIA_ASSETS_SQL = "database/social-media-assets.sql";
+const SOCIAL_ASSETS_STORAGE_SQL = "database/social-assets-storage.sql";
+const SOCIAL_ASSETS_STORAGE_BUCKET = "social-assets";
+const SOCIAL_ASSET_ALLOWED_MIME_TYPES = {
+  "image/jpeg": { media_type: "image", extension: "jpg" },
+  "image/png": { media_type: "image", extension: "png" },
+  "image/webp": { media_type: "image", extension: "webp" },
+  "video/mp4": { media_type: "video", extension: "mp4" },
+  "video/webm": { media_type: "video", extension: "webm" }
+};
 
 function requestHeader(req, name) {
   const headers = req.headers || {};
@@ -1637,6 +1647,183 @@ function validateSocialAssetInput(input = {}) {
   return null;
 }
 
+function socialAssetUploadLimitBytes(mediaType, env = process.env) {
+  const envKey = mediaType === "video" ? "SOCIAL_ASSET_MAX_VIDEO_MB" : "SOCIAL_ASSET_MAX_IMAGE_MB";
+  const fallbackMb = mediaType === "video" ? 100 : 10;
+  const parsed = Number.parseFloat(String(env[envKey] || fallbackMb));
+  const megabytes = Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMb;
+  return Math.floor(megabytes * 1024 * 1024);
+}
+
+function safeSocialAssetFilename(filename = "", mimeType = "application/octet-stream") {
+  const mime = SOCIAL_ASSET_ALLOWED_MIME_TYPES[mimeType] || {};
+  const fallbackExt = mime.extension || "bin";
+  const withoutPath = String(filename || `asset.${fallbackExt}`).split(/[\\/]/).pop() || `asset.${fallbackExt}`;
+  const clean = withoutPath
+    .normalize("NFKD")
+    .replace(/[^\w.\-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^\.+/, "")
+    .replace(/^[-.]+|[-.]+$/g, "")
+    .slice(0, 120);
+  const hasExtension = /\.[a-z0-9]{2,8}$/i.test(clean);
+  return hasExtension ? clean : `${clean || "asset"}.${fallbackExt}`;
+}
+
+function socialAssetStorageObjectPath(filename, now = new Date()) {
+  const yyyy = String(now.getUTCFullYear());
+  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
+  return `${yyyy}/${mm}/${crypto.randomUUID()}-${filename}`;
+}
+
+function encodedStoragePath(path) {
+  return String(path || "")
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
+function supabaseStorageBaseUrl(env = process.env) {
+  return String(env.SUPABASE_URL || "").replace(/\/+$/, "").replace(/\/rest\/v1$/, "");
+}
+
+function supabaseStorageObjectPublicUrl(bucket, objectPath, env = process.env) {
+  return `${supabaseStorageBaseUrl(env)}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodedStoragePath(objectPath)}`;
+}
+
+function supabaseStorageHeaders(contentType, env = process.env) {
+  const key = env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const headers = {
+    apikey: key,
+    "content-type": contentType,
+    "cache-control": "31536000"
+  };
+  if (!String(key).startsWith("sb_secret_") && !String(key).startsWith("sb_publishable_")) {
+    headers.authorization = `Bearer ${key}`;
+  }
+  return headers;
+}
+
+function parseSocialUploadBase64(body = {}) {
+  const dataUrl = String(body.data_url || body.file_data_url || "");
+  if (dataUrl) {
+    const match = dataUrl.match(/^data:([^;,]+);base64,(.+)$/i);
+    if (!match) return { error: "social_asset_upload_data_url_invalid" };
+    return { mime_type: match[1].toLowerCase(), content_base64: match[2] };
+  }
+  return {
+    mime_type: String(body.mime_type || body.content_type || "").trim().toLowerCase(),
+    content_base64: String(body.content_base64 || body.base64 || "").trim()
+  };
+}
+
+function normalizeSocialAssetUploadInput(body = {}, env = process.env) {
+  const parsed = parseSocialUploadBase64(body);
+  if (parsed.error) return { error: parsed.error };
+  const mimeConfig = SOCIAL_ASSET_ALLOWED_MIME_TYPES[parsed.mime_type];
+  if (!mimeConfig) return { error: "social_asset_upload_mime_not_allowed" };
+  if (!parsed.content_base64) return { error: "social_asset_upload_content_required" };
+  let buffer;
+  try {
+    buffer = Buffer.from(parsed.content_base64, "base64");
+  } catch (error) {
+    return { error: "social_asset_upload_base64_invalid" };
+  }
+  if (!buffer.length || buffer.toString("base64").replace(/=+$/, "") !== parsed.content_base64.replace(/\s/g, "").replace(/=+$/, "")) {
+    return { error: "social_asset_upload_base64_invalid" };
+  }
+  const limitBytes = socialAssetUploadLimitBytes(mimeConfig.media_type, env);
+  if (buffer.length > limitBytes) {
+    return {
+      error: "social_asset_upload_too_large",
+      limit_bytes: limitBytes,
+      file_size_bytes: buffer.length
+    };
+  }
+  const filename = safeSocialAssetFilename(body.filename || body.name || "", parsed.mime_type);
+  return {
+    buffer,
+    filename,
+    mime_type: parsed.mime_type,
+    media_type: mimeConfig.media_type,
+    file_size_bytes: buffer.length,
+    title: socialSafeText(body.title || filename, 180),
+    description: cleanNullable(body.description),
+    usage_notes: cleanNullable(body.usage_notes),
+    metadata: normalizeSocialAssetMetadata({
+      ...(body.metadata && typeof body.metadata === "object" ? body.metadata : {}),
+      original_filename: filename,
+      uploaded_via: "backoffice",
+      storage_bucket: SOCIAL_ASSETS_STORAGE_BUCKET
+    })
+  };
+}
+
+async function uploadSocialAssetBufferToStorage(input, env = process.env, fetchImpl = fetchWithTimeout) {
+  const objectPath = socialAssetStorageObjectPath(input.filename);
+  const url = `${supabaseStorageBaseUrl(env)}/storage/v1/object/${encodeURIComponent(SOCIAL_ASSETS_STORAGE_BUCKET)}/${encodedStoragePath(objectPath)}`;
+  const response = await fetchImpl(url, {
+    method: "POST",
+    headers: {
+      ...supabaseStorageHeaders(input.mime_type, env),
+      "x-upsert": "false"
+    },
+    body: input.buffer,
+    timeoutMs: Number(env.SOCIAL_ASSET_STORAGE_TIMEOUT_MS || 30000)
+  });
+  const text = await response.text();
+  let payload = {};
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch (error) {
+    payload = { raw_response: sanitizeMetaSecretText(text || "", 600) };
+  }
+  if (!response.ok) {
+    throw new Error(sanitizeMetaSecretText(`Supabase Storage ${response.status}: ${JSON.stringify(payload)}`, 800));
+  }
+  return {
+    bucket: SOCIAL_ASSETS_STORAGE_BUCKET,
+    object_path: objectPath,
+    storage_path: `${SOCIAL_ASSETS_STORAGE_BUCKET}/${objectPath}`,
+    public_url: supabaseStorageObjectPublicUrl(SOCIAL_ASSETS_STORAGE_BUCKET, objectPath, env),
+    storage_response: sanitizeMetaPayload(payload)
+  };
+}
+
+async function uploadSocialAsset(body = {}, env = process.env) {
+  const input = normalizeSocialAssetUploadInput(body, env);
+  if (input.error) return { status: 400, payload: { ok: false, error: input.error, limit_bytes: input.limit_bytes, file_size_bytes: input.file_size_bytes } };
+  try {
+    const storage = await uploadSocialAssetBufferToStorage(input, env);
+    const result = await createSocialAsset({
+      provider: "manual",
+      media_type: input.media_type,
+      status: "ready",
+      title: input.title,
+      description: input.description,
+      public_url: storage.public_url,
+      thumbnail_url: input.media_type === "image" ? storage.public_url : null,
+      mime_type: input.mime_type,
+      file_size_bytes: input.file_size_bytes,
+      license_status: "internal",
+      usage_notes: input.usage_notes,
+      metadata: {
+        ...input.metadata,
+        storage_bucket: storage.bucket,
+        storage_path: storage.storage_path,
+        storage_object_path: storage.object_path,
+        storage_response: storage.storage_response
+      }
+    });
+    if (result.status) return { status: result.status, payload: { ok: false, error: result.error } };
+    if (result.table_missing) return { status: 503, payload: { ok: false, error: "social_media_assets_table_missing", pending_sql: SOCIAL_MEDIA_ASSETS_SQL } };
+    if (result.error) return { status: 500, payload: { ok: false, error: result.error } };
+    return { status: 201, payload: { ok: true, asset: result.asset, storage: { bucket: storage.bucket, path: storage.storage_path, public_url: storage.public_url } } };
+  } catch (error) {
+    return { status: 500, payload: { ok: false, error: "social_asset_upload_failed", message: sanitizeMetaSecretText(error.message || "social_asset_upload_failed", 800) } };
+  }
+}
+
 async function listSocialAssets(url = new URL("https://admin.local/?limit=50"), limitOverride) {
   const params = new URLSearchParams({
     select: "*",
@@ -2079,6 +2266,11 @@ async function handleSocialAssets(req, url) {
     return updateSocialAsset(id, await readJsonBody(req));
   }
   return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+}
+
+async function handleSocialAssetUpload(req) {
+  if (req.method !== "POST") return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  return uploadSocialAsset(await readJsonBody(req));
 }
 
 async function handleLinkedInPostAction(body = {}) {
@@ -2866,6 +3058,8 @@ async function handleSocialStatus(req) {
         social_media_assets_table_missing: socialAssetsState.table_missing,
         social_media_assets_error: socialAssetsState.error,
         social_media_assets_pending_sql: socialAssetsState.table_missing ? SOCIAL_MEDIA_ASSETS_SQL : null,
+        social_assets_storage_bucket: SOCIAL_ASSETS_STORAGE_BUCKET,
+        social_assets_storage_sql: SOCIAL_ASSETS_STORAGE_SQL,
         pending_sql: socialPostsState.table_missing ? SOCIAL_POST_QUEUE_SQL : null
       }
     }
@@ -4716,6 +4910,10 @@ async function handleAdminRequest(req, res) {
     }
     if (resource === "social/assets") {
       const result = await handleSocialAssets(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "social/assets/upload") {
+      const result = await handleSocialAssetUpload(req);
       return json(res, result.status, result.payload);
     }
     if (resource === "meta" || resource.startsWith("meta/")) {

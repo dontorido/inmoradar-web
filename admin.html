@@ -568,6 +568,16 @@
                   <button class="admin-button tiny" type="button" data-social-create-asset>Crear asset manual</button>
                 </div>
               </div>
+              <form class="admin-linkedin-form admin-social-upload-form" data-social-asset-upload-form>
+                <label class="admin-linkedin-wide"><span>Subir asset</span><input name="file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"></label>
+                <label><span>T&iacute;tulo</span><input name="title" placeholder="Logo, foto, clip Runway..."></label>
+                <label class="admin-linkedin-wide"><span>Descripci&oacute;n</span><input name="description" placeholder="Contexto interno opcional"></label>
+                <label class="admin-linkedin-wide"><span>Notas de uso</span><input name="usage_notes" placeholder="Licencia, formato, restricciones..."></label>
+                <div class="admin-linkedin-editor-actions admin-linkedin-wide">
+                  <button class="admin-button tiny" type="submit">Subir asset</button>
+                  <small class="admin-subtle">Se sube a Supabase Storage bucket social-assets y se registra como asset ready. No publica nada.</small>
+                </div>
+              </form>
               <div class="admin-table-wrap">
                 <table class="admin-table admin-social-assets-table">
                   <thead>
