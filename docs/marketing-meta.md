@@ -131,7 +131,7 @@ El parametro `next` contiene la ruta codificada a:
 
 con `client_id=INSTAGRAM_APP_ID`, `redirect_uri=INSTAGRAM_REDIRECT_URI`, `response_type=code`, los scopes organicos y el `state` firmado. No usa `https://www.facebook.com/{version}/dialog/oauth`, `https://api.instagram.com/oauth/authorize` ni `https://www.instagram.com/oauth/authorize` como endpoint directo de autorizacion para Instagram.
 
-Si Meta incluye parametros extra en la URL oficial de insercion, copia esa URL completa en `INSTAGRAM_OFFICIAL_EMBED_URL` o `INSTAGRAM_BUSINESS_LOGIN_URL`. El backend la usa como plantilla, conserva extras como `config_id`, `logger_id`, `auth_type` o `display`, y fuerza solo `platform_app_id`, `client_id`, `redirect_uri`, `response_type`, `scope` y `state`.
+Si Meta incluye parametros extra en la URL oficial de insercion, copia esa URL completa en `INSTAGRAM_OFFICIAL_EMBED_URL` o `INSTAGRAM_BUSINESS_LOGIN_URL`. El backend la usa como plantilla para el `next`, conserva extras internos como `config_id`, y reconstruye el nivel superior con el patron oficial limpio: `force_authentication`, `platform_app_id=INSTAGRAM_APP_ID` y `next=...`. No conserva `client_id`, `redirect_uri`, `response_type`, `scope`, `force_reauth`, `logger_id`, `auth_type` ni `display` en el nivel superior.
 
 Para esta spike de publicacion test, el scope de Instagram se limita siempre a `instagram_business_basic,instagram_business_content_publish`, incluso si la URL oficial de Meta trae permisos adicionales. No se piden `instagram_business_manage_messages`, `instagram_manage_comments` ni `instagram_business_manage_insights`; mensajes, comentarios e insights quedan fuera de esta prueba.
 
