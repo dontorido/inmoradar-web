@@ -145,6 +145,8 @@ const SOCIAL_ASSET_ALLOWED_MIME_TYPES = {
   "video/mp4": { media_type: "video", extension: "mp4" },
   "video/webm": { media_type: "video", extension: "webm" }
 };
+const SOCIAL_INSTAGRAM_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const SOCIAL_INSTAGRAM_VIDEO_MIME_TYPES = new Set(["video/mp4"]);
 
 function requestHeader(req, name) {
   const headers = req.headers || {};
@@ -1584,7 +1586,7 @@ function normalizeSocialAssetMetadata(value) {
 
 function normalizeSocialAssetRow(row = {}) {
   if (!row) return null;
-  return {
+  const asset = {
     id: row.id || null,
     provider: normalizeSocialAssetProvider(row.provider),
     provider_asset_id: row.provider_asset_id ? socialSafeText(row.provider_asset_id, 220) : null,
@@ -1607,6 +1609,10 @@ function normalizeSocialAssetRow(row = {}) {
     metadata: normalizeSocialAssetMetadata(row.metadata),
     created_at: row.created_at || null,
     updated_at: row.updated_at || null
+  };
+  return {
+    ...asset,
+    compatibility: buildSocialAssetCompatibility(asset)
   };
 }
 
@@ -2228,6 +2234,99 @@ function publicHttpsMediaUrl(value) {
   }
 }
 
+function normalizedSocialMimeType(value) {
+  return String(value || "").split(";")[0].trim().toLowerCase();
+}
+
+function inferSocialMimeTypeFromUrl(value) {
+  try {
+    const pathname = new URL(String(value || "")).pathname.toLowerCase();
+    if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "image/jpeg";
+    if (pathname.endsWith(".png")) return "image/png";
+    if (pathname.endsWith(".webp")) return "image/webp";
+    if (pathname.endsWith(".mp4")) return "video/mp4";
+    if (pathname.endsWith(".webm")) return "video/webm";
+  } catch (error) {
+    return "";
+  }
+  return "";
+}
+
+function socialAssetMimeType(asset = {}) {
+  return normalizedSocialMimeType(asset.mime_type) || inferSocialMimeTypeFromUrl(asset.public_url);
+}
+
+function socialAssetCompatibilityBase(asset = {}) {
+  const mimeType = socialAssetMimeType(asset);
+  return {
+    asset_id: asset?.id || null,
+    media_type: asset?.media_type || "",
+    status: asset?.status || "",
+    public_url_https: publicHttpsMediaUrl(asset?.public_url),
+    mime_type: mimeType || null,
+    duration_seconds: socialOptionalNumber(asset?.duration_seconds),
+    ratio: asset?.ratio || null
+  };
+}
+
+function socialAssetCompatibilityResult(channel, status, publishable, reason, checks = {}) {
+  return {
+    channel,
+    status,
+    publishable,
+    reason,
+    checks
+  };
+}
+
+function evaluateSocialAssetCompatibility(asset = {}, channelInput = "instagram") {
+  const channel = normalizeSocialPlatform(channelInput);
+  const checks = socialAssetCompatibilityBase(asset);
+  if (channel === "facebook") {
+    return socialAssetCompatibilityResult(channel, "pending_page_permissions", false, "pending_page_permissions", checks);
+  }
+  if (channel === "linkedin" || channel === "tiktok") {
+    return socialAssetCompatibilityResult(channel, "pending_integration", false, "pending_integration", checks);
+  }
+  if (!asset?.id) {
+    return socialAssetCompatibilityResult(channel, "incompatible", false, "social_media_asset_not_found", checks);
+  }
+  if (asset.status !== "ready") {
+    return socialAssetCompatibilityResult(channel, "incompatible", false, "social_media_asset_not_ready", checks);
+  }
+  if (!checks.public_url_https) {
+    return socialAssetCompatibilityResult(channel, "incompatible", false, "social_media_asset_public_url_required", checks);
+  }
+  if (asset.media_type === "image") {
+    if (!checks.mime_type) {
+      return socialAssetCompatibilityResult(channel, "incompatible", false, "social_instagram_mime_type_required", checks);
+    }
+    if (!SOCIAL_INSTAGRAM_IMAGE_MIME_TYPES.has(checks.mime_type)) {
+      return socialAssetCompatibilityResult(channel, "incompatible", false, "social_instagram_image_mime_not_supported", checks);
+    }
+    return socialAssetCompatibilityResult(channel, "compatible", true, "social_instagram_image_compatible", checks);
+  }
+  if (asset.media_type === "video") {
+    if (!checks.mime_type) {
+      return socialAssetCompatibilityResult(channel, "incompatible", false, "social_instagram_mime_type_required", checks);
+    }
+    if (!SOCIAL_INSTAGRAM_VIDEO_MIME_TYPES.has(checks.mime_type)) {
+      return socialAssetCompatibilityResult(channel, "incompatible", false, "social_instagram_video_mime_not_supported", checks);
+    }
+    if (!checks.duration_seconds) {
+      return socialAssetCompatibilityResult(channel, "incompatible", false, "social_instagram_video_duration_required", checks);
+    }
+    return socialAssetCompatibilityResult(channel, "compatible_pending_video_publish_support", false, "compatible_pending_video_publish_support", checks);
+  }
+  return socialAssetCompatibilityResult(channel, "incompatible", false, "social_instagram_media_type_not_supported", checks);
+}
+
+function buildSocialAssetCompatibility(asset = {}) {
+  return Object.fromEntries(
+    SOCIAL_POST_PLATFORMS.map((channel) => [channel, evaluateSocialAssetCompatibility(asset, channel)])
+  );
+}
+
 async function resolveSocialPostMedia(post = {}) {
   const mediaAssetId = post.media_asset_id || post.media_asset?.id || "";
   if (!mediaAssetId) {
@@ -2242,10 +2341,16 @@ async function resolveSocialPostMedia(post = {}) {
     }
   }
   if (!asset?.id) return { ok: false, reason: "social_media_asset_not_found", post };
-  if (asset.status !== "ready") return { ok: false, reason: "social_media_asset_not_ready", post: { ...post, media_asset: asset }, asset };
-  if (!publicHttpsMediaUrl(asset.public_url)) return { ok: false, reason: "social_media_asset_public_url_required", post: { ...post, media_asset: asset }, asset };
-  if (post.platform === "instagram" && asset.media_type !== "image") {
-    return { ok: false, reason: "social_instagram_video_asset_not_supported_yet", post: { ...post, media_asset: asset }, asset };
+  asset = normalizeSocialAssetRow(asset);
+  const compatibility = evaluateSocialAssetCompatibility(asset, post.platform);
+  if (!compatibility.publishable) {
+    return {
+      ok: false,
+      reason: compatibility.reason,
+      post: { ...post, media_asset: asset, asset_compatibility: compatibility },
+      asset,
+      compatibility
+    };
   }
   return {
     ok: true,
@@ -2255,7 +2360,8 @@ async function resolveSocialPostMedia(post = {}) {
       ...post,
       media_url: asset.public_url,
       image_url: asset.public_url,
-      media_asset: asset
+      media_asset: asset,
+      asset_compatibility: compatibility
     }
   };
 }
@@ -2855,6 +2961,7 @@ function socialPostPreview(post = {}, channel = post.platform || "linkedin") {
   const caption = post.caption || post.text || post.body || post.hook || "";
   const mediaUrl = post.media_url || post.image_url || "";
   const targetUrl = post.target_url || post.source_url || post.destination_url || "";
+  const mediaAsset = post.media_asset ? normalizeSocialAssetRow(post.media_asset) : null;
   return {
     id: post.id || null,
     channel,
@@ -2866,7 +2973,8 @@ function socialPostPreview(post = {}, channel = post.platform || "linkedin") {
     media_url: mediaUrl ? socialSafeText(mediaUrl, 1000) : null,
     image_url: mediaUrl ? socialSafeText(mediaUrl, 1000) : null,
     media_asset_id: post.media_asset_id || post.media_asset?.id || null,
-    media_asset: post.media_asset ? normalizeSocialAssetRow(post.media_asset) : null,
+    media_asset: mediaAsset,
+    asset_compatibility: mediaAsset ? evaluateSocialAssetCompatibility(mediaAsset, channel) : null,
     target_url: targetUrl ? socialSafeText(targetUrl, 1000) : null,
     source_url: targetUrl ? socialSafeText(targetUrl, 1000) : null,
     topic: socialSafeText(post.topic || post.source_slug || "", 180),
