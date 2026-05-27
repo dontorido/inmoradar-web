@@ -41,11 +41,14 @@ const {
   validateMetaOrganicEnv
 } = require("../lib/meta/organic");
 
+const IG_APP_ID = "1438690814675569";
+const OLD_IG_APP_ID = "14386908146755569";
+
 const validEnv = {
   META_APP_ID: "meta-app-id",
   META_APP_SECRET: "meta-app-secret",
   META_REDIRECT_URI: "https://www.inmoradar.app/api/meta/oauth/callback",
-  INSTAGRAM_APP_ID: "14386908146755569",
+  INSTAGRAM_APP_ID: IG_APP_ID,
   INSTAGRAM_APP_SECRET: "instagram-app-secret",
   INSTAGRAM_REDIRECT_URI: "https://www.inmoradar.app/api/meta/oauth/callback",
   INSTAGRAM_GRAPH_VERSION: "v23.0",
@@ -158,14 +161,14 @@ function assertCleanInstagramLoginTopLevel(url) {
     ["force_authentication", "platform_app_id", "next"]
   );
   assert.equal(parsed.searchParams.has("force_authentication"), true);
-  assert.equal(parsed.searchParams.get("platform_app_id"), "14386908146755569");
+  assert.equal(parsed.searchParams.get("platform_app_id"), IG_APP_ID);
   assert.equal(parsed.searchParams.has("client_id"), false);
   assert.equal(parsed.searchParams.has("redirect_uri"), false);
   assert.equal(parsed.searchParams.has("response_type"), false);
   assert.equal(parsed.searchParams.has("scope"), false);
   assert.equal(parsed.searchParams.has("force_reauth"), false);
-  assert.equal(nextUrl.searchParams.get("client_id"), "14386908146755569");
-  assert.equal(url.includes("client_id=1438690814675569"), false);
+  assert.equal(nextUrl.searchParams.get("client_id"), IG_APP_ID);
+  assert.equal(decodeURIComponent(url).includes(OLD_IG_APP_ID), false);
 }
 
 async function callMetaOAuthStartRedirect(query = "", env = validEnv) {
@@ -430,7 +433,7 @@ test("OAuth Instagram Login usa URL de insercion con accounts/login y next third
   assert.equal(parsed.searchParams.get("platform_app_id") === validEnv.META_APP_ID, false);
   assertOnlyInstagramPublishScopes(url);
   assert.equal(nextUrl.pathname, "/oauth/authorize/third_party/");
-  assert.equal(nextUrl.searchParams.get("client_id"), "14386908146755569");
+  assert.equal(nextUrl.searchParams.get("client_id"), IG_APP_ID);
   assert.equal(nextUrl.searchParams.get("redirect_uri"), "https://www.inmoradar.app/api/meta/oauth/callback");
   assert.equal(nextUrl.searchParams.get("scope"), "instagram_business_basic,instagram_business_content_publish");
   assert.equal(nextUrl.searchParams.get("response_type"), "code");
@@ -443,7 +446,7 @@ test("OAuth Instagram Login usa URL de insercion con accounts/login y next third
 
 test("OAuth Instagram fuerza scopes minimos aunque la URL oficial traiga mensajes comentarios o insights", async () => {
   const broadScope = "instagram_business_basic,instagram_business_manage_messages,instagram_manage_comments,instagram_business_content_publish,instagram_business_manage_insights";
-  const officialUrl = `https://www.instagram.com/accounts/login/?force_reauth=true&client_id=1438690814675569&redirect_uri=${encodeURIComponent("https://example.com/wrong")}&response_type=code&platform_app_id=14386908146755569&scope=${encodeURIComponent(broadScope)}&logger_id=official-logger&next=${encodeURIComponent(`/oauth/authorize/third_party/?client_id=14386908146755569&redirect_uri=${encodeURIComponent("https://example.com/callback")}&response_type=code&scope=${encodeURIComponent(broadScope)}&config_id=official-config`)}`;
+  const officialUrl = `https://www.instagram.com/accounts/login/?force_reauth=true&client_id=${IG_APP_ID}&redirect_uri=${encodeURIComponent("https://example.com/wrong")}&response_type=code&platform_app_id=${OLD_IG_APP_ID}&scope=${encodeURIComponent(broadScope)}&logger_id=official-logger&next=${encodeURIComponent(`/oauth/authorize/third_party/?client_id=${OLD_IG_APP_ID}&redirect_uri=${encodeURIComponent("https://example.com/callback")}&response_type=code&scope=${encodeURIComponent(broadScope)}&config_id=official-config`)}`;
   const { url, scopes } = buildInstagramAuthorizationUrl({
     state: "state",
     env: { ...validEnv, INSTAGRAM_OFFICIAL_EMBED_URL: officialUrl }
@@ -454,7 +457,7 @@ test("OAuth Instagram fuerza scopes minimos aunque la URL oficial traiga mensaje
   assertOnlyInstagramPublishScopes(url);
   assert.equal(parsed.searchParams.has("logger_id"), false);
   assert.equal(nextUrl.searchParams.get("config_id"), "official-config");
-  assert.equal(nextUrl.searchParams.get("client_id"), "14386908146755569");
+  assert.equal(nextUrl.searchParams.get("client_id"), IG_APP_ID);
   assert.equal(nextUrl.searchParams.get("redirect_uri"), "https://www.inmoradar.app/api/meta/oauth/callback");
   assert.equal(nextUrl.searchParams.get("response_type"), "code");
   assert.deepEqual(scopes, IG_PUBLISH_SCOPES);
@@ -467,7 +470,7 @@ test("OAuth Instagram fuerza scopes minimos aunque la URL oficial traiga mensaje
 });
 
 test("OAuth Instagram conserva extras del next oficial y permite comparar diferencias", () => {
-  const officialUrl = "https://www.instagram.com/accounts/login/?force_authentication&platform_app_id=14386908146755569&logger_id=official-logger&next=%2Foauth%2Fauthorize%2Fthird_party%2F%3Fconfig_id%3Dofficial-config%26client_id%3D14386908146755569%26redirect_uri%3Dhttps%253A%252F%252Fexample.com%252Fcallback%26response_type%3Dcode%26scope%3Dinstagram_business_basic%252Cinstagram_business_content_publish";
+  const officialUrl = `https://www.instagram.com/accounts/login/?force_authentication&platform_app_id=${IG_APP_ID}&logger_id=official-logger&next=${encodeURIComponent(`/oauth/authorize/third_party/?config_id=official-config&client_id=${IG_APP_ID}&redirect_uri=${encodeURIComponent("https://example.com/callback")}&response_type=code&scope=instagram_business_basic%2Cinstagram_business_content_publish`)}`;
   const { url } = buildInstagramAuthorizationUrl({
     state: "state",
     env: { ...validEnv, INSTAGRAM_OFFICIAL_EMBED_URL: officialUrl }
@@ -476,9 +479,9 @@ test("OAuth Instagram conserva extras del next oficial y permite comparar difere
   assertCleanInstagramLoginTopLevel(url);
   assertOnlyInstagramPublishScopes(url);
   assert.equal(parsed.searchParams.has("logger_id"), false);
-  assert.equal(parsed.searchParams.get("platform_app_id"), "14386908146755569");
+  assert.equal(parsed.searchParams.get("platform_app_id"), IG_APP_ID);
   assert.equal(nextUrl.searchParams.get("config_id"), "official-config");
-  assert.equal(nextUrl.searchParams.get("client_id"), "14386908146755569");
+  assert.equal(nextUrl.searchParams.get("client_id"), IG_APP_ID);
   assert.equal(nextUrl.searchParams.get("redirect_uri"), "https://www.inmoradar.app/api/meta/oauth/callback");
   assert.equal(nextUrl.searchParams.get("state"), "state");
 
@@ -533,7 +536,7 @@ test("intercambio Instagram Login usa api.instagram.com y secreto Instagram", as
   const body = new URLSearchParams(calls[0].options.body);
   assert.equal(calls[0].url, "https://api.instagram.com/oauth/access_token");
   assert.equal(calls[0].options.method, "POST");
-  assert.equal(body.get("client_id"), "14386908146755569");
+  assert.equal(body.get("client_id"), IG_APP_ID);
   assert.equal(body.get("client_secret"), "instagram-app-secret");
   assert.equal(body.get("client_secret") === validEnv.META_APP_SECRET, false);
   assert.equal(body.get("redirect_uri"), "https://www.inmoradar.app/api/meta/oauth/callback");
@@ -648,9 +651,9 @@ test("OAuth organico por defecto no pide scopes legacy ni Page scopes", async ()
   assert.equal(parsed.origin, "https://www.instagram.com");
   assert.equal(parsed.pathname, "/accounts/login/");
   assert.equal(parsed.searchParams.has("force_authentication"), true);
-  assert.equal(parsed.searchParams.get("platform_app_id"), "14386908146755569");
+  assert.equal(parsed.searchParams.get("platform_app_id"), IG_APP_ID);
   assert.equal(nextUrl.pathname, "/oauth/authorize/third_party/");
-  assert.equal(nextUrl.searchParams.get("client_id"), "14386908146755569");
+  assert.equal(nextUrl.searchParams.get("client_id"), IG_APP_ID);
   assert.equal(payload.url.includes("facebook.com"), false);
   assert.equal(payload.url.includes("api.instagram.com/oauth/authorize"), false);
   assert.equal(payload.url.includes("www.instagram.com/oauth/authorize"), false);
@@ -660,6 +663,30 @@ test("OAuth organico por defecto no pide scopes legacy ni Page scopes", async ()
   assert.equal(scope.includes("pages_manage_posts"), false);
   assert.deepEqual(payload.scopes, ["instagram_business_basic", "instagram_business_content_publish"]);
   assert.equal(payload.provider, "instagram");
+});
+
+test("OAuth organico usa INSTAGRAM_APP_ID desde env y no fallback", async () => {
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (message, ...args) => {
+    logs.push([message, ...args].map((entry) => String(entry)).join(" "));
+  };
+  try {
+    const { statusCode, payload } = await callMetaOAuthStart();
+    assert.equal(statusCode, 200);
+    assertCleanInstagramLoginTopLevel(payload.url);
+    assert.equal(decodeURIComponent(payload.url).includes(OLD_IG_APP_ID), false);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.ok(logs.some((line) => line.includes("instagram_app_id_source=env fallback=none")));
+});
+
+test("OAuth organico falla claro si falta INSTAGRAM_APP_ID", async () => {
+  const { statusCode, payload } = await callMetaOAuthStart("", { ...validEnv, INSTAGRAM_APP_ID: undefined });
+  assert.equal(statusCode, 500);
+  assert.equal(payload.error, "meta_oauth_not_configured");
+  assert.ok(payload.missing.includes("INSTAGRAM_APP_ID"));
 });
 
 test("OAuth organico solo activa legacy con flag explicito", async () => {
@@ -695,7 +722,7 @@ test("OAuth organico no mezcla scopes aunque pidan target meta/all", async () =>
   assert.equal(payload.target, "instagram");
   assert.equal(parsed.origin, "https://www.instagram.com");
   assert.equal(parsed.pathname, "/accounts/login/");
-  assert.equal(parsed.searchParams.get("platform_app_id"), "14386908146755569");
+  assert.equal(parsed.searchParams.get("platform_app_id"), IG_APP_ID);
   assert.equal(payload.url.includes("api.instagram.com/oauth/authorize"), false);
   assert.equal(payload.url.includes("www.instagram.com/oauth/authorize"), false);
   assert.equal(scope, "instagram_business_basic,instagram_business_content_publish");
@@ -746,8 +773,8 @@ test("endpoint legacy meta/connect queda blindado a Instagram-only por defecto",
   const { parsed, nextUrl } = parseInstagramLoginUrl(payload.url);
   const scope = nextUrl.searchParams.get("scope");
   assert.equal(parsed.origin, "https://www.instagram.com");
-  assert.equal(parsed.searchParams.get("platform_app_id"), "14386908146755569");
-  assert.equal(nextUrl.searchParams.get("client_id"), "14386908146755569");
+  assert.equal(parsed.searchParams.get("platform_app_id"), IG_APP_ID);
+  assert.equal(nextUrl.searchParams.get("client_id"), IG_APP_ID);
   assert.equal(payload.url.includes("api.instagram.com/oauth/authorize"), false);
   assert.equal(payload.url.includes("www.instagram.com/oauth/authorize"), false);
   assert.equal(scope, "instagram_business_basic,instagram_business_content_publish");

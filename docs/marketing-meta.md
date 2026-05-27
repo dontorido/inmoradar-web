@@ -87,7 +87,7 @@ Estados de posts:
 
 Hay dos IDs distintos:
 
-- `INSTAGRAM_APP_ID`: identificador de aplicacion de Instagram, por ejemplo `14386908146755569`, visible en `Casos de uso > Administrar mensajes y contenido en Instagram > API de Instagram > Configuracion de la API con el inicio de sesion de Instagram`.
+- `INSTAGRAM_APP_ID`: identificador de aplicacion de Instagram, por ejemplo `1438690814675569`, visible en `Casos de uso > Administrar mensajes y contenido en Instagram > API de Instagram > Configuracion de la API con el inicio de sesion de Instagram`.
 - `META_APP_ID`: App ID principal de Meta/Facebook, usado solo para Facebook Login y Facebook Page.
 
 No intercambies estos IDs. Instagram Login no debe usar el dialog de Facebook.
@@ -111,6 +111,8 @@ https://www.inmoradar.app/api/meta/oauth/callback
 ```env
 INSTAGRAM_REDIRECT_URI=https://www.inmoradar.app/api/meta/oauth/callback
 ```
+
+`INSTAGRAM_APP_ID` no tiene fallback ni valor por defecto: si falta en Vercel, `/api/meta/oauth/start?target=instagram` debe devolver `meta_oauth_not_configured` con `INSTAGRAM_APP_ID` en `missing`.
 
 5. Para la spike inicial de Instagram, prepara permisos:
 

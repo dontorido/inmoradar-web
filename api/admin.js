@@ -2247,6 +2247,10 @@ async function handleMetaOrganicOAuthStart(req, res, url) {
   if (req.method !== "GET") return json(res, 405, { ok: false, error: "method_not_allowed" });
   const target = normalizeOAuthTarget(url.searchParams.get("target") || url.searchParams.get("platform") || "instagram");
   const envStatus = validateMetaOrganicEnv(process.env, { target });
+  if (target === "instagram") {
+    const instagramAppIdSource = process.env.INSTAGRAM_APP_ID ? "env" : "missing";
+    console.log(`[Meta Organic OAuth] instagram_app_id_source=${instagramAppIdSource} fallback=none`);
+  }
   if (!envStatus.ok) {
     return json(res, 500, { ok: false, error: "meta_oauth_not_configured", missing: envStatus.missing });
   }
