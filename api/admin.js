@@ -10,6 +10,7 @@ const {
 } = require("./_seo/autogeneration");
 const { getSeoContentPublicationStatus, runSeoContentPublication } = require("./_seo/contentPublisher");
 const { runSeoLandingGeneration } = require("./_seo/generator");
+const { evaluateLandingIndexability } = require("./_seo/indexability");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
 const { createKpiSettingsHandler } = require("./_admin/handlers/kpis");
 const { createOperationsReleaseHandler } = require("./_admin/handlers/operations");
@@ -124,7 +125,7 @@ const {
 } = require("../lib/meta/organic");
 const { logRequestMetric } = require("../lib/observability/request-metrics");
 const LANDING_SELECT =
-  "id,opportunity_id,slug,title,meta_title,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at,source_data_json";
+  "id,opportunity_id,slug,title,meta_title,meta_description,h1,body_html,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,created_at,updated_at,source_data_json";
 const META_OAUTH_STATE_COOKIE = "inmoradar_meta_oauth_state";
 const SOCIAL_POST_PLATFORMS = ["instagram", "facebook", "linkedin", "tiktok"];
 const SOCIAL_POST_FORMATS = ["image", "carousel", "reel", "video", "link", "text"];
@@ -696,11 +697,20 @@ async function handleSeoLandingAction(body) {
   if (!landing) return { status: 404, payload: { ok: false, error: "landing_not_found" } };
 
   if (action === "publish") {
-    const score = Number(landing.quality_score) || 0;
-    if (score < 75) {
+    const indexability = evaluateLandingIndexability({
+      ...landing,
+      status: "published",
+      index_status: "index"
+    });
+    if (!indexability.sitemap_eligible) {
       return {
         status: 409,
-        payload: { ok: false, error: "quality_too_low", message: "Quality score must be at least 75." }
+        payload: {
+          ok: false,
+          error: "indexability_gate_failed",
+          message: "La landing no cumple el gate de indexabilidad.",
+          reasons: indexability.reasons
+        }
       };
     }
     const updated = await patchLanding(slug, {

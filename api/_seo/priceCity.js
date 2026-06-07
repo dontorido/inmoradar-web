@@ -270,6 +270,21 @@ function usefulLinks() {
         <span>Página principal de InmoRadar</span>
         <small>INMORADAR.APP</small>
       </a>
+      <a href="/precio-metro-cuadrado/">
+        ${icon("arrowUpRight")}
+        <span>Guía de precio por metro cuadrado por ciudad</span>
+        <small>PRECIO M2</small>
+      </a>
+      <a href="/precio-alquiler/">
+        ${icon("arrowUpRight")}
+        <span>Referencias de alquiler por metro cuadrado</span>
+        <small>ALQUILER</small>
+      </a>
+      <a href="/saber-si-piso-esta-caro/">
+        ${icon("arrowUpRight")}
+        <span>Cómo saber si un piso está caro</span>
+        <small>ANALISIS</small>
+      </a>
     </div>
   </section>`;
 }

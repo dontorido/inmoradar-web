@@ -85,6 +85,42 @@ const FALLBACK_MARKET_PRICE_SOURCES = [
     sample_size: 10342,
     confidence_score: 0.65,
     extracted_at: "2026-05-14T17:04:12.681Z"
+  },
+  {
+    source: "idealista_public_report",
+    operation: "sale",
+    country: "ES",
+    autonomous_community: "Andalucia",
+    province: "Granada",
+    municipality: "Granada",
+    zone_name: "Granada",
+    geo_level: "municipality",
+    price_eur_m2: 2645,
+    evolution_month_pct: 0.6,
+    evolution_year_pct: 9.2,
+    period_label: "mayo 2026",
+    period_date: "2026-05-01",
+    source_url: "https://www.idealista.com/sala-de-prensa/informes-precio-vivienda/venta/andalucia/granada-provincia/granada/",
+    confidence_score: 0.75,
+    extracted_at: "2026-06-07T10:00:00Z"
+  },
+  {
+    source: "idealista_public_report",
+    operation: "rent",
+    country: "ES",
+    autonomous_community: "Andalucia",
+    province: "Granada",
+    municipality: "Granada",
+    zone_name: "Granada",
+    geo_level: "municipality",
+    price_eur_m2: 10.5,
+    evolution_month_pct: 1.0,
+    evolution_year_pct: 4.4,
+    period_label: "abril 2026",
+    period_date: "2026-04-01",
+    source_url: "https://www.idealista.com/sala-de-prensa/informes-precio-vivienda/alquiler/andalucia/granada-provincia/granada/",
+    confidence_score: 0.75,
+    extracted_at: "2026-06-07T10:00:00Z"
   }
 ];
 
