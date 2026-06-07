@@ -1853,6 +1853,49 @@
   border-left-color: rgba(220, 38, 38, .48);
 }
 
+.admin-seo-diagnostics {
+  border-top: 1px solid rgba(9, 9, 11, .1);
+  display: grid;
+  gap: 14px;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  padding: 18px 20px 22px;
+}
+
+.admin-seo-diagnostics section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-seo-diagnostics strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-seo-diagnostics div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-seo-diagnostics span,
+.admin-seo-diagnostics a,
+.admin-seo-diagnostics p {
+  background: rgba(9, 9, 11, .04);
+  border: 1px solid rgba(9, 9, 11, .08);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 7px 9px;
+  text-decoration: none;
+}
+
 @media (max-width: 920px) {
   .admin-seo-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -383,6 +383,22 @@ test("seo autogeneration registra skipped con reason para score insuficiente", a
   assert.equal(result.results[0].reason, "score_below_publish_threshold_drafted");
 });
 
+test("seo autogeneration no publica si falla el indexability gate tecnico", async () => {
+  const storage = memoryStorage();
+  const result = await run({
+    storage,
+    opportunities: [opportunity("Sevilla \u00c3\u00a1", "price_city", 95)]
+  });
+
+  assert.equal(result.published_count, 0);
+  assert.equal(storage.saved.length, 1);
+  assert.equal(storage.saved[0].status, "draft");
+  assert.equal(storage.saved[0].index_status, "noindex");
+  assert.equal(result.results[0].sitemap_eligible, false);
+  assert.ok(result.results[0].indexability_reasons.includes("mojibake_detected"));
+  assert.equal(result.results[0].reason, "mojibake_detected");
+});
+
 test("seo autogeneration endpoint protegido rechaza llamadas sin token", async () => {
   const result = await callSeoAutogenerationResource();
 
@@ -466,7 +482,7 @@ test("seo autogeneration mantiene limites seguros aunque env pida mas", () => {
   assert.equal(config.max_per_run, 1);
   assert.equal(config.max_per_day, 3);
   assert.equal(config.max_per_week, 40);
-  assert.equal(config.min_score, 80);
+  assert.equal(config.min_score, 85);
 });
 
 test("seo autogeneration alerts avisan si el ultimo run falla", () => {

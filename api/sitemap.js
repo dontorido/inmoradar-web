@@ -1,26 +1,33 @@
 const { hasSupabaseConfig, supabaseFetch } = require("./_utils");
-const { getSeedPublishedLanding } = require("./_seo/seedPublished");
+const { evaluateSitemapEligibility } = require("./_seo/indexability");
+const { SEED_PUBLISHED_OPPORTUNITIES, getSeedPublishedLanding } = require("./_seo/seedPublished");
 const { escapeHtml, siteUrl } = require("./_seo/text");
 
 const STATIC_PATHS = [
-  "/",
-  "/que-analiza",
-  "/datos",
-  "/metodologia",
-  "/noticias",
-  "/premium",
-  "/clientes",
-  "/faq",
-  "/contacto",
-  "/privacidad",
-  "/terminos"
+  { pathname: "/", lastmod: "2026-06-07" },
+  { pathname: "/que-analiza", lastmod: "2026-06-07" },
+  { pathname: "/datos", lastmod: "2026-06-07" },
+  { pathname: "/metodologia", lastmod: "2026-06-07" },
+  { pathname: "/noticias", lastmod: "2026-06-07" },
+  { pathname: "/precio-metro-cuadrado/", lastmod: "2026-06-07" },
+  { pathname: "/precio-alquiler/", lastmod: "2026-06-07" },
+  { pathname: "/saber-si-piso-esta-caro/", lastmod: "2026-06-07" },
+  { pathname: "/premium", lastmod: "2026-06-07" },
+  { pathname: "/clientes", lastmod: "2026-06-07" },
+  { pathname: "/faq", lastmod: "2026-06-07" },
+  { pathname: "/contacto", lastmod: "2026-06-07" },
+  { pathname: "/privacidad", lastmod: "2026-06-07" },
+  { pathname: "/terminos", lastmod: "2026-06-07" }
 ];
 
 async function fetchPublishedLandings() {
-  const seed = await getSeedPublishedLanding("precio-metro-cuadrado/logrono");
-  if (!hasSupabaseConfig()) return seed ? [seed] : [];
+  const seeds = (
+    await Promise.all(Object.keys(SEED_PUBLISHED_OPPORTUNITIES).map((slug) => getSeedPublishedLanding(slug)))
+  ).filter(Boolean);
+  if (!hasSupabaseConfig()) return seeds;
   const params = new URLSearchParams({
-    select: "slug,title,meta_description,city,template_type,quality_score,updated_at,published_at,last_generated_at",
+    select:
+      "slug,title,meta_title,meta_description,h1,body_html,city,template_type,canonical_url,index_status,status,quality_score,word_count,source_data_json,updated_at,published_at,last_generated_at",
     index_status: "eq.index",
     status: "eq.published",
     quality_score: "gte.75",
@@ -34,10 +41,14 @@ async function fetchPublishedLandings() {
   } catch (error) {
     console.warn("[sitemap] Supabase landing lookup failed, using seed fallback", error.message);
   }
-  if (seed && !landings.some((landing) => landing.slug === seed.slug)) {
-    landings.unshift(seed);
+  for (const seed of seeds) {
+    if (!landings.some((landing) => landing.slug === seed.slug)) {
+      landings.unshift(seed);
+    }
   }
-  return landings.sort((left, right) => publishedTime(right) - publishedTime(left));
+  return landings
+    .filter((landing) => evaluateSitemapEligibility(landing).sitemap_eligible)
+    .sort((left, right) => publishedTime(right) - publishedTime(left));
 }
 
 function publishedTime(landing) {
@@ -119,7 +130,7 @@ module.exports = async function handler(req, res) {
     }
 
     const entries = [
-      ...STATIC_PATHS.map((pathname) => urlEntry(`${baseUrl}${pathname === "/" ? "/" : pathname}`)),
+      ...STATIC_PATHS.map((entry) => urlEntry(`${baseUrl}${entry.pathname === "/" ? "/" : entry.pathname}`, entry.lastmod)),
       ...landings.map((landing) =>
         urlEntry(`${baseUrl}/${landing.slug.replace(/^\/+|\/+$/g, "")}/`, landing.published_at || landing.updated_at || landing.last_generated_at)
       )

@@ -274,26 +274,15 @@ test("servidor local cubre rewrites operativas clave de Vercel", () => {
   assert.match(localServer, /"\/inmuebles-guardados": "\/inmuebles-guardados\.html"/);
 });
 
-test("menus publicos no enlazan a Premium mientras esta oculto", () => {
+test("home footer enlaza Premium y hubs SEO publicos", () => {
   const root = path.join(__dirname, "..");
-  const files = [
-    "index.html",
-    "que-analiza.html",
-    "datos.html",
-    "noticias.html",
-    "faq.html",
-    "contacto.html",
-    "clientes.html",
-    "inmuebles-guardados.html",
-    "status.html",
-    "privacidad.html",
-    "terminos.html"
-  ];
-  for (const file of files) {
-    const html = fs.readFileSync(path.join(root, file), "utf8");
-    assert.doesNotMatch(html, /href="\/premium"/, file);
-    assert.doesNotMatch(html, /nav-link-premium|nav-mobile-link-premium|footer-link-premium/, file);
-  }
+  const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+
+  assert.match(html, /href="\/premium"/);
+  assert.match(html, /href="\/precio-metro-cuadrado\/"/);
+  assert.match(html, /href="\/precio-alquiler\/"/);
+  assert.match(html, /href="\/saber-si-piso-esta-caro\/"/);
+  assert.doesNotMatch(html, /nav-link-premium|nav-mobile-link-premium/);
 });
 
 test("backoffice muestra fallback si /api/status falla", () => {

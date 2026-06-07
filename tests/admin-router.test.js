@@ -63,6 +63,12 @@ function jsonResponse(rows) {
   };
 }
 
+const RICH_SEO_BODY = `
+  <section data-city-specific="true"><p>${"Logrono precio vivienda fuente fecha anuncio ".repeat(120)}</p></section>
+  <section data-city-specific="true"><p>Fuente: MIVAU. Fecha del dato: 4T 2025.</p><a href="/datos">Datos</a></section>
+  <section data-city-specific="true"><p>${"Comparar superficie estado zona precio metro cuadrado ".repeat(80)}</p><a href="/metodologia">Metodologia</a></section>
+`;
+
 function supabaseMockFetch(url) {
   const path = apiPath(url);
   if (path.startsWith("premium_subscriptions?select=status")) {
@@ -82,6 +88,37 @@ function supabaseMockFetch(url) {
       { status: "draft", index_status: "noindex", quality_score: 60 }
     ]);
   }
+  if (path.startsWith("seo_landings?select=slug,title,meta_title,meta_description,h1,body_html")) {
+    return jsonResponse([
+      {
+        slug: "precio-metro-cuadrado/logrono",
+        title: "Logrono",
+        meta_title: "Precio m2 Logrono - InmoRadar",
+        meta_description: "Referencia de precio por metro cuadrado en Logrono con fuente y fecha para comparar anuncios.",
+        h1: "Precio del metro cuadrado en Logrono",
+        body_html: RICH_SEO_BODY,
+        status: "published",
+        index_status: "index",
+        quality_score: 91,
+        word_count: 850,
+        canonical_url: "https://inmoradar.app/precio-metro-cuadrado/logrono/",
+        published_at: "2026-05-24T00:00:00.000Z"
+      },
+      {
+        slug: "precio-metro-cuadrado/draft",
+        title: "Draft",
+        meta_title: "Draft",
+        meta_description: "Draft",
+        h1: "Draft",
+        body_html: "<p>Draft pendiente.</p>",
+        status: "draft",
+        index_status: "noindex",
+        quality_score: 60,
+        word_count: 200,
+        canonical_url: "https://inmoradar.app/precio-metro-cuadrado/draft/"
+      }
+    ]);
+  }
   if (path.startsWith("seo_landings?select=id,opportunity_id,slug")) {
     return jsonResponse([
       {
@@ -90,6 +127,9 @@ function supabaseMockFetch(url) {
         slug: "precio-metro-cuadrado/logrono",
         title: "Precio metro cuadrado Logrono",
         meta_title: "Precio m2 Logrono",
+        meta_description: "Referencia de precio por metro cuadrado en Logrono con fuente y fecha para comparar anuncios.",
+        h1: "Precio del metro cuadrado en Logrono",
+        body_html: RICH_SEO_BODY,
         city: "Logrono",
         province: "La Rioja",
         autonomous_community: "La Rioja",
@@ -411,13 +451,39 @@ test("admin seo landings handler keeps filters and pagination read-only", async 
     }),
     clampLimit: (value, fallback, max) => Math.max(1, Math.min(max, Number.parseInt(String(value || fallback), 10) || fallback)),
     clampPage: (value) => Math.max(1, Number.parseInt(String(value || 1), 10) || 1),
-    landingSelect: "id,slug,status,index_status,quality_score,updated_at,source_data_json",
+    landingSelect: "id,slug,status,index_status,quality_score,updated_at,body_html,source_data_json",
     safeFetch: async (path) => {
       paths.push(path);
       if (path.startsWith("seo_landing_opportunities?")) return [{ status: "pending", template_type: "price_city" }];
       return [
-        { status: "published", index_status: "index", quality_score: 90, template_type: "price_city" },
-        { status: "draft", index_status: "noindex", quality_score: 60, template_type: "guide_city" }
+        {
+          slug: "precio-metro-cuadrado/logrono",
+          title: "Precio del metro cuadrado en Logrono",
+          meta_title: "Precio m2 en Logrono - InmoRadar",
+          meta_description: "Referencia de precio por metro cuadrado en Logrono con fuente y fecha para comparar anuncios.",
+          h1: "Precio del metro cuadrado en Logrono",
+          body_html: RICH_SEO_BODY,
+          status: "published",
+          index_status: "index",
+          quality_score: 90,
+          word_count: 850,
+          canonical_url: "https://inmoradar.app/precio-metro-cuadrado/logrono/",
+          template_type: "price_city"
+        },
+        {
+          slug: "precio-metro-cuadrado/draft",
+          title: "Draft",
+          meta_title: "Draft",
+          meta_description: "Draft",
+          h1: "Draft",
+          body_html: "<p>Draft pendiente.</p>",
+          status: "draft",
+          index_status: "noindex",
+          quality_score: 60,
+          word_count: 120,
+          canonical_url: "https://inmoradar.app/precio-metro-cuadrado/draft/",
+          template_type: "guide_city"
+        }
       ];
     },
     seoDailyTargets: { landings: 2, news: 2 },
@@ -429,7 +495,14 @@ test("admin seo landings handler keeps filters and pagination read-only", async 
           slug: "landing-3",
           status: "published",
           index_status: "index",
+          title: "Precio del metro cuadrado en Logrono",
+          meta_title: "Precio m2 en Logrono - InmoRadar",
+          meta_description: "Referencia de precio por metro cuadrado en Logrono con fuente y fecha para comparar anuncios.",
+          h1: "Precio del metro cuadrado en Logrono",
+          body_html: RICH_SEO_BODY,
           quality_score: 92,
+          word_count: 850,
+          canonical_url: "https://inmoradar.app/landing-3/",
           source_data_json: {
             quality: {
               signals: ["datos reales disponibles"],
@@ -463,9 +536,12 @@ test("admin seo landings handler keeps filters and pagination read-only", async 
   assert.deepEqual(result.payload.landings[0].quality_signals, ["datos reales disponibles"]);
   assert.equal(result.payload.landings[0].sitemap_status, "included");
   assert.equal(result.payload.landings[0].sitemap_reason, "published_index_quality_ok");
+  assert.equal(result.payload.landings[0].body_html, undefined);
   assert.equal(result.payload.landings[0].source_data_json, undefined);
   assert.equal(result.payload.summary.filtered_total, 1);
   assert.equal(result.payload.summary.target_landings_per_day, 2);
+  assert.equal(result.payload.summary.sitemap_included, 1);
+  assert.equal(result.payload.summary.sitemap_excluded, 1);
   assert.equal(paths.length, 3);
   assert.ok(paths[0].startsWith("seo_landings?"));
   assert.match(paths[0], /limit=3/);

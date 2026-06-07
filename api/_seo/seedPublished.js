@@ -1,27 +1,71 @@
+const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../../lib/seo/cityGuideTemplates");
 const { buildPriceCitySourceData } = require("./marketSources");
 const { buildPriceCityLanding } = require("./priceCity");
 const { calculateSeoLandingQuality } = require("./quality");
 
-const FIRST_PUBLISHED_OPPORTUNITY = {
-  keyword: "precio metro cuadrado Logroño",
-  city: "Logroño",
-  province: "La Rioja",
-  autonomous_community: "La Rioja",
-  intent: "informational",
-  template_type: "price_city",
-  search_priority: 85,
-  status: "published"
+const SEED_PUBLISHED_OPPORTUNITIES = {
+  "precio-metro-cuadrado/logrono": {
+    keyword: "precio metro cuadrado Logrono",
+    city: "Logrono",
+    province: "La Rioja",
+    autonomous_community: "La Rioja",
+    intent: "informational",
+    template_type: "price_city",
+    search_priority: 85,
+    status: "published"
+  },
+  "precio-metro-cuadrado/madrid": {
+    keyword: "precio metro cuadrado Madrid",
+    city: "Madrid",
+    province: "Madrid",
+    autonomous_community: "Madrid Comunidad",
+    intent: "informational",
+    template_type: "price_city",
+    search_priority: 95,
+    status: "published"
+  },
+  "precio-alquiler/madrid": {
+    keyword: "precio alquiler metro cuadrado Madrid",
+    city: "Madrid",
+    province: "Madrid",
+    autonomous_community: "Madrid Comunidad",
+    intent: "informational",
+    template_type: "rent_city",
+    search_priority: 92,
+    status: "published"
+  },
+  "saber-si-piso-esta-caro/granada": {
+    keyword: "saber si un piso esta caro en Granada",
+    city: "Granada",
+    province: "Granada",
+    autonomous_community: "Andalucia",
+    intent: "commercial_investigation",
+    template_type: "expensive_listing_city",
+    search_priority: 76,
+    status: "published"
+  }
 };
 
+const FIRST_PUBLISHED_OPPORTUNITY = SEED_PUBLISHED_OPPORTUNITIES["precio-metro-cuadrado/logrono"];
 const FIRST_PUBLISHED_AT = "2026-05-18T00:00:00.000Z";
 
-async function getSeedPublishedLanding(slug) {
-  if (String(slug || "").replace(/^\/+|\/+$/g, "") !== "precio-metro-cuadrado/logrono") {
-    return null;
+function buildSeedLanding(opportunity, sourceData) {
+  if (opportunity.template_type === "rent_city") {
+    return buildRentCityLanding(opportunity, sourceData);
   }
+  if (opportunity.template_type === "expensive_listing_city") {
+    return buildExpensiveListingCityLanding(opportunity, sourceData);
+  }
+  return buildPriceCityLanding(opportunity, sourceData);
+}
 
-  const sourceData = await buildPriceCitySourceData(FIRST_PUBLISHED_OPPORTUNITY);
-  const landing = buildPriceCityLanding(FIRST_PUBLISHED_OPPORTUNITY, sourceData);
+async function getSeedPublishedLanding(slug) {
+  const cleanSlug = String(slug || "").replace(/^\/+|\/+$/g, "");
+  const opportunity = SEED_PUBLISHED_OPPORTUNITIES[cleanSlug];
+  if (!opportunity) return null;
+
+  const sourceData = await buildPriceCitySourceData(opportunity);
+  const landing = buildSeedLanding(opportunity, sourceData);
   const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: landing.faq });
   if (!sourceData.hasRealData || quality.score < 85) return null;
 
@@ -57,5 +101,6 @@ async function getSeedPublishedLanding(slug) {
 
 module.exports = {
   FIRST_PUBLISHED_OPPORTUNITY,
+  SEED_PUBLISHED_OPPORTUNITIES,
   getSeedPublishedLanding
 };

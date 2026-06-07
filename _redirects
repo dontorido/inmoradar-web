@@ -12,8 +12,12 @@
 /api/admin/meta/posts /api/admin?resource=meta/posts 200
 /api/admin/meta/autopublisher/run /api/admin?resource=meta/autopublisher/run 200
 /backoffice/marketing/meta /admin.html 200
+/precio-metro-cuadrado /precio-metro-cuadrado.html 200
+/precio-metro-cuadrado/ /precio-metro-cuadrado.html 200
 /precio-metro-cuadrado/:city /api/seo-page?slug=precio-metro-cuadrado/:city 200
 /precio-metro-cuadrado/:city/ /api/seo-page?slug=precio-metro-cuadrado/:city 200
+/precio-alquiler /precio-alquiler.html 200
+/precio-alquiler/ /precio-alquiler.html 200
 /precio-alquiler/:city /api/seo-page?slug=precio-alquiler/:city 200
 /precio-alquiler/:city/ /api/seo-page?slug=precio-alquiler/:city 200
 /saber-si-piso-esta-caro /saber-si-piso-esta-caro.html 200
