@@ -623,8 +623,12 @@ test("sitemap consulta solo landings publicadas indexables y con quality_score s
 test("sitemap publica solo URLs canonicas sin www e incluye hubs SEO indexables", async () => {
   const previousUrl = process.env.PUBLIC_SITE_URL;
   const previousSiteUrl = process.env.SITE_URL;
+  const previousSupabaseUrl = process.env.SUPABASE_URL;
+  const previousSupabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   process.env.PUBLIC_SITE_URL = "https://www.inmoradar.app";
   delete process.env.SITE_URL;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   const req = {
     method: "GET",
@@ -650,6 +654,10 @@ test("sitemap publica solo URLs canonicas sin www e incluye hubs SEO indexables"
     else process.env.PUBLIC_SITE_URL = previousUrl;
     if (previousSiteUrl === undefined) delete process.env.SITE_URL;
     else process.env.SITE_URL = previousSiteUrl;
+    if (previousSupabaseUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousSupabaseUrl;
+    if (previousSupabaseKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousSupabaseKey;
   }
 
   const xml = chunks.join("");
@@ -661,8 +669,13 @@ test("sitemap publica solo URLs canonicas sin www e incluye hubs SEO indexables"
   assert.match(xml, /<loc>https:\/\/inmoradar\.app\/terminos<\/loc>/);
   assert.match(xml, /<loc>https:\/\/inmoradar\.app\/privacidad<\/loc>/);
   assert.match(xml, /<loc>https:\/\/inmoradar\.app\/que-analiza<\/loc>/);
+  assert.match(xml, /<loc>https:\/\/inmoradar\.app\/precio-metro-cuadrado\/madrid\/<\/loc>/);
+  assert.match(xml, /<loc>https:\/\/inmoradar\.app\/precio-alquiler\/madrid\/<\/loc>/);
+  assert.match(xml, /<loc>https:\/\/inmoradar\.app\/precio-metro-cuadrado\/logrono\/<\/loc>/);
+  assert.match(xml, /<loc>https:\/\/inmoradar\.app\/saber-si-piso-esta-caro\/granada\/<\/loc>/);
   assert.doesNotMatch(xml, /<loc>https:\/\/www\.inmoradar\.app\//);
   assert.doesNotMatch(xml, /<loc>http:\/\//);
+  assert.doesNotMatch(xml, /body_html|seo-reading|Fuente:/);
 });
 
 test("sitemap excluye drafts, noindex, score bajo, canonical incoherente y contenido pobre", async () => {
@@ -842,6 +855,51 @@ test("sitemap y landings SEO aceptan HEAD para comprobaciones HTTP", async () =>
   assert.equal(pageChunks.join(""), "");
 });
 
+test("fallback local sin Supabase cubre rutas de ciudad representativas", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  async function request(url) {
+    const chunks = [];
+    const res = {
+      statusCode: 0,
+      headers: {},
+      setHeader(name, value) {
+        this.headers[name.toLowerCase()] = value;
+      },
+      end(chunk) {
+        if (chunk) chunks.push(String(chunk));
+      }
+    };
+    await seoPageHandler({ method: "GET", url, headers: { host: "inmoradar.app" } }, res);
+    return { res, html: chunks.join("") };
+  }
+
+  try {
+    const cases = [
+      ["/precio-metro-cuadrado/madrid/", "https://inmoradar.app/precio-metro-cuadrado/madrid/", /Precio del metro cuadrado en Madrid/],
+      ["/precio-alquiler/madrid/", "https://inmoradar.app/precio-alquiler/madrid/", /Precio del alquiler por metro cuadrado en Madrid/],
+      ["/precio-metro-cuadrado/logrono/", "https://inmoradar.app/precio-metro-cuadrado/logrono/", /Precio del metro cuadrado en Logro/],
+      ["/saber-si-piso-esta-caro/granada/", "https://inmoradar.app/saber-si-piso-esta-caro/granada/", /saber si un piso est/]
+    ];
+
+    for (const [url, canonical, heading] of cases) {
+      const { res, html } = await request(url);
+      assert.equal(res.statusCode, 200, url);
+      assert.match(html, new RegExp(`<link rel="canonical" href="${canonical.replace(/\//g, "\\/")}">`));
+      assert.match(html, /<meta name="robots" content="index,follow">/);
+      assert.match(html, heading);
+    }
+  } finally {
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
 test("la home tiene seccion Noticias con enlaces a publicaciones", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
 
@@ -1016,13 +1074,24 @@ test("las landings SEO normalizan trailing slash al mismo canonical absoluto", a
   assert.match(withSlash, /index,follow/);
 });
 
-test("la primera landing seed queda publicada e indexable", async () => {
-  const landing = await getSeedPublishedLanding("precio-metro-cuadrado/logrono");
+test("las landings seed quedan publicadas e indexables", async () => {
+  const slugs = [
+    "precio-metro-cuadrado/logrono",
+    "precio-metro-cuadrado/madrid",
+    "precio-alquiler/madrid",
+    "saber-si-piso-esta-caro/granada"
+  ];
 
-  assert.equal(landing.status, "published");
-  assert.equal(landing.index_status, "index");
-  assert.ok(landing.quality_score >= 85);
-  assert.match(landing.body_html, /Fuente:/);
+  for (const slug of slugs) {
+    const landing = await getSeedPublishedLanding(slug);
+
+    assert.equal(landing.status, "published", slug);
+    assert.equal(landing.index_status, "index", slug);
+    assert.ok(landing.quality_score >= 85, slug);
+    assert.match(landing.canonical_url, new RegExp(`https:\\/\\/inmoradar\\.app\\/${slug.replace(/\//g, "\\/")}\\/`));
+    assert.doesNotMatch(landing.canonical_url, /www\.inmoradar\.app/);
+    assert.match(landing.body_html, /Fuente:/);
+  }
 });
 
 test("el render publico usa fallback si Supabase esta configurado pero falla", async () => {

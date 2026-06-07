@@ -1,4 +1,4 @@
-const { buildExpensiveListingCityLanding } = require("../../lib/seo/cityGuideTemplates");
+const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../../lib/seo/cityGuideTemplates");
 const { buildPriceCitySourceData } = require("./marketSources");
 const { buildPriceCityLanding } = require("./priceCity");
 const { calculateSeoLandingQuality } = require("./quality");
@@ -12,6 +12,26 @@ const SEED_PUBLISHED_OPPORTUNITIES = {
     intent: "informational",
     template_type: "price_city",
     search_priority: 85,
+    status: "published"
+  },
+  "precio-metro-cuadrado/madrid": {
+    keyword: "precio metro cuadrado Madrid",
+    city: "Madrid",
+    province: "Madrid",
+    autonomous_community: "Madrid Comunidad",
+    intent: "informational",
+    template_type: "price_city",
+    search_priority: 95,
+    status: "published"
+  },
+  "precio-alquiler/madrid": {
+    keyword: "precio alquiler metro cuadrado Madrid",
+    city: "Madrid",
+    province: "Madrid",
+    autonomous_community: "Madrid Comunidad",
+    intent: "informational",
+    template_type: "rent_city",
+    search_priority: 92,
     status: "published"
   },
   "saber-si-piso-esta-caro/granada": {
@@ -30,6 +50,9 @@ const FIRST_PUBLISHED_OPPORTUNITY = SEED_PUBLISHED_OPPORTUNITIES["precio-metro-c
 const FIRST_PUBLISHED_AT = "2026-05-18T00:00:00.000Z";
 
 function buildSeedLanding(opportunity, sourceData) {
+  if (opportunity.template_type === "rent_city") {
+    return buildRentCityLanding(opportunity, sourceData);
+  }
   if (opportunity.template_type === "expensive_listing_city") {
     return buildExpensiveListingCityLanding(opportunity, sourceData);
   }

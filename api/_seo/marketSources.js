@@ -121,6 +121,42 @@ const FALLBACK_MARKET_PRICE_SOURCES = [
     source_url: "https://www.idealista.com/sala-de-prensa/informes-precio-vivienda/alquiler/andalucia/granada-provincia/granada/",
     confidence_score: 0.75,
     extracted_at: "2026-06-07T10:00:00Z"
+  },
+  {
+    source: "idealista_public_report",
+    operation: "sale",
+    country: "ES",
+    autonomous_community: "Madrid Comunidad",
+    province: "Madrid",
+    municipality: "Madrid",
+    zone_name: "Madrid",
+    geo_level: "municipality",
+    price_eur_m2: 5984,
+    evolution_month_pct: 0.4,
+    evolution_year_pct: 7.4,
+    period_label: "mayo 2026",
+    period_date: "2026-05-01",
+    source_url: "https://www.idealista.com/sala-de-prensa/informes-precio-vivienda/venta/madrid-comunidad/madrid-provincia/madrid/",
+    confidence_score: 0.75,
+    extracted_at: "2026-06-07T10:45:00Z"
+  },
+  {
+    source: "idealista_public_report",
+    operation: "rent",
+    country: "ES",
+    autonomous_community: "Madrid Comunidad",
+    province: "Madrid",
+    municipality: "Madrid",
+    zone_name: "Madrid",
+    geo_level: "municipality",
+    price_eur_m2: 23.4,
+    evolution_month_pct: 0.4,
+    evolution_year_pct: 7.8,
+    period_label: "mayo 2026",
+    period_date: "2026-05-01",
+    source_url: "https://www.idealista.com/sala-de-prensa/informes-precio-vivienda/alquiler/madrid-comunidad/madrid-provincia/madrid/",
+    confidence_score: 0.75,
+    extracted_at: "2026-06-07T10:45:00Z"
   }
 ];
 
