@@ -9,6 +9,7 @@ const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../.
 const { buildPriceCitySourceData } = require("./marketSources");
 const { buildSeoDailyPolicySnapshot, seoContentTypeForTemplate } = require("./publishingPolicy");
 const { buildPriceCityLanding } = require("./priceCity");
+const { evaluateLandingIndexability } = require("./indexability");
 const { calculateSeoLandingQuality } = require("./quality");
 
 const LANDING_TEMPLATE_TYPES = ["price_city", "rent_city", "expensive_listing_city"];
@@ -349,6 +350,8 @@ async function countPublishedToday(now) {
 function canPublishNow({ mode, autoPublish, quality, publishedToday, publishedThisRun, dailyPublishLimit, maxPublishesPerRun }) {
   if (mode !== "publish" || !autoPublish) return false;
   if (quality.score < 85) return false;
+  if (quality.technical_indexability_status === "blocked") return false;
+  if (Array.isArray(quality.rejection_reasons) && quality.rejection_reasons.length) return false;
   if (publishedThisRun >= maxPublishesPerRun) return false;
   if (dailyPublishLimit !== null && publishedToday >= dailyPublishLimit) return false;
   return true;
@@ -389,7 +392,7 @@ function buildLandingForOpportunity(opportunity, sourceData) {
   throw new Error(`Unsupported template_type: ${opportunity.template_type}`);
 }
 
-function buildLandingRecord({ opportunity, landing, sourceData, quality, status, indexStatus, now, publishedAt }) {
+function buildLandingRecord({ opportunity, landing, sourceData, quality, indexability, status, indexStatus, now, publishedAt }) {
   return {
     opportunity_id: opportunity.id || null,
     slug: landing.slug,
@@ -411,6 +414,7 @@ function buildLandingRecord({ opportunity, landing, sourceData, quality, status,
       generated_by: "inmoradar_seo_mvp",
       template_type: landing.template_type,
       sources: sourceData.sources,
+      indexability,
       quality,
       faq: landing.faq,
       lookup_error: sourceData.lookup_error || null
@@ -421,6 +425,7 @@ function buildLandingRecord({ opportunity, landing, sourceData, quality, status,
 }
 
 function resultSummary(record, sourceData, quality, saved) {
+  const indexability = record.source_data_json?.indexability || {};
   return {
     slug: record.slug,
     title: record.title,
@@ -436,6 +441,9 @@ function resultSummary(record, sourceData, quality, saved) {
     penalties: quality.penalties,
     warnings: quality.warnings || [],
     rejection_reasons: quality.rejection_reasons || [],
+    indexability_reasons: indexability.reasons || [],
+    sitemap_eligible: Boolean(indexability.sitemap_eligible),
+    sitemap_reason: indexability.sitemap_reason || null,
     technical_indexability_status: quality.technical_indexability_status || "ok",
     editorial_quality_status: quality.editorial_quality_status || "pass",
     saved: Boolean(saved)
@@ -454,23 +462,46 @@ async function generateOne({ opportunity, mode, autoPublish, publishedToday, pub
       : templateSourceData(await buildPriceCitySourceData(opportunity), opportunity.template_type);
   const landing = buildLandingForOpportunity(opportunity, sourceData);
   const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: landing.faq });
-  const canAutoPublish = canPublishNow({
-    mode,
-    autoPublish,
-    quality,
-    publishedToday,
-    publishedThisRun,
-    dailyPublishLimit,
-    maxPublishesPerRun
-  });
+  const publishIndexability = evaluateLandingIndexability(
+    {
+      ...landing,
+      status: "published",
+      index_status: "index",
+      quality_score: quality.score,
+      word_count: quality.word_count
+    },
+    { quality, minQualityScore: 85 }
+  );
+  const canAutoPublish =
+    publishIndexability.sitemap_eligible &&
+    canPublishNow({
+      mode,
+      autoPublish,
+      quality,
+      publishedToday,
+      publishedThisRun,
+      dailyPublishLimit,
+      maxPublishesPerRun
+    });
   const status = landingStatus(quality.score, canAutoPublish);
-  const indexStatus = status === "published" && quality.score >= 75 ? "index" : "noindex";
+  const indexStatus = canAutoPublish ? "index" : "noindex";
   const publishedAt = canAutoPublish ? now : null;
+  const indexability = evaluateLandingIndexability(
+    {
+      ...landing,
+      status,
+      index_status: indexStatus,
+      quality_score: quality.score,
+      word_count: quality.word_count
+    },
+    { quality }
+  );
   const record = buildLandingRecord({
     opportunity,
     landing,
     sourceData,
     quality,
+    indexability,
     status,
     indexStatus,
     now,

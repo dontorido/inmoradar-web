@@ -2232,7 +2232,7 @@ function seoQualityLine(label, items, tone = "neutral") {
 }
 
 function renderSeoQualityGate(row = {}) {
-  const warnings = [...(row.quality_warnings || []), ...(row.quality_reasons || [])].filter(Boolean);
+  const warnings = [...(row.quality_warnings || []), ...(row.quality_reasons || []), ...(row.sitemap_reasons || [])].filter(Boolean);
   return `
     <div class="admin-seo-quality">
       <div class="admin-seo-quality-chips">
@@ -2302,6 +2302,10 @@ function renderSeoSummary(summary = {}, fallbackRows = []) {
   const ready = Number(summary.ready_to_publish ?? rows.filter((row) => row.status === "ready_to_publish").length);
   const needsReview = Number(summary.needs_review ?? rows.filter((row) => row.status === "needs_review").length);
   const noindex = Number(summary.noindex ?? rows.filter((row) => row.index_status === "noindex" || row.status === "noindex").length);
+  const indexable = Number(summary.indexable ?? rows.filter((row) => row.status === "published" && row.index_status === "index").length);
+  const sitemapIncluded = Number(summary.sitemap_included ?? rows.filter((row) => row.sitemap_status === "included").length);
+  const sitemapExcluded = Number(summary.sitemap_excluded ?? rows.filter((row) => row.sitemap_status === "excluded").length);
+  const publishedWithoutSitemap = Number(summary.published_without_sitemap ?? rows.filter((row) => row.status === "published" && row.sitemap_status === "excluded").length);
   const opportunities = Number(summary.pending_opportunities ?? 0);
   const landingsToday = Number(summary.published_landings_today ?? 0);
   const newsToday = Number(summary.published_news_today ?? 0);
@@ -2309,10 +2313,28 @@ function renderSeoSummary(summary = {}, fallbackRows = []) {
   const targetNews = Number(summary.target_news_per_day ?? 2);
   const dailyStatus = summary.seo_daily_status === "complete" ? "completo" : "pendiente";
   const averageScore = Number(summary.average_quality_score ?? 0);
+  const reasonEntries = Object.entries(summary.sitemap_exclusion_reasons || {})
+    .sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0))
+    .slice(0, 6);
+  const reasonHtml = reasonEntries.length
+    ? reasonEntries.map(([reason, count]) => `<span>${escapeHtml(reason)}: ${escapeHtml(count)}</span>`).join("")
+    : "<span>Sin exclusiones detectadas</span>";
+  const latest = Array.isArray(summary.latest_published_landings) ? summary.latest_published_landings.slice(0, 5) : [];
+  const latestHtml = latest.length
+    ? latest
+        .map((item) => `<a href="/${String(item.slug || "").replace(/^\/+|\/+$/g, "")}/" target="_blank" rel="noopener">${escapeHtml(item.slug || item.title || "-")}</a>`)
+        .join("")
+    : "<span>Sin publicaciones recientes</span>";
+  const warnings = summary.warnings || {};
+  const gscFlow = summary.gsc_discovered_not_indexed?.flow || "Carga el CSV de GSC y compara URL, canonical, noindex y sitemap_reason.";
 
   els.seoSummary.innerHTML = [
     stat("Total", total, { id: "seo-total", hint: "Landings SEO creadas" }),
-    stat("Publicadas", published, { id: "seo-published", hint: "Visibles e indexables" }),
+    stat("Publicadas", published, { id: "seo-published", hint: "Status published" }),
+    stat("Indexables", indexable, { id: "seo-indexable", hint: "Published + index" }),
+    stat("En sitemap", sitemapIncluded, { id: "seo-sitemap-included", hint: "Elegibles y emitidas" }),
+    stat("Fuera sitemap", sitemapExcluded, { id: "seo-sitemap-excluded", hint: "Con motivo visible" }),
+    stat("Pub. sin sitemap", publishedWithoutSitemap, { id: "seo-published-without-sitemap", hint: "Revisar antes de revalidar" }),
     stat("Hoy landings", `${landingsToday}/${targetLandings}`, { id: "seo-today-landings", hint: "Objetivo diario programatico" }),
     stat("Hoy guias", `${newsToday}/${targetNews}`, { id: "seo-today-guides", hint: `Objetivo diario editorial - ${dailyStatus}` }),
     stat("Pendientes", pending, { id: "seo-pending", hint: "Draft + revision + ready" }),
@@ -2320,7 +2342,14 @@ function renderSeoSummary(summary = {}, fallbackRows = []) {
     stat("Revision", needsReview, { id: "seo-review", hint: "Necesitan criterio humano" }),
     stat("Noindex", noindex, { id: "seo-noindex", hint: "Bloqueadas para indice" }),
     stat("Oportunidades", opportunities, { id: "seo-opportunities", hint: "Pendientes de generar" }),
-    stat("Score medio", averageScore ? averageScore.toFixed(0) : 0, { id: "seo-average-score", unit: "/100", hint: "Solo landings con score" })
+    stat("Score medio", averageScore ? averageScore.toFixed(0) : 0, { id: "seo-average-score", unit: "/100", hint: "Solo landings con score" }),
+    `<div class="admin-seo-diagnostics">
+      <section><strong>Motivos fuera de sitemap</strong><div>${reasonHtml}</div></section>
+      <section><strong>Warnings</strong><div><span>canonical: ${escapeHtml(warnings.canonical || 0)}</span><span>noindex: ${escapeHtml(warnings.noindex || 0)}</span><span>robots: ${escapeHtml(warnings.robots || 0)}</span><span>low_content: ${escapeHtml(warnings.low_content || 0)}</span><span>no_internal_links: ${escapeHtml(warnings.no_internal_links || 0)}</span></div></section>
+      <section><strong>Ultimas publicadas</strong><div>${latestHtml}</div></section>
+      <section><strong>Sitemap</strong><div><span>Ultima lectura: ${escapeHtml(summary.last_sitemap_generated_at ? formatCompactDate(summary.last_sitemap_generated_at) : "-")}</span></div></section>
+      <section><strong>GSC</strong><p>${escapeHtml(gscFlow)}</p></section>
+    </div>`
   ].join("");
 }
 

@@ -2,6 +2,7 @@ const { hasSupabaseConfig, supabaseFetch } = require("./_utils");
 const { googleTagManagerHead, googleTagManagerNoscript } = require("./_seo/analytics");
 const { getSeedPublishedLanding } = require("./_seo/seedPublished");
 const { buildPrecioMetroCuadradoCiudad } = require("./_seo/priceCity");
+const { evaluateLandingIndexability } = require("./_seo/indexability");
 const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../lib/seo/cityGuideTemplates");
 const { canonicalForLanding, escapeHtml, siteUrl, stripHtml } = require("./_seo/text");
 
@@ -197,8 +198,8 @@ function siteFooterHtml() {
           <p class="footer-tagline">Analiza anuncios antes de contactar.</p>
           <button class="button" type="button" data-install-button data-install-source="seo_footer">Empezar gratis</button>
         </div>
-        <div class="footer-col"><h4>Producto</h4><a href="/que-analiza">Qué analiza</a><a href="/datos">APIs</a></div>
-        <div class="footer-col"><h4>Contenido</h4><a href="/noticias">Noticias</a><a href="/faq">FAQ</a></div>
+        <div class="footer-col"><h4>Producto</h4><a href="/que-analiza">Qué analiza</a><a href="/datos">APIs</a><a href="/premium">Premium</a></div>
+        <div class="footer-col"><h4>Contenido</h4><a href="/precio-metro-cuadrado/">Precio m²</a><a href="/precio-alquiler/">Alquiler</a><a href="/saber-si-piso-esta-caro/">Piso caro</a><a href="/noticias">Noticias</a><a href="/faq">FAQ</a></div>
         <div class="footer-col"><h4>Compañía</h4><a href="/contacto">Contacto</a><a href="/privacidad">Privacidad</a><a href="/terminos">Términos</a></div>
         <span class="footer-status">Online</span>
       </div>
@@ -357,7 +358,6 @@ function normalizeLandingBodyHtml(bodyHtml = "") {
 }
 function renderLandingHtml(landing) {
   const qualityScore = Number(landing.quality_score) || 0;
-  const robots = landing.index_status === "index" && landing.status === "published" && qualityScore >= 75 ? "index,follow" : "noindex,follow";
   const canonical = canonicalForLanding(landing);
   const dynamicLanding = buildDynamicCityGuideLanding(landing);
   const renderedLanding = dynamicLanding
@@ -376,6 +376,13 @@ function renderLandingHtml(landing) {
   const title = renderedLanding.meta_title || `${renderedLanding.title} · InmoRadar`;
   const dynamicBodyHtml = buildDynamicPriceCityBodyHtml(landing);
   const bodyHtml = normalizeLandingBodyHtml(dynamicBodyHtml || dynamicLanding?.body_html || landing.body_html);
+  const indexability = evaluateLandingIndexability({
+    ...renderedLanding,
+    body_html: bodyHtml,
+    canonical_url: canonical,
+    quality_score: qualityScore
+  });
+  const robots = indexability.sitemap_eligible ? "index,follow" : "noindex,follow";
   const description = renderedLanding.meta_description || stripHtml(bodyHtml).slice(0, 155);
   const imageUrl = ogImageUrl(renderedLanding);
 
