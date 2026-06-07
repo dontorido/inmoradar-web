@@ -1,6 +1,5 @@
 const crypto = require("node:crypto");
 const {
-  fetchWithTimeout,
   handleCors,
   hasSupabaseConfig,
   isEmail,
@@ -10,6 +9,7 @@ const {
   readRawBody,
   supabaseFetch
 } = require("./_utils");
+const { cloudflareEmailConfig, sendCloudflareEmail } = require("./_email/cloudflareEmail");
 const { buildCloudflareEmailPayload, buildSavedPropertiesEmail } = require("./_reports/savedPropertiesEmail");
 
 const DAILY_REPORT_LIMIT = 5;
@@ -34,14 +34,6 @@ async function findSubscription(email) {
     `premium_subscriptions?email=eq.${encodeURIComponent(email)}&select=email,status,renews_at,ends_at,provider,provider_subscription_id,updated_at&limit=1`
   );
   return Array.isArray(rows) ? rows[0] || null : null;
-}
-
-function cloudflareEmailConfig() {
-  return {
-    accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
-    apiToken: process.env.CLOUDFLARE_EMAIL_API_TOKEN,
-    from: process.env.CLOUDFLARE_EMAIL_FROM || "hola@inmoradar.app"
-  };
 }
 
 function publicSiteUrl(req) {
@@ -203,37 +195,6 @@ async function updateReportAccess({ tokenHash, storageMode = "modern", status, p
   } catch {
     // No bloquea el resultado del envio.
   }
-}
-
-async function sendCloudflareEmail(payload) {
-  const config = cloudflareEmailConfig();
-  if (!config.accountId || !config.apiToken) {
-    const error = new Error("cloudflare_email_not_configured");
-    error.status = 500;
-    throw error;
-  }
-
-  const response = await fetchWithTimeout(
-    `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/email/sending/send`,
-    {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${config.apiToken}`,
-        "content-type": "application/json"
-      },
-      body: JSON.stringify(payload),
-      timeoutMs: 12000
-    }
-  );
-  const body = await response.json().catch(() => null);
-  if (!response.ok || body?.success === false) {
-    const message = body?.errors?.[0]?.message || `cloudflare_email_http_${response.status}`;
-    const error = new Error(message);
-    error.status = response.status;
-    error.providerResponse = body;
-    throw error;
-  }
-  return body;
 }
 
 async function handleSavedPropertiesEmailReport(req, res) {

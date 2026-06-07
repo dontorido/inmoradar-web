@@ -1,5 +1,6 @@
 const { hasSupabaseConfig, sanitizeErrorMessage, supabaseFetch } = require("../_utils");
 const { runSeoLandingGeneration } = require("./generator");
+const { attachSeoPublicationEmailNotification, countSeoPublicationTotals } = require("./publicationEmail");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./publishingPolicy");
 
 const JOB_NAME = "seo-publish";
@@ -124,6 +125,11 @@ function createSeoContentPublicationStorage() {
         limit: "5000"
       });
       return safeSupabase(`seo_landings?${params.toString()}`, []);
+    },
+    async fetchSeoPublicationTotals() {
+      if (!hasSupabaseConfig()) return null;
+      const rows = await safeSupabase("seo_landings?select=status,index_status&limit=5000", []);
+      return countSeoPublicationTotals(rows);
     }
   };
 }
@@ -194,10 +200,16 @@ function resultPath(item = {}) {
 }
 
 function normalizeResult(item = {}) {
+  const qualityPenalties = item.quality_penalties || item.penalties || [];
+  const qualityWarnings = item.quality_warnings || item.warnings || [];
+  const qualityReasons = item.quality_reasons || item.rejection_reasons || [];
   return {
     ...item,
     target_path: resultPath(item),
-    final_score: Number(item.final_score ?? item.quality_score ?? 0)
+    final_score: Number(item.final_score ?? item.quality_score ?? 0),
+    quality_penalties: Array.isArray(qualityPenalties) ? qualityPenalties : [],
+    quality_warnings: Array.isArray(qualityWarnings) ? qualityWarnings : [],
+    quality_reasons: Array.isArray(qualityReasons) ? qualityReasons : []
   };
 }
 
@@ -264,6 +276,17 @@ async function finishRun(storage, run, summary, status = "completed", errorMessa
   }
 }
 
+async function finalizeSummary({ storage, run, summary, status = "completed", errorMessage = null, env, emailNotification }) {
+  const finalSummary = await attachSeoPublicationEmailNotification({
+    summary,
+    storage,
+    env,
+    ...(emailNotification || {})
+  });
+  await finishRun(storage, run, finalSummary, status, errorMessage);
+  return finalSummary;
+}
+
 async function runSeoContentPublication(options = {}) {
   const now = nowIso(options.now);
   const requestSource = options.requestSource || "manual";
@@ -271,6 +294,7 @@ async function runSeoContentPublication(options = {}) {
   const config = buildSeoContentPublicationConfig(env, options.config || {});
   const storage = options.storage || createSeoContentPublicationStorage(env);
   const runGeneration = options.runGeneration || runSeoLandingGeneration;
+  const emailNotification = options.emailNotification || {};
   let run = null;
 
   try {
@@ -278,21 +302,18 @@ async function runSeoContentPublication(options = {}) {
       run = await storage.startRun({ now, requestSource });
       if (run && run.acquired === false) {
         const summary = emptySummary({ config, now, requestSource, reason: run.reason || "cron_already_running_or_completed", run });
-        await finishRun(storage, run, summary, "skipped", null);
-        return summary;
+        return finalizeSummary({ storage, run, summary, status: "skipped", env, emailNotification });
       }
     }
 
     if (!config.enabled) {
       const summary = emptySummary({ config, now, requestSource, reason: "autogeneration_disabled", run });
-      await finishRun(storage, run, summary, "skipped", null);
-      return summary;
+      return finalizeSummary({ storage, run, summary, status: "skipped", env, emailNotification });
     }
 
     if (!config.dry_run && !options.storage && !hasSupabaseConfig()) {
       const summary = emptySummary({ config, now, requestSource, reason: "supabase_not_configured", run });
-      await finishRun(storage, run, summary, "skipped", null);
-      return summary;
+      return finalizeSummary({ storage, run, summary, status: "skipped", env, emailNotification });
     }
 
     const rows = storage.fetchRecentPublishedRows ? await storage.fetchRecentPublishedRows({ now }) : [];
@@ -300,8 +321,7 @@ async function runSeoContentPublication(options = {}) {
     const selectedContentType = dailyPolicy.selected_content_type;
     if (!selectedContentType) {
       const summary = emptySummary({ config, now, requestSource, reason: dailyPolicy.skipped_reason, rows, policy: dailyPolicy, run });
-      await finishRun(storage, run, summary, "completed", null);
-      return summary;
+      return finalizeSummary({ storage, run, summary, status: "completed", env, emailNotification });
     }
 
     const result = await runGeneration({
@@ -327,15 +347,21 @@ async function runSeoContentPublication(options = {}) {
       selectedContentType,
       run
     });
-    await finishRun(storage, run, summary, summary.failed_count ? "failed" : "completed", summary.failed_count ? "candidate_failed" : null);
-    return summary;
+    return finalizeSummary({
+      storage,
+      run,
+      summary,
+      status: summary.failed_count ? "failed" : "completed",
+      errorMessage: summary.failed_count ? "candidate_failed" : null,
+      env,
+      emailNotification
+    });
   } catch (error) {
     const summary = emptySummary({ config, now, requestSource, reason: "autogeneration_failed", run });
     summary.ok = false;
     summary.error = safeError(error);
     summary.finished_at = new Date().toISOString();
-    await finishRun(storage, run, summary, "failed", summary.error);
-    return summary;
+    return finalizeSummary({ storage, run, summary, status: "failed", errorMessage: summary.error, env, emailNotification });
   }
 }
 

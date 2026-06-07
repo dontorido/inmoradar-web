@@ -2344,6 +2344,59 @@ function seoAutogenCard(label, value, options = {}) {
   `;
 }
 
+function seoAutogenArray(value) {
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
+function seoAutogenUnique(values) {
+  return [...new Set((values || []).map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function seoAutogenScore(item = {}) {
+  const score = Number(item.final_score ?? item.quality_score ?? item.score ?? 0);
+  return Number.isFinite(score) && score > 0 ? score : null;
+}
+
+function seoAutogenReasons(item = {}) {
+  return seoAutogenUnique([
+    item.reason,
+    ...seoAutogenArray(item.quality_penalties || item.penalties),
+    ...seoAutogenArray(item.quality_reasons || item.rejection_reasons),
+    ...seoAutogenArray(item.quality_warnings || item.warnings)
+  ]);
+}
+
+function seoAutogenRunDetail(result = {}, row = {}) {
+  const items = Array.isArray(result.results) ? result.results : [];
+  const diagnostics = result.publication_diagnostics || {};
+  const itemDetail = items
+    .slice(0, 3)
+    .map((item) => {
+      const path = item.target_path || (item.slug ? `/${String(item.slug).replace(/^\/+|\/+$/g, "")}/` : "");
+      const score = seoAutogenScore(item);
+      const reasons = seoAutogenReasons(item).slice(0, 2).join(", ");
+      return [path, item.status || item.reason, score ? `score ${score}` : "", reasons ? `motivo: ${reasons}` : ""].filter(Boolean).join(" - ");
+    })
+    .join(" | ");
+  const reasonCounts = seoAutogenArray(diagnostics.reason_counts)
+    .slice(0, 3)
+    .map((item) => `${item.reason} (${item.count})`)
+    .join(", ");
+  const nextStep = seoAutogenArray(diagnostics.next_steps)[0];
+  const email = result.email_notification;
+  const emailDetail = email?.enabled ? `Email: ${email.sent ? "enviado" : email.reason || "pendiente"}` : "";
+  return [
+    itemDetail,
+    reasonCounts ? `Diagnostico: ${reasonCounts}` : "",
+    nextStep ? `Siguiente: ${nextStep}` : "",
+    emailDetail,
+    result.reason,
+    row.error_message
+  ]
+    .filter(Boolean)
+    .join(" | ");
+}
+
 function renderSeoAutogeneration(payload = {}) {
   if (!els.seoAutogenSummary || !els.seoAutogenRuns) return;
   state.seoAutogeneration.status = payload;
@@ -2393,7 +2446,7 @@ function renderSeoAutogeneration(payload = {}) {
       const result = row.result_json || {};
       const items = Array.isArray(result.results) ? result.results : [];
       const counts = `${Number(result.published_count || 0)} pub · ${Number(result.draft_count || 0)} draft · ${Number(result.skipped_count || 0)} skip`;
-      const detail =
+      const legacyDetail =
         items
           .slice(0, 3)
           .map((item) =>
@@ -2406,6 +2459,7 @@ function renderSeoAutogeneration(payload = {}) {
               .join(" · ")
           )
           .join(" | ") || result.reason;
+      const detail = seoAutogenRunDetail(result, row) || legacyDetail;
       return `
         <tr>
           <td>
