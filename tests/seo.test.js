@@ -8,6 +8,7 @@ const { buildPriceCityLanding } = require("../api/_seo/priceCity");
 const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { canPublishNow, runSeoLandingGeneration } = require("../api/_seo/generator");
 const { runSeoContentPublication } = require("../api/_seo/contentPublisher");
+const { maybeSendSeoPublicationEmail } = require("../api/_seo/publicationEmail");
 const { evaluateLandingIndexability, evaluateSitemapEligibility } = require("../api/_seo/indexability");
 const { buildSeoDailyPolicySnapshot, selectNextSeoContentType } = require("../api/_seo/publishingPolicy");
 const { getSeedPublishedLanding } = require("../api/_seo/seedPublished");
@@ -59,6 +60,16 @@ function qualityFixture(overrides = {}) {
     ]
   };
   return { landing, sourceData };
+}
+
+function seoPublicationEmailEnv(overrides = {}) {
+  return {
+    SEO_PUBLICATION_EMAIL_ENABLED: "true",
+    SEO_PUBLICATION_EMAIL_TO: "sergio.torio@gmail.com",
+    SEO_PUBLICATION_EMAIL_FROM: "seo@inmoradar.app",
+    PUBLIC_SITE_URL: "https://www.inmoradar.app",
+    ...overrides
+  };
 }
 
 test("price_city genera una landing de alta calidad cuando hay datos reales, fuente y fecha", async () => {
@@ -304,6 +315,205 @@ test("la publicacion SEO operativa selecciona guias cuando falta cuota editorial
   assert.equal(result.published_news_today, 2);
   assert.equal(result.published_landings_today, 2);
   assert.equal(result.results[0].target_path, "/guias/antes-de-llamar-por-un-piso/");
+});
+
+test("email SEO no se envia si esta desactivado, en dry-run o sin publicaciones", async () => {
+  let calls = 0;
+  const transport = async () => {
+    calls += 1;
+  };
+  const enabledEnv = seoPublicationEmailEnv();
+  const disabled = await maybeSendSeoPublicationEmail({
+    summary: { published_count: 1, dry_run: false },
+    env: seoPublicationEmailEnv({ SEO_PUBLICATION_EMAIL_ENABLED: "false" }),
+    transport
+  });
+  const dryRun = await maybeSendSeoPublicationEmail({
+    summary: { published_count: 1, dry_run: true },
+    env: enabledEnv,
+    transport
+  });
+  const noPublished = await maybeSendSeoPublicationEmail({
+    summary: { published_count: 0, dry_run: false },
+    env: enabledEnv,
+    transport
+  });
+
+  assert.equal(disabled.enabled, false);
+  assert.equal(disabled.attempted, false);
+  assert.equal(disabled.reason, "email_disabled");
+  assert.equal(dryRun.attempted, false);
+  assert.equal(dryRun.reason, "dry_run");
+  assert.equal(noPublished.attempted, false);
+  assert.equal(noPublished.reason, "no_published_pages");
+  assert.equal(calls, 0);
+});
+
+test("email SEO se envia desde runSeoContentPublication con resumen de paginas y totales", async () => {
+  const sent = [];
+  const storage = {
+    async startRun() {
+      return { persisted: false, acquired: true };
+    },
+    async finishRun() {},
+    async fetchRecentPublishedRows() {
+      return [];
+    },
+    async fetchSeoPublicationTotals() {
+      return {
+        total_landings: 12,
+        published_landings: 7,
+        indexable_landings: 6,
+        drafts: 4,
+        pending_review: 1
+      };
+    }
+  };
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    storage,
+    env: seoPublicationEmailEnv(),
+    config: { enabled: true, dryRun: false },
+    emailNotification: {
+      transport: async (message) => {
+        sent.push(message);
+      }
+    },
+    runGeneration: async () => ({
+      ok: true,
+      mode: "publish",
+      template_type: "landing_random",
+      generated_count: 1,
+      published_count: 1,
+      results: [
+        {
+          slug: "precio-metro-cuadrado/sevilla",
+          title: "Precio del metro cuadrado en Sevilla",
+          city: "Sevilla",
+          template_type: "price_city",
+          quality_score: 93,
+          final_score: 93,
+          status: "published",
+          index_status: "index"
+        }
+      ]
+    })
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.email_notification, {
+    enabled: true,
+    attempted: true,
+    sent: true,
+    reason: null,
+    recipient: "sergio.torio@gmail.com"
+  });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].payload.to, "sergio.torio@gmail.com");
+  assert.equal(sent[0].payload.from, "seo@inmoradar.app");
+  assert.match(sent[0].payload.html, /Precio del metro cuadrado en Sevilla/);
+  assert.match(sent[0].payload.html, /precio-metro-cuadrado\/sevilla/);
+  assert.match(sent[0].payload.html, /Template: price_city/);
+  assert.match(sent[0].payload.html, /Indexacion: index/);
+  assert.match(sent[0].payload.html, /Total landings publicadas: 7/);
+  assert.match(sent[0].payload.text, /total landings indexables: 6/);
+});
+
+test("fallo de email SEO no falla la publicacion ni expone tokens", async () => {
+  const secret = "cloudflare-secret-token";
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [];
+      },
+      async fetchSeoPublicationTotals() {
+        return { published_landings: 1, indexable_landings: 1, drafts: 0, pending_review: 0 };
+      }
+    },
+    env: seoPublicationEmailEnv({ CLOUDFLARE_EMAIL_API_TOKEN: secret }),
+    config: { enabled: true, dryRun: false },
+    emailNotification: {
+      transport: async () => {
+        throw new Error(`cloudflare failed ${secret}`);
+      }
+    },
+    runGeneration: async () => ({
+      ok: true,
+      mode: "publish",
+      generated_count: 1,
+      published_count: 1,
+      results: [
+        {
+          slug: "guias/antes-de-llamar-por-un-piso",
+          title: "Antes de llamar por un piso",
+          template_type: "editorial_guide",
+          quality_score: 94,
+          status: "published",
+          index_status: "index"
+        }
+      ]
+    })
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.published_count, 1);
+  assert.equal(result.email_notification.enabled, true);
+  assert.equal(result.email_notification.attempted, true);
+  assert.equal(result.email_notification.sent, false);
+  assert.doesNotMatch(result.email_notification.reason, new RegExp(secret));
+  assert.match(result.email_notification.reason, /\[redacted\]/);
+  assert.ok(result.warnings.some((warning) => warning.startsWith("seo_publication_email_")));
+});
+
+test("email SEO activado sin Cloudflare configurado no bloquea el cron", async () => {
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [];
+      }
+    },
+    env: seoPublicationEmailEnv({
+      CLOUDFLARE_ACCOUNT_ID: undefined,
+      CLOUDFLARE_EMAIL_API_TOKEN: undefined
+    }),
+    config: { enabled: true, dryRun: false },
+    runGeneration: async () => ({
+      ok: true,
+      mode: "publish",
+      generated_count: 1,
+      published_count: 1,
+      results: [
+        {
+          slug: "precio-metro-cuadrado/granada",
+          title: "Precio del metro cuadrado en Granada",
+          template_type: "price_city",
+          quality_score: 91,
+          status: "published",
+          index_status: "index"
+        }
+      ]
+    })
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.published_count, 1);
+  assert.equal(result.email_notification.enabled, true);
+  assert.equal(result.email_notification.attempted, false);
+  assert.equal(result.email_notification.sent, false);
+  assert.equal(result.email_notification.reason, "cloudflare_email_not_configured");
 });
 
 test("la publicacion SEO operativa respeta el cupo diario 2 landings + 2 guias", async () => {
