@@ -59,12 +59,37 @@ function buildSeedLanding(opportunity, sourceData) {
   return buildPriceCityLanding(opportunity, sourceData);
 }
 
+function sourceSummary(record) {
+  return {
+    operation: record.operation,
+    source: record.source,
+    source_url: record.source_url,
+    period_label: record.period_label,
+    period_date: record.period_date,
+    geo_level: record.geo_level,
+    price_eur_m2: record.price_eur_m2
+  };
+}
+
+function templateSourceData(sourceData, templateType) {
+  const selectedRecords = templateType === "rent_city" ? [sourceData.rent].filter(Boolean) : [sourceData.sale, sourceData.rent].filter(Boolean);
+  const hasProvincialOnly =
+    selectedRecords.length > 0 && selectedRecords.every((record) => ["province", "autonomous_community", "country"].includes(record.geo_level));
+  return {
+    ...sourceData,
+    hasRealData: selectedRecords.length > 0,
+    hasProvincialOnly,
+    records: selectedRecords,
+    sources: selectedRecords.map(sourceSummary)
+  };
+}
+
 async function getSeedPublishedLanding(slug) {
   const cleanSlug = String(slug || "").replace(/^\/+|\/+$/g, "");
   const opportunity = SEED_PUBLISHED_OPPORTUNITIES[cleanSlug];
   if (!opportunity) return null;
 
-  const sourceData = await buildPriceCitySourceData(opportunity);
+  const sourceData = templateSourceData(await buildPriceCitySourceData(opportunity), opportunity.template_type);
   const landing = buildSeedLanding(opportunity, sourceData);
   const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: landing.faq });
   if (!sourceData.hasRealData || quality.score < 85) return null;

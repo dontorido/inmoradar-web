@@ -168,9 +168,10 @@ function buildEditorialGuideSourceData(opportunity, now = new Date().toISOString
   };
 }
 
-function sourceNote(dateLabel) {
+function sourceNote(dateLabel, sourceUrl = canonicalForSlug("metodologia")) {
   return `<aside class="seo-disclaimer">
     <p class="seo-disclaimer-kicker">-> CRITERIO EDITORIAL</p>
+    <p><strong>Fuente y fecha del dato:</strong> <a href="${escapeHtml(sourceUrl)}">metodologia editorial de InmoRadar</a>. Fecha del dato: ${escapeHtml(dateLabel)}.</p>
     <p><strong>Fuente:</strong> metodología editorial de InmoRadar, basada en lectura de anuncios, criterios de comparación y señales urbanas. <strong>Fecha del dato:</strong> ${escapeHtml(
       dateLabel
     )}. Esta guía es orientativa: no es tasación, asesoramiento financiero ni recomendación de compra.</p>
@@ -231,6 +232,7 @@ function buildEditorialGuideLanding(opportunity, sourceData = {}) {
   const topic = guideTopicForOpportunity(opportunity);
   const city = displayName(opportunity.city || "España");
   const dateLabel = sourceData.records?.[0]?.period_label || new Date().toISOString().slice(0, 10);
+  const sourceUrl = sourceData.records?.[0]?.source_url || canonicalForSlug("metodologia");
   const slug = `guias/${topic.key}`;
   const faqItems = faq(topic);
   const bodyHtml = `<article class="seo-reading" data-template="editorial_guide" data-testid="page-editorial-guide-${escapeHtml(topic.key)}">
@@ -293,7 +295,7 @@ function buildEditorialGuideLanding(opportunity, sourceData = {}) {
           </div>
         </section>
         ${faqHtml(faqItems)}
-        ${sourceNote(dateLabel)}
+        ${sourceNote(dateLabel, sourceUrl)}
       </div>
     </div>
   </article>`;

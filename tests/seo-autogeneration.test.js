@@ -234,8 +234,9 @@ test("seo autogeneration publica una pagina elegible con score suficiente", asyn
   assert.equal(storage.saved.length, 1);
   assert.equal(storage.saved[0].status, "published");
   assert.equal(storage.saved[0].index_status, "index");
+  assert.equal(result.config.min_score, 85);
   assert.equal(result.results[0].target_path, "/precio-metro-cuadrado/sevilla/");
-  assert.ok(result.results[0].final_score >= 80);
+  assert.ok(result.results[0].final_score >= 85);
 });
 
 test("seo autogeneration respeta maximo 1 publicacion por ejecucion", async () => {
