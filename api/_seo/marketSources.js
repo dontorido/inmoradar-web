@@ -33,6 +33,21 @@ const GEO_PRIORITY_FOR_CITY = {
   country: 0
 };
 
+const MUNICIPALITY_ALIAS_GROUPS = [
+  ["Alicante", "Alacant", "Alicante / Alacant", "Alicante/Alacant"],
+  ["Castellon", "Castellón", "Castello", "Castelló", "Castelló / Castellón", "Castello / Castellon", "Castellon / Castello"],
+  ["Valencia", "València", "València / Valencia", "Valencia / Valencia"],
+  ["Las Palmas de Gran Canaria", "Palmas de Gran Canaria, Las", "Las Palmas"],
+  ["A Coruna", "A Coruña", "Coruna, A", "Coruña, A", "La Coruna", "La Coruña"],
+  ["Girona", "Gerona", "Gerona / Girona"],
+  ["Lleida", "Lerida", "Lérida", "Lérida / Lleida", "Lerida / Lleida"],
+  ["Ourense", "Orense", "Orense / Ourense"],
+  ["Gijon", "Gijón", "Xixon", "Xixón", "Gijón / Xixón", "Gijon / Xixon"],
+  ["Donostia", "San Sebastian", "San Sebastián", "Donostia-San Sebastián", "Donostia-San Sebastian", "Donostia / San Sebastián", "Donostia / San Sebastian"],
+  ["Vitoria", "Gasteiz", "Vitoria-Gasteiz"],
+  ["Pamplona", "Iruna", "Iruña", "Pamplona / Iruña", "Pamplona / Iruna"]
+];
+
 const FALLBACK_MARKET_PRICE_SOURCES = [
   {
     source: "idealista_public_report",
@@ -168,16 +183,75 @@ function buildNameCandidates(value) {
     candidates.add(normalized.replace(/\b\w/g, (char) => char.toUpperCase()));
     candidates.add(normalized);
   }
+  for (const alias of aliasCandidatesForName(raw)) {
+    candidates.add(alias);
+  }
   if (normalized === "logrono") candidates.add("Logrono");
   if (normalized === "malaga") candidates.add("Malaga");
   if (normalized === "a coruna") candidates.add("A Coruna");
   return [...candidates].filter(Boolean);
 }
 
+function titleCaseName(value) {
+  return String(value || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => (part.length <= 3 ? part : `${part.charAt(0).toUpperCase()}${part.slice(1)}`))
+    .join(" ");
+}
+
+function normalizedNameVariants(value) {
+  const raw = String(value || "").trim();
+  const variants = new Set();
+  const add = (item) => {
+    const normalized = normalizeText(item);
+    if (normalized) variants.add(normalized);
+  };
+  add(raw);
+  for (const part of raw.split(/[\/|]/)) add(part);
+  for (const part of raw.split(/\s+-\s+|-/)) add(part);
+
+  const commaArticle = raw.match(/^(.+?),\s*(a|o|as|os|la|el|las|los)$/i);
+  if (commaArticle) {
+    const [, name, article] = commaArticle;
+    add(`${article} ${name}`);
+    add(name);
+  }
+
+  return variants;
+}
+
+function aliasGroupsForName(value) {
+  const variants = normalizedNameVariants(value);
+  return MUNICIPALITY_ALIAS_GROUPS.filter((group) =>
+    group.some((alias) => {
+      const aliasVariants = normalizedNameVariants(alias);
+      return [...aliasVariants].some((variant) => variants.has(variant));
+    })
+  );
+}
+
+function aliasCandidatesForName(value) {
+  const candidates = new Set();
+  for (const group of aliasGroupsForName(value)) {
+    for (const alias of group) {
+      candidates.add(alias);
+      const normalized = normalizeText(alias);
+      if (normalized) candidates.add(titleCaseName(normalized));
+    }
+  }
+  return candidates;
+}
+
 function sameName(left, right) {
-  const a = normalizeText(left);
-  const b = normalizeText(right);
-  return Boolean(a && b && a === b);
+  const leftVariants = normalizedNameVariants(left);
+  const rightVariants = normalizedNameVariants(right);
+  for (const value of leftVariants) {
+    if (rightVariants.has(value)) return true;
+  }
+  const leftGroups = aliasGroupsForName(left);
+  const rightGroups = aliasGroupsForName(right);
+  return leftGroups.some((leftGroup) => rightGroups.some((rightGroup) => leftGroup === rightGroup));
 }
 
 function parseNumber(value) {

@@ -34,6 +34,20 @@ function sourceShortName(source) {
   return sourceName(source);
 }
 
+function recordPlaceLabel(record, fallbackCity) {
+  return record?.municipality || record?.zone_name || record?.neighbourhood || record?.district || record?.province || fallbackCity || "municipio indicado";
+}
+
+function recordSourceMarkup(record) {
+  const label = sourceName(record?.source) || "fuente no indicada";
+  if (!record?.source_url) return escapeHtml(label);
+  return `<a href="${escapeHtml(record.source_url)}" target="_blank" rel="noopener nofollow">${escapeHtml(label)}${externalIcon()}</a>`;
+}
+
+function recordPeriodLabel(record) {
+  return record?.period_label || record?.period_date || "periodo pendiente de confirmar";
+}
+
 function formatPrice(record, operation) {
   if (!record?.price_eur_m2) return null;
   const decimals = operation === "rent" ? 2 : 0;
@@ -112,7 +126,7 @@ function faq(city) {
   ];
 }
 
-function sourceLinks(records) {
+function sourceLinks(records, city) {
   if (!records.length) {
     return `<p>No hay una fuente municipal o de zona suficiente para generar una página indexable. El borrador debe quedar en noindex hasta incorporar datos verificables.</p>`;
   }
@@ -130,6 +144,21 @@ ${records
   )
   .join("\n")}
   </ul>`;
+}
+
+function sourceMethodologyNotes(records, city) {
+  if (!records.length) return "";
+  return `<div class="seo-source-methodology">
+${records
+  .map(
+    (record) => `    <p><strong>Fuente y fecha del dato:</strong> datos de precio de ${escapeHtml(
+      operationLabel(record.operation).toLowerCase()
+    )} publicados por ${recordSourceMarkup(record)}, consultados para ${escapeHtml(
+      recordPlaceLabel(record, city)
+    )}, periodo ${escapeHtml(recordPeriodLabel(record))}. InmoRadar los usa como referencia orientativa y recomienda contrastar cada anuncio concreto.</p>`
+  )
+  .join("\n")}
+  </div>`;
 }
 
 function dataSummaryRows(sourceData) {
@@ -367,6 +396,7 @@ function buildPrecioMetroCuadradoCiudad({ city, province, autonomousCommunity, s
         <h2>Datos disponibles para ${escapeHtml(city)}</h2>
         ${dataSummary(sourceData)}
         ${sourceLinks(sourceRecords)}
+        ${sourceMethodologyNotes(sourceRecords, city)}
         <p>${availabilityCopy}</p>
         <p>Si el nivel geográfico indicado es una referencia municipal, el dato resume el municipio y no describe una calle concreta. Si aparece como referencia de zona, puede estar más cerca del entorno buscado, aunque sigue siendo una señal agregada y no el resultado de una valoración individual de la vivienda.</p>
       </section>

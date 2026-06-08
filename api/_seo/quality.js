@@ -20,11 +20,54 @@ const BRAND_RISK_TERMS = new Set([
   "partners"
 ]);
 
-function hasSourceAndDate(sourceData) {
-  return Boolean(
-    sourceData?.records?.length &&
-      sourceData.records.every((record) => record.source && record.source_url && (record.period_label || record.period_date))
+function sourceRecords(sourceData = {}) {
+  const records = Array.isArray(sourceData.records) ? sourceData.records : [];
+  if (records.length) return records.filter(Boolean);
+  return Array.isArray(sourceData.sources) ? sourceData.sources.filter(Boolean) : [];
+}
+
+function hasEscapedUrl(bodyHtml, sourceUrl) {
+  if (!sourceUrl) return false;
+  const body = String(bodyHtml || "");
+  const url = String(sourceUrl || "").trim();
+  if (!url) return false;
+  if (body.includes(url) || body.includes(url.replace(/&/g, "&amp;"))) return true;
+  try {
+    const parsed = new URL(url);
+    return Boolean(parsed.pathname && body.includes(parsed.pathname));
+  } catch (_) {
+    return false;
+  }
+}
+
+function sourceVisibilityDetails(landing, sourceData = {}) {
+  const records = sourceRecords(sourceData);
+  const bodyHtml = String(landing?.body_html || "");
+  const visibleText = normalizeText(stripHtml(bodyHtml));
+  const hasCompleteMetadata = Boolean(
+    records.length &&
+      records.every((record) => record.source && record.source_url && (record.period_label || record.period_date))
   );
+  const hasSourceLabel = /Fuente:|Fuente y fecha del dato:/i.test(bodyHtml);
+  const hasDateLabel = /Fecha del dato:|Fuente y fecha del dato:|periodo/i.test(bodyHtml);
+  const visibleSources = records.every((record) => {
+    if (!record.source || !record.source_url) return false;
+    return hasEscapedUrl(bodyHtml, record.source_url);
+  });
+  const visibleDates = records.every((record) => {
+    const period = String(record.period_label || record.period_date || "").trim();
+    return Boolean(period && visibleText.includes(normalizeText(period)));
+  });
+
+  return {
+    records,
+    hasCompleteMetadata,
+    hasSourceLabel,
+    hasDateLabel,
+    sourceVisible: hasCompleteMetadata && hasSourceLabel && visibleSources,
+    dateVisible: hasCompleteMetadata && hasDateLabel && visibleDates,
+    sourceAndDateVisible: hasCompleteMetadata && hasSourceLabel && hasDateLabel && visibleSources && visibleDates
+  };
 }
 
 function citySpecificBlockCount(bodyHtml) {
@@ -147,7 +190,8 @@ function calculateSeoLandingQuality(landing, sourceData = {}) {
   const rejectionReasons = [];
   let score = 0;
   const wordCount = Number(landing?.word_count) || countWords(landing?.body_html);
-  const sourceVisible = hasSourceAndDate(sourceData) && /Fuente:|Fecha del dato:/i.test(String(landing?.body_html || ""));
+  const sourceVisibility = sourceVisibilityDetails(landing, sourceData);
+  const sourceVisible = sourceVisibility.sourceAndDateVisible;
   const specificBlockCount = landing?.template_type === "editorial_guide" ? guideSpecificBlockCount(landing?.body_html) : citySpecificBlockCount(landing?.body_html);
   const citySpecific = specificBlockCount >= 3 && !hasOverGenericClaims(landing);
   const canonicalIssue = canonicalIssueReason(landing);
@@ -194,9 +238,13 @@ function calculateSeoLandingQuality(landing, sourceData = {}) {
     score -= 30;
     penalties.push("contenido duplicado");
   }
-  if (!sourceVisible) {
+  if (!sourceVisibility.hasCompleteMetadata) {
     score -= 30;
-    penalties.push("sin fuente visible");
+    penalties.push("fuente o fecha incompleta en datos de origen");
+  } else if (!sourceVisible) {
+    score -= 30;
+    if (!sourceVisibility.sourceVisible) penalties.push("sin fuente visible");
+    if (!sourceVisibility.dateVisible) penalties.push("sin fecha visible");
   }
   if (wordCount < 500) {
     score -= 20;
@@ -231,6 +279,11 @@ function calculateSeoLandingQuality(landing, sourceData = {}) {
   }
 
   const normalizedScore = Math.max(0, Math.min(100, score));
+  if (!sourceVisibility.hasCompleteMetadata) rejectionReasons.push("source_metadata_incomplete");
+  else {
+    if (!sourceVisibility.sourceVisible) rejectionReasons.push("source_not_visible");
+    if (!sourceVisibility.dateVisible) rejectionReasons.push("date_not_visible");
+  }
   if (normalizedScore < QUALITY_GATE_SCORE_THRESHOLD) rejectionReasons.push("quality_score_below_75");
   if (mojibakeDetected) rejectionReasons.push("mojibake_detected");
   if (canonicalIssue) rejectionReasons.push("canonical_incoherent");

@@ -3,8 +3,9 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { buildPriceCitySourceData } = require("../api/_seo/marketSources");
+const { buildPriceCitySourceData, findBestRecord } = require("../api/_seo/marketSources");
 const { buildPriceCityLanding } = require("../api/_seo/priceCity");
+const { buildRentCityLanding } = require("../lib/seo/cityGuideTemplates");
 const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { canPublishNow, runSeoLandingGeneration } = require("../api/_seo/generator");
 const { runSeoContentPublication } = require("../api/_seo/contentPublisher");
@@ -25,7 +26,7 @@ function qualityFixture(overrides = {}) {
   const repeatedCityCopy = "Madrid mercado vivienda precio barrio referencia comprador ".repeat(130);
   const bodyHtml = `
     <header data-city-specific="true"><h1>Precio del metro cuadrado en Madrid</h1></header>
-    <section data-city-specific="true"><p>${repeatedCityCopy}</p><p><strong>Fuente:</strong> MIVAU. <strong>Fecha del dato:</strong> 4T 2025.</p></section>
+    <section data-city-specific="true"><p>${repeatedCityCopy}</p><p><strong>Fuente y fecha del dato:</strong> <a href="https://example.com/mivau.csv">MIVAU</a>. <strong>Fecha del dato:</strong> 4T 2025.</p></section>
     <section data-city-specific="true"><p>${repeatedCityCopy}</p><a href="/datos">Datos</a><a href="/metodologia">Metodologia</a></section>
     <section data-city-specific="true"><button>EMPEZAR GRATIS</button></section>
   `;
@@ -62,6 +63,48 @@ function qualityFixture(overrides = {}) {
   return { landing, sourceData };
 }
 
+function marketSourceRecord(overrides = {}) {
+  return {
+    source: "idealista_public_report",
+    operation: "sale",
+    country: "ES",
+    autonomous_community: "Comunidad Valenciana",
+    province: "Alicante",
+    municipality: "Alicante / Alacant",
+    zone_name: "Alicante / Alacant",
+    geo_level: "municipality",
+    price_eur_m2: 2150,
+    period_label: "mayo 2026",
+    period_date: "2026-05-01",
+    source_url: "https://example.com/alicante-venta.csv",
+    confidence_score: 0.8,
+    extracted_at: "2026-06-01T00:00:00.000Z",
+    ...overrides
+  };
+}
+
+function citySourceData(records) {
+  const sale = records.find((record) => record.operation === "sale") || null;
+  const rent = records.find((record) => record.operation === "rent") || null;
+  return {
+    hasRealData: records.length > 0,
+    hasProvincialOnly:
+      records.length > 0 && records.every((record) => ["province", "autonomous_community", "country"].includes(record.geo_level)),
+    sale,
+    rent,
+    records,
+    sources: records.map((record) => ({
+      operation: record.operation,
+      source: record.source,
+      source_url: record.source_url,
+      period_label: record.period_label,
+      period_date: record.period_date,
+      geo_level: record.geo_level,
+      price_eur_m2: record.price_eur_m2
+    }))
+  };
+}
+
 function seoPublicationEmailEnv(overrides = {}) {
   return {
     SEO_PUBLICATION_EMAIL_ENABLED: "true",
@@ -92,6 +135,131 @@ test("price_city genera una landing de alta calidad cuando hay datos reales, fue
   assert.match(landing.body_html, /data-seo-calc-price/);
   assert.match(landing.body_html, /data-seo-calc-area/);
   assert.doesNotMatch(landing.body_html, /precio exacto de calle/i);
+});
+
+test("marketSources encuentra municipios con alias bilingues, coma-articulo y nombres oficiales", () => {
+  const alicante = marketSourceRecord({ municipality: "Alicante / Alacant", zone_name: "Alicante / Alacant" });
+  const coruna = marketSourceRecord({
+    municipality: "Coru\u00f1a, A",
+    zone_name: "Coru\u00f1a, A",
+    province: "A Coru\u00f1a",
+    source_url: "https://example.com/coruna-venta.csv",
+    period_label: "abril 2026"
+  });
+  const donostia = marketSourceRecord({
+    municipality: "Donostia-San Sebasti\u00e1n",
+    zone_name: "Donostia-San Sebasti\u00e1n",
+    province: "Gipuzkoa",
+    source_url: "https://example.com/donostia-venta.csv",
+    period_label: "marzo 2026"
+  });
+
+  assert.equal(findBestRecord([alicante], "sale", "Alicante"), alicante);
+  assert.equal(findBestRecord([coruna], "sale", "A Coru\u00f1a"), coruna);
+  assert.equal(findBestRecord([donostia], "sale", "San Sebasti\u00e1n"), donostia);
+  assert.equal(findBestRecord([donostia], "sale", "Donostia"), donostia);
+  assert.equal(findBestRecord([alicante], "sale", "Alicante")?.source_url, "https://example.com/alicante-venta.csv");
+  assert.equal(findBestRecord([coruna], "sale", "A Coru\u00f1a")?.period_label, "abril 2026");
+});
+
+test("marketSources no confunde Las Palmas provincia con municipio", () => {
+  const provinceOnly = marketSourceRecord({
+    municipality: null,
+    zone_name: null,
+    province: "Las Palmas",
+    geo_level: "province",
+    source_url: "https://example.com/las-palmas-provincia.csv"
+  });
+  const cityRecord = marketSourceRecord({
+    municipality: "Las Palmas",
+    zone_name: "Las Palmas",
+    province: "Las Palmas",
+    geo_level: "municipality",
+    source_url: "https://example.com/las-palmas-ciudad.csv"
+  });
+
+  assert.equal(findBestRecord([provinceOnly], "sale", "Las Palmas de Gran Canaria"), null);
+  assert.equal(findBestRecord([provinceOnly, cityRecord], "sale", "Las Palmas de Gran Canaria"), cityRecord);
+});
+
+test("price_city con alias encontrado muestra fuente y fecha visibles y supera quality gate", () => {
+  const sale = marketSourceRecord();
+  const sourceData = citySourceData([sale]);
+  const opportunity = {
+    keyword: "precio metro cuadrado Alicante",
+    city: "Alicante",
+    province: "Alicante",
+    autonomous_community: "Comunidad Valenciana",
+    template_type: "price_city"
+  };
+  const landing = buildPriceCityLanding(opportunity, sourceData);
+  const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: landing.faq });
+
+  assert.ok(quality.score >= 75);
+  assert.ok(quality.signals.includes("fuente y fecha visibles"));
+  assert.equal(quality.penalties.includes("sin fuente visible"), false);
+  assert.equal(quality.rejection_reasons.includes("source_not_visible"), false);
+  assert.match(landing.body_html, /Fuente y fecha del dato:/);
+  assert.match(landing.body_html, /https:\/\/example\.com\/alicante-venta\.csv/);
+  assert.match(landing.body_html, /mayo 2026/);
+  assert.match(landing.body_html, /Alicante \/ Alacant/);
+});
+
+test("rent_city con fuente y fecha visibles supera quality gate", () => {
+  const rent = marketSourceRecord({
+    source: "serpavi",
+    operation: "rent",
+    price_eur_m2: 11.4,
+    period_label: "2024",
+    period_date: "2024-01-01",
+    source_url: "https://example.com/alicante-alquiler.csv"
+  });
+  const sourceData = citySourceData([rent]);
+  const landing = buildRentCityLanding(
+    {
+      keyword: "precio alquiler metro cuadrado Alicante",
+      city: "Alicante",
+      province: "Alicante",
+      autonomous_community: "Comunidad Valenciana",
+      template_type: "rent_city"
+    },
+    sourceData
+  );
+  const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: landing.faq });
+
+  assert.ok(quality.score >= 75);
+  assert.ok(quality.signals.includes("fuente y fecha visibles"));
+  assert.equal(quality.rejection_reasons.includes("source_not_visible"), false);
+  assert.match(landing.body_html, /https:\/\/example\.com\/alicante-alquiler\.csv/);
+  assert.match(landing.body_html, /2024/);
+});
+
+test("quality gate bloquea landings sin fuente o fecha visible", () => {
+  const fixture = qualityFixture();
+  const withoutSourceUrl = calculateSeoLandingQuality(
+    {
+      ...fixture.landing,
+      body_html: fixture.landing.body_html.replace(/https:\/\/example\.com\/mivau\.csv/g, "")
+    },
+    fixture.sourceData
+  );
+  const withoutDate = calculateSeoLandingQuality(
+    {
+      ...fixture.landing,
+      body_html: fixture.landing.body_html.replace(/4T 2025/g, "")
+    },
+    fixture.sourceData
+  );
+  const withoutMetadata = calculateSeoLandingQuality(fixture.landing, { ...fixture.sourceData, records: [], sources: [] });
+
+  assert.ok(withoutSourceUrl.score < 75);
+  assert.ok(withoutSourceUrl.penalties.includes("sin fuente visible"));
+  assert.ok(withoutSourceUrl.rejection_reasons.includes("source_not_visible"));
+  assert.ok(withoutDate.score < 75);
+  assert.ok(withoutDate.penalties.includes("sin fecha visible"));
+  assert.ok(withoutDate.rejection_reasons.includes("date_not_visible"));
+  assert.ok(withoutMetadata.score < 75);
+  assert.ok(withoutMetadata.rejection_reasons.includes("source_metadata_incomplete"));
 });
 
 test("quality gate acepta CTA actual EMPEZAR GRATIS", () => {
@@ -175,6 +343,7 @@ test("price_city queda por debajo de publicación si no hay fuente real", async 
   assert.equal(result.results[0].data_available, false);
   assert.equal(result.results[0].index_status, "noindex");
   assert.ok(result.results[0].quality_score < 75);
+  assert.ok(result.results[0].rejection_reasons.includes("source_metadata_incomplete"));
 });
 
 test("dry_run usa la semilla de 5 oportunidades y no guarda cambios", async () => {
