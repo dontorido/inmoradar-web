@@ -5,7 +5,7 @@ const path = require("node:path");
 
 const { buildPriceCitySourceData, findBestRecord } = require("../api/_seo/marketSources");
 const { buildPriceCityLanding } = require("../api/_seo/priceCity");
-const { buildRentCityLanding } = require("../lib/seo/cityGuideTemplates");
+const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../lib/seo/cityGuideTemplates");
 const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { canPublishNow, runSeoLandingGeneration } = require("../api/_seo/generator");
 const { runSeoContentPublication } = require("../api/_seo/contentPublisher");
@@ -232,6 +232,33 @@ test("rent_city con fuente y fecha visibles supera quality gate", () => {
   assert.equal(quality.rejection_reasons.includes("source_not_visible"), false);
   assert.match(landing.body_html, /https:\/\/example\.com\/alicante-alquiler\.csv/);
   assert.match(landing.body_html, /2024/);
+});
+
+test("las landings SEO ciudad enlazan a la siguiente pagina relacionada", () => {
+  const sale = marketSourceRecord({ operation: "sale" });
+  const rent = marketSourceRecord({
+    source: "serpavi",
+    operation: "rent",
+    price_eur_m2: 11.4,
+    period_label: "2024",
+    period_date: "2024-01-01",
+    source_url: "https://example.com/alicante-alquiler.csv"
+  });
+  const sourceData = citySourceData([sale, rent]);
+  const opportunity = {
+    keyword: "precio Alicante",
+    city: "Alicante",
+    province: "Alicante",
+    autonomous_community: "Comunidad Valenciana"
+  };
+
+  const priceLanding = buildPriceCityLanding({ ...opportunity, template_type: "price_city" }, sourceData);
+  const rentLanding = buildRentCityLanding({ ...opportunity, template_type: "rent_city" }, sourceData);
+  const expensiveLanding = buildExpensiveListingCityLanding({ ...opportunity, template_type: "expensive_listing_city" }, sourceData);
+
+  assert.match(priceLanding.body_html, /href="\/saber-si-piso-esta-caro\/alicante\/"/);
+  assert.match(rentLanding.body_html, /href="\/precio-metro-cuadrado\/alicante\/"/);
+  assert.match(expensiveLanding.body_html, /href="\/guias\/errores-comprar-piso\/"/);
 });
 
 test("quality gate bloquea landings sin fuente o fecha visible", () => {

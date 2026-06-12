@@ -290,10 +290,18 @@ ${items
   </section>`;
 }
 
-function usefulLinks() {
+function usefulLinks({ city, slug } = {}) {
+  const relatedCityLink = slug
+    ? `<a href="/saber-si-piso-esta-caro/${escapeHtml(slug)}/">
+        ${icon("arrowUpRight")}
+        <span>Saber si un piso esta caro en ${escapeHtml(city)}</span>
+        <small>ANALISIS ${escapeHtml(String(city || "").toUpperCase())}</small>
+      </a>`
+    : "";
   return `<section class="seo-section seo-useful-links" id="enlaces-utiles" aria-labelledby="enlaces-utiles-heading">
     <h2 id="enlaces-utiles-heading">Enlaces útiles</h2>
     <div class="seo-link-bento">
+      ${relatedCityLink}
       <a href="/">
         ${icon("arrowUpRight")}
         <span>Página principal de InmoRadar</span>
@@ -450,7 +458,7 @@ function buildPrecioMetroCuadradoCiudad({ city, province, autonomousCommunity, s
         </div>
       </section>
 
-      ${usefulLinks()}
+      ${usefulLinks({ city, slug })}
       ${faqHtml(faqItems)}
       ${finalCta(city)}
       ${disclaimer(publishedLabel, updatedLabel)}
