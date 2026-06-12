@@ -507,6 +507,7 @@ function buildPriceCityLanding(opportunity, sourceData) {
 }
 
 module.exports = {
+  CHROME_WEBSTORE_URL,
   buildPrecioMetroCuadradoCiudad,
   buildPriceCityLanding,
   geoLevelLabel,

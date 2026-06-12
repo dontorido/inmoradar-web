@@ -781,6 +781,76 @@ function renderLandingHtml(landing) {
     .seo-formula span { color: #52525B; display: block; font-size: 14px; line-height: 1.6; margin-top: 12px; max-width: 62ch; }
     .seo-inline-cta { align-items: center; display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; margin: 52px 0; max-width: 820px; padding: 26px 30px; }
     .seo-inline-cta .seo-sidebar-kicker { margin-bottom: 8px; }
+    .seo-commercial-cta {
+      align-items: center;
+      background: #111113;
+      border: 1px solid #27272A;
+      border-left: 6px solid #FF4500;
+      border-radius: 28px;
+      box-shadow: 0 24px 70px -48px rgba(9, 9, 11, .68);
+      display: grid;
+      gap: 24px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      margin: 64px 0;
+      max-width: 860px;
+      padding: clamp(24px, 4vw, 36px);
+    }
+    .seo-commercial-cta[data-guide-commercial-cta="final"] {
+      margin-top: 96px;
+      max-width: 920px;
+    }
+    .seo-commercial-copy { display: grid; gap: 12px; min-width: 0; }
+    .seo-commercial-kicker {
+      color: #FFB199;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      font-weight: 900;
+      letter-spacing: .2em;
+      line-height: 1.4;
+      margin: 0;
+      text-transform: uppercase;
+    }
+    .seo-commercial-cta h2 {
+      color: #FFFFFF;
+      font-family: var(--display);
+      font-size: clamp(26px, 3vw, 38px);
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin: 0;
+      max-width: 12em;
+    }
+    .seo-commercial-cta p {
+      color: rgba(255,255,255,.82);
+      font-size: 16px;
+      line-height: 1.62;
+      margin: 0;
+      max-width: 66ch;
+    }
+    .seo-commercial-cta .seo-commercial-disclaimer {
+      border-top: 1px solid rgba(255,255,255,.12);
+      color: rgba(255,255,255,.66);
+      font-size: 13px;
+      margin-top: 4px;
+      padding-top: 12px;
+    }
+    .seo-commercial-actions {
+      align-items: stretch;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 220px;
+    }
+    .seo-commercial-cta .seo-button-secondary {
+      background: rgba(255,255,255,.06);
+      border-color: rgba(255,255,255,.22);
+      color: #FFFFFF;
+    }
+    .seo-commercial-cta .seo-button-secondary:hover {
+      background: rgba(255,255,255,.12);
+      border-color: rgba(255,255,255,.42);
+      color: #FFFFFF;
+    }
     .seo-button {
       align-items: center;
       border-radius: 999px;
@@ -845,6 +915,8 @@ function renderLandingHtml(landing) {
       .seo-link-bento a { align-items: start; grid-template-columns: 18px minmax(0, 1fr); }
       .seo-link-bento small { grid-column: 2; white-space: normal; }
       .seo-button { width: 100%; }
+      .seo-commercial-cta { grid-template-columns: 1fr; }
+      .seo-commercial-actions { min-width: 0; width: 100%; }
       .seo-page-hero { border-radius: 28px; padding: 30px 22px; }
       .seo-hero-badges { grid-template-columns: 1fr; }
       .seo-inline-cta { align-items: stretch; }
@@ -868,12 +940,14 @@ function renderLandingHtml(landing) {
       .seo-product-card,
       .seo-data-card,
       .seo-inline-cta,
+      .seo-commercial-cta,
       .seo-final-cta {
         border-radius: 22px;
         padding: 20px 16px;
       }
       .seo-product-card h2,
       .seo-section h2,
+      .seo-commercial-cta h2,
       .seo-final-cta h2 {
         font-size: clamp(28px, 9vw, 36px);
         letter-spacing: 0;
