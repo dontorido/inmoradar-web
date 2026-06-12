@@ -8,6 +8,7 @@ const ANALYTICS_DEFAULT_DAYS = 7;
 const ANALYTICS_MAX_RANGE_DAYS = 90;
 const EXTENSION_USAGE_DEFAULT_PRESET = "30d";
 const EXTENSION_USAGE_TIMEZONE = "Europe/Madrid";
+const SEO_AUTOGENERATION_TIMEZONE = "Europe/Madrid";
 const EXTENSION_USAGE_PRESETS = new Set(["24h", "7d", "30d", "month", "all", "custom"]);
 const INITIAL_ADMIN_PATH = window.location.pathname || "";
 const INITIAL_MARKETING_SUBSECTION = INITIAL_ADMIN_PATH.includes("/backoffice/marketing/viraliza")
@@ -560,16 +561,18 @@ function formatDate(value) {
   }).format(date);
 }
 
-function formatCompactDate(value) {
+function formatCompactDate(value, options = {}) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("es-ES", {
+  const formatOptions = {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
     minute: "2-digit"
-  }).format(date);
+  };
+  if (options.timeZone) formatOptions.timeZone = options.timeZone;
+  return new Intl.DateTimeFormat("es-ES", formatOptions).format(date);
 }
 
 function showStatus(message, tone = "neutral") {
@@ -2446,6 +2449,9 @@ function renderSeoAutogeneration(payload = {}) {
   const newsToday = Number(payload.published_news_today ?? payload.daily_policy?.published_news_today ?? 0);
   const targetLandings = Number(payload.target_landings_per_day || config.target_landings_per_day || 2);
   const targetNews = Number(payload.target_news_per_day || config.target_news_per_day || 2);
+  const nextScheduledLabel = payload.next_scheduled_at
+    ? formatCompactDate(payload.next_scheduled_at, { timeZone: SEO_AUTOGENERATION_TIMEZONE })
+    : "-";
 
   els.seoAutogenSummary.innerHTML = [
     seoAutogenCard("Estado", enabledLabel, { badge: true, tone: config.enabled ? "good" : "muted", hint: "Kill switch" }),
@@ -2455,7 +2461,7 @@ function renderSeoAutogeneration(payload = {}) {
     seoAutogenCard("7 dias", ratioLabel(weekCount, weekLimit), { hint: "Publicado / limite", overLimit: weekCount > weekLimit }),
     seoAutogenCard("Min score", `${Number(config.min_score || 80)} / 100`, { hint: "Umbral de calidad" }),
     seoAutogenCard("Ultima", lastRun ? formatCompactDate(lastRun.started_at) : "-", { hint: lastRun?.status || "Sin ejecuciones" }),
-    seoAutogenCard("Proxima", payload.next_scheduled_at ? formatCompactDate(payload.next_scheduled_at) : "-", { hint: "Cadencia 6h" })
+    seoAutogenCard("Proxima", nextScheduledLabel, { hint: "Cron Vercel UTC / hora Madrid" })
   ].join("");
 
   if (els.seoAutogenNote) {

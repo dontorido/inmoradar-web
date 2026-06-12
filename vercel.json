@@ -90,5 +90,11 @@
     { "source": "/terminos", "destination": "/terminos.html" },
     { "source": "/success", "destination": "/success.html" },
     { "source": "/cancel", "destination": "/cancel.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/seo-publish",
+      "schedule": "0 */4 * * *"
+    }
   ]
 }
