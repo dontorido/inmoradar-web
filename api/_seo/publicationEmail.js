@@ -253,73 +253,137 @@ function pageMetaLine(page = {}) {
 
 function renderSeoPublicationEmail({ summary, pages, totals, config }) {
   const publishedCount = safeInt(summary.published_count, 0);
-  const subject = `[InmoRadar] ${publishedCount} pagina SEO publicada${publishedCount === 1 ? "" : "s"}`;
+  const pageLabel = publishedCount === 1 ? "pagina SEO publicada" : "paginas SEO publicadas";
+  const subject = `[InmoRadar] ${publishedCount} ${pageLabel}`;
+  const primaryPage = pages[0] || {};
+  const primaryHref = primaryPage.url || primaryPage.target_path || config.site_url || DEFAULT_SITE_URL;
   const rows = pages.length
     ? pages
         .map((page) => {
           const href = page.url || page.target_path || "";
+          const label = page.target_path || page.slug || page.url || "Sin URL";
+          const meta = pageMetaLine(page);
           return `<tr>
-            <td style="padding:12px;border-bottom:1px solid #e7e2d8;">
-              <a href="${escapeHtml(href)}" style="color:#1f5fbf;text-decoration:none;font-weight:700;">${escapeHtml(
-                page.target_path || page.slug
+            <td style="padding:16px 0;border-bottom:1px solid #eee7dc;">
+              <a href="${escapeHtml(href)}" style="color:#171717;text-decoration:none;font-weight:800;font-size:15px;line-height:1.35;">${escapeHtml(
+                page.title || label
               )}</a>
-              <div style="margin-top:4px;color:#171717;">${escapeHtml(page.title)}</div>
-              <div style="margin-top:4px;color:#6f6a62;font-size:12px;">${escapeHtml(pageMetaLine(page) || "Sin metadatos")}</div>
+              <div style="margin-top:6px;color:#7a4a1f;font-size:13px;font-weight:700;">${escapeHtml(label)}</div>
+              <div style="margin-top:6px;color:#766e63;font-size:12px;">${escapeHtml(meta || "Lista para revision")}</div>
             </td>
-            <td style="padding:12px;border-bottom:1px solid #e7e2d8;text-align:right;font-weight:700;">${escapeHtml(page.score)}</td>
+            <td style="padding:16px 0 16px 18px;border-bottom:1px solid #eee7dc;text-align:right;vertical-align:top;">
+              <span style="display:inline-block;background:#eef8ef;color:#176534;border:1px solid #cde9d1;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:800;">Score ${escapeHtml(
+                page.score
+              )}</span>
+            </td>
           </tr>`;
         })
         .join("")
-    : `<tr><td style="padding:12px;border-bottom:1px solid #e7e2d8;">Sin detalle de paginas</td><td style="padding:12px;border-bottom:1px solid #e7e2d8;text-align:right;">-</td></tr>`;
+    : `<tr>
+        <td style="padding:16px 0;border-bottom:1px solid #eee7dc;color:#766e63;">Sin detalle de paginas</td>
+        <td style="padding:16px 0;border-bottom:1px solid #eee7dc;text-align:right;">-</td>
+      </tr>`;
   const html = `<!doctype html>
 <html>
-<body style="margin:0;background:#f7f3ed;color:#171717;font-family:Arial,Helvetica,sans-serif;">
-  <main style="max-width:720px;margin:0 auto;padding:28px;">
-    <p style="margin:0 0 8px;color:#7a4a1f;font-size:12px;font-weight:800;text-transform:uppercase;">InmoRadar SEO</p>
-    <h1 style="margin:0 0 12px;font-size:24px;line-height:1.2;">Publicacion SEO confirmada</h1>
-    <p style="margin:0 0 18px;color:#5c5750;line-height:1.55;">La ejecucion ${escapeHtml(
-      summary.job_name || "seo"
-    )} publico ${escapeHtml(publishedCount)} pagina(s) con quality gate superado.</p>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#fff;border:1px solid #e7e2d8;">
-      <thead><tr><th align="left" style="padding:10px;border-bottom:1px solid #d8d0c5;">Pagina</th><th align="right" style="padding:10px;border-bottom:1px solid #d8d0c5;">Score</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <section style="margin-top:18px;background:#fff;border:1px solid #e7e2d8;padding:16px;">
-      <p style="margin:0 0 8px;font-weight:800;">Resumen de la ejecucion</p>
-      <p style="margin:0;color:#5c5750;line-height:1.7;">
+<body style="margin:0;background:#f6f1e9;color:#171717;font-family:Arial,Helvetica,sans-serif;">
+  <div style="display:none;max-height:0;overflow:hidden;color:transparent;">
+    ${escapeHtml(publishedCount)} ${escapeHtml(pageLabel)} tras superar el quality gate de InmoRadar.
+  </div>
+  <main style="max-width:680px;margin:0 auto;padding:28px 16px;">
+    <section style="background:#171717;border-radius:24px 24px 0 0;padding:28px 28px 24px;color:#fff;">
+      <p style="margin:0 0 18px;color:#f4c77c;font-size:13px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;">InmoRadar</p>
+      <h1 style="margin:0;font-size:30px;line-height:1.15;letter-spacing:-.03em;">Nueva pagina SEO publicada</h1>
+      <p style="margin:14px 0 0;color:#e8dccb;font-size:16px;line-height:1.55;">
+        La automatizacion publico ${escapeHtml(publishedCount)} ${escapeHtml(pageLabel.replace("SEO ", ""))} despues de superar los controles de calidad.
+      </p>
+    </section>
+
+    <section style="background:#ffffff;border:1px solid #eadfce;border-top:0;border-radius:0 0 24px 24px;padding:28px;box-shadow:0 12px 32px rgba(23,23,23,.08);">
+      <p style="margin:0 0 10px;color:#7a4a1f;font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;">Pagina destacada</p>
+      <h2 style="margin:0 0 8px;font-size:22px;line-height:1.25;color:#171717;">${escapeHtml(
+        primaryPage.title || "Pagina SEO publicada"
+      )}</h2>
+      <p style="margin:0 0 18px;color:#766e63;font-size:14px;line-height:1.6;">${escapeHtml(
+        primaryPage.target_path || primaryPage.slug || "URL disponible en el backoffice"
+      )}</p>
+      <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 22px;border-collapse:collapse;">
+        <tr>
+          <td style="padding:0 8px 8px 0;"><span style="display:inline-block;background:#eef8ef;color:#176534;border:1px solid #cde9d1;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:800;">Publicada</span></td>
+          <td style="padding:0 8px 8px 0;"><span style="display:inline-block;background:#fdf6e7;color:#7a4a1f;border:1px solid #f2d7a2;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:800;">Quality gate superado</span></td>
+          <td style="padding:0 0 8px 0;"><span style="display:inline-block;background:#f3f1ee;color:#5c5750;border:1px solid #e4ddd4;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:800;">Score ${escapeHtml(
+            primaryPage.score ?? "OK"
+          )}</span></td>
+        </tr>
+      </table>
+      <a href="${escapeHtml(primaryHref)}" style="display:inline-block;background:#171717;color:#ffffff;text-decoration:none;border-radius:14px;padding:13px 18px;font-size:14px;font-weight:900;">Ver pagina SEO</a>
+    </section>
+
+    <section style="margin-top:18px;background:#fff;border:1px solid #eadfce;border-radius:20px;padding:24px;">
+      <h3 style="margin:0 0 14px;font-size:18px;color:#171717;">Paginas publicadas</h3>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+        <tbody>${rows}</tbody>
+      </table>
+    </section>
+
+    <section style="margin-top:18px;background:#fff;border:1px solid #eadfce;border-radius:20px;padding:24px;">
+      <h3 style="margin:0 0 10px;font-size:18px;color:#171717;">Revision recomendada</h3>
+      <p style="margin:0 0 14px;color:#5c5750;line-height:1.65;">
+        Antes de aumentar cadencia o limites, conviene revisar que la pagina esta bien preparada para indexacion y conversion.
+      </p>
+      <p style="margin:0;color:#5c5750;line-height:1.8;font-size:14px;">
+        Canonical correcto &nbsp;·&nbsp; Sitemap actualizado &nbsp;·&nbsp; Vista movil &nbsp;·&nbsp; Title, H1 y meta &nbsp;·&nbsp; Tildes y caracteres
+      </p>
+    </section>
+
+    <section style="margin-top:18px;background:#fff;border:1px solid #eadfce;border-radius:20px;padding:24px;">
+      <h3 style="margin:0 0 10px;font-size:18px;color:#171717;">Resumen operativo</h3>
+      <p style="margin:0;color:#5c5750;line-height:1.75;font-size:14px;">
+        Ejecucion: ${escapeHtml(summary.job_name || "seo")}<br>
         Publicadas en esta ejecucion: ${escapeHtml(publishedCount)}<br>
         Drafts: ${escapeHtml(formatMetric(summary.draft_count))}<br>
         Skipped: ${escapeHtml(formatMetric(summary.skipped_count))}<br>
         Fallidas: ${escapeHtml(formatMetric(summary.failed_count))}<br>
         Ultima ejecucion: ${escapeHtml(summary.finished_at || summary.started_at || "No disponible")}<br>
-        Modo: ${escapeHtml(summary.dry_run ? "dry-run" : "publicacion real")}<br>
+        Modo: ${escapeHtml(summary.dry_run ? "simulacion" : "publicacion real")}<br>
         Min score: ${escapeHtml(config.min_score ?? summary.config?.min_score ?? "No disponible")}
       </p>
     </section>
-    <section style="margin-top:18px;background:#fff;border:1px solid #e7e2d8;padding:16px;">
-      <p style="margin:0 0 8px;font-weight:800;">Totales SEO</p>
-      <p style="margin:0;color:#5c5750;line-height:1.7;">
-        Total landings publicadas: ${escapeHtml(formatMetric(totals?.published_landings))}<br>
-        Total landings indexables: ${escapeHtml(formatMetric(totals?.indexable_landings))}<br>
-        Total drafts: ${escapeHtml(formatMetric(totals?.drafts))}<br>
-        Total pendientes/review: ${escapeHtml(formatMetric(totals?.pending_review))}
+
+    <section style="margin-top:18px;background:#fff;border:1px solid #eadfce;border-radius:20px;padding:24px;">
+      <h3 style="margin:0 0 10px;font-size:18px;color:#171717;">Totales SEO</h3>
+      <p style="margin:0;color:#5c5750;line-height:1.75;font-size:14px;">
+        Landings publicadas: ${escapeHtml(formatMetric(totals?.published_landings))}<br>
+        Landings indexables: ${escapeHtml(formatMetric(totals?.indexable_landings))}<br>
+        Drafts: ${escapeHtml(formatMetric(totals?.drafts))}<br>
+        Pendientes/review: ${escapeHtml(formatMetric(totals?.pending_review))}
       </p>
     </section>
+
+    <p style="margin:22px 0 0;text-align:center;color:#8a8175;font-size:12px;line-height:1.6;">
+      InmoRadar · Analiza pisos antes de contactar
+    </p>
   </main>
 </body>
 </html>`;
   const text = [
-    "InmoRadar SEO - Publicacion SEO confirmada",
+    "InmoRadar - Nueva pagina SEO publicada",
     "",
-    `Publicadas en esta ejecucion: ${publishedCount}`,
+    `Se han publicado ${publishedCount} ${pageLabel} tras superar el quality gate.`,
     "",
-    "Paginas:",
+    "Paginas publicadas:",
     ...(pages.length ? pages : [{ target_path: "Sin detalle", score: "-" }]).map((page) => {
       const meta = pageMetaLine(page);
-      return `- ${page.target_path || page.slug || page.url}: ${page.title || "Pagina SEO"} | score ${page.score}${meta ? ` | ${meta}` : ""}`;
+      return `- ${page.title || "Pagina SEO"} | ${page.target_path || page.slug || page.url || "Sin URL"} | score ${page.score}${meta ? ` | ${meta}` : ""}`;
     }),
     "",
-    "Resumen de ultima ejecucion:",
+    "Revision recomendada:",
+    "- Canonical correcto",
+    "- Sitemap actualizado",
+    "- Vista movil",
+    "- Title, H1 y meta description",
+    "- Tildes y caracteres",
+    "",
+    "Resumen operativo:",
     `- job: ${summary.job_name || "seo"}`,
     `- request_source: ${summary.request_source || "unknown"}`,
     `- finished_at: ${summary.finished_at || summary.started_at || "No disponible"}`,
@@ -329,10 +393,10 @@ function renderSeoPublicationEmail({ summary, pages, totals, config }) {
     `- min_score: ${config.min_score ?? summary.config?.min_score ?? "No disponible"}`,
     "",
     "Totales SEO:",
-    `- total landings publicadas: ${formatMetric(totals?.published_landings)}`,
-    `- total landings indexables: ${formatMetric(totals?.indexable_landings)}`,
-    `- total drafts: ${formatMetric(totals?.drafts)}`,
-    `- total pendientes/review: ${formatMetric(totals?.pending_review)}`
+    `- landings publicadas: ${formatMetric(totals?.published_landings)}`,
+    `- landings indexables: ${formatMetric(totals?.indexable_landings)}`,
+    `- drafts: ${formatMetric(totals?.drafts)}`,
+    `- pendientes/review: ${formatMetric(totals?.pending_review)}`
   ].join("\n");
   return { subject, html, text };
 }
