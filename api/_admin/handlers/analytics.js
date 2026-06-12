@@ -105,11 +105,11 @@ function cleanSourceToken(value, fallback = "unknown") {
 
 function analyticsSourceIdentity(row = {}) {
   const utm = row.utm && typeof row.utm === "object" && !Array.isArray(row.utm) ? row.utm : {};
-  const rawSource = utm.source || utm.utm_source || row.source || (row.referrer ? "referral" : "direct");
-  const source = cleanSourceToken(rawSource, "direct");
-  const mediumFallback = source === "direct" ? "none" : source === "referral" ? "referral" : "unknown";
+  const rawSource = utm.source || utm.utm_source || row.source || (row.referrer ? "referral" : "unknown");
+  const source = cleanSourceToken(rawSource, "unknown");
+  const mediumFallback = source === "referral" ? "referral" : "unknown";
   const medium = cleanSourceToken(utm.medium || utm.utm_medium, mediumFallback);
-  const campaign = cleanSourceToken(utm.campaign || utm.utm_campaign, "");
+  const campaign = cleanSourceToken(utm.campaign || utm.utm_campaign, "-");
   return { source, medium, campaign };
 }
 
@@ -145,7 +145,9 @@ function analyticsSourceGroups(rows, limit = 12) {
         medium: item.medium,
         campaign: item.campaign,
         users: sessions,
-        new_users: 0,
+        new_users: null,
+        returning_users: null,
+        unclassified_users: null,
         sessions,
         cta_installation: item.cta_installation,
         chrome_store_clicks: item.chrome_store_clicks,

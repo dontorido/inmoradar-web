@@ -169,6 +169,7 @@ function emptyExtensionUsagePayload(window, error = null) {
     active_users_30d: 0,
     new_users: 0,
     returning_users: 0,
+    unclassified_users: 0,
     sessions: 0,
     events: 0,
     completed_analyses: 0,
@@ -211,6 +212,7 @@ function emptyExtensionUsagePayload(window, error = null) {
     kpis,
     breakdowns,
     timeseries: [],
+    acquisition: [],
     total_events: 0,
     unique_users_30d: 0,
     active_users_7d: 0,
@@ -249,7 +251,7 @@ function createExtensionUsageHandlers({ clampLimit, supabaseFetch } = {}) {
     const limit = clampLimit(url.searchParams.get("limit"), 10000, 20000);
     const params = new URLSearchParams({
       select:
-        "event_name,anonymous_id_hash,session_id_hash,browser_name,browser_version,platform,country,extension_version,duration_seconds,active_seconds,created_at",
+        "event_name,anonymous_id_hash,session_id_hash,browser_name,browser_version,platform,country,extension_version,duration_seconds,active_seconds,source,metadata,created_at",
       order: "created_at.desc",
       limit: String(limit)
     });

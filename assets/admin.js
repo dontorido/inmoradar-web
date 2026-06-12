@@ -507,7 +507,7 @@ let adminTooltipEl = null;
 
 function tooltipTargetFromEvent(event) {
   return event.target instanceof Element
-    ? event.target.closest(".admin-linkedin-panel [data-tooltip], .admin-seo-performance-panel [data-tooltip], .admin-extension-panel [data-tooltip]")
+    ? event.target.closest(".admin-linkedin-panel [data-tooltip], .admin-seo-performance-panel [data-tooltip], .admin-extension-panel [data-tooltip], .admin-dashboard-acquisition-panel [data-tooltip]")
     : null;
 }
 
@@ -1410,7 +1410,8 @@ function renderUsageList(title, rows) {
 const extensionKpiTooltips = Object.freeze({
   users: "Instalaciones o usuarios anonimos distintos por identificador estable hasheado. Provisional hasta que la extension envie anonymous_install_id. No usa IP ni user-agent.",
   newUsers: "Usuarios cuyo primer evento conocido cae en el rango seleccionado. Se compara con actividad anterior cuando la base lo permite.",
-  returningUsers: "Usuarios con actividad en mas de un dia o mas de una sesion dentro del rango.",
+  returningUsers: "Usuarios ya conocidos antes del rango que tienen actividad en mas de un dia o mas de una sesion dentro del rango.",
+  unclassifiedUsers: "Usuarios activos que no pueden clasificarse como nuevos ni recurrentes con los datos disponibles.",
   sessions: "Sesiones por session_id; si falta, se agrupan eventos del mismo usuario por ventanas de actividad.",
   events: "Eventos anonimos recibidos desde la extension en el rango. No equivale a usuarios.",
   analyses: "Eventos de analisis efectivo, como analysis_completed o page_analyzed.",
@@ -1450,6 +1451,7 @@ function renderExtensionTimeseries(rows = []) {
           <td>${escapeHtml(row.unique_users || 0)}</td>
           <td>${escapeHtml(row.new_users || 0)}</td>
           <td>${escapeHtml(row.returning_users || 0)}</td>
+          <td>${escapeHtml(row.unclassified_users || 0)}</td>
           <td>${escapeHtml(row.sessions || 0)}</td>
           <td>${escapeHtml(row.completed_analyses || 0)}</td>
           <td>${escapeHtml(row.events || 0)}</td>
@@ -1474,6 +1476,7 @@ function renderExtensionTimeseries(rows = []) {
               <th>Usuarios</th>
               <th>Nuevos</th>
               <th>Recurrentes</th>
+              <th>Sin clasif.</th>
               <th>Sesiones</th>
               <th>Analisis</th>
               <th>Eventos</th>
@@ -1536,6 +1539,11 @@ function renderExtensionUsage(payload) {
       id: "extension-returning-users",
       hint: "Mas de un dia o sesion",
       tooltip: extensionKpiTooltips.returningUsers
+    }),
+    stat("Sin clasificar", kpis.unclassified_users || 0, {
+      id: "extension-unclassified-users",
+      hint: "No nuevos ni recurrentes con datos actuales",
+      tooltip: extensionKpiTooltips.unclassifiedUsers
     }),
     stat("Activos 24h", kpis.active_users_24h ?? payload.active_users_24h ?? 0, {
       id: "extension-active-24h",
@@ -1603,7 +1611,10 @@ function dashboardRate(value) {
 function renderDashboardAcquisition() {
   if (!els.dashboardAcquisition) return;
   const analytics = state.dashboard.analytics || state.analytics.learning || {};
-  const rows = Array.isArray(analytics.top_sources) ? analytics.top_sources : [];
+  const extensionAcquisition = state.dashboard.extensionUsage?.acquisition;
+  const rows = Array.isArray(extensionAcquisition) && extensionAcquisition.length
+    ? extensionAcquisition
+    : Array.isArray(analytics.top_sources) ? analytics.top_sources : [];
   if (!rows.length) {
     els.dashboardAcquisition.innerHTML = `<p class="admin-empty-state compact">Sin datos de adquisicion por fuente para este rango.</p>`;
     return;
@@ -1616,13 +1627,15 @@ function renderDashboardAcquisition() {
           <th>Fuente</th>
           <th>Medio</th>
           <th>Campana</th>
-          <th>Usuarios</th>
-          <th>Nuevos</th>
-          <th>Sesiones</th>
-          <th>CTA instalacion</th>
-          <th>Clic Chrome Store</th>
-          <th>Activaciones</th>
-          <th>Analisis</th>
+          <th ${tooltipAttrs(extensionKpiTooltips.users)}>Usuarios</th>
+          <th ${tooltipAttrs(extensionKpiTooltips.newUsers)}>Nuevos</th>
+          <th ${tooltipAttrs(extensionKpiTooltips.returningUsers)}>Recurrentes</th>
+          <th ${tooltipAttrs(extensionKpiTooltips.unclassifiedUsers)}>Sin clasif.</th>
+          <th ${tooltipAttrs(extensionKpiTooltips.sessions)}>Sesiones</th>
+          <th ${tooltipAttrs(analyticsKpiTooltips.installIntent)}>CTA instalacion</th>
+          <th ${tooltipAttrs(analyticsKpiTooltips.chromeStore)}>Clic Chrome Store</th>
+          <th ${tooltipAttrs(extensionKpiTooltips.activation)}>Activaciones</th>
+          <th ${tooltipAttrs(extensionKpiTooltips.analyses)}>Analisis</th>
           <th>Conv. visita &rarr; CTA</th>
           <th>Conv. CTA &rarr; analisis</th>
         </tr>
@@ -1634,10 +1647,12 @@ function renderDashboardAcquisition() {
             <td>${dashboardCell(row.medium, "-")}</td>
             <td>${dashboardCell(row.campaign, "-")}</td>
             <td>${dashboardCell(row.users)}</td>
-            <td>${dashboardCell(row.new_users)}</td>
+            <td>${dashboardCell(row.new_users, "-")}</td>
+            <td>${dashboardCell(row.returning_users, "-")}</td>
+            <td>${dashboardCell(row.unclassified_users, "-")}</td>
             <td>${dashboardCell(row.sessions)}</td>
-            <td>${dashboardCell(row.cta_installation)}</td>
-            <td>${dashboardCell(row.chrome_store_clicks)}</td>
+            <td>${dashboardCell(row.cta_installation, "-")}</td>
+            <td>${dashboardCell(row.chrome_store_clicks, "-")}</td>
             <td>${dashboardCell(row.activations, "-")}</td>
             <td>${dashboardCell(row.analyses, "-")}</td>
             <td>${escapeHtml(dashboardRate(row.visit_to_cta_rate))}</td>
