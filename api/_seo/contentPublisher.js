@@ -4,7 +4,8 @@ const { attachSeoPublicationEmailNotification, countSeoPublicationTotals } = req
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./publishingPolicy");
 
 const JOB_NAME = "seo-publish";
-const SCHEDULE = "0 */6 * * *";
+const SCHEDULE = "0 */4 * * *";
+const SCHEDULE_INTERVAL_HOURS = 4;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 const MIN_PUBLISH_SCORE = 85;
@@ -27,10 +28,11 @@ function nowIso(value) {
   return date.toISOString();
 }
 
-function nextSixHourRun(now = new Date()) {
+function nextSeoPublishRun(now = new Date()) {
   const date = new Date(now);
   date.setUTCMinutes(0, 0, 0);
-  const nextHour = Math.floor(date.getUTCHours() / 6) * 6 + 6;
+  const nextHour =
+    Math.floor(date.getUTCHours() / SCHEDULE_INTERVAL_HOURS) * SCHEDULE_INTERVAL_HOURS + SCHEDULE_INTERVAL_HOURS;
   date.setUTCHours(nextHour);
   return date.toISOString();
 }
@@ -388,7 +390,7 @@ async function getSeoContentPublicationStatus(options = {}) {
     target_news_per_day: SEO_DAILY_TARGETS.news,
     last_run: Array.isArray(recentRuns) ? recentRuns[0] || null : null,
     recent_runs: Array.isArray(recentRuns) ? recentRuns : [],
-    next_scheduled_at: nextSixHourRun(new Date(now)),
+    next_scheduled_at: nextSeoPublishRun(new Date(now)),
     pause_hint: "Set SEO_AUTOGENERATION_ENABLED=false"
   };
 }
@@ -400,6 +402,7 @@ module.exports = {
   buildSeoContentPublicationConfig,
   createSeoContentPublicationStorage,
   getSeoContentPublicationStatus,
-  nextSixHourRun,
+  nextSeoPublishRun,
+  nextSixHourRun: nextSeoPublishRun,
   runSeoContentPublication
 };

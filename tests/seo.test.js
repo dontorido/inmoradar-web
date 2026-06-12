@@ -8,7 +8,11 @@ const { buildPriceCityLanding } = require("../api/_seo/priceCity");
 const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../lib/seo/cityGuideTemplates");
 const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { canPublishNow, runSeoLandingGeneration } = require("../api/_seo/generator");
-const { runSeoContentPublication } = require("../api/_seo/contentPublisher");
+const {
+  buildSeoContentPublicationConfig,
+  nextSeoPublishRun,
+  runSeoContentPublication
+} = require("../api/_seo/contentPublisher");
 const { maybeSendSeoPublicationEmail } = require("../api/_seo/publicationEmail");
 const { evaluateLandingIndexability, evaluateSitemapEligibility } = require("../api/_seo/indexability");
 const { buildSeoDailyPolicySnapshot, selectNextSeoContentType } = require("../api/_seo/publishingPolicy");
@@ -1453,6 +1457,26 @@ test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () 
   assert.match(localServer, /guias/);
   assert.match(localServer, /\/datos\.html/);
   assert.match(localServer, /article\.html/);
+});
+
+test("Vercel Cron publica SEO real cada cuatro horas sin cambiar limites", () => {
+  const root = path.join(__dirname, "..");
+  const vercel = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
+  const seoCron = vercel.crons.find((cron) => cron.path === "/api/cron/seo-publish");
+  const config = buildSeoContentPublicationConfig({}, { enabled: true, dryRun: false });
+
+  assert.ok(Array.isArray(vercel.crons));
+  assert.equal(fs.existsSync(path.join(root, "api", "cron", "seo-publish.js")), true);
+  assert.deepEqual(seoCron, {
+    path: "/api/cron/seo-publish",
+    schedule: "0 */4 * * *"
+  });
+  assert.equal(config.schedule, "0 */4 * * *");
+  assert.equal(config.max_per_run, 1);
+  assert.equal(config.max_per_day, 4);
+  assert.equal(config.max_per_week, 28);
+  assert.equal(config.min_score, 85);
+  assert.equal(nextSeoPublishRun(new Date("2026-05-22T10:30:00.000Z")), "2026-05-22T12:00:00.000Z");
 });
 
 test("las landings SEO normalizan trailing slash al mismo canonical absoluto", async () => {
