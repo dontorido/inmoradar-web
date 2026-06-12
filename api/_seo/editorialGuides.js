@@ -1,4 +1,5 @@
 const { canonicalForSlug, countWords, displayName, escapeHtml, slugify } = require("./text");
+const { CHROME_WEBSTORE_URL } = require("./priceCity");
 
 const EDITORIAL_GUIDE_TOPICS = [
   {
@@ -228,6 +229,26 @@ ${topic.checklist.map((item) => `    <li>${escapeHtml(item)}.</li>`).join("\n")}
   </ul>`;
 }
 
+function commercialCtaHtml(position = "intermediate") {
+  const isFinal = position === "final";
+  const title = isFinal ? "Compara mejor antes de llamar o escribir" : "Analiza el anuncio antes de contactar";
+  const actionLabel = isFinal ? "Usa InmoRadar gratis para revisar el anuncio" : "Analiza el anuncio gratis";
+  const installSource = isFinal ? "seo_editorial_guide_commercial_final" : "seo_editorial_guide_commercial_intermediate";
+
+  return `<section class="seo-commercial-cta" data-guide-specific="true" data-guide-commercial-cta="${escapeHtml(position)}">
+          <div class="seo-commercial-copy">
+            <p class="seo-commercial-kicker">-> INMORADAR GRATIS</p>
+            <h2>${escapeHtml(title)}</h2>
+            <p>¿Estás buscando vivienda en Idealista, Fotocasa u otros portales? Usa InmoRadar gratis para ver información útil del anuncio que muchas veces no aparece clara: precio por m², señales de riesgo, resumen del inmueble y comparación antes de contactar.</p>
+            <p class="seo-commercial-disclaimer">InmoRadar es una herramienta independiente y no está afiliada oficialmente a portales inmobiliarios.</p>
+          </div>
+          <div class="seo-commercial-actions">
+            <a class="seo-button seo-button-primary" href="${escapeHtml(CHROME_WEBSTORE_URL)}" target="_blank" rel="noopener noreferrer" data-install-button data-install-source="${escapeHtml(installSource)}">${escapeHtml(actionLabel)}</a>
+            <a class="seo-button seo-button-secondary" href="/que-analiza">Ver qué analiza</a>
+          </div>
+        </section>`;
+}
+
 function buildEditorialGuideLanding(opportunity, sourceData = {}) {
   const topic = guideTopicForOpportunity(opportunity);
   const city = displayName(opportunity.city || "España");
@@ -272,6 +293,8 @@ function buildEditorialGuideLanding(opportunity, sourceData = {}) {
           <p>Este checklist no sustituye una visita ni una tasación. Sirve para ordenar la primera lectura. Si dos anuncios parecen parecidos, el checklist ayuda a descubrir cuál merece más tiempo y cuál exige demasiadas comprobaciones antes incluso de llamar.</p>
         </section>
 
+        ${commercialCtaHtml("intermediate")}
+
         <section class="seo-section" id="como-leer-numeros" data-guide-specific="true">
           <h2>Cómo leer los números sin caer en conclusiones rápidas</h2>
           <p>Empieza por el precio por metro cuadrado, pero no lo uses de forma aislada. La superficie puede ser útil o construida, la zona puede estar descrita de forma imprecisa y el estado real de la vivienda puede cambiar mucho el coste final. Por eso la lectura mejora cuando mezclas datos de precio con contexto de zona, transporte, ruido, aparcamiento, comunidad, posible reforma y comparación con alternativas cercanas.</p>
@@ -295,6 +318,7 @@ function buildEditorialGuideLanding(opportunity, sourceData = {}) {
           </div>
         </section>
         ${faqHtml(faqItems)}
+        ${commercialCtaHtml("final")}
         ${sourceNote(dateLabel, sourceUrl)}
       </div>
     </div>

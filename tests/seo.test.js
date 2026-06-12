@@ -5,7 +5,13 @@ const path = require("node:path");
 
 const { buildPriceCitySourceData, findBestRecord } = require("../api/_seo/marketSources");
 const { buildPriceCityLanding } = require("../api/_seo/priceCity");
+const {
+  EDITORIAL_GUIDE_TOPICS,
+  buildEditorialGuideLanding,
+  buildEditorialGuideSourceData
+} = require("../api/_seo/editorialGuides");
 const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../lib/seo/cityGuideTemplates");
+
 const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { canPublishNow, runSeoLandingGeneration } = require("../api/_seo/generator");
 const {
@@ -24,6 +30,38 @@ const { renderLandingHtml } = require("../api/seo-page");
 
 function extractJsonLd(html) {
   return [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => JSON.parse(match[1]));
+}
+
+function stripTags(html) {
+  return String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function commercialGuideCtas(bodyHtml, position) {
+  return [
+    ...String(bodyHtml || "").matchAll(
+      new RegExp(`<section\\b[^>]*data-guide-commercial-cta="${position}"[^>]*>[\\s\\S]*?<\\/section>`, "g")
+    )
+  ].map((match) => match[0]);
+}
+
+function hrefsFromHtml(html) {
+  return [...String(html || "").matchAll(/\bhref="([^"]+)"/g)].map((match) => match[1]);
+}
+
+function assertCtaLinksAreValid(ctaHtml) {
+  const knownInternalPaths = new Set(["/", "/que-analiza", "/premium", "/noticias"]);
+  const links = hrefsFromHtml(ctaHtml);
+  assert.ok(links.length > 0);
+  for (const href of links) {
+    const isChromeStore = /^https:\/\/chromewebstore\.google\.com\/detail\/inmoradar\/[a-z0-9]+$/i.test(href);
+    const isKnownInternal = knownInternalPaths.has(href);
+    assert.ok(isChromeStore || isKnownInternal, `CTA link should not be broken or invented: ${href}`);
+  }
 }
 
 function qualityFixture(overrides = {}) {
@@ -463,6 +501,49 @@ test("el generador SEO crea guias editoriales indexables cuando alcanzan calidad
   assert.equal(guide.slug, "guias/antes-de-llamar-por-un-piso");
   assert.ok(guide.quality_score >= 85);
   assert.ok(guide.word_count >= 700);
+});
+
+test("cada guia editorial indexable incluye CTAs comerciales prudentes y enlaces validos", () => {
+  for (const topic of EDITORIAL_GUIDE_TOPICS) {
+    const sourceData = buildEditorialGuideSourceData(
+      { keyword: topic.keyword, city: "Espana", template_type: "editorial_guide" },
+      "2026-06-01T00:00:00.000Z"
+    );
+    const landing = buildEditorialGuideLanding(
+      { keyword: topic.keyword, city: "Espana", template_type: "editorial_guide" },
+      sourceData
+    );
+    const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: landing.faq });
+    assert.ok(quality.score >= 85, landing.slug);
+
+    const intermediateCtas = commercialGuideCtas(landing.body_html, "intermediate");
+    const finalCtas = commercialGuideCtas(landing.body_html, "final");
+    assert.ok(intermediateCtas.length >= 1, landing.slug);
+    assert.ok(finalCtas.length >= 1, landing.slug);
+
+    const checklistIndex = landing.body_html.indexOf('id="checklist"');
+    const intermediateIndex = landing.body_html.indexOf('data-guide-commercial-cta="intermediate"');
+    const readingNumbersIndex = landing.body_html.indexOf('id="como-leer-numeros"');
+    const finalIndex = landing.body_html.indexOf('data-guide-commercial-cta="final"');
+    const sourceIndex = landing.body_html.indexOf("seo-disclaimer");
+    assert.ok(checklistIndex >= 0 && intermediateIndex > checklistIndex, landing.slug);
+    assert.ok(readingNumbersIndex > intermediateIndex, landing.slug);
+    assert.ok(finalIndex > readingNumbersIndex, landing.slug);
+    assert.ok(sourceIndex > finalIndex, landing.slug);
+
+    for (const ctaHtml of [...intermediateCtas, ...finalCtas]) {
+      const ctaText = stripTags(ctaHtml);
+      assert.match(ctaText, /InmoRadar/);
+      assert.match(ctaText, /Idealista/);
+      assert.match(ctaText, /Fotocasa/);
+      assert.match(ctaText, /independiente/i);
+      assert.match(ctaText, /no est[aá] afiliada oficialmente/i);
+      assert.doesNotMatch(ctaHtml, /<img\b|<picture\b|<source\b/i);
+      assert.doesNotMatch(ctaHtml, /idealista[-_ ]?(logo|brand)|fotocasa[-_ ]?(logo|brand)/i);
+      assert.doesNotMatch(ctaText, /partner oficial|colaboraci[oó]n oficial|integraci[oó]n oficial|aprobado por/i);
+      assertCtaLinksAreValid(ctaHtml);
+    }
+  }
 });
 
 test("la publicacion SEO operativa selecciona guias cuando falta cuota editorial", async () => {
