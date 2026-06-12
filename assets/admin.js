@@ -2445,10 +2445,6 @@ function renderSeoAutogeneration(payload = {}) {
   const dayLimit = Number(limits.max_per_day || 3);
   const weekCount = Number(limits.published_last_7d || 0);
   const weekLimit = Number(limits.max_per_week || 10);
-  const landingsToday = Number(payload.published_landings_today ?? payload.daily_policy?.published_landings_today ?? 0);
-  const newsToday = Number(payload.published_news_today ?? payload.daily_policy?.published_news_today ?? 0);
-  const targetLandings = Number(payload.target_landings_per_day || config.target_landings_per_day || 2);
-  const targetNews = Number(payload.target_news_per_day || config.target_news_per_day || 2);
   const nextScheduledLabel = payload.next_scheduled_at
     ? formatCompactDate(payload.next_scheduled_at, { timeZone: SEO_AUTOGENERATION_TIMEZONE })
     : "-";
@@ -2466,7 +2462,7 @@ function renderSeoAutogeneration(payload = {}) {
 
   if (els.seoAutogenNote) {
     els.seoAutogenNote.textContent = config.enabled
-      ? `Alcance: landings y guias editoriales. Objetivo diario: ${landingsToday}/${targetLandings} landings y ${newsToday}/${targetNews} guias. Pausa con SEO_AUTOGENERATION_ENABLED=false. Ultimo resultado: ${lastResult.reason || lastRun?.status || "sin datos"}.`
+      ? `Alcance: landings y guías editoriales. Límite diario: 4 publicaciones. Máximo 1 por ejecución. Pausa con SEO_AUTOGENERATION_ENABLED=false. Último resultado: ${lastResult.reason || lastRun?.status || "sin datos"}.`
       : "Kill switch activo: SEO_AUTOGENERATION_ENABLED=false.";
   }
 
