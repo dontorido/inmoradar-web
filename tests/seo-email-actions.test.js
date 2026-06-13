@@ -35,7 +35,8 @@ function sampleEmailPayload() {
       skipped_count: 0,
       failed_count: 0,
       dry_run: false,
-      limits: { published_last_24h: 3 },
+      status: "completed",
+      limits: { published_last_24h: 3, max_per_day: 4, remaining_day: 1 },
       published_landings_today: 2,
       published_news_today: 1,
       target_landings_per_day: 2,
@@ -135,6 +136,9 @@ test("email SEO usa botones reales para ver, copiar y abrir Search Console", () 
   assert.match(html, />Ver URL publicada<\/a>/);
   assert.match(html, />Copiar URL<\/a>/);
   assert.match(html, />Abrir Search Console<\/a>/);
+  assert.match(html, /Nueva URL SEO publicada/);
+  assert.match(html, /Resumen últimas 24 horas/);
+  assert.match(html, /Siguiente lanzamiento/);
 
   assert.equal(hrefForLabel(html, "Ver URL publicada"), "https://inmoradar.app/guias/como-comparar-dos-pisos/");
 
@@ -160,7 +164,10 @@ test("pagina copiar-url responde y muestra noindex, fallback y controles de copi
   assert.match(html, /Copia la URL publicada/);
   assert.match(html, /data-copy-url-value/);
   assert.match(html, />Copiar URL<\/button>/);
+  assert.match(html, />Abrir Search Console<\/a>/);
+  assert.match(html, /href="https:\/\/search\.google\.com\/search-console\/index\?resource_id=sc-domain%3Ainmoradar\.app"/);
   assert.match(html, /selecciona la URL de la caja y copiala manualmente/);
+  assert.match(html, /pégala en Inspección de URL si quieres revisarla manualmente/);
   assert.match(html, /src="\/assets\/copy-url\.js"/);
 
   const localServer = fs.readFileSync(path.join(root, "scripts", "serve-static.js"), "utf8");

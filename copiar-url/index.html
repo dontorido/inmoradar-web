@@ -106,6 +106,25 @@
       padding: 0 22px;
       width: fit-content;
     }
+    .copy-actions {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .copy-console-button {
+      align-items: center;
+      background: #ffffff;
+      border: 1px solid #d4d4d8;
+      border-radius: 999px;
+      color: #111113;
+      display: inline-flex;
+      font-size: 15px;
+      font-weight: 900;
+      min-height: 48px;
+      padding: 0 22px;
+      text-decoration: none;
+    }
     .copy-button:disabled {
       background: #a1a1aa;
       border-color: #a1a1aa;
@@ -125,7 +144,9 @@
     }
     @media (max-width: 560px) {
       .copy-page { place-items: start center; }
-      .copy-button { width: 100%; }
+      .copy-actions { align-items: stretch; flex-direction: column; }
+      .copy-button,
+      .copy-console-button { justify-content: center; width: 100%; }
     }
   </style>
 </head>
@@ -143,7 +164,11 @@
         <code data-copy-url-value>Validando URL...</code>
         <a data-copy-url-link href="#" target="_blank" rel="noopener noreferrer" hidden>Abrir URL publicada</a>
       </div>
-      <button class="copy-button" type="button" data-copy-url-button disabled>Copiar URL</button>
+      <div class="copy-actions">
+        <button class="copy-button" type="button" data-copy-url-button disabled>Copiar URL</button>
+        <a class="copy-console-button" href="https://search.google.com/search-console/index?resource_id=sc-domain%3Ainmoradar.app" target="_blank" rel="noopener noreferrer">Abrir Search Console</a>
+      </div>
+      <p class="copy-fallback">Después de copiar la URL, abre Search Console y pégala en Inspección de URL si quieres revisarla manualmente.</p>
       <p class="copy-fallback" data-copy-url-fallback hidden>Si no se puede copiar automaticamente, selecciona la URL de la caja y copiala manualmente.</p>
       <p class="copy-invalid" data-copy-url-invalid hidden>La URL recibida no pertenece a InmoRadar o no es valida.</p>
       <noscript>Activa JavaScript para usar el boton de copiado. Tambien puedes seleccionar la URL desde la barra del navegador.</noscript>
