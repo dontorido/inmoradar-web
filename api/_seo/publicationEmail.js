@@ -6,7 +6,9 @@ const {
   sendCloudflareEmail
 } = require("../_email/cloudflareEmail");
 
-const DEFAULT_SITE_URL = "https://www.inmoradar.app";
+const DEFAULT_SITE_URL = "https://inmoradar.app";
+const COPY_URL_PATH = "/copiar-url";
+const SEARCH_CONSOLE_URL = "https://search.google.com/search-console/index?resource_id=sc-domain%3Ainmoradar.app";
 
 function parseBoolean(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
@@ -47,9 +49,22 @@ function safeInt(value, fallback = 0) {
 function siteUrlFromEnv(env = process.env) {
   const raw = env.PUBLIC_SITE_URL || env.SITE_URL || DEFAULT_SITE_URL;
   try {
-    return new URL(String(raw)).origin.replace(/\/+$/, "");
+    const url = new URL(String(raw));
+    if (/^www\.inmoradar\.app$/i.test(url.hostname)) url.hostname = "inmoradar.app";
+    return url.origin.replace(/\/+$/, "");
   } catch {
     return DEFAULT_SITE_URL;
+  }
+}
+
+function normalizePublishedUrl(value, siteUrl = DEFAULT_SITE_URL) {
+  if (!value) return null;
+  try {
+    const url = new URL(String(value), siteUrl);
+    if (/^www\.inmoradar\.app$/i.test(url.hostname)) url.hostname = "inmoradar.app";
+    return url.toString();
+  } catch {
+    return value;
   }
 }
 
@@ -96,10 +111,16 @@ function targetPathForResult(item = {}) {
 function absoluteUrlForPath(path, siteUrl) {
   if (!path) return null;
   try {
-    return new URL(path, siteUrl).toString();
+    return normalizePublishedUrl(new URL(path, siteUrl).toString(), siteUrl);
   } catch {
     return path;
   }
+}
+
+function copyUrlPageUrl(publishedUrl, siteUrl = DEFAULT_SITE_URL) {
+  const base = siteUrlFromEnv({ PUBLIC_SITE_URL: siteUrl });
+  const url = normalizePublishedUrl(publishedUrl, base) || base;
+  return `${base}${COPY_URL_PATH}?url=${encodeURIComponent(url)}`;
 }
 
 function scoreForResult(item = {}) {
@@ -251,16 +272,39 @@ function pageMetaLine(page = {}) {
     .join(" | ");
 }
 
+function publishedLast24h(summary = {}, fallback = 0) {
+  return safeInt(
+    summary.limits?.published_last_24h ?? summary.published_last_24h ?? summary.daily_policy?.published_total_today,
+    fallback
+  );
+}
+
+function nextScheduledAt(summary = {}) {
+  const explicit = summary.next_scheduled_at || summary.cron?.next_scheduled_at || summary.cron?.next_run_at;
+  if (explicit) return explicit;
+
+  const timestamp = Date.parse(summary.finished_at || summary.started_at || "");
+  if (!Number.isFinite(timestamp)) return "Cada 4 horas";
+  const date = new Date(timestamp);
+  date.setUTCMinutes(0, 0, 0);
+  const nextHour = Math.floor(date.getUTCHours() / 4) * 4 + 4;
+  date.setUTCHours(nextHour);
+  return date.toISOString();
+}
+
 function renderSeoPublicationEmail({ summary, pages, totals, config }) {
   const publishedCount = safeInt(summary.published_count, 0);
   const pageLabel = publishedCount === 1 ? "pagina SEO publicada" : "paginas SEO publicadas";
   const subject = `[InmoRadar] ${publishedCount} ${pageLabel}`;
   const primaryPage = pages[0] || {};
-  const primaryHref = primaryPage.url || primaryPage.target_path || config.site_url || DEFAULT_SITE_URL;
+  const primaryHref = absoluteUrlForPath(primaryPage.url || primaryPage.target_path || "/", config.site_url || DEFAULT_SITE_URL);
+  const copyHref = copyUrlPageUrl(primaryHref, config.site_url || DEFAULT_SITE_URL);
+  const last24h = publishedLast24h(summary, publishedCount);
+  const nextLaunch = nextScheduledAt(summary);
   const rows = pages.length
     ? pages
         .map((page) => {
-          const href = page.url || page.target_path || "";
+          const href = absoluteUrlForPath(page.url || page.target_path || "", config.site_url || DEFAULT_SITE_URL) || "";
           const label = page.target_path || page.slug || page.url || "Sin URL";
           const meta = pageMetaLine(page);
           return `<tr>
@@ -315,7 +359,19 @@ function renderSeoPublicationEmail({ summary, pages, totals, config }) {
           )}</span></td>
         </tr>
       </table>
-      <a href="${escapeHtml(primaryHref)}" style="display:inline-block;background:#171717;color:#ffffff;text-decoration:none;border-radius:14px;padding:13px 18px;font-size:14px;font-weight:900;">Ver pagina SEO</a>
+      <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0;border-collapse:collapse;">
+        <tr>
+          <td style="padding:0 8px 8px 0;">
+            <a href="${escapeHtml(primaryHref)}" style="display:inline-block;background:#171717;color:#ffffff;text-decoration:none;border-radius:14px;padding:13px 18px;font-size:14px;font-weight:900;white-space:nowrap;">Ver URL publicada</a>
+          </td>
+          <td style="padding:0 8px 8px 0;">
+            <a href="${escapeHtml(copyHref)}" style="display:inline-block;background:#ffffff;color:#171717;text-decoration:none;border:1px solid #d9cdbb;border-radius:14px;padding:12px 17px;font-size:14px;font-weight:900;white-space:nowrap;">Copiar URL</a>
+          </td>
+          <td style="padding:0 0 8px 0;">
+            <a href="${escapeHtml(SEARCH_CONSOLE_URL)}" style="display:inline-block;background:#fdf6e7;color:#7a4a1f;text-decoration:none;border:1px solid #f2d7a2;border-radius:14px;padding:12px 17px;font-size:14px;font-weight:900;white-space:nowrap;">Abrir Search Console</a>
+          </td>
+        </tr>
+      </table>
     </section>
 
     <section style="margin-top:18px;background:#fff;border:1px solid #eadfce;border-radius:20px;padding:24px;">
@@ -350,6 +406,16 @@ function renderSeoPublicationEmail({ summary, pages, totals, config }) {
     </section>
 
     <section style="margin-top:18px;background:#fff;border:1px solid #eadfce;border-radius:20px;padding:24px;">
+      <h3 style="margin:0 0 10px;font-size:18px;color:#171717;">Resumen ultimas 24 horas</h3>
+      <p style="margin:0;color:#5c5750;line-height:1.75;font-size:14px;">
+        Publicadas ultimas 24 horas: ${escapeHtml(formatMetric(last24h))}<br>
+        Landings hoy: ${escapeHtml(formatMetric(summary.published_landings_today))} / ${escapeHtml(formatMetric(summary.target_landings_per_day))}<br>
+        Guias hoy: ${escapeHtml(formatMetric(summary.published_news_today))} / ${escapeHtml(formatMetric(summary.target_news_per_day))}<br>
+        Siguiente lanzamiento programado: ${escapeHtml(nextLaunch)}
+      </p>
+    </section>
+
+    <section style="margin-top:18px;background:#fff;border:1px solid #eadfce;border-radius:20px;padding:24px;">
       <h3 style="margin:0 0 10px;font-size:18px;color:#171717;">Totales SEO</h3>
       <p style="margin:0;color:#5c5750;line-height:1.75;font-size:14px;">
         Landings publicadas: ${escapeHtml(formatMetric(totals?.published_landings))}<br>
@@ -369,6 +435,11 @@ function renderSeoPublicationEmail({ summary, pages, totals, config }) {
     "InmoRadar - Nueva pagina SEO publicada",
     "",
     `Se han publicado ${publishedCount} ${pageLabel} tras superar el quality gate.`,
+    "",
+    "Acciones:",
+    `- Ver URL publicada: ${primaryHref}`,
+    `- Copiar URL: ${copyHref}`,
+    `- Abrir Search Console: ${SEARCH_CONSOLE_URL}`,
     "",
     "Paginas publicadas:",
     ...(pages.length ? pages : [{ target_path: "Sin detalle", score: "-" }]).map((page) => {
@@ -391,6 +462,12 @@ function renderSeoPublicationEmail({ summary, pages, totals, config }) {
     `- skipped_count: ${formatMetric(summary.skipped_count)}`,
     `- failed_count: ${formatMetric(summary.failed_count)}`,
     `- min_score: ${config.min_score ?? summary.config?.min_score ?? "No disponible"}`,
+    "",
+    "Resumen ultimas 24 horas:",
+    `- publicadas ultimas 24 horas: ${formatMetric(last24h)}`,
+    `- landings hoy: ${formatMetric(summary.published_landings_today)} / ${formatMetric(summary.target_landings_per_day)}`,
+    `- guias hoy: ${formatMetric(summary.published_news_today)} / ${formatMetric(summary.target_news_per_day)}`,
+    `- siguiente lanzamiento programado: ${nextLaunch}`,
     "",
     "Totales SEO:",
     `- landings publicadas: ${formatMetric(totals?.published_landings)}`,
@@ -493,9 +570,11 @@ module.exports = {
   buildSeoPublicationEmailConfig,
   buildSeoPublicationEmailPayload,
   countSeoPublicationTotals,
+  copyUrlPageUrl,
   maybeSendSeoPublicationEmail,
   publishedPagesFromSummary,
   renderSeoPublicationEmail,
   safeEmailError,
+  SEARCH_CONSOLE_URL,
   sendSeoPublicationEmail
 };

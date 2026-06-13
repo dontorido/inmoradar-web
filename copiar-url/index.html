@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Copia la URL publicada | InmoRadar</title>
+  <meta name="description" content="Copia una URL publicada de InmoRadar.">
+  <meta name="robots" content="noindex,nofollow">
+  <meta property="og:title" content="Copia la URL publicada">
+  <meta property="og:description" content="Herramienta ligera para copiar una URL publicada de InmoRadar.">
+  <meta property="og:url" content="https://inmoradar.app/copiar-url">
+  <meta name="theme-color" content="#FAFAFA">
+  <link rel="icon" href="/assets/favicon-32.png?v=20260519b" type="image/png" sizes="32x32">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <style>
+    body {
+      background: #fafafa;
+      color: #111113;
+      font-family: Satoshi, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+    }
+    .copy-page {
+      display: grid;
+      min-height: 100vh;
+      place-items: center;
+      padding: 32px 16px;
+    }
+    .copy-panel {
+      background: #ffffff;
+      border: 1px solid #e4e4e7;
+      border-radius: 8px;
+      box-shadow: 0 24px 70px -54px rgba(17, 17, 19, .48);
+      display: grid;
+      gap: 22px;
+      max-width: 720px;
+      padding: clamp(24px, 6vw, 44px);
+      width: min(100%, 720px);
+    }
+    .copy-brand {
+      align-items: center;
+      color: #111113;
+      display: inline-flex;
+      font-size: 18px;
+      font-weight: 900;
+      gap: 10px;
+      text-decoration: none;
+    }
+    .copy-brand img {
+      height: 34px;
+      width: 34px;
+    }
+    .copy-kicker {
+      color: #ff4500;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .16em;
+      margin: 0;
+      text-transform: uppercase;
+    }
+    h1 {
+      font-size: clamp(34px, 7vw, 56px);
+      letter-spacing: 0;
+      line-height: 1;
+      margin: 0;
+    }
+    .copy-status {
+      color: #52525b;
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0;
+    }
+    .copy-url-box {
+      background: #fafafa;
+      border: 1px solid #d4d4d8;
+      border-radius: 8px;
+      display: grid;
+      gap: 10px;
+      padding: 16px;
+    }
+    .copy-url-box[data-state="invalid"] {
+      background: #fff1f2;
+      border-color: #fecdd3;
+    }
+    .copy-url-box code {
+      color: #111113;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+      user-select: all;
+    }
+    .copy-url-box a {
+      color: #52525b;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .copy-button {
+      background: #111113;
+      border: 1px solid #111113;
+      border-radius: 999px;
+      color: #ffffff;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 900;
+      min-height: 48px;
+      padding: 0 22px;
+      width: fit-content;
+    }
+    .copy-button:disabled {
+      background: #a1a1aa;
+      border-color: #a1a1aa;
+      cursor: not-allowed;
+    }
+    .copy-fallback,
+    .copy-invalid,
+    noscript {
+      color: #71717a;
+      font-size: 14px;
+      line-height: 1.65;
+      margin: 0;
+    }
+    .copy-invalid {
+      color: #be123c;
+      font-weight: 800;
+    }
+    @media (max-width: 560px) {
+      .copy-page { place-items: start center; }
+      .copy-button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="copy-page">
+    <section class="copy-panel" aria-labelledby="copy-title">
+      <a class="copy-brand" href="/" aria-label="InmoRadar">
+        <img src="/assets/inmoradar-brand-mark.svg" alt="" aria-hidden="true">
+        <span>InmoRadar</span>
+      </a>
+      <p class="copy-kicker">URL publicada</p>
+      <h1 id="copy-title">Copia la URL publicada</h1>
+      <p class="copy-status" data-copy-status>Validando URL...</p>
+      <div class="copy-url-box" data-copy-url-box>
+        <code data-copy-url-value>Validando URL...</code>
+        <a data-copy-url-link href="#" target="_blank" rel="noopener noreferrer" hidden>Abrir URL publicada</a>
+      </div>
+      <button class="copy-button" type="button" data-copy-url-button disabled>Copiar URL</button>
+      <p class="copy-fallback" data-copy-url-fallback hidden>Si no se puede copiar automaticamente, selecciona la URL de la caja y copiala manualmente.</p>
+      <p class="copy-invalid" data-copy-url-invalid hidden>La URL recibida no pertenece a InmoRadar o no es valida.</p>
+      <noscript>Activa JavaScript para usar el boton de copiado. Tambien puedes seleccionar la URL desde la barra del navegador.</noscript>
+    </section>
+  </main>
+  <script src="/assets/copy-url.js" defer></script>
+</body>
+</html>

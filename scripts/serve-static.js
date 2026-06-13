@@ -69,6 +69,8 @@ const rewrites = {
   "/precio-metro-cuadrado/": "/precio-metro-cuadrado.html",
   "/precio-alquiler": "/precio-alquiler.html",
   "/precio-alquiler/": "/precio-alquiler.html",
+  "/copiar-url": "/copiar-url/index.html",
+  "/copiar-url/": "/copiar-url/index.html",
   "/admin": "/admin.html",
   "/backoffice/marketing/viraliza": "/admin.html",
   "/backoffice/marketing/linkedin": "/admin.html",
