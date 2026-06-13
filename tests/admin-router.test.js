@@ -885,6 +885,88 @@ test("admin kpi settings router handles POST write and preserves unsupported met
   assert.deepEqual(putResult.payload, { ok: false, error: "method_not_allowed" });
 });
 
+test("admin seo autogeneration settings read and write kpi_settings safely", async () => {
+  const captured = {};
+  const settingsFetch = async (url, options = {}) => {
+    const path = apiPath(url);
+    if (path.startsWith("kpi_settings?id=eq.default")) {
+      return jsonResponse([
+        {
+          id: "default",
+          schema_version: 1,
+          settings_json: {
+            seo_autogeneration: {
+              enabled: true,
+              max_per_day: 10,
+              max_per_week: 70,
+              max_per_run: 2,
+              min_score: 90
+            }
+          },
+          updated_at: "2026-05-25T10:00:00.000Z"
+        }
+      ]);
+    }
+    if (path.startsWith("kpi_settings?on_conflict=id")) {
+      captured.path = path;
+      captured.rows = JSON.parse(options.body);
+      return jsonResponse([
+        {
+          id: "default",
+          schema_version: 1,
+          settings_json: captured.rows[0].settings_json,
+          updated_at: "2026-05-25T11:00:00.000Z"
+        }
+      ]);
+    }
+    return supabaseMockFetch(url, options);
+  };
+
+  const readResult = await callAdmin("seo-autogenerate/settings", { fetchImpl: settingsFetch });
+  const writeResult = await callAdmin("seo-autogenerate/settings", {
+    method: "POST",
+    body: {
+      settings: {
+        enabled: false,
+        max_per_day: 12,
+        max_per_week: 84,
+        max_per_run: 3,
+        min_score: 92
+      }
+    },
+    fetchImpl: settingsFetch
+  });
+
+  assert.equal(readResult.statusCode, 200);
+  assert.equal(readResult.payload.settings.max_per_day, 10);
+  assert.equal(readResult.payload.settings.min_score, 90);
+  assert.equal(writeResult.statusCode, 200);
+  assert.equal(writeResult.payload.settings.enabled, false);
+  assert.equal(writeResult.payload.settings.max_per_day, 12);
+  assert.equal(captured.path, "kpi_settings?on_conflict=id");
+  assert.equal(captured.rows[0].settings_json.seo_autogeneration.max_per_week, 84);
+  assert.doesNotMatch(JSON.stringify(writeResult.payload), /service-role-test|SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test("admin seo autogeneration settings reject invalid values", async () => {
+  const result = await callAdmin("seo-autogenerate/settings", {
+    method: "POST",
+    body: {
+      settings: {
+        enabled: true,
+        max_per_day: "nope",
+        max_per_week: 28,
+        max_per_run: 1,
+        min_score: 85
+      }
+    }
+  });
+
+  assert.equal(result.statusCode, 400);
+  assert.equal(result.payload.error, "validation_error");
+  assert.ok(result.payload.errors.some((message) => /entero/.test(message)));
+});
+
 test("admin kpi settings router handles empty POST body like legacy", async () => {
   const result = await callAdmin("kpis/settings", {
     method: "POST",

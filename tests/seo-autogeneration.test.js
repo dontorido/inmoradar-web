@@ -9,6 +9,7 @@ const {
   buildSeoAutogenerationOperationalAlerts,
   buildSeoAutogenerationConfig
 } = require("../api/_seo/autogeneration");
+const { validateSeoAutogenerationConditions } = require("../api/_seo/autogenerationSettings");
 const { buildPriceCityLanding } = require("../api/_seo/priceCity");
 
 const NOW = "2026-05-23T10:00:00.000Z";
@@ -128,9 +129,9 @@ async function run(options = {}) {
       enabled: true,
       dryRun: false,
       maxPerRun: 1,
-      maxPerDay: 3,
-      maxPerWeek: 10,
-      minScore: 80,
+      maxPerDay: 4,
+      maxPerWeek: 28,
+      minScore: 85,
       ...(options.config || {})
     },
     requestSource: options.requestSource || "admin"
@@ -251,8 +252,8 @@ test("seo autogeneration respeta maximo 1 publicacion por ejecucion", async () =
   assert.equal(result.results.some((item) => item.reason === "run_limit_reached"), true);
 });
 
-test("seo autogeneration respeta maximo 3 publicaciones por dia", async () => {
-  const storage = memoryStorage({ recent: recentPublished(3) });
+test("seo autogeneration con limite diario 4 se comporta como antes", async () => {
+  const storage = memoryStorage({ recent: recentPublished(4) });
   const result = await run({ storage });
 
   assert.equal(result.published_count, 0);
@@ -260,9 +261,20 @@ test("seo autogeneration respeta maximo 3 publicaciones por dia", async () => {
   assert.equal(result.results[0].reason, "daily_limit_reached");
 });
 
-test("seo autogeneration respeta maximo 10 publicaciones por semana", async () => {
+test("seo autogeneration con limite diario 10 permite seguir publicando", async () => {
+  const storage = memoryStorage({ recent: recentPublished(4) });
+  const result = await run({ storage, config: { maxPerDay: 10 } });
+
+  assert.equal(result.config.max_per_day, 10);
+  assert.equal(result.published_count, 1);
+  assert.equal(storage.saved.length, 1);
+  assert.equal(result.limits.max_per_day, 10);
+  assert.equal(result.limits.published_last_24h, 5);
+});
+
+test("seo autogeneration aplica limite semanal configurable", async () => {
   const storage = memoryStorage({ recent: recentPublished(10, 18) });
-  const result = await run({ storage, config: { maxPerDay: 3 } });
+  const result = await run({ storage, config: { maxPerDay: 10, maxPerWeek: 10 } });
 
   assert.equal(result.published_count, 0);
   assert.equal(storage.saved.length, 0);
@@ -384,6 +396,34 @@ test("seo autogeneration registra skipped con reason para score insuficiente", a
   assert.equal(result.results[0].reason, "score_below_publish_threshold_drafted");
 });
 
+test("seo autogeneration valida condiciones editables", () => {
+  const invalid = validateSeoAutogenerationConditions({
+    enabled: true,
+    max_per_day: "abc",
+    max_per_week: 28,
+    max_per_run: 1,
+    min_score: 85
+  });
+  const valid = validateSeoAutogenerationConditions({
+    enabled: false,
+    max_per_day: 0,
+    max_per_week: 0,
+    max_per_run: 1,
+    min_score: 0
+  });
+
+  assert.equal(invalid.ok, false);
+  assert.match(invalid.errors.join(" "), /entero/);
+  assert.equal(valid.ok, true);
+  assert.deepEqual(valid.settings, {
+    enabled: false,
+    max_per_day: 0,
+    max_per_week: 0,
+    max_per_run: 1,
+    min_score: 0
+  });
+});
+
 test("seo autogeneration no publica si falla el indexability gate tecnico", async () => {
   const storage = memoryStorage();
   const result = await run({
@@ -468,22 +508,22 @@ test("seo autogeneration usa la misma logica para cron y manual", async () => {
   assert.equal(admin.results[0].target_path, cron.results[0].target_path);
 });
 
-test("seo autogeneration mantiene limites seguros aunque env pida mas", () => {
+test("seo autogeneration normaliza limites configurables", () => {
   const config = buildSeoAutogenerationConfig({
     SEO_AUTOGENERATION_ENABLED: "true",
     SEO_AUTOGENERATION_DRY_RUN: "false",
-    SEO_AUTOGENERATION_MAX_PER_RUN: "25",
-    SEO_AUTOGENERATION_MAX_PER_DAY: "30",
-    SEO_AUTOGENERATION_MAX_PER_WEEK: "100",
-    SEO_AUTOGENERATION_MIN_SCORE: "10"
+    SEO_AUTOGENERATION_MAX_PER_RUN: "250",
+    SEO_AUTOGENERATION_MAX_PER_DAY: "300",
+    SEO_AUTOGENERATION_MAX_PER_WEEK: "1000",
+    SEO_AUTOGENERATION_MIN_SCORE: "-10"
   });
 
   assert.equal(config.enabled, true);
   assert.equal(config.dry_run, false);
-  assert.equal(config.max_per_run, 1);
-  assert.equal(config.max_per_day, 3);
-  assert.equal(config.max_per_week, 40);
-  assert.equal(config.min_score, 85);
+  assert.equal(config.max_per_run, 100);
+  assert.equal(config.max_per_day, 100);
+  assert.equal(config.max_per_week, 700);
+  assert.equal(config.min_score, 0);
 });
 
 test("seo autogeneration alerts avisan si el ultimo run falla", () => {

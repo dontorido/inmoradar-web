@@ -335,6 +335,40 @@
               </div>
             </div>
             <div class="admin-seo-autogen-summary" data-seo-autogen-summary aria-live="polite"></div>
+            <form class="admin-seo-autogen-conditions" data-seo-autogen-conditions-form>
+              <div class="admin-seo-autogen-conditions-head">
+                <div>
+                  <h3>Condiciones de autogeneraci&oacute;n</h3>
+                  <p>Ajusta los l&iacute;mites que usa el cron antes de publicar contenido SEO.</p>
+                </div>
+                <label class="admin-seo-autogen-toggle">
+                  <input name="enabled" type="checkbox" data-seo-autogen-enabled>
+                  <span>Autogeneraci&oacute;n activa</span>
+                </label>
+              </div>
+              <div class="admin-seo-autogen-fields">
+                <label>
+                  <span>Publicaciones m&aacute;ximas por d&iacute;a</span>
+                  <input name="max_per_day" type="number" min="0" max="100" step="1" required data-seo-autogen-setting="max_per_day">
+                </label>
+                <label>
+                  <span>Publicaciones m&aacute;ximas por semana</span>
+                  <input name="max_per_week" type="number" min="0" max="700" step="1" required data-seo-autogen-setting="max_per_week">
+                </label>
+                <label>
+                  <span>M&aacute;ximo de publicaciones por ejecuci&oacute;n</span>
+                  <input name="max_per_run" type="number" min="1" max="100" step="1" required data-seo-autogen-setting="max_per_run">
+                </label>
+                <label>
+                  <span>Score m&iacute;nimo</span>
+                  <input name="min_score" type="number" min="0" max="100" step="1" required data-seo-autogen-setting="min_score">
+                </label>
+              </div>
+              <div class="admin-seo-autogen-conditions-actions">
+                <button class="admin-button tiny" type="submit">Guardar condiciones</button>
+                <p class="admin-empty-state compact" data-seo-autogen-conditions-feedback role="status" aria-live="polite"></p>
+              </div>
+            </form>
             <p class="admin-empty-state compact" data-seo-autogen-note></p>
             <div class="admin-table-wrap">
               <table class="admin-table admin-seo-autogen-table">

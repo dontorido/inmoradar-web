@@ -1,7 +1,11 @@
 const { hasSupabaseConfig, sanitizeErrorMessage, supabaseFetch } = require("../_utils");
 const { runSeoLandingGeneration } = require("./generator");
 const { attachSeoPublicationEmailNotification, countSeoPublicationTotals } = require("./publicationEmail");
-const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./publishingPolicy");
+const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot, buildSeoDailyTargets } = require("./publishingPolicy");
+const {
+  defaultSeoAutogenerationConditions,
+  readSeoAutogenerationConditions
+} = require("./autogenerationSettings");
 
 const JOB_NAME = "seo-publish";
 const SCHEDULE = "0 */4 * * *";
@@ -22,6 +26,12 @@ function parseBoolean(value, fallback) {
   return fallback;
 }
 
+function clampInt(value, fallback, min, max) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  const number = Number.isFinite(parsed) ? parsed : fallback;
+  return Math.max(min, Math.min(max, number));
+}
+
 function nowIso(value) {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) return new Date().toISOString();
@@ -37,8 +47,12 @@ function nextSeoPublishRun(now = new Date()) {
   return date.toISOString();
 }
 
-function buildSeoContentPublicationConfig(env = process.env, overrides = {}) {
-  const enabled =
+function buildSeoContentPublicationConfig(env = process.env, overrides = {}, storedConditions = {}) {
+  const conditions = {
+    ...defaultSeoAutogenerationConditions(),
+    ...(storedConditions || {})
+  };
+  const environmentEnabled =
     typeof overrides.enabled === "boolean"
       ? overrides.enabled
       : parseBoolean(env.SEO_AUTOGENERATION_ENABLED, false);
@@ -46,16 +60,30 @@ function buildSeoContentPublicationConfig(env = process.env, overrides = {}) {
     typeof overrides.dryRun === "boolean"
       ? overrides.dryRun
       : parseBoolean(env.SEO_AUTOGENERATION_DRY_RUN, true);
+  const settingsEnabled = parseBoolean(conditions.enabled, true);
+  const maxPerDay = clampInt(overrides.maxPerDay ?? conditions.max_per_day ?? env.SEO_AUTOGENERATION_MAX_PER_DAY, SEO_DAILY_TARGETS.total, 0, 100);
+  const maxPerWeek = clampInt(
+    overrides.maxPerWeek ?? conditions.max_per_week ?? env.SEO_AUTOGENERATION_MAX_PER_WEEK,
+    SEO_DAILY_TARGETS.total * 7,
+    0,
+    700
+  );
+  const maxPerRun = clampInt(overrides.maxPerRun ?? conditions.max_per_run ?? env.SEO_AUTOGENERATION_MAX_PER_RUN, 1, 1, 100);
+  const minScore = clampInt(overrides.minScore ?? conditions.min_score ?? env.SEO_AUTOGENERATION_MIN_SCORE, MIN_PUBLISH_SCORE, 0, 100);
+  const dailyTargets = buildSeoDailyTargets({ total: maxPerDay });
 
   return {
-    enabled,
+    enabled: environmentEnabled && settingsEnabled,
+    environment_enabled: environmentEnabled,
+    settings_enabled: settingsEnabled,
     dry_run: dryRun,
-    max_per_run: 1,
-    max_per_day: SEO_DAILY_TARGETS.total,
-    max_per_week: SEO_DAILY_TARGETS.total * 7,
-    min_score: MIN_PUBLISH_SCORE,
-    target_landings_per_day: SEO_DAILY_TARGETS.landings,
-    target_news_per_day: SEO_DAILY_TARGETS.news,
+    max_per_run: maxPerRun,
+    max_per_day: maxPerDay,
+    max_per_week: maxPerWeek,
+    min_score: minScore,
+    target_landings_per_day: dailyTargets.landings,
+    target_news_per_day: dailyTargets.news,
+    daily_targets: dailyTargets,
     allowed_template_types: ["price_city", "rent_city", "expensive_listing_city", "editorial_guide"],
     schedule: SCHEDULE
   };
@@ -132,6 +160,9 @@ function createSeoContentPublicationStorage() {
       if (!hasSupabaseConfig()) return null;
       const rows = await safeSupabase("seo_landings?select=status,index_status&limit=5000", []);
       return countSeoPublicationTotals(rows);
+    },
+    async fetchAutogenerationConditions() {
+      return readSeoAutogenerationConditions();
     }
   };
 }
@@ -161,7 +192,7 @@ function limitSnapshot({ rows, policy, config, publishedThisRun, now }) {
 }
 
 function emptySummary({ config, now, requestSource, reason, rows = [], policy = null, run = null }) {
-  const dailyPolicy = policy || buildSeoDailyPolicySnapshot(rows, { now });
+  const dailyPolicy = policy || buildSeoDailyPolicySnapshot(rows, { now, targets: config.daily_targets });
   const limits = limitSnapshot({ rows, policy: dailyPolicy, config, publishedThisRun: 0, now });
   return {
     ok: true,
@@ -184,13 +215,13 @@ function emptySummary({ config, now, requestSource, reason, rows = [], policy = 
     daily_policy: dailyPolicy,
     published_landings_today: dailyPolicy.published_landings_today,
     published_news_today: dailyPolicy.published_news_today,
-    target_landings_per_day: SEO_DAILY_TARGETS.landings,
-    target_news_per_day: SEO_DAILY_TARGETS.news,
+    target_landings_per_day: config.target_landings_per_day,
+    target_news_per_day: config.target_news_per_day,
     selected_content_type: dailyPolicy.selected_content_type,
     skipped_reason: dailyPolicy.skipped_reason || reason || null,
     cron: {
       schedule: SCHEDULE,
-      policy: "publish one SEO piece per run with daily 2 landings + 2 guides target",
+      policy: `publish up to ${config.max_per_day} SEO pieces/day with configurable backoffice limits`,
       lock: run
     }
   };
@@ -252,13 +283,13 @@ function summarizeGenerationResult({ result, config, now, requestSource, rows, p
     daily_policy: afterPolicy,
     published_landings_today: afterPolicy.published_landings_today,
     published_news_today: afterPolicy.published_news_today,
-    target_landings_per_day: SEO_DAILY_TARGETS.landings,
-    target_news_per_day: SEO_DAILY_TARGETS.news,
+    target_landings_per_day: config.target_landings_per_day,
+    target_news_per_day: config.target_news_per_day,
     selected_content_type: selectedContentType,
     skipped_reason: null,
     cron: {
       schedule: SCHEDULE,
-      policy: "publish one SEO piece per run with daily 2 landings + 2 guides target",
+      policy: `publish up to ${config.max_per_day} SEO pieces/day with configurable backoffice limits`,
       lock: run
     }
   };
@@ -289,12 +320,34 @@ async function finalizeSummary({ storage, run, summary, status = "completed", er
   return finalSummary;
 }
 
+async function resolveSeoContentPublicationConfig({ storage, env, options }) {
+  if (options.settingsState) {
+    return {
+      config: buildSeoContentPublicationConfig(env, options.config || {}, options.settingsState.settings),
+      settingsState: options.settingsState
+    };
+  }
+  if (options.conditions) {
+    return {
+      config: buildSeoContentPublicationConfig(env, options.config || {}, options.conditions),
+      settingsState: { ok: true, settings: options.conditions, read_only: false, reason: null, updated_at: null }
+    };
+  }
+  const settingsState = storage.fetchAutogenerationConditions
+    ? await storage.fetchAutogenerationConditions()
+    : { ok: true, settings: defaultSeoAutogenerationConditions(), read_only: false, reason: null, updated_at: null };
+  return {
+    config: buildSeoContentPublicationConfig(env, options.config || {}, settingsState.settings),
+    settingsState
+  };
+}
+
 async function runSeoContentPublication(options = {}) {
   const now = nowIso(options.now);
   const requestSource = options.requestSource || "manual";
   const env = options.env || process.env;
-  const config = buildSeoContentPublicationConfig(env, options.config || {});
   const storage = options.storage || createSeoContentPublicationStorage(env);
+  const { config, settingsState } = await resolveSeoContentPublicationConfig({ storage, env, options });
   const runGeneration = options.runGeneration || runSeoLandingGeneration;
   const emailNotification = options.emailNotification || {};
   let run = null;
@@ -304,25 +357,35 @@ async function runSeoContentPublication(options = {}) {
       run = await storage.startRun({ now, requestSource });
       if (run && run.acquired === false) {
         const summary = emptySummary({ config, now, requestSource, reason: run.reason || "cron_already_running_or_completed", run });
+        summary.settings_status = settingsState;
         return finalizeSummary({ storage, run, summary, status: "skipped", env, emailNotification });
       }
     }
 
     if (!config.enabled) {
       const summary = emptySummary({ config, now, requestSource, reason: "autogeneration_disabled", run });
+      summary.settings_status = settingsState;
       return finalizeSummary({ storage, run, summary, status: "skipped", env, emailNotification });
     }
 
     if (!config.dry_run && !options.storage && !hasSupabaseConfig()) {
       const summary = emptySummary({ config, now, requestSource, reason: "supabase_not_configured", run });
+      summary.settings_status = settingsState;
       return finalizeSummary({ storage, run, summary, status: "skipped", env, emailNotification });
     }
 
     const rows = storage.fetchRecentPublishedRows ? await storage.fetchRecentPublishedRows({ now }) : [];
-    const dailyPolicy = buildSeoDailyPolicySnapshot(rows, { now });
+    const dailyPolicy = buildSeoDailyPolicySnapshot(rows, { now, targets: config.daily_targets });
+    const currentLimits = limitSnapshot({ rows, policy: dailyPolicy, config, publishedThisRun: 0, now });
+    if (currentLimits.remaining_week <= 0) {
+      const summary = emptySummary({ config, now, requestSource, reason: "weekly_limit_reached", rows, policy: dailyPolicy, run });
+      summary.settings_status = settingsState;
+      return finalizeSummary({ storage, run, summary, status: "completed", env, emailNotification });
+    }
     const selectedContentType = dailyPolicy.selected_content_type;
     if (!selectedContentType) {
       const summary = emptySummary({ config, now, requestSource, reason: dailyPolicy.skipped_reason, rows, policy: dailyPolicy, run });
+      summary.settings_status = settingsState;
       return finalizeSummary({ storage, run, summary, status: "completed", env, emailNotification });
     }
 
@@ -336,6 +399,7 @@ async function runSeoContentPublication(options = {}) {
       publishFirstEligible: true,
       maxPublishesPerRun: config.max_per_run,
       dailyPublishLimit: config.max_per_day,
+      minScore: config.min_score,
       publishedToday: dailyPolicy.published_total_today,
       now
     });
@@ -352,7 +416,7 @@ async function runSeoContentPublication(options = {}) {
     return finalizeSummary({
       storage,
       run,
-      summary,
+      summary: { ...summary, settings_status: settingsState },
       status: summary.failed_count ? "failed" : "completed",
       errorMessage: summary.failed_count ? "candidate_failed" : null,
       env,
@@ -360,6 +424,7 @@ async function runSeoContentPublication(options = {}) {
     });
   } catch (error) {
     const summary = emptySummary({ config, now, requestSource, reason: "autogeneration_failed", run });
+    summary.settings_status = settingsState;
     summary.ok = false;
     summary.error = safeError(error);
     summary.finished_at = new Date().toISOString();
@@ -370,24 +435,31 @@ async function runSeoContentPublication(options = {}) {
 async function getSeoContentPublicationStatus(options = {}) {
   const now = nowIso(options.now);
   const env = options.env || process.env;
-  const config = buildSeoContentPublicationConfig(env, options.config || {});
   const storage = options.storage || createSeoContentPublicationStorage(env);
+  const { config, settingsState } = await resolveSeoContentPublicationConfig({ storage, env, options });
   const [recentRuns, rows] = await Promise.all([
     storage.fetchRecentRuns ? storage.fetchRecentRuns(10) : [],
     storage.fetchRecentPublishedRows ? storage.fetchRecentPublishedRows({ now }) : []
   ]);
-  const dailyPolicy = buildSeoDailyPolicySnapshot(rows, { now });
+  const dailyPolicy = buildSeoDailyPolicySnapshot(rows, { now, targets: config.daily_targets });
   return {
     ok: true,
     job_name: JOB_NAME,
     generated_at: now,
     config,
+    settings: settingsState.settings,
+    settings_status: {
+      read_only: Boolean(settingsState.read_only),
+      table_missing: Boolean(settingsState.table_missing),
+      reason: settingsState.reason || null,
+      updated_at: settingsState.updated_at || null
+    },
     limits: limitSnapshot({ rows, policy: dailyPolicy, config, publishedThisRun: 0, now }),
     daily_policy: dailyPolicy,
     published_landings_today: dailyPolicy.published_landings_today,
     published_news_today: dailyPolicy.published_news_today,
-    target_landings_per_day: SEO_DAILY_TARGETS.landings,
-    target_news_per_day: SEO_DAILY_TARGETS.news,
+    target_landings_per_day: config.target_landings_per_day,
+    target_news_per_day: config.target_news_per_day,
     last_run: Array.isArray(recentRuns) ? recentRuns[0] || null : null,
     recent_runs: Array.isArray(recentRuns) ? recentRuns : [],
     next_scheduled_at: nextSeoPublishRun(new Date(now)),

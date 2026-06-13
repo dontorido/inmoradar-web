@@ -1056,6 +1056,60 @@ const KPI_SETTINGS_SCHEMA = [
         description: "Debe seguir apagado tras retirar el analisis visual."
       }
     ]
+  },
+  {
+    key: "seo_autogeneration",
+    label: "Autogeneracion SEO",
+    description: "Condiciones editables del cron de publicacion SEO desde el backoffice.",
+    fields: [
+      {
+        path: "seo_autogeneration.enabled",
+        label: "Autogeneracion activa",
+        type: "boolean",
+        defaultValue: true,
+        description: "Pausa o permite la autogeneracion desde backoffice sin saltarse el kill switch de entorno."
+      },
+      {
+        path: "seo_autogeneration.max_per_day",
+        label: "Publicaciones maximas por dia",
+        type: "number",
+        min: 0,
+        max: 100,
+        step: 1,
+        defaultValue: 4,
+        description: "Limite diario editable. Cero bloquea nuevas publicaciones automaticas."
+      },
+      {
+        path: "seo_autogeneration.max_per_week",
+        label: "Publicaciones maximas por semana",
+        type: "number",
+        min: 0,
+        max: 700,
+        step: 1,
+        defaultValue: 28,
+        description: "Limite semanal editable para el cron SEO."
+      },
+      {
+        path: "seo_autogeneration.max_per_run",
+        label: "Maximo por ejecucion",
+        type: "number",
+        min: 1,
+        max: 100,
+        step: 1,
+        defaultValue: 1,
+        description: "Maximo de publicaciones que puede hacer una ejecucion."
+      },
+      {
+        path: "seo_autogeneration.min_score",
+        label: "Score minimo",
+        type: "number",
+        min: 0,
+        max: 100,
+        step: 1,
+        defaultValue: 85,
+        description: "Umbral de calidad minimo para publicar."
+      }
+    ]
   }
 ];
 

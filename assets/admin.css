@@ -2313,6 +2313,111 @@
   line-height: 1.55;
 }
 
+.admin-seo-autogen-conditions {
+  display: grid;
+  gap: 16px;
+  border-top: 1px solid var(--admin-line);
+  border-bottom: 1px solid var(--admin-line);
+  padding: 20px 0;
+}
+
+.admin-seo-autogen-conditions-head,
+.admin-seo-autogen-conditions-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-seo-autogen-conditions h3,
+.admin-seo-autogen-conditions p {
+  margin: 0;
+}
+
+.admin-seo-autogen-conditions h3 {
+  color: var(--admin-dark);
+  font-size: 18px;
+}
+
+.admin-seo-autogen-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-seo-autogen-fields label {
+  display: grid;
+  gap: 7px;
+}
+
+.admin-seo-autogen-fields span,
+.admin-seo-autogen-toggle span {
+  color: var(--admin-muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.admin-seo-autogen-fields input {
+  width: 100%;
+  border: 1px solid var(--admin-line);
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 12px 13px;
+  color: var(--admin-dark);
+  font: inherit;
+}
+
+.admin-seo-autogen-fields input:focus {
+  border-color: rgba(255, 69, 0, .45);
+  box-shadow: 0 0 0 3px rgba(255, 69, 0, .1);
+  outline: none;
+}
+
+.admin-seo-autogen-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-seo-autogen-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--radar);
+}
+
+.admin-seo-autogen-conditions-feedback[data-tone="good"] {
+  color: var(--admin-lime-text);
+}
+
+.admin-seo-autogen-conditions-feedback[data-tone="bad"] {
+  color: var(--admin-rose-text);
+}
+
+.admin-seo-autogen-conditions-feedback[data-tone="warn"] {
+  color: var(--admin-amber-text);
+}
+
+@media (max-width: 980px) {
+  .admin-seo-autogen-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-seo-autogen-conditions-head,
+  .admin-seo-autogen-conditions-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-seo-autogen-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
 .admin-video-runway-column {
   display: grid;
   align-content: start;

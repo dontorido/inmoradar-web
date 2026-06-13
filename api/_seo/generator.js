@@ -347,9 +347,9 @@ async function countPublishedToday(now) {
   return snapshot.published_total_today;
 }
 
-function canPublishNow({ mode, autoPublish, quality, publishedToday, publishedThisRun, dailyPublishLimit, maxPublishesPerRun }) {
+function canPublishNow({ mode, autoPublish, quality, publishedToday, publishedThisRun, dailyPublishLimit, maxPublishesPerRun, minScore = 85 }) {
   if (mode !== "publish" || !autoPublish) return false;
-  if (quality.score < 85) return false;
+  if (quality.score < minScore) return false;
   if (quality.technical_indexability_status === "blocked") return false;
   if (Array.isArray(quality.rejection_reasons) && quality.rejection_reasons.length) return false;
   if (publishedThisRun >= maxPublishesPerRun) return false;
@@ -450,7 +450,7 @@ function resultSummary(record, sourceData, quality, saved) {
   };
 }
 
-async function generateOne({ opportunity, mode, autoPublish, publishedToday, publishedThisRun, dailyPublishLimit, maxPublishesPerRun, now }) {
+async function generateOne({ opportunity, mode, autoPublish, publishedToday, publishedThisRun, dailyPublishLimit, maxPublishesPerRun, minScore, now }) {
   const dryRun = mode === "dry_run";
   if (!dryRun) {
     await updateOpportunity(opportunity, { status: "generating" });
@@ -470,7 +470,7 @@ async function generateOne({ opportunity, mode, autoPublish, publishedToday, pub
       quality_score: quality.score,
       word_count: quality.word_count
     },
-    { quality, minQualityScore: 85 }
+    { quality, minQualityScore: minScore }
   );
   const canAutoPublish =
     publishIndexability.sitemap_eligible &&
@@ -481,7 +481,8 @@ async function generateOne({ opportunity, mode, autoPublish, publishedToday, pub
       publishedToday,
       publishedThisRun,
       dailyPublishLimit,
-      maxPublishesPerRun
+      maxPublishesPerRun,
+      minScore
     });
   const status = landingStatus(quality.score, canAutoPublish);
   const indexStatus = canAutoPublish ? "index" : "noindex";
@@ -494,7 +495,7 @@ async function generateOne({ opportunity, mode, autoPublish, publishedToday, pub
       quality_score: quality.score,
       word_count: quality.word_count
     },
-    { quality }
+    { quality, minQualityScore: minScore }
   );
   const record = buildLandingRecord({
     opportunity,
@@ -542,8 +543,15 @@ async function runSeoLandingGeneration(options = {}) {
   const autoPublish = options.autoPublish === true;
   const includeExistingDrafts = options.includeExistingDrafts === true;
   const publishFirstEligible = options.publishFirstEligible === true;
-  const maxPublishesPerRun = Math.max(1, Math.min(5, Number.parseInt(String(options.maxPublishesPerRun || 1), 10) || 1));
-  const dailyPublishLimit = options.dailyPublishLimit === null ? null : Math.max(1, Number.parseInt(String(options.dailyPublishLimit || 1), 10) || 1);
+  const parsedMaxPublishesPerRun = Number.parseInt(String(options.maxPublishesPerRun ?? 1), 10);
+  const parsedDailyPublishLimit = Number.parseInt(String(options.dailyPublishLimit ?? 1), 10);
+  const parsedMinScore = Number.parseInt(String(options.minScore ?? 85), 10);
+  const maxPublishesPerRun = Math.max(1, Math.min(100, Number.isFinite(parsedMaxPublishesPerRun) ? parsedMaxPublishesPerRun : 1));
+  const dailyPublishLimit =
+    options.dailyPublishLimit === null
+      ? null
+      : Math.max(0, Math.min(100, Number.isFinite(parsedDailyPublishLimit) ? parsedDailyPublishLimit : 1));
+  const minScore = Math.max(0, Math.min(100, Number.isFinite(parsedMinScore) ? parsedMinScore : 85));
   const now = options.now || new Date().toISOString();
   const opportunities =
     options.opportunities ||
@@ -568,6 +576,7 @@ async function runSeoLandingGeneration(options = {}) {
       publishedThisRun,
       dailyPublishLimit,
       maxPublishesPerRun,
+      minScore,
       now
     });
     if (generated.didPublish) {
@@ -575,7 +584,7 @@ async function runSeoLandingGeneration(options = {}) {
       publishedThisRun += 1;
     }
     results.push(resultSummary(generated.record, generated.sourceData, generated.quality, generated.saved));
-    if (publishFirstEligible && generated.didPublish) break;
+    if (publishFirstEligible && generated.didPublish && publishedThisRun >= maxPublishesPerRun) break;
   }
 
   return {
@@ -590,6 +599,7 @@ async function runSeoLandingGeneration(options = {}) {
     includeExistingDrafts,
     dailyPublishLimit,
     maxPublishesPerRun,
+    minScore,
     generated_count: results.length,
     published_count: publishedThisRun,
     results

@@ -342,6 +342,9 @@ const els = {
   seoAutogenRuns: document.querySelector("[data-seo-autogen-runs]"),
   seoAutogenRun: document.querySelector("[data-seo-autogen-run]"),
   seoAutogenNote: document.querySelector("[data-seo-autogen-note]"),
+  seoAutogenConditionsForm: document.querySelector("[data-seo-autogen-conditions-form]"),
+  seoAutogenConditionsFeedback: document.querySelector("[data-seo-autogen-conditions-feedback]"),
+  seoAutogenEnabled: document.querySelector("[data-seo-autogen-enabled]"),
   linkedinRefresh: document.querySelector("[data-linkedin-refresh]"),
   linkedinTest: document.querySelector("[data-linkedin-test]"),
   linkedinConnect: document.querySelector("[data-linkedin-connect]"),
@@ -2438,6 +2441,74 @@ function seoAutogenRunDetail(result = {}, row = {}) {
     .join(" | ");
 }
 
+function setSeoAutogenConditionsFeedback(message = "", tone = "neutral") {
+  if (!els.seoAutogenConditionsFeedback) return;
+  els.seoAutogenConditionsFeedback.textContent = message;
+  els.seoAutogenConditionsFeedback.dataset.tone = tone;
+}
+
+function seoAutogenSettingsFromPayload(payload = {}) {
+  const settings = payload.settings || {};
+  const config = payload.config || {};
+  return {
+    enabled: settings.enabled ?? config.settings_enabled ?? true,
+    max_per_day: settings.max_per_day ?? config.max_per_day ?? 4,
+    max_per_week: settings.max_per_week ?? config.max_per_week ?? 28,
+    max_per_run: settings.max_per_run ?? config.max_per_run ?? 1,
+    min_score: settings.min_score ?? config.min_score ?? 85
+  };
+}
+
+function renderSeoAutogenConditions(payload = {}) {
+  if (!els.seoAutogenConditionsForm) return;
+  const settings = seoAutogenSettingsFromPayload(payload);
+  const status = payload.settings_status || {};
+  const config = payload.config || {};
+  const set = (name, value) => {
+    const field = els.seoAutogenConditionsForm.elements[name];
+    if (field) field.value = String(value);
+  };
+
+  if (els.seoAutogenEnabled) els.seoAutogenEnabled.checked = settings.enabled !== false;
+  set("max_per_day", settings.max_per_day);
+  set("max_per_week", settings.max_per_week);
+  set("max_per_run", settings.max_per_run);
+  set("min_score", settings.min_score);
+
+  const readOnly = Boolean(status.read_only);
+  els.seoAutogenConditionsForm.querySelectorAll("input, button").forEach((field) => {
+    field.disabled = readOnly;
+  });
+
+  if (readOnly) {
+    const reason = status.reason === "kpi_settings_table_missing"
+      ? "Modo solo lectura: falta la tabla kpi_settings."
+      : "Modo solo lectura: no hay persistencia segura disponible.";
+    setSeoAutogenConditionsFeedback(reason, "warn");
+    return;
+  }
+  if (config.environment_enabled === false) {
+    setSeoAutogenConditionsFeedback("Guardado disponible, pero el kill switch de entorno mantiene la autogeneracion pausada.", "warn");
+    return;
+  }
+  setSeoAutogenConditionsFeedback(status.updated_at ? `Condiciones cargadas: ${formatCompactDate(status.updated_at)}` : "", "neutral");
+}
+
+function validateSeoAutogenConditions(values = {}) {
+  const rules = [
+    ["max_per_day", "Publicaciones maximas por dia", 0, 100],
+    ["max_per_week", "Publicaciones maximas por semana", 0, 700],
+    ["max_per_run", "Maximo de publicaciones por ejecucion", 1, 100],
+    ["min_score", "Score minimo", 0, 100]
+  ];
+  for (const [key, label, min, max] of rules) {
+    if (!Number.isInteger(values[key])) return `${label} debe ser un entero.`;
+    if (values[key] < min || values[key] > max) return `${label} debe estar entre ${min} y ${max}.`;
+  }
+  if (values.enabled && values.max_per_run < 1) return "Maximo de publicaciones por ejecucion debe ser al menos 1 si la autogeneracion esta activa.";
+  return "";
+}
+
 function renderSeoAutogeneration(payload = {}) {
   if (!els.seoAutogenSummary || !els.seoAutogenRuns) return;
   state.seoAutogeneration.status = payload;
@@ -2451,9 +2522,9 @@ function renderSeoAutogeneration(payload = {}) {
   const runCount = Number(limits.published_this_run || 0);
   const runLimit = Number(limits.max_per_run || 1);
   const dayCount = Number(limits.published_last_24h || 0);
-  const dayLimit = Number(limits.max_per_day || 3);
+  const dayLimit = Number(limits.max_per_day ?? 4);
   const weekCount = Number(limits.published_last_7d || 0);
-  const weekLimit = Number(limits.max_per_week || 10);
+  const weekLimit = Number(limits.max_per_week ?? 28);
   const nextScheduledLabel = payload.next_scheduled_at
     ? formatCompactDate(payload.next_scheduled_at, { timeZone: SEO_AUTOGENERATION_TIMEZONE })
     : "-";
@@ -2464,15 +2535,19 @@ function renderSeoAutogeneration(payload = {}) {
     seoAutogenCard("Run", ratioLabel(runCount, runLimit), { hint: "Publicado / limite", overLimit: runCount > runLimit }),
     seoAutogenCard("24h", ratioLabel(dayCount, dayLimit), { hint: "Publicado / limite", overLimit: dayCount > dayLimit }),
     seoAutogenCard("7 dias", ratioLabel(weekCount, weekLimit), { hint: "Publicado / limite", overLimit: weekCount > weekLimit }),
-    seoAutogenCard("Min score", `${Number(config.min_score || 80)} / 100`, { hint: "Umbral de calidad" }),
+    seoAutogenCard("Min score", `${Number(config.min_score ?? 85)} / 100`, { hint: "Umbral de calidad" }),
     seoAutogenCard("Ultima", lastRun ? formatCompactDate(lastRun.started_at) : "-", { hint: lastRun?.status || "Sin ejecuciones" }),
     seoAutogenCard("Proxima", nextScheduledLabel, { hint: "Cron Vercel UTC / hora Madrid" })
   ].join("");
 
+  renderSeoAutogenConditions(payload);
+
   if (els.seoAutogenNote) {
     els.seoAutogenNote.textContent = config.enabled
-      ? `Alcance: landings y guías editoriales. Límite diario: 4 publicaciones. Máximo 1 por ejecución. Pausa con SEO_AUTOGENERATION_ENABLED=false. Último resultado: ${lastResult.reason || lastRun?.status || "sin datos"}.`
-      : "Kill switch activo: SEO_AUTOGENERATION_ENABLED=false.";
+      ? `Alcance: landings y guias editoriales. Limite diario: ${dayLimit} publicaciones. Limite semanal: ${weekLimit} publicaciones. Maximo ${runLimit} por ejecucion. Score minimo ${Number(config.min_score ?? 85)}/100. Ultimo resultado: ${lastResult.reason || lastRun?.status || "sin datos"}.`
+      : config.environment_enabled === false
+        ? "Kill switch activo: SEO_AUTOGENERATION_ENABLED=false."
+        : "Autogeneracion pausada desde condiciones del backoffice.";
   }
 
   const runs = payload.recent_runs || [];
@@ -7228,6 +7303,47 @@ async function saveKpis(settings) {
   showStatus("KPIs guardados.", "good");
 }
 
+function collectSeoAutogenConditions() {
+  const form = els.seoAutogenConditionsForm;
+  const values = {
+    enabled: Boolean(els.seoAutogenEnabled?.checked),
+    max_per_day: Number(form.elements.max_per_day?.value),
+    max_per_week: Number(form.elements.max_per_week?.value),
+    max_per_run: Number(form.elements.max_per_run?.value),
+    min_score: Number(form.elements.min_score?.value)
+  };
+  return values;
+}
+
+async function saveSeoAutogenConditions() {
+  if (!els.seoAutogenConditionsForm) return;
+  const settings = collectSeoAutogenConditions();
+  const validationError = validateSeoAutogenConditions(settings);
+  if (validationError) {
+    setSeoAutogenConditionsFeedback(validationError, "bad");
+    showStatus(validationError, "bad");
+    return;
+  }
+
+  setSeoAutogenConditionsFeedback("Guardando condiciones...", "neutral");
+  const payload = await api("/api/admin?resource=seo-autogenerate/settings", {
+    method: "POST",
+    body: JSON.stringify({ settings })
+  });
+  setSeoAutogenConditionsFeedback("Condiciones guardadas correctamente.", "good");
+  state.seoAutogeneration.status = {
+    ...(state.seoAutogeneration.status || {}),
+    settings: payload.settings,
+    settings_status: {
+      read_only: false,
+      updated_at: payload.updated_at || new Date().toISOString()
+    }
+  };
+  await loadSeoAutogeneration();
+  setSeoAutogenConditionsFeedback("Condiciones guardadas correctamente.", "good");
+  showStatus("Condiciones de autogeneracion guardadas.", "good");
+}
+
 async function runSeoGeneration(mode) {
   const payload =
     mode === "publish"
@@ -7426,6 +7542,20 @@ els.seoGenerate.addEventListener("click", () => runSeoGeneration("generate").cat
 els.seoPublish.addEventListener("click", () => runSeoGeneration("publish").catch((error) => showStatus(error.message, "bad")));
 if (els.seoAutogenRun) {
   els.seoAutogenRun.addEventListener("click", () => runSeoAutogeneration(false).catch((error) => showStatus(error.message, "bad")));
+}
+if (els.seoAutogenConditionsForm) {
+  els.seoAutogenConditionsForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveSeoAutogenConditions().catch((error) => {
+      const payloadErrors = Array.isArray(error.payload?.errors) ? error.payload.errors.join(" ") : "";
+      const message =
+        error.payload?.error === "read_only"
+          ? "Modo solo lectura: no se pudieron guardar las condiciones."
+          : payloadErrors || error.payload?.message || error.message || "Error de backend al guardar condiciones.";
+      setSeoAutogenConditionsFeedback(message, error.payload?.error === "read_only" ? "warn" : "bad");
+      showStatus(message, error.payload?.error === "read_only" ? "neutral" : "bad");
+    });
+  });
 }
 if (els.linkedinRefresh) {
   els.linkedinRefresh.addEventListener("click", () => loadLinkedIn().catch((error) => showStatus(error.message, "bad")));

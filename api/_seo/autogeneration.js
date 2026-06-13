@@ -46,10 +46,10 @@ function buildSeoAutogenerationConfig(env = process.env, overrides = {}) {
   return {
     enabled,
     dry_run: dryRun,
-    max_per_run: clampInt(overrides.maxPerRun ?? env.SEO_AUTOGENERATION_MAX_PER_RUN, 1, 1, 1),
-    max_per_day: clampInt(overrides.maxPerDay ?? env.SEO_AUTOGENERATION_MAX_PER_DAY, 3, 1, 3),
-    max_per_week: clampInt(overrides.maxPerWeek ?? env.SEO_AUTOGENERATION_MAX_PER_WEEK, 10, 1, 40),
-    min_score: clampInt(overrides.minScore ?? env.SEO_AUTOGENERATION_MIN_SCORE, 85, 85, 100),
+    max_per_run: clampInt(overrides.maxPerRun ?? env.SEO_AUTOGENERATION_MAX_PER_RUN, 1, 1, 100),
+    max_per_day: clampInt(overrides.maxPerDay ?? env.SEO_AUTOGENERATION_MAX_PER_DAY, 4, 0, 100),
+    max_per_week: clampInt(overrides.maxPerWeek ?? env.SEO_AUTOGENERATION_MAX_PER_WEEK, 28, 0, 700),
+    min_score: clampInt(overrides.minScore ?? env.SEO_AUTOGENERATION_MIN_SCORE, 85, 0, 100),
     candidate_limit: clampInt(overrides.candidateLimit ?? env.SEO_AUTOGENERATION_CANDIDATE_LIMIT, 25, 1, 50),
     allowed_template_types: ALLOWED_AUTOGENERATION_TEMPLATE_TYPES,
     schedule: SCHEDULE

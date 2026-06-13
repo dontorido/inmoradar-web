@@ -18,12 +18,21 @@ test("kpi settings expose editable groups and defaults", () => {
   assert.ok(fieldPaths.includes("pros_cons.market.expensive_pct"));
   assert.ok(fieldPaths.includes("pros_cons.keywords.negative"));
   assert.ok(fieldPaths.includes("visibility.show_photo_analysis"));
+  assert.ok(fieldPaths.includes("seo_autogeneration.max_per_day"));
+  assert.ok(fieldPaths.includes("seo_autogeneration.max_per_week"));
+  assert.ok(fieldPaths.includes("seo_autogeneration.max_per_run"));
+  assert.ok(fieldPaths.includes("seo_autogeneration.min_score"));
   assert.equal(defaults.property_score.weights.price, 35);
   assert.equal(defaults.price_score.baseline, 6.4);
   assert.equal(defaults.zone_score.fallback_policy, "hide");
   assert.equal(defaults.pros_cons.max_good, 5);
   assert.equal(defaults.pros_cons.market.expensive_pct, 8);
   assert.equal(defaults.visibility.show_photo_analysis, false);
+  assert.equal(defaults.seo_autogeneration.enabled, true);
+  assert.equal(defaults.seo_autogeneration.max_per_day, 4);
+  assert.equal(defaults.seo_autogeneration.max_per_week, 28);
+  assert.equal(defaults.seo_autogeneration.max_per_run, 1);
+  assert.equal(defaults.seo_autogeneration.min_score, 85);
 });
 
 test("kpi settings coercion clamps unsafe values", () => {
@@ -50,6 +59,13 @@ test("kpi settings coercion clamps unsafe values", () => {
         expensive_pct: "500"
       },
       fallback_policy: "invent"
+    },
+    seo_autogeneration: {
+      enabled: "false",
+      max_per_day: "999",
+      max_per_week: "-1",
+      max_per_run: "25",
+      min_score: "101"
     }
   });
 
@@ -62,6 +78,11 @@ test("kpi settings coercion clamps unsafe values", () => {
   assert.equal(settings.pros_cons.max_good, 8);
   assert.equal(settings.pros_cons.market.expensive_pct, 80);
   assert.equal(settings.pros_cons.fallback_policy, "neutral");
+  assert.equal(settings.seo_autogeneration.enabled, false);
+  assert.equal(settings.seo_autogeneration.max_per_day, 100);
+  assert.equal(settings.seo_autogeneration.max_per_week, 0);
+  assert.equal(settings.seo_autogeneration.max_per_run, 25);
+  assert.equal(settings.seo_autogeneration.min_score, 100);
 });
 
 test("market scoring uses editable kpi thresholds", () => {
