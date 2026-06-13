@@ -8,6 +8,10 @@ const { createSeoHandlers } = require("./_admin/handlers/seo");
 const {
   buildSeoAutogenerationOperationalAlerts
 } = require("./_seo/autogeneration");
+const {
+  readSeoAutogenerationConditions,
+  saveSeoAutogenerationConditions
+} = require("./_seo/autogenerationSettings");
 const { getSeoContentPublicationStatus, runSeoContentPublication } = require("./_seo/contentPublisher");
 const { runSeoLandingGeneration } = require("./_seo/generator");
 const { evaluateLandingIndexability } = require("./_seo/indexability");
@@ -957,6 +961,53 @@ async function handleSeoAutogeneration(req, url) {
   const requestSource = isCronTokenRequest(req) && !isAdminTokenRequest(req) ? "cron" : "admin";
   const result = await runSeoContentPublication({ requestSource, config });
   return { status: result.ok === false ? 500 : 200, payload: result };
+}
+
+async function handleSeoAutogenerationSettings(req) {
+  if (req.method === "GET") {
+    const result = await readSeoAutogenerationConditions();
+    return { status: 200, payload: result };
+  }
+  if (req.method !== "POST") {
+    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  }
+  try {
+    const body = await readJsonBody(req);
+    const result = await saveSeoAutogenerationConditions(body.settings || body);
+    return { status: 200, payload: result };
+  } catch (error) {
+    const status = Number(error.status || 500);
+    if (status === 400) {
+      return {
+        status: 400,
+        payload: {
+          ok: false,
+          error: "validation_error",
+          message: "Revisa las condiciones de autogeneracion.",
+          errors: error.errors || [sanitizeErrorMessage(error, 400)]
+        }
+      };
+    }
+    if (status === 503 || error.reason === "supabase_not_configured") {
+      return {
+        status: 503,
+        payload: {
+          ok: false,
+          error: "read_only",
+          reason: error.reason || "settings_read_only",
+          message: "Modo solo lectura: no hay persistencia segura disponible para guardar condiciones."
+        }
+      };
+    }
+    return {
+      status: 500,
+      payload: {
+        ok: false,
+        error: "backend_error",
+        message: sanitizeErrorMessage(error, 500)
+      }
+    };
+  }
 }
 
 function parseJsonMaybe(value, fallback = null) {
@@ -5201,6 +5252,10 @@ async function handleAdminRequest(req, res) {
     const preSupabaseReadOnly = await dispatchAdminRoute(ADMIN_PRE_SUPABASE_READ_ONLY_ROUTES, { req, url, resource });
     if (preSupabaseReadOnly) {
       return json(res, preSupabaseReadOnly.status, preSupabaseReadOnly.payload);
+    }
+    if (resource === "seo-autogenerate/settings") {
+      const result = await handleSeoAutogenerationSettings(req);
+      return json(res, result.status, result.payload);
     }
     if (resource === "meta/connect") {
       const result = await handleMeta(req, url, resource);

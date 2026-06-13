@@ -10,8 +10,16 @@ test("SEO Autogeneration muestra copy de Vercel Cron 4h sin textos obsoletos", (
   const copy = `${html}\n${adminJs}`;
 
   assert.match(copy, /cada 4 horas vía Vercel Cron/);
-  assert.match(copy, /Límite diario: 4 publicaciones/);
-  assert.match(copy, /Máximo 1 por ejecución/);
+  assert.match(copy, /Condiciones de autogeneraci&oacute;n/);
+  assert.match(copy, /Publicaciones m&aacute;ximas por d&iacute;a/);
+  assert.match(copy, /Publicaciones m&aacute;ximas por semana/);
+  assert.match(copy, /M&aacute;ximo de publicaciones por ejecuci&oacute;n/);
+  assert.match(copy, /Score m&iacute;nimo/);
+  assert.match(copy, /Guardar condiciones/);
+  assert.match(copy, /data-seo-autogen-conditions-form/);
+  assert.match(copy, /Limite diario: \$\{dayLimit\} publicaciones/);
+  assert.match(copy, /Limite semanal: \$\{weekLimit\} publicaciones/);
+  assert.doesNotMatch(copy, /L[ií]mite diario: 4 publicaciones/);
   assert.doesNotMatch(copy, /cada 6 horas/);
   assert.doesNotMatch(copy, /Cadencia 6h/);
   assert.doesNotMatch(copy, /Objetivo diario:/);

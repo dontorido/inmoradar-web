@@ -7,6 +7,16 @@ const SEO_DAILY_TARGETS = {
 
 const NEWS_TEMPLATE_TYPES = new Set(["editorial_guide", "news_guide"]);
 
+function buildSeoDailyTargets(input = {}) {
+  const total = Math.max(0, Number.parseInt(String(input.total ?? SEO_DAILY_TARGETS.total), 10) || 0);
+  return {
+    landings: Math.ceil(total / 2),
+    news: Math.floor(total / 2),
+    total,
+    timeZone: input.timeZone || SEO_DAILY_TARGETS.timeZone
+  };
+}
+
 function isSeoNewsTemplateType(templateType) {
   return NEWS_TEMPLATE_TYPES.has(String(templateType || "").toLowerCase());
 }
@@ -86,6 +96,7 @@ function buildSeoDailyPolicySnapshot(rows = [], options = {}) {
 
 module.exports = {
   SEO_DAILY_TARGETS,
+  buildSeoDailyTargets,
   buildSeoDailyPolicySnapshot,
   dateKeyForTimeZone,
   isSeoNewsTemplateType,

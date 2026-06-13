@@ -829,6 +829,132 @@ test("la publicacion SEO operativa respeta el cupo diario 2 landings + 2 guias",
   assert.equal(result.skipped_reason, "daily_total_quota_reached");
 });
 
+test("la publicacion SEO usa limite diario configurable", async () => {
+  let received = null;
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [
+          { template_type: "price_city", status: "published", published_at: "2026-05-22T08:00:00.000Z" },
+          { template_type: "rent_city", status: "published", published_at: "2026-05-22T09:00:00.000Z" },
+          { template_type: "editorial_guide", status: "published", published_at: "2026-05-22T10:00:00.000Z" },
+          { template_type: "editorial_guide", status: "published", published_at: "2026-05-22T11:00:00.000Z" }
+        ];
+      }
+    },
+    config: { enabled: true, dryRun: false, maxPerDay: 10 },
+    runGeneration: async (options) => {
+      received = options;
+      return { ok: true, generated_count: 1, published_count: 1, results: [] };
+    }
+  });
+
+  assert.equal(result.config.max_per_day, 10);
+  assert.equal(result.limits.max_per_day, 10);
+  assert.equal(result.published_count, 1);
+  assert.equal(received.dailyPublishLimit, 10);
+});
+
+test("la publicacion SEO bloquea por limite semanal configurable", async () => {
+  let called = false;
+  const rows = Array.from({ length: 28 }, (_, index) => ({
+    template_type: index % 2 ? "editorial_guide" : "price_city",
+    status: "published",
+    published_at: new Date(Date.parse("2026-05-22T12:00:00.000Z") - index * 6 * 60 * 60 * 1000).toISOString()
+  }));
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return rows;
+      }
+    },
+    config: { enabled: true, dryRun: false, maxPerDay: 100, maxPerWeek: 28 },
+    runGeneration: async () => {
+      called = true;
+      return { ok: true, generated_count: 1, published_count: 1, results: [] };
+    }
+  });
+
+  assert.equal(called, false);
+  assert.equal(result.reason, "weekly_limit_reached");
+  assert.equal(result.limits.max_per_week, 28);
+});
+
+test("la publicacion SEO pasa score minimo configurable al quality gate", async () => {
+  let received = null;
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [];
+      }
+    },
+    config: { enabled: true, dryRun: false, minScore: 95 },
+    runGeneration: async (options) => {
+      received = options;
+      return { ok: true, generated_count: 1, published_count: 0, results: [{ quality_score: 90, status: "draft" }] };
+    }
+  });
+
+  assert.equal(result.config.min_score, 95);
+  assert.equal(received.minScore, 95);
+});
+
+test("la publicacion SEO no salta el kill switch aunque settings este activo", async () => {
+  let called = false;
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "false",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 10,
+      max_per_week: 70,
+      max_per_run: 2,
+      min_score: 80
+    },
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [];
+      }
+    },
+    runGeneration: async () => {
+      called = true;
+      return { ok: true, generated_count: 1, published_count: 1, results: [] };
+    }
+  });
+
+  assert.equal(called, false);
+  assert.equal(result.enabled, false);
+  assert.equal(result.config.environment_enabled, false);
+  assert.equal(result.config.settings_enabled, true);
+  assert.equal(result.reason, "autogeneration_disabled");
+});
+
 test("la publicacion SEO exige score editorial minimo antes de publicar", () => {
   const base = {
     mode: "publish",
@@ -841,10 +967,35 @@ test("la publicacion SEO exige score editorial minimo antes de publicar", () => 
 
   assert.equal(canPublishNow({ ...base, quality: { score: 84 } }), false);
   assert.equal(canPublishNow({ ...base, quality: { score: 85 } }), true);
+  assert.equal(canPublishNow({ ...base, minScore: 95, quality: { score: 94 } }), false);
+  assert.equal(canPublishNow({ ...base, minScore: 95, quality: { score: 95 } }), true);
   assert.equal(canPublishNow({ ...base, quality: { score: 95, technical_indexability_status: "blocked" } }), false);
   assert.equal(canPublishNow({ ...base, quality: { score: 95, rejection_reasons: ["canonical_incoherent"] } }), false);
   assert.equal(canPublishNow({ ...base, quality: { score: 100 }, publishedToday: 4 }), false);
 });
+
+test("indexability respeta score minimo configurable en cero", () => {
+  const result = evaluateLandingIndexability(
+    {
+      slug: "precio-metro-cuadrado/test-score-cero",
+      title: "Precio del metro cuadrado en Test Score Cero",
+      meta_title: "Precio m2 Test Score Cero",
+      meta_description: "Referencia de precio por metro cuadrado con fuente y fecha para comparar anuncios.",
+      h1: "Precio del metro cuadrado en Test Score Cero",
+      status: "published",
+      index_status: "index",
+      quality_score: 0,
+      word_count: 600,
+      canonical_url: "https://inmoradar.app/precio-metro-cuadrado/test-score-cero/"
+    },
+    { minQualityScore: 0, requireInternalLinks: false }
+  );
+
+  assert.equal(result.min_quality_score, 0);
+  assert.equal(result.can_publish, true);
+  assert.equal(result.reasons.includes("quality_score_below_threshold"), false);
+});
+
 test("las landings publicas cargan analitica solo tras consentimiento", () => {
   const html = renderLandingHtml({
     slug: "precio-metro-cuadrado/logrono",
