@@ -973,6 +973,29 @@ test("la publicacion SEO exige score editorial minimo antes de publicar", () => 
   assert.equal(canPublishNow({ ...base, quality: { score: 95, rejection_reasons: ["canonical_incoherent"] } }), false);
   assert.equal(canPublishNow({ ...base, quality: { score: 100 }, publishedToday: 4 }), false);
 });
+
+test("indexability respeta score minimo configurable en cero", () => {
+  const result = evaluateLandingIndexability(
+    {
+      slug: "precio-metro-cuadrado/test-score-cero",
+      title: "Precio del metro cuadrado en Test Score Cero",
+      meta_title: "Precio m2 Test Score Cero",
+      meta_description: "Referencia de precio por metro cuadrado con fuente y fecha para comparar anuncios.",
+      h1: "Precio del metro cuadrado en Test Score Cero",
+      status: "published",
+      index_status: "index",
+      quality_score: 0,
+      word_count: 600,
+      canonical_url: "https://inmoradar.app/precio-metro-cuadrado/test-score-cero/"
+    },
+    { minQualityScore: 0, requireInternalLinks: false }
+  );
+
+  assert.equal(result.min_quality_score, 0);
+  assert.equal(result.can_publish, true);
+  assert.equal(result.reasons.includes("quality_score_below_threshold"), false);
+});
+
 test("las landings publicas cargan analitica solo tras consentimiento", () => {
   const html = renderLandingHtml({
     slug: "precio-metro-cuadrado/logrono",

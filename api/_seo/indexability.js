@@ -101,7 +101,7 @@ function evaluateLandingIndexability(landing = {}, options = {}) {
   const status = String(landing.status || "").toLowerCase();
   const indexStatus = String(landing.index_status || "").toLowerCase();
   const score = Number(landing.quality_score ?? quality.score ?? 0);
-  const minQualityScore = Number(options.minQualityScore || QUALITY_GATE_SCORE_THRESHOLD);
+  const minQualityScore = Number(options.minQualityScore ?? QUALITY_GATE_SCORE_THRESHOLD);
   const canonicalIssue = canonicalIssueReason(landing, options.baseUrl || siteUrl());
   const wordCount = wordCountForLanding(landing);
   const bodyHtml = String(landing.body_html || "");
@@ -163,7 +163,7 @@ function evaluateLandingIndexability(landing = {}, options = {}) {
 function evaluateSitemapEligibility(landing = {}, options = {}) {
   return evaluateLandingIndexability(landing, {
     ...options,
-    minQualityScore: options.minQualityScore || QUALITY_GATE_SCORE_THRESHOLD,
+    minQualityScore: options.minQualityScore ?? QUALITY_GATE_SCORE_THRESHOLD,
     requirePublished: true,
     requireIndex: true,
     requireInternalLinks: options.requireInternalLinks !== false
