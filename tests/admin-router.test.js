@@ -442,6 +442,50 @@ test("admin extension usage handler keeps window filters and known users", async
   assert.match(paths[1], /created_at=lt\./);
 });
 
+test("dashboard extension usage and web acquisition use the same Madrid day range", async () => {
+  const paths = [];
+  const historicalWebRows = Array.from({ length: 4 }, (_, index) => ({
+    event_name: "page_view",
+    anonymous_session_id: `historical-web-${index + 1}`,
+    source: "web",
+    occurred_at: "2026-06-12T10:00:00.000Z",
+    created_at: "2026-06-12T10:00:00.000Z"
+  }));
+  const expectedMadridFilters = ["gte.2026-06-12T22:00:00.000Z", "lte.2026-06-13T21:59:59.999Z"];
+
+  const fetchImpl = async (url) => {
+    const path = apiPath(url);
+    paths.push(path);
+    if (path.startsWith("extension_usage_events?")) return jsonResponse([]);
+    if (path.startsWith("owned_analytics_events?")) {
+      const params = new URLSearchParams(path.split("?")[1] || "");
+      const filters = params.getAll("occurred_at");
+      return jsonResponse(JSON.stringify(filters) === JSON.stringify(expectedMadridFilters) ? [] : historicalWebRows);
+    }
+    return jsonResponse([]);
+  };
+
+  const extension = await callAdmin("extension/usage", {
+    query: "from=2026-06-13&to=2026-06-13&timezone=Europe/Madrid",
+    fetchImpl
+  });
+  const analytics = await callAdmin("analytics/summary", {
+    query: "from=2026-06-13&to=2026-06-13&timezone=Europe/Madrid",
+    fetchImpl
+  });
+
+  assert.equal(extension.statusCode, 200);
+  assert.equal(extension.payload.kpis.sessions, 0);
+  assert.equal(extension.payload.timeseries[0].sessions, 0);
+  assert.equal(analytics.statusCode, 200);
+  assert.equal(analytics.payload.window_timezone, "Europe/Madrid");
+  assert.equal(analytics.payload.top_sources.length, 0);
+
+  const analyticsPath = paths.find((path) => path.startsWith("owned_analytics_events?"));
+  const analyticsFilters = new URLSearchParams(analyticsPath.split("?")[1] || "").getAll("occurred_at");
+  assert.deepEqual(analyticsFilters, expectedMadridFilters);
+});
+
 test("admin seo landings handler keeps filters and pagination read-only", async () => {
   const paths = [];
   const { handleSeoLandings } = createSeoHandlers({

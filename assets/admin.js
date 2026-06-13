@@ -698,6 +698,7 @@ function analyticsRangeParams(resource, range, extra = {}) {
   const params = new URLSearchParams({ resource, ...extra });
   params.set("from", range.from);
   params.set("to", range.to);
+  params.set("timezone", state.extensionUsage.timezone || EXTENSION_USAGE_TIMEZONE);
   return params;
 }
 
@@ -1462,7 +1463,7 @@ function renderExtensionTimeseries(rows = []) {
   els.extensionTimeseries.innerHTML = `
     <section class="admin-extension-trend">
       <div class="admin-extension-trend-head">
-        <span>Evolucion diaria</span>
+        <span>Evolucion diaria de uso de extension</span>
         <p><i data-key="users"></i>Usuarios <i data-key="sessions"></i>Sesiones <i data-key="analyses"></i>Analisis</p>
       </div>
       <div class="admin-extension-chart">${chart}</div>
@@ -1604,12 +1605,20 @@ function renderDashboardAcquisition() {
   if (!els.dashboardAcquisition) return;
   const analytics = state.dashboard.analytics || state.analytics.learning || {};
   const rows = Array.isArray(analytics.top_sources) ? analytics.top_sources : [];
+  const rangeLabel = analyticsWindowLabel(analytics);
+  const timeZone = analytics.window_timezone || state.extensionUsage.timezone || EXTENSION_USAGE_TIMEZONE;
+  const sourceNote = `
+    <p class="admin-subtle">
+      Fuentes registradas en analitica web. Rango aplicado: ${escapeHtml(rangeLabel)}. Timezone: ${escapeHtml(timeZone)}. Fuente de datos: analytics/summary / owned_analytics_events. Usuarios web se basa en anonymous_session_id; nuevos/recurrentes no estan disponibles aqui.
+    </p>
+  `;
   if (!rows.length) {
-    els.dashboardAcquisition.innerHTML = `<p class="admin-empty-state compact">Sin datos de adquisicion por fuente para este rango.</p>`;
+    els.dashboardAcquisition.innerHTML = `${sourceNote}<p class="admin-empty-state compact">Sin datos de adquisicion web para este rango.</p>`;
     return;
   }
 
   els.dashboardAcquisition.innerHTML = `
+    ${sourceNote}
     <table class="admin-table admin-dashboard-source-table">
       <thead>
         <tr>
@@ -1634,7 +1643,7 @@ function renderDashboardAcquisition() {
             <td>${dashboardCell(row.medium, "-")}</td>
             <td>${dashboardCell(row.campaign, "-")}</td>
             <td>${dashboardCell(row.users)}</td>
-            <td>${dashboardCell(row.new_users)}</td>
+            <td>${dashboardCell(row.new_users, "No disponible")}</td>
             <td>${dashboardCell(row.sessions)}</td>
             <td>${dashboardCell(row.cta_installation)}</td>
             <td>${dashboardCell(row.chrome_store_clicks)}</td>
