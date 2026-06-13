@@ -233,6 +233,7 @@ test("analyticsSourceGroups agrega adquisicion por fuente sin inventar activacio
   assert.equal(google.campaign, "piso-caro");
   assert.equal(google.users, 2);
   assert.equal(google.sessions, 2);
+  assert.equal(google.new_users, null);
   assert.equal(google.cta_installation, 1);
   assert.equal(google.chrome_store_clicks, 1);
   assert.equal(google.activations, null);
@@ -448,6 +449,51 @@ test("admin analytics aplica el rango explicito al filtro de Supabase", async ()
 
   const filters = new URL(requestedUrl).searchParams.getAll("occurred_at");
   assert.deepEqual(filters, ["gte.2026-05-01T00:00:00.000Z", "lte.2026-05-10T23:59:59.999Z"]);
+});
+
+test("admin analytics aplica timezone Europe/Madrid al rango explicito del dashboard", async () => {
+  const previousFetch = global.fetch;
+  let requestedUrl = "";
+
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      global.fetch = async (url) => {
+        requestedUrl = String(url);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [],
+          text: async () => ""
+        };
+      };
+
+      try {
+        const { res, payload } = createJsonResponse();
+        const req = {
+          method: "GET",
+          url: "/api/admin?resource=analytics/summary&from=2026-06-13&to=2026-06-13&timezone=Europe/Madrid",
+          headers: { authorization: "Bearer admin-test-token", host: "inmoradar.app" }
+        };
+        await adminHandler(req, res);
+        const body = payload();
+        assert.equal(res.statusCode, 200);
+        assert.equal(body.window_mode, "date_range");
+        assert.equal(body.window_timezone, "Europe/Madrid");
+        assert.equal(body.window_from_date, "2026-06-13");
+        assert.equal(body.window_to_date, "2026-06-13");
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+
+  const filters = new URL(requestedUrl).searchParams.getAll("occurred_at");
+  assert.deepEqual(filters, ["gte.2026-06-12T22:00:00.000Z", "lte.2026-06-13T21:59:59.999Z"]);
 });
 
 test("admin analytics limita rangos explicitos a 90 dias", async () => {
