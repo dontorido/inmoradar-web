@@ -5,6 +5,7 @@ const {
   isCloudflareEmailConfigured,
   sendCloudflareEmail
 } = require("../_email/cloudflareEmail");
+const { formatMadridDateTime } = require("../_formatters/madridDateTime");
 
 const DEFAULT_SITE_URL = "https://inmoradar.app";
 const COPY_URL_PATH = "/copiar-url";
@@ -292,7 +293,81 @@ function nextScheduledAt(summary = {}) {
   return date.toISOString();
 }
 
-function renderSeoPublicationEmail({ summary, pages, totals, config }) {
+function nextScheduledLabel(summary = {}) {
+  const value = nextScheduledAt(summary);
+  if (value === "Cada 4 horas") return value;
+  return formatMadridDateTime(value, "No disponible");
+}
+
+function dailyLimit(summary = {}) {
+  return safeInt(summary.limits?.max_per_day ?? summary.config?.max_per_day, null);
+}
+
+function remainingToday(summary = {}, publishedLast24hValue = null) {
+  const explicit = safeInt(summary.limits?.remaining_day, null);
+  if (explicit !== null) return explicit;
+  const limit = dailyLimit(summary);
+  if (limit === null || publishedLast24hValue === null) return null;
+  return Math.max(0, limit - publishedLast24hValue);
+}
+
+function lastResult(summary = {}) {
+  return cleanText(
+    summary.status ||
+      summary.result_status ||
+      summary.run_status ||
+      (summary.ok === false ? "failed" : summary.reason || summary.skipped_reason ? "skipped" : "completed"),
+    "completed"
+  );
+}
+
+function scoreLabel(value) {
+  const score = Number(value);
+  return Number.isFinite(score) ? `${Math.round(score)}/100` : "No disponible";
+}
+
+function emailButtonHtml({ href, label, variant = "orange" }) {
+  const variants = {
+    orange: "background:#FF5A0A;color:#FFFFFF;border:1px solid #FF5A0A;",
+    black: "background:#0A0A0A;color:#FFFFFF;border:1px solid #0A0A0A;",
+    light: "background:#FFFFFF;color:#0B0B0C;border:1px solid #DED8D2;"
+  };
+  return `<a href="${escapeHtml(href)}" style="${variants[variant] || variants.light}border-radius:999px;display:inline-block;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:900;line-height:1.2;padding:15px 20px;text-decoration:none;">${escapeHtml(label)}</a>`;
+}
+
+function emailKpiCardHtml(label, value, detail) {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FFFFFF;border:1px solid #DED8D2;border-radius:24px;">
+    <tr>
+      <td style="padding:18px 16px 17px;">
+        <p style="color:#7A726B;font-family:Arial,Helvetica,sans-serif;font-size:10px;font-weight:900;letter-spacing:2px;line-height:1.2;margin:0 0 10px;text-transform:uppercase;">${escapeHtml(label)}</p>
+        <p style="color:#0B0B0C;font-family:Arial,Helvetica,sans-serif;font-size:28px;font-weight:900;letter-spacing:0;line-height:1;margin:0 0 8px;">${escapeHtml(value)}</p>
+        <p style="color:#5E5A57;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;line-height:1.35;margin:0;">${escapeHtml(detail)}</p>
+      </td>
+    </tr>
+  </table>`;
+}
+
+function summaryMetricCell(label, value) {
+  return `<td class="metric-cell" width="25%" style="padding:0 8px 10px 0;vertical-align:top;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F7F5F3;border:1px solid #E7E0DA;border-radius:16px;">
+      <tr>
+        <td style="padding:13px 12px 12px;">
+          <p style="color:#7A726B;font-family:Arial,Helvetica,sans-serif;font-size:10px;font-weight:900;letter-spacing:1.3px;line-height:1.2;margin:0 0 7px;text-transform:uppercase;">${escapeHtml(label)}</p>
+          <p style="color:#0B0B0C;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:900;line-height:1.25;margin:0;">${escapeHtml(value)}</p>
+        </td>
+      </tr>
+    </table>
+  </td>`;
+}
+
+function detailRow(label, value) {
+  return `<tr>
+    <td style="border-bottom:1px solid #EEE8E2;color:#7A726B;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:900;letter-spacing:1.5px;line-height:1.3;padding:13px 12px 13px 0;text-transform:uppercase;vertical-align:top;width:34%;">${escapeHtml(label)}</td>
+    <td style="border-bottom:1px solid #EEE8E2;color:#0B0B0C;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:800;line-height:1.45;padding:13px 0;vertical-align:top;">${escapeHtml(value)}</td>
+  </tr>`;
+}
+
+function renderSeoPublicationEmailLegacy({ summary, pages, totals, config }) {
   const publishedCount = safeInt(summary.published_count, 0);
   const pageLabel = publishedCount === 1 ? "pagina SEO publicada" : "paginas SEO publicadas";
   const subject = `[InmoRadar] ${publishedCount} ${pageLabel}`;
@@ -472,6 +547,214 @@ function renderSeoPublicationEmail({ summary, pages, totals, config }) {
     "Totales SEO:",
     `- landings publicadas: ${formatMetric(totals?.published_landings)}`,
     `- landings indexables: ${formatMetric(totals?.indexable_landings)}`,
+    `- drafts: ${formatMetric(totals?.drafts)}`,
+    `- pendientes/review: ${formatMetric(totals?.pending_review)}`
+  ].join("\n");
+  return { subject, html, text };
+}
+
+function renderSeoPublicationEmail({ summary, pages, totals, config }) {
+  const publishedCount = safeInt(summary.published_count, 0);
+  const pageLabel = publishedCount === 1 ? "pagina SEO publicada" : "paginas SEO publicadas";
+  const subject = `[InmoRadar] ${publishedCount} ${pageLabel}`;
+  const primaryPage = pages[0] || {};
+  const primaryHref = absoluteUrlForPath(primaryPage.url || primaryPage.target_path || "/", config.site_url || DEFAULT_SITE_URL);
+  const copyHref = copyUrlPageUrl(primaryHref, config.site_url || DEFAULT_SITE_URL);
+  const last24h = publishedLast24h(summary, null);
+  const limitDay = dailyLimit(summary);
+  const remainingDay = remainingToday(summary, last24h);
+  const nextLaunch = nextScheduledLabel(summary);
+  const resultStatus = lastResult(summary);
+  const publishedPath = primaryPage.target_path || primaryPage.slug || primaryPage.url || "No disponible";
+  const pageTitle = primaryPage.title || "URL SEO publicada";
+  const pageScore = scoreLabel(primaryPage.score);
+  const indexStatus = primaryPage.index_status || "No disponible";
+  const templateType = primaryPage.template_type || "No disponible";
+  const city = primaryPage.city || "No disponible";
+
+  const html = `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <title>${escapeHtml(subject)}</title>
+  <style>
+    body { margin:0 !important; padding:0 !important; background:#F3F1EF; }
+    table { border-collapse:separate; }
+    a { text-decoration:none; }
+    @media screen and (max-width: 620px) {
+      .container { width:100% !important; }
+      .outer-pad { padding:18px 12px !important; }
+      .hero-pad { padding:34px 22px 30px !important; }
+      .hero-title { font-size:42px !important; line-height:.98 !important; }
+      .section-pad { padding:24px 22px !important; }
+      .kpi-cell { display:block !important; width:100% !important; padding:0 0 10px !important; }
+      .metric-cell { display:block !important; width:100% !important; padding:0 0 10px !important; }
+      .button-cell { display:block !important; width:100% !important; padding:0 0 10px !important; text-align:left !important; }
+    }
+  </style>
+</head>
+<body style="background:#F3F1EF;margin:0;padding:0;">
+  <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;visibility:hidden;">Nueva URL SEO publicada tras superar los controles de calidad de InmoRadar.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F3F1EF;">
+    <tr>
+      <td class="outer-pad" align="center" style="padding:30px 14px;">
+        <table role="presentation" class="container" width="680" cellpadding="0" cellspacing="0" border="0" style="max-width:680px;width:680px;">
+          <tr>
+            <td style="padding:0 0 14px;">
+              <p style="color:#0B0B0C;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:900;letter-spacing:0;line-height:1;margin:0;">Inmo<span style="color:#FF5A0A;">Radar</span></p>
+            </td>
+          </tr>
+          <tr>
+            <td class="hero-pad" style="background:#FAF8F6;background-image:radial-gradient(#DED8D2 1px, transparent 1px);background-size:18px 18px;border:1px solid #DED8D2;border-radius:30px;padding:44px 40px 38px;">
+              <p style="color:#FF5A0A;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:900;letter-spacing:2.4px;line-height:1.2;margin:0 0 20px;text-transform:uppercase;">INMORADAR · SEO AUTOGENERATION</p>
+              <h1 class="hero-title" style="color:#0B0B0C;font-family:Arial,Helvetica,sans-serif;font-size:58px;font-weight:900;letter-spacing:0;line-height:.94;margin:0 0 20px;">Nueva URL SEO publicada.</h1>
+              <p style="color:#3A3632;font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.55;margin:0 0 24px;max-width:560px;">La automatización ha publicado una nueva página tras superar los controles de calidad. Revisa la URL, copia el enlace o abre Search Console para inspeccionarla.</p>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td class="button-cell" style="padding:0 10px 0 0;">${emailButtonHtml({ href: primaryHref, label: "Ver URL publicada", variant: "orange" })}</td>
+                  <td class="button-cell" style="padding:0 10px 0 0;">${emailButtonHtml({ href: copyHref, label: "Copiar URL", variant: "black" })}</td>
+                  <td class="button-cell">${emailButtonHtml({ href: SEARCH_CONSOLE_URL, label: "Abrir Search Console", variant: "light" })}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:18px 0 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td class="kpi-cell" width="50%" style="padding:0 7px 12px 0;">${emailKpiCardHtml("Score", pageScore, `Min score: ${formatMetric(config.min_score ?? summary.config?.min_score)}`)}</td>
+                  <td class="kpi-cell" width="50%" style="padding:0 0 12px 7px;">${emailKpiCardHtml("Estado", "Publicada", resultStatus)}</td>
+                </tr>
+                <tr>
+                  <td class="kpi-cell" width="50%" style="padding:0 7px 0 0;">${emailKpiCardHtml("Indexación", indexStatus, `Indexacion: ${indexStatus}`)}</td>
+                  <td class="kpi-cell" width="50%" style="padding:0 0 0 7px;">${emailKpiCardHtml("Siguiente lanzamiento", nextLaunch, "Hora Madrid")}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="section-pad" style="padding:42px 26px 18px;">
+              <p style="color:#FF5A0A;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:900;letter-spacing:2.4px;line-height:1.2;margin:0 0 14px;text-transform:uppercase;">Resumen últimas 24 horas</p>
+              <h2 style="color:#0B0B0C;font-family:Arial,Helvetica,sans-serif;font-size:36px;font-weight:900;letter-spacing:0;line-height:1.04;margin:0 0 18px;">Publicación completada<br>sin perder contexto.</h2>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  ${summaryMetricCell("Publicadas 24h", formatMetric(last24h))}
+                  ${summaryMetricCell("Límite diario", formatMetric(limitDay))}
+                  ${summaryMetricCell("Restantes hoy", formatMetric(remainingDay))}
+                  ${summaryMetricCell("Último resultado", resultStatus)}
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 0 18px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FFFFFF;border:1px solid #DED8D2;border-radius:28px;">
+                <tr>
+                  <td class="section-pad" style="padding:30px 30px 28px;">
+                    <p style="color:#FF5A0A;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:900;letter-spacing:2.4px;line-height:1.2;margin:0 0 14px;text-transform:uppercase;">Página publicada</p>
+                    <h2 style="color:#0B0B0C;font-family:Arial,Helvetica,sans-serif;font-size:32px;font-weight:900;letter-spacing:0;line-height:1.08;margin:0 0 10px;">${escapeHtml(pageTitle)}</h2>
+                    <p style="color:#5E5A57;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:800;line-height:1.45;margin:0 0 18px;word-break:break-word;">${escapeHtml(publishedPath)}</p>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      ${detailRow("Ciudad", city)}
+                      ${detailRow("Template", `Template: ${templateType}`)}
+                      ${detailRow("Score", pageScore)}
+                      ${detailRow("Indexacion", `Indexacion: ${indexStatus}`)}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:0 0 18px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0A0A0A;border-radius:28px;">
+                <tr>
+                  <td class="section-pad" style="padding:30px 30px 28px;">
+                    <p style="color:#FF8A4C;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:900;letter-spacing:2.4px;line-height:1.2;margin:0 0 14px;text-transform:uppercase;">Acción recomendada</p>
+                    <h2 style="color:#FFFFFF;font-family:Arial,Helvetica,sans-serif;font-size:30px;font-weight:900;letter-spacing:0;line-height:1.06;margin:0 0 16px;">Revisa antes de<br>subir la cadencia.</h2>
+                    <p style="color:#E8E0D8;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.62;margin:0 0 22px;max-width:560px;">Revisa la URL publicada y, si todo está correcto, abre Search Console para comprobar su estado de indexación.</p>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td class="button-cell" style="padding:0 10px 0 0;">${emailButtonHtml({ href: primaryHref, label: "Ver URL publicada", variant: "orange" })}</td>
+                        <td class="button-cell">${emailButtonHtml({ href: SEARCH_CONSOLE_URL, label: "Abrir Search Console", variant: "light" })}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="section-pad" style="padding:18px 26px 12px;">
+              <p style="color:#7A726B;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;margin:0;">
+                Total landings publicadas: ${escapeHtml(formatMetric(totals?.published_landings))} · Total landings indexables: ${escapeHtml(formatMetric(totals?.indexable_landings))} · Drafts: ${escapeHtml(formatMetric(totals?.drafts))} · Pendientes/review: ${escapeHtml(formatMetric(totals?.pending_review))}
+              </p>
+              <p style="color:#7A726B;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;margin:10px 0 0;">
+                Ejecución: ${escapeHtml(summary.job_name || "seo")} · Modo: ${escapeHtml(summary.dry_run ? "simulación" : "publicación real")} · Última ejecución: ${escapeHtml(formatMadridDateTime(summary.finished_at || summary.started_at, "No disponible"))}
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="border-top:1px solid #DED8D2;padding:22px 0 4px;">
+              <p style="color:#0B0B0C;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:900;letter-spacing:2px;line-height:1.2;margin:0 0 7px;text-transform:uppercase;">INMORADAR</p>
+              <p style="color:#5E5A57;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.45;margin:0;">Analiza anuncios antes de contactar.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+  const text = [
+    "InmoRadar - Nueva URL SEO publicada",
+    "",
+    "La automatización ha publicado una nueva página tras superar los controles de calidad.",
+    "",
+    "Acciones:",
+    `- Ver URL publicada: ${primaryHref}`,
+    `- Copiar URL: ${copyHref}`,
+    `- Abrir Search Console: ${SEARCH_CONSOLE_URL}`,
+    "",
+    "Resumen últimas 24 horas:",
+    `- Publicadas 24h: ${formatMetric(last24h)}`,
+    `- Límite diario: ${formatMetric(limitDay)}`,
+    `- Restantes hoy: ${formatMetric(remainingDay)}`,
+    `- Último resultado: ${resultStatus}`,
+    `- Siguiente lanzamiento: ${nextLaunch}`,
+    "",
+    "Página publicada:",
+    `- title: ${pageTitle}`,
+    `- path: ${publishedPath}`,
+    `- ciudad: ${city}`,
+    `- template_type: ${templateType}`,
+    `- score: ${pageScore}`,
+    `- index_status: ${indexStatus}`,
+    "",
+    "Acción recomendada:",
+    "Revisa la URL publicada y, si todo está correcto, abre Search Console para comprobar su estado de indexación.",
+    "",
+    "Resumen operativo:",
+    `- job: ${summary.job_name || "seo"}`,
+    `- request_source: ${summary.request_source || "unknown"}`,
+    `- estado: ${resultStatus}`,
+    `- finished_at: ${formatMadridDateTime(summary.finished_at || summary.started_at, "No disponible")}`,
+    `- draft_count: ${formatMetric(summary.draft_count)}`,
+    `- skipped_count: ${formatMetric(summary.skipped_count)}`,
+    `- failed_count: ${formatMetric(summary.failed_count)}`,
+    `- min_score: ${config.min_score ?? summary.config?.min_score ?? "No disponible"}`,
+    "",
+    "Totales SEO:",
+    `- total landings publicadas: ${formatMetric(totals?.published_landings)}`,
+    `- total landings indexables: ${formatMetric(totals?.indexable_landings)}`,
     `- drafts: ${formatMetric(totals?.drafts)}`,
     `- pendientes/review: ${formatMetric(totals?.pending_review)}`
   ].join("\n");
