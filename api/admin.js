@@ -12,7 +12,11 @@ const {
   readSeoAutogenerationConditions,
   saveSeoAutogenerationConditions
 } = require("./_seo/autogenerationSettings");
-const { getSeoContentPublicationStatus, runSeoContentPublication } = require("./_seo/contentPublisher");
+const {
+  getSeoContentPublicationDiagnostics,
+  getSeoContentPublicationStatus,
+  runSeoContentPublication
+} = require("./_seo/contentPublisher");
 const { runSeoLandingGeneration } = require("./_seo/generator");
 const { evaluateLandingIndexability } = require("./_seo/indexability");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
@@ -961,6 +965,17 @@ async function handleSeoAutogeneration(req, url) {
   const requestSource = isCronTokenRequest(req) && !isAdminTokenRequest(req) ? "cron" : "admin";
   const result = await runSeoContentPublication({ requestSource, config });
   return { status: result.ok === false ? 500 : 200, payload: result };
+}
+
+async function handleSeoAutogenerationDiagnostics(req, url) {
+  if (req.method !== "GET") {
+    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  }
+  const result = await getSeoContentPublicationDiagnostics({
+    template_type: url.searchParams.get("template_type") || url.searchParams.get("scope") || "all",
+    candidateLimit: url.searchParams.get("candidate_limit") || url.searchParams.get("limit") || undefined
+  });
+  return { status: 200, payload: result };
 }
 
 async function handleSeoAutogenerationSettings(req) {
@@ -5255,6 +5270,10 @@ async function handleAdminRequest(req, res) {
     }
     if (resource === "seo-autogenerate/settings") {
       const result = await handleSeoAutogenerationSettings(req);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "seo-autogenerate/diagnostics") {
+      const result = await handleSeoAutogenerationDiagnostics(req, url);
       return json(res, result.status, result.payload);
     }
     if (resource === "meta/connect") {

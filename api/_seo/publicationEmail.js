@@ -129,6 +129,12 @@ function scoreForResult(item = {}) {
   return Number.isFinite(score) ? score : 0;
 }
 
+function minScoreForSummary(summary = {}) {
+  const raw = summary.config?.min_score ?? summary.min_score ?? summary.minScore;
+  const score = Number(raw);
+  return Number.isFinite(score) ? score : null;
+}
+
 function publishedPagesFromSummary(summary = {}) {
   const results = Array.isArray(summary.results) ? summary.results : [];
   const explicitlyPublished = results.filter((item) => String(item.status || "").toLowerCase() === "published");
@@ -187,7 +193,79 @@ function resultReasons(item = {}) {
 
 function isNonPublishedDiagnosticResult(item = {}) {
   const status = String(item.status || "").toLowerCase();
-  return ["draft", "needs_review", "ready_to_publish", "skipped", "would_skip"].includes(status);
+  return ["draft", "needs_review", "ready_to_publish", "skipped", "would_skip", "failed"].includes(status);
+}
+
+function skipCounterStatus(item = {}) {
+  return ["skipped", "would_skip"].includes(String(item.status || "").toLowerCase());
+}
+
+function draftCounterStatus(item = {}) {
+  return ["draft", "needs_review", "ready_to_publish"].includes(String(item.status || "").toLowerCase());
+}
+
+function exactNonPublicationReason(item = {}, summary = {}) {
+  const status = String(item.status || "").toLowerCase();
+  if (status === "published") return null;
+  if (item.reason) return item.reason;
+
+  const qualityReasons = arrayOrEmpty(item.quality_reasons || item.rejection_reasons);
+  const indexabilityReasons = arrayOrEmpty(item.indexability_reasons);
+  const technicalReason = indexabilityReasons.find((reason) => reason !== "quality_score_below_threshold");
+  if (technicalReason) return technicalReason;
+
+  const minScore = minScoreForSummary(summary);
+  const score = scoreForResult(item);
+  if (minScore !== null && score < minScore) return "score_below_publish_threshold";
+  if (qualityReasons.length) return qualityReasons[0];
+  if (indexabilityReasons.length) return indexabilityReasons[0];
+  if (summary.dry_run || summary.mode === "dry_run") return "diagnostic_dry_run_only";
+  if (status === "draft") return "draft_created_for_review";
+  if (status === "needs_review") return "needs_editorial_review";
+  if (status === "ready_to_publish") return "ready_but_not_published_by_run";
+  if (status === "failed") return "candidate_failed";
+  if (skipCounterStatus(item)) return "candidate_skipped";
+  return "not_published";
+}
+
+function publicationDiagnosticCandidate(item = {}, summary = {}) {
+  const status = String(item.status || "").toLowerCase() || null;
+  const minScore = minScoreForSummary(summary);
+  const score = scoreForResult(item);
+  const countedAsSkip = skipCounterStatus(item);
+  const countedAsDraft = draftCounterStatus(item);
+  const notPublished = status !== "published";
+  const reason = exactNonPublicationReason(item, summary);
+  return {
+    target_path: targetPathForResult(item),
+    slug: item.slug || null,
+    title: item.title || null,
+    city: item.city || item.municipality || null,
+    template_type: item.template_type || item.page_type || null,
+    status,
+    reason,
+    original_reason: item.reason || null,
+    score,
+    min_score: minScore,
+    meets_min_score: minScore === null ? null : score >= minScore,
+    counted_as_skip: countedAsSkip,
+    counted_as_draft: countedAsDraft,
+    discarded_before_skip: Boolean(notPublished && !countedAsSkip),
+    quality_penalties: arrayOrEmpty(item.quality_penalties || item.penalties),
+    quality_warnings: arrayOrEmpty(item.quality_warnings || item.warnings),
+    quality_reasons: arrayOrEmpty(item.quality_reasons || item.rejection_reasons),
+    indexability_reasons: arrayOrEmpty(item.indexability_reasons),
+    technical_indexability_status: item.technical_indexability_status || null,
+    editorial_quality_status: item.editorial_quality_status || null,
+    sitemap_eligible: typeof item.sitemap_eligible === "boolean" ? item.sitemap_eligible : null,
+    sitemap_reason: item.sitemap_reason || null,
+    score_components: {
+      data_quality_score: item.data_quality_score ?? null,
+      uniqueness_score: item.uniqueness_score ?? null,
+      seo_opportunity_score: item.seo_opportunity_score ?? null,
+      conversion_potential_score: item.conversion_potential_score ?? null
+    }
+  };
 }
 
 function aggregateReasons(results = []) {
@@ -229,32 +307,27 @@ function nextStepsForNoPublication(reasonCounts = []) {
 function buildPublicationDiagnostics(summary = {}) {
   const results = Array.isArray(summary.results) ? summary.results : [];
   const diagnosticResults = results.filter(isNonPublishedDiagnosticResult);
+  const evaluatedCandidates = results.map((item) => publicationDiagnosticCandidate(item, summary));
+  const lowScoreResults = diagnosticResults
+    .map((item) => publicationDiagnosticCandidate(item, summary))
+    .filter((item) => item.meets_min_score === false || item.status !== "published");
   const reasonCounts = aggregateReasons(diagnosticResults);
   const publishedCount = safeInt(summary.published_count, 0);
+  const notCountedAsSkip = evaluatedCandidates.filter((item) => item.status !== "published" && !item.counted_as_skip);
   return {
-    min_score: safeInt(summary.config?.min_score, null),
+    min_score: minScoreForSummary(summary),
+    evaluated_candidates_count: results.length,
     published_count: publishedCount,
     draft_count: safeInt(summary.draft_count, 0),
     skipped_count: safeInt(summary.skipped_count, 0),
     failed_count: safeInt(summary.failed_count, 0),
+    non_published_count: evaluatedCandidates.filter((item) => item.status !== "published").length,
+    not_counted_as_skip_count: notCountedAsSkip.length,
+    discarded_before_skip_count: evaluatedCandidates.filter((item) => item.discarded_before_skip).length,
+    skip_counter_explanation: "skipped_count only counts candidates whose result status is skipped or would_skip; low-score ready_to_publish/needs_review/draft candidates can be non-published without incrementing skip.",
     reason_counts: reasonCounts,
-    low_score_results: diagnosticResults.slice(0, 10).map((item) => ({
-      target_path: targetPathForResult(item),
-      status: item.status || null,
-      reason: item.reason || null,
-      score: scoreForResult(item),
-      quality_penalties: arrayOrEmpty(item.quality_penalties || item.penalties),
-      quality_warnings: arrayOrEmpty(item.quality_warnings || item.warnings),
-      quality_reasons: arrayOrEmpty(item.quality_reasons || item.rejection_reasons),
-      technical_indexability_status: item.technical_indexability_status || null,
-      editorial_quality_status: item.editorial_quality_status || null,
-      score_components: {
-        data_quality_score: item.data_quality_score ?? null,
-        uniqueness_score: item.uniqueness_score ?? null,
-        seo_opportunity_score: item.seo_opportunity_score ?? null,
-        conversion_potential_score: item.conversion_potential_score ?? null
-      }
-    })),
+    evaluated_candidates: evaluatedCandidates.slice(0, 25),
+    low_score_results: lowScoreResults.slice(0, 10),
     next_steps: publishedCount === 0 ? nextStepsForNoPublication(reasonCounts) : []
   };
 }
@@ -850,6 +923,7 @@ async function attachSeoPublicationEmailNotification({ summary, storage, env = p
 module.exports = {
   attachSeoPublicationEmailNotification,
   buildPublicationDiagnostics,
+  publicationDiagnosticCandidate,
   buildSeoPublicationEmailConfig,
   buildSeoPublicationEmailPayload,
   countSeoPublicationTotals,
