@@ -16,6 +16,7 @@ const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { canPublishNow, runSeoLandingGeneration } = require("../api/_seo/generator");
 const {
   buildSeoContentPublicationConfig,
+  getSeoContentPublicationDiagnostics,
   nextSeoPublishRun,
   runSeoContentPublication
 } = require("../api/_seo/contentPublisher");
@@ -915,6 +916,77 @@ test("la publicacion SEO pasa score minimo configurable al quality gate", async 
 
   assert.equal(result.config.min_score, 95);
   assert.equal(received.minScore, 95);
+});
+
+test("diagnostico read-only explica candidatos bajo score que no cuentan como skip", async () => {
+  let startRunCalled = false;
+  let finishRunCalled = false;
+  let received = null;
+  const result = await getSeoContentPublicationDiagnostics({
+    now: "2026-05-22T12:00:00.000Z",
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: {
+      async startRun() {
+        startRunCalled = true;
+      },
+      async finishRun() {
+        finishRunCalled = true;
+      },
+      async fetchRecentRuns() {
+        return [];
+      },
+      async fetchRecentPublishedRows() {
+        return [];
+      }
+    },
+    runGeneration: async (options) => {
+      received = options;
+      return {
+        ok: true,
+        mode: "dry_run",
+        template_type: options.template_type,
+        generated_count: 1,
+        published_count: 0,
+        results: [
+          {
+            slug: "guias/comparar-pisos",
+            title: "Comparar pisos antes de llamar",
+            template_type: "editorial_guide",
+            status: "ready_to_publish",
+            quality_score: 86,
+            penalties: ["contenido_generico"],
+            warnings: ["fuente_visible_debil"],
+            rejection_reasons: [],
+            indexability_reasons: ["quality_score_below_threshold"],
+            sitemap_eligible: false
+          }
+        ]
+      };
+    }
+  });
+
+  const candidate = result.publication_diagnostics.evaluated_candidates[0];
+  assert.equal(startRunCalled, false);
+  assert.equal(finishRunCalled, false);
+  assert.equal(result.read_only, true);
+  assert.equal(result.writes_enabled, false);
+  assert.equal(received.mode, "dry_run");
+  assert.equal(received.minScore, 90);
+  assert.equal(result.generation_summary.skipped_count, 0);
+  assert.equal(result.counter_diagnosis.low_score_not_counted_as_skip, 1);
+  assert.equal(candidate.reason, "score_below_publish_threshold");
+  assert.equal(candidate.score, 86);
+  assert.equal(candidate.meets_min_score, false);
+  assert.equal(candidate.counted_as_skip, false);
+  assert.equal(candidate.discarded_before_skip, true);
+  assert.deepEqual(candidate.quality_penalties, ["contenido_generico"]);
+  assert.deepEqual(candidate.quality_warnings, ["fuente_visible_debil"]);
 });
 
 test("la publicacion SEO no salta el kill switch aunque settings este activo", async () => {

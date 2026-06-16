@@ -4292,6 +4292,126 @@
   overflow-wrap: anywhere;
 }
 
+.admin-seo-autogen-diagnostics {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-seo-autogen-diagnostics-panel {
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--admin-line);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 16px;
+}
+
+.admin-seo-autogen-diagnostics-panel.is-attention {
+  border-color: rgba(180, 83, 9, .28);
+  background: rgba(254, 243, 199, .22);
+}
+
+.admin-seo-autogen-diagnostics-panel.is-muted {
+  background: rgba(10, 20, 15, .03);
+}
+
+.admin-seo-autogen-diagnostics-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.admin-seo-autogen-diagnostics-head h3,
+.admin-seo-autogen-diagnostics-head p {
+  margin: 0;
+}
+
+.admin-seo-autogen-diagnostics-head h3 {
+  color: var(--admin-dark);
+  font-size: 16px;
+}
+
+.admin-seo-autogen-diagnostics-head p {
+  margin-top: 6px;
+  color: var(--admin-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-seo-autogen-diagnostic-counters,
+.admin-seo-autogen-run-counters,
+.admin-seo-autogen-token-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-seo-autogen-diagnostic-counters span,
+.admin-seo-autogen-run-counters span,
+.admin-seo-autogen-token-list span {
+  border: 1px solid rgba(10, 20, 15, .1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .74);
+  color: rgba(10, 20, 15, .72);
+  font-size: 12px;
+  line-height: 1.25;
+  padding: 5px 8px;
+}
+
+.admin-seo-autogen-diagnostic-counters b,
+.admin-seo-autogen-run-counters b {
+  color: var(--admin-dark);
+}
+
+.admin-seo-autogen-run-counters {
+  margin-top: 8px;
+}
+
+.admin-seo-autogen-diagnostics-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-seo-autogen-diagnostics-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.admin-seo-autogen-diagnostics-table th,
+.admin-seo-autogen-diagnostics-table td {
+  border-top: 1px solid var(--admin-line);
+  padding: 10px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-seo-autogen-diagnostics-table th {
+  color: var(--admin-muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.admin-seo-autogen-diagnostics-table td {
+  color: var(--admin-dark);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-seo-autogen-diagnostics-table code {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+@media (max-width: 720px) {
+  .admin-seo-autogen-diagnostics-head {
+    grid-template-columns: 1fr;
+  }
+}
+
 [data-admin-view="ventas"] .admin-table {
   min-width: 980px;
 }

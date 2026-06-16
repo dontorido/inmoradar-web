@@ -1,6 +1,6 @@
 const { hasSupabaseConfig, sanitizeErrorMessage, supabaseFetch } = require("../_utils");
 const { runSeoLandingGeneration } = require("./generator");
-const { attachSeoPublicationEmailNotification, countSeoPublicationTotals } = require("./publicationEmail");
+const { attachSeoPublicationEmailNotification, buildPublicationDiagnostics, countSeoPublicationTotals } = require("./publicationEmail");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot, buildSeoDailyTargets } = require("./publishingPolicy");
 const {
   defaultSeoAutogenerationConditions,
@@ -467,12 +467,100 @@ async function getSeoContentPublicationStatus(options = {}) {
   };
 }
 
+function diagnosticTemplateType(value = "all") {
+  const normalized = String(value || "all").trim().toLowerCase();
+  if (["landing", "landings"].includes(normalized)) return "landing_random";
+  if (["news", "guide", "guides", "editorial"].includes(normalized)) return "editorial_guide";
+  return normalized || "all";
+}
+
+async function getSeoContentPublicationDiagnostics(options = {}) {
+  const now = nowIso(options.now);
+  const env = options.env || process.env;
+  const storage = options.storage || createSeoContentPublicationStorage(env);
+  const { config, settingsState } = await resolveSeoContentPublicationConfig({ storage, env, options });
+  const [recentRuns, rows] = await Promise.all([
+    storage.fetchRecentRuns ? storage.fetchRecentRuns(10) : [],
+    storage.fetchRecentPublishedRows ? storage.fetchRecentPublishedRows({ now }) : []
+  ]);
+  const dailyPolicy = buildSeoDailyPolicySnapshot(rows, { now, targets: config.daily_targets });
+  const limits = limitSnapshot({ rows, policy: dailyPolicy, config, publishedThisRun: 0, now });
+  const candidateLimit = clampInt(options.candidateLimit ?? options.candidate_limit ?? options.limit, 25, 1, 25);
+  const templateType = diagnosticTemplateType(options.templateType || options.template_type || "all");
+  const runGeneration = options.runGeneration || runSeoLandingGeneration;
+  const generation = await runGeneration({
+    mode: "dry_run",
+    template_type: templateType,
+    limit: 1,
+    candidateLimit,
+    autoPublish: true,
+    includeExistingDrafts: true,
+    publishFirstEligible: true,
+    maxPublishesPerRun: config.max_per_run,
+    dailyPublishLimit: config.max_per_day,
+    minScore: config.min_score,
+    publishedToday: dailyPolicy.published_total_today,
+    now
+  });
+  const previewSummary = summarizeGenerationResult({
+    result: generation,
+    config: { ...config, dry_run: true },
+    now,
+    requestSource: "diagnostic",
+    rows,
+    policy: dailyPolicy,
+    selectedContentType: "diagnostic",
+    run: null
+  });
+  const diagnostics = buildPublicationDiagnostics(previewSummary);
+  const notPublishedCandidates = diagnostics.evaluated_candidates.filter((item) => item.status !== "published");
+
+  return {
+    ok: true,
+    read_only: true,
+    writes_enabled: false,
+    diagnostic_mode: "dry_run",
+    job_name: JOB_NAME,
+    generated_at: now,
+    template_type: templateType,
+    candidate_limit: candidateLimit,
+    config,
+    settings_status: {
+      read_only: Boolean(settingsState.read_only),
+      table_missing: Boolean(settingsState.table_missing),
+      reason: settingsState.reason || null,
+      updated_at: settingsState.updated_at || null
+    },
+    limits,
+    daily_policy: dailyPolicy,
+    latest_run: Array.isArray(recentRuns) ? recentRuns[0] || null : null,
+    recent_runs: Array.isArray(recentRuns) ? recentRuns : [],
+    generation_summary: {
+      generated_count: previewSummary.generated_count,
+      candidates_count: previewSummary.candidates_count,
+      published_count: previewSummary.published_count,
+      draft_count: previewSummary.draft_count,
+      skipped_count: previewSummary.skipped_count,
+      failed_count: previewSummary.failed_count,
+      non_published_count: notPublishedCandidates.length
+    },
+    publication_diagnostics: diagnostics,
+    counter_diagnosis: {
+      skipped_count_scope: "Only statuses skipped and would_skip increment skipped_count.",
+      low_score_not_counted_as_skip: notPublishedCandidates.filter((item) => item.meets_min_score === false && !item.counted_as_skip).length,
+      discarded_before_skip_count: diagnostics.discarded_before_skip_count,
+      explanation: diagnostics.skip_counter_explanation
+    }
+  };
+}
+
 module.exports = {
   JOB_NAME,
   MIN_PUBLISH_SCORE,
   SCHEDULE,
   buildSeoContentPublicationConfig,
   createSeoContentPublicationStorage,
+  getSeoContentPublicationDiagnostics,
   getSeoContentPublicationStatus,
   nextSeoPublishRun,
   nextSixHourRun: nextSeoPublishRun,
