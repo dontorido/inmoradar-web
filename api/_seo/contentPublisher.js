@@ -175,13 +175,24 @@ function createSeoContentPublicationStorage() {
     },
     async publishReadyToPublishLanding(landing, patch) {
       if (!hasSupabaseConfig()) throw new Error("Supabase is not configured");
-      const rows = await supabaseFetch(`seo_landings?slug=eq.${encodeURIComponent(landing.slug)}`, {
+      const params = new URLSearchParams({
+        status: "eq.ready_to_publish"
+      });
+      const landingId = landing.id ?? landing.landing_id;
+      if (landingId !== undefined && landingId !== null && landingId !== "") {
+        params.set("id", `eq.${landingId}`);
+      } else if (landing.slug) {
+        params.set("slug", `eq.${landing.slug}`);
+      } else {
+        throw new Error("landing_identifier_missing");
+      }
+      const rows = await supabaseFetch(`seo_landings?${params.toString()}`, {
         method: "PATCH",
         headers: { Prefer: "return=representation" },
         body: JSON.stringify(patch),
         timeoutMs: 8000
       });
-      return Array.isArray(rows) ? rows[0] : rows;
+      return Array.isArray(rows) ? rows[0] || null : rows || null;
     },
     async fetchAutogenerationConditions() {
       return readSeoAutogenerationConditions();
@@ -395,6 +406,18 @@ async function publishReadyToPublishLandings({ storage, config, now, limits, can
       const saved = storage.publishReadyToPublishLanding
         ? await storage.publishReadyToPublishLanding(landing, patch)
         : null;
+      if (!saved) {
+        results.push(
+          readyLandingResult({
+            landing,
+            status: "blocked",
+            reason: "status_changed_before_publish",
+            quality,
+            indexability
+          })
+        );
+        continue;
+      }
       publishedCount += 1;
       results.push(
         readyLandingResult({
@@ -417,6 +440,8 @@ async function publishReadyToPublishLandings({ storage, config, now, limits, can
     mode: config.dry_run ? "dry_run" : "publish",
     template_type: "ready_to_publish",
     content_type: "mixed",
+    content_type_policy_note:
+      "Existing ready_to_publish candidates are evaluated against total run/day/week quotas; selected_content_type only chooses generated fallback content.",
     generated_count: results.length,
     published_count: publishedCount,
     failed_count: failedCount,
@@ -579,6 +604,8 @@ async function runSeoContentPublication(options = {}) {
       return finalizeSummary({ storage, run, summary, status: "completed", env, emailNotification });
     }
 
+    // Existing ready_to_publish rows have already passed editorial generation and are
+    // promoted against total quotas; the daily content-type mix applies to fallback generation.
     const readyPublication = await publishReadyToPublishLandings({
       storage,
       config,

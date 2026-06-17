@@ -16,11 +16,12 @@ const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { canPublishNow, runSeoLandingGeneration } = require("../api/_seo/generator");
 const {
   buildSeoContentPublicationConfig,
+  createSeoContentPublicationStorage,
   getSeoContentPublicationDiagnostics,
   nextSeoPublishRun,
   runSeoContentPublication
 } = require("../api/_seo/contentPublisher");
-const { maybeSendSeoPublicationEmail } = require("../api/_seo/publicationEmail");
+const { buildPublicationDiagnostics, maybeSendSeoPublicationEmail } = require("../api/_seo/publicationEmail");
 const { evaluateLandingIndexability, evaluateSitemapEligibility } = require("../api/_seo/indexability");
 const { buildSeoDailyPolicySnapshot, selectNextSeoContentType } = require("../api/_seo/publishingPolicy");
 const { getSeedPublishedLanding } = require("../api/_seo/seedPublished");
@@ -983,6 +984,47 @@ function readyPublicationStorage(candidates, savedRows = []) {
   };
 }
 
+test("PATCH de READY_TO_PUBLISH se condiciona por id y status", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  let requestUrl = "";
+  let requestOptions = null;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url, options) => {
+    requestUrl = String(url);
+    requestOptions = options;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([{ id: 42, slug: "guias/comprar-para-alquilar-rentabilidad", status: "published" }])
+    };
+  };
+
+  try {
+    const storage = createSeoContentPublicationStorage();
+    const saved = await storage.publishReadyToPublishLanding(
+      { id: 42, slug: "guias/comprar-para-alquilar-rentabilidad", status: "ready_to_publish" },
+      { status: "published", index_status: "index" }
+    );
+    const url = new URL(requestUrl);
+    assert.equal(saved.id, 42);
+    assert.equal(requestOptions.method, "PATCH");
+    assert.equal(requestOptions.headers.Prefer, "return=representation");
+    assert.equal(url.pathname, "/rest/v1/seo_landings");
+    assert.equal(url.searchParams.get("id"), "eq.42");
+    assert.equal(url.searchParams.get("status"), "eq.ready_to_publish");
+    assert.equal(url.searchParams.get("slug"), null);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
 async function sitemapXmlForLandings(landings) {
   const previousUrl = process.env.SUPABASE_URL;
   const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1066,6 +1108,46 @@ test("la publicacion SEO promociona READY_TO_PUBLISH con score suficiente", asyn
   assert.match(sitemap.xml, /<lastmod>2026-05-22<\/lastmod>/);
 });
 
+test("la publicacion SEO no cuenta exito si el status cambia antes del PATCH", async () => {
+  const candidate = readyToPublishLanding();
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [];
+      },
+      async fetchReadyToPublishLandings() {
+        return [candidate];
+      },
+      async publishReadyToPublishLanding() {
+        return null;
+      }
+    }
+  });
+
+  assert.equal(result.published_count, 0);
+  assert.equal(result.skipped_count, 0);
+  assert.equal(result.results[0].status, "blocked");
+  assert.equal(result.results[0].reason, "status_changed_before_publish");
+  assert.equal(result.publication_diagnostics.evaluated_candidates[0].category, "blocked_by_status");
+});
+
 test("la publicacion SEO bloquea el segundo READY_TO_PUBLISH por maximo de ejecucion", async () => {
   const saved = [];
   const result = await runSeoContentPublication({
@@ -1122,6 +1204,46 @@ test("la publicacion SEO no promociona READY_TO_PUBLISH por score bajo", async (
   assert.equal(saved.length, 0);
   assert.equal(result.results[0].reason, "low_score");
   assert.equal(result.publication_diagnostics.evaluated_candidates[0].category, "low_score");
+});
+
+test("diagnostico clasifica calidad missing antes que flags operativas", () => {
+  const diagnostics = buildPublicationDiagnostics({
+    config: { min_score: 90 },
+    results: [
+      {
+        slug: "guias/canonical-missing",
+        status: "skipped",
+        reason: "canonical_missing",
+        quality_score: 100,
+        indexability_reasons: ["canonical_missing"]
+      },
+      {
+        slug: "guias/content-missing",
+        status: "skipped",
+        reason: "content_missing",
+        quality_score: 100,
+        indexability_reasons: ["content_missing"]
+      },
+      {
+        slug: "guias/autogen-disabled",
+        status: "skipped",
+        reason: "autogeneration_disabled",
+        quality_score: 100
+      },
+      {
+        slug: "guias/dry-run",
+        status: "would_publish",
+        reason: "dry_run_enabled",
+        quality_score: 100
+      }
+    ]
+  });
+  const bySlug = Object.fromEntries(diagnostics.evaluated_candidates.map((candidate) => [candidate.slug, candidate]));
+
+  assert.equal(bySlug["guias/canonical-missing"].category, "blocked_by_quality");
+  assert.equal(bySlug["guias/content-missing"].category, "blocked_by_quality");
+  assert.equal(bySlug["guias/autogen-disabled"].category, "blocked_by_flag");
+  assert.equal(bySlug["guias/dry-run"].category, "blocked_by_flag");
 });
 
 test("diagnostico read-only explica candidatos bajo score que no cuentan como skip", async () => {

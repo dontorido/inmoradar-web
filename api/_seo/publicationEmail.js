@@ -231,21 +231,22 @@ function exactNonPublicationReason(item = {}, summary = {}) {
 }
 
 function diagnosticCategory({ item, reason, status, minScore, score }) {
+  const reasonText = String(reason || "");
   if (status === "published") return "published";
   if (["execution_limit_reached", "daily_limit_reached", "weekly_limit_reached"].includes(reason)) return "blocked_by_limit";
-  if (/disabled|dry_run|flag|not_configured|missing/.test(String(reason || ""))) return "blocked_by_flag";
   if (reason === "low_score" || (minScore !== null && score < minScore)) return "low_score";
-  if (/^status_/.test(String(reason || "")) || ["draft_created_for_review", "needs_editorial_review", "ready_but_not_published_by_run"].includes(reason)) {
+  if (/^status_/.test(reasonText) || ["draft_created_for_review", "needs_editorial_review", "ready_but_not_published_by_run"].includes(reason)) {
     return "blocked_by_status";
   }
   if (
     arrayOrEmpty(item.quality_reasons || item.rejection_reasons).length ||
     arrayOrEmpty(item.quality_penalties || item.penalties).length ||
     arrayOrEmpty(item.indexability_reasons).length ||
-    /quality|canonical|index|noindex|content|technical|source|sitemap|editorial/.test(String(reason || ""))
+    /quality|canonical|index|noindex|content|technical|source|sitemap|editorial/.test(reasonText)
   ) {
     return "blocked_by_quality";
   }
+  if (/disabled|dry_run|flag|not_configured/.test(reasonText)) return "blocked_by_flag";
   if (status !== "published" && !skipCounterStatus(item)) return "discarded_before_skip";
   return "not_published";
 }
