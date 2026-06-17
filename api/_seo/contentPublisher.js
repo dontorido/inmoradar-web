@@ -600,11 +600,6 @@ async function runSeoContentPublication(options = {}) {
       return finalizeSummary({ storage, run, summary, status: "completed", env, emailNotification });
     }
     const selectedContentType = dailyPolicy.selected_content_type;
-    if (!selectedContentType) {
-      const summary = emptySummary({ config, now, requestSource, reason: dailyPolicy.skipped_reason, rows, policy: dailyPolicy, run });
-      summary.settings_status = settingsState;
-      return finalizeSummary({ storage, run, summary, status: "completed", env, emailNotification });
-    }
 
     // Existing ready_to_publish rows have already passed editorial generation and are
     // promoted against total quotas; the daily content-type mix applies to fallback generation.
@@ -635,6 +630,58 @@ async function runSeoContentPublication(options = {}) {
         env,
         emailNotification
       });
+    }
+
+    const existingReadyPublication = storage?.fetchReadyToPublishLandings
+      ? await runGeneration({
+          mode: config.dry_run ? "dry_run" : "publish",
+          template_type: "all",
+          limit: 1,
+          candidateLimit: 25,
+          autoPublish: !config.dry_run,
+          includeExistingDrafts: true,
+          existingDraftsOnly: true,
+          readyToPublishOnly: true,
+          publishFirstEligible: true,
+          maxPublishesPerRun: config.max_per_run,
+          dailyPublishLimit: config.max_per_day,
+          minScore: config.min_score,
+          publishedToday: dailyPolicy.published_total_today,
+          now
+        })
+      : null;
+    if (Number(existingReadyPublication?.generated_count || 0) > 0) {
+      const summary = summarizeGenerationResult({
+        result: {
+          ...existingReadyPublication,
+          template_type: "ready_to_publish_existing",
+          content_type: "mixed",
+          content_type_policy_note:
+            "Existing ready_to_publish/draft candidates are evaluated against total run/day/week quotas before selected_content_type fallback."
+        },
+        config,
+        now,
+        requestSource,
+        rows,
+        policy: dailyPolicy,
+        selectedContentType: selectedContentType || "existing_ready",
+        run
+      });
+      return finalizeSummary({
+        storage,
+        run,
+        summary: { ...summary, settings_status: settingsState },
+        status: summary.failed_count ? "failed" : "completed",
+        errorMessage: summary.failed_count ? "candidate_failed" : null,
+        env,
+        emailNotification
+      });
+    }
+
+    if (!selectedContentType) {
+      const summary = emptySummary({ config, now, requestSource, reason: dailyPolicy.skipped_reason, rows, policy: dailyPolicy, run });
+      summary.settings_status = settingsState;
+      return finalizeSummary({ storage, run, summary, status: "completed", env, emailNotification });
     }
 
     const result = await runGeneration({
@@ -750,6 +797,8 @@ async function getSeoContentPublicationDiagnostics(options = {}) {
     candidateLimit,
     autoPublish: true,
     includeExistingDrafts: true,
+    existingDraftsOnly: true,
+    readyToPublishOnly: true,
     publishFirstEligible: true,
     maxPublishesPerRun: config.max_per_run,
     dailyPublishLimit: config.max_per_day,

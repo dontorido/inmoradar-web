@@ -1187,6 +1187,84 @@ test("diagnostico READY_TO_PUBLISH valido muestra would_publish y limite por eje
   assert.equal(candidates[1].category, "blocked_by_limit");
 });
 
+test("cron real reutiliza candidatas existentes que diagnostico marcaria como would_publish", async () => {
+  const seenTemplates = [];
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [];
+      },
+      async fetchReadyToPublishLandings() {
+        return [];
+      }
+    },
+    runGeneration: async (options) => {
+      seenTemplates.push({
+        template_type: options.template_type,
+        existingDraftsOnly: options.existingDraftsOnly,
+        readyToPublishOnly: options.readyToPublishOnly
+      });
+      if (options.template_type !== "all" || options.existingDraftsOnly !== true || options.readyToPublishOnly !== true) {
+        return { ok: true, generated_count: 0, published_count: 0, results: [] };
+      }
+      return {
+        ok: true,
+        mode: "publish",
+        template_type: "all",
+        generated_count: 2,
+        published_count: 1,
+        results: [
+          {
+            slug: "guias/comprar-para-alquilar-rentabilidad",
+            title: "Comprar para alquilar: rentabilidad real",
+            template_type: "editorial_guide",
+            status: "published",
+            index_status: "index",
+            quality_score: 100,
+            final_score: 100,
+            sitemap_eligible: true
+          },
+          {
+            slug: "guias/reforma-costes-ocultos",
+            title: "Reforma: costes ocultos",
+            template_type: "editorial_guide",
+            status: "blocked",
+            reason: "execution_limit_reached",
+            quality_score: 100,
+            final_score: 100,
+            sitemap_eligible: true
+          }
+        ]
+      };
+    }
+  });
+
+  assert.deepEqual(seenTemplates, [{ template_type: "all", existingDraftsOnly: true, readyToPublishOnly: true }]);
+  assert.equal(result.published_count, 1);
+  assert.equal(result.candidates_count, 2);
+  assert.equal(result.publication_diagnostics.evaluated_candidates_count, 2);
+  assert.equal(result.publication_diagnostics.evaluated_candidates[0].category, "published");
+  assert.equal(result.publication_diagnostics.evaluated_candidates[1].reason, "execution_limit_reached");
+  assert.equal(result.publication_diagnostics.evaluated_candidates[1].category, "blocked_by_limit");
+});
+
 test("la publicacion SEO no cuenta exito si el status cambia antes del PATCH", async () => {
   const candidate = readyToPublishLanding();
   const result = await runSeoContentPublication({

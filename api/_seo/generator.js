@@ -274,13 +274,13 @@ function landingToOpportunity(landing) {
   };
 }
 
-async function fetchDraftLandingOpportunities({ limit, templateType }) {
+async function fetchDraftLandingOpportunities({ limit, templateType, readyToPublishOnly = false }) {
   if (!hasSupabaseConfig()) return [];
 
   const templateTypes = templateTypesForRequest(templateType);
   const params = new URLSearchParams({
     select: "id,opportunity_id,slug,title,city,province,autonomous_community,template_type,status,quality_score,updated_at",
-    status: "in.(draft,needs_review,ready_to_publish,noindex)",
+    status: readyToPublishOnly ? "in.(ready_to_publish,READY_TO_PUBLISH)" : "in.(draft,needs_review,ready_to_publish,noindex)",
     order: "updated_at.asc",
     limit: String(limit)
   });
@@ -289,7 +289,7 @@ async function fetchDraftLandingOpportunities({ limit, templateType }) {
   return Array.isArray(rows) ? rows.map(landingToOpportunity) : [];
 }
 
-async function fetchGenerationCandidates({ limit, templateType, includeExistingDrafts }) {
+async function fetchGenerationCandidates({ limit, templateType, includeExistingDrafts, existingDraftsOnly = false, readyToPublishOnly = false }) {
   if (!includeExistingDrafts) {
     return fetchPendingOpportunities({ limit, templateType });
   }
@@ -305,8 +305,8 @@ async function fetchGenerationCandidates({ limit, templateType, includeExistingD
   };
 
   const [drafts, pending] = await Promise.all([
-    fetchDraftLandingOpportunities({ limit, templateType }),
-    fetchPendingOpportunities({ limit, templateType })
+    fetchDraftLandingOpportunities({ limit, templateType, readyToPublishOnly }),
+    existingDraftsOnly ? Promise.resolve([]) : fetchPendingOpportunities({ limit, templateType })
   ]);
 
   drafts.forEach(add);
@@ -539,7 +539,8 @@ async function generateOne({ opportunity, mode, autoPublish, publishedToday, pub
     sourceData,
     quality,
     saved,
-    didPublish: canAutoPublish
+    didPublish: canAutoPublish,
+    wouldPublish: wouldPublishInDryRun
   };
 }
 
@@ -557,6 +558,8 @@ async function runSeoLandingGeneration(options = {}) {
   const templateType = options.template_type || options.templateType || "price_city";
   const autoPublish = options.autoPublish === true;
   const includeExistingDrafts = options.includeExistingDrafts === true;
+  const existingDraftsOnly = options.existingDraftsOnly === true;
+  const readyToPublishOnly = options.readyToPublishOnly === true;
   const publishFirstEligible = options.publishFirstEligible === true;
   const parsedMaxPublishesPerRun = Number.parseInt(String(options.maxPublishesPerRun ?? 1), 10);
   const parsedDailyPublishLimit = Number.parseInt(String(options.dailyPublishLimit ?? 1), 10);
@@ -573,13 +576,16 @@ async function runSeoLandingGeneration(options = {}) {
     (await fetchGenerationCandidates({
       limit: publishFirstEligible ? candidateLimit : limit,
       templateType,
-      includeExistingDrafts
+      includeExistingDrafts,
+      existingDraftsOnly,
+      readyToPublishOnly
     }));
   let publishedToday = await countPublishedToday(now);
   if (Number.isFinite(Number(options.publishedToday))) {
     publishedToday = Number(options.publishedToday);
   }
   let publishedThisRun = 0;
+  let consumedThisRun = 0;
   const results = [];
 
   for (const opportunity of opportunities.slice(0, publishFirstEligible ? candidateLimit : limit)) {
@@ -588,7 +594,7 @@ async function runSeoLandingGeneration(options = {}) {
       mode,
       autoPublish,
       publishedToday,
-      publishedThisRun,
+      publishedThisRun: consumedThisRun,
       dailyPublishLimit,
       maxPublishesPerRun,
       minScore,
@@ -597,9 +603,12 @@ async function runSeoLandingGeneration(options = {}) {
     if (generated.didPublish) {
       publishedToday += 1;
       publishedThisRun += 1;
+      consumedThisRun += 1;
+    } else if (generated.wouldPublish) {
+      consumedThisRun += 1;
     }
     results.push(resultSummary(generated.record, generated.sourceData, generated.quality, generated.saved));
-    if (publishFirstEligible && generated.didPublish && publishedThisRun >= maxPublishesPerRun) break;
+    if (publishFirstEligible && consumedThisRun >= maxPublishesPerRun) break;
   }
 
   return {
@@ -612,6 +621,8 @@ async function runSeoLandingGeneration(options = {}) {
     candidate_limit: publishFirstEligible ? candidateLimit : limit,
     autoPublish,
     includeExistingDrafts,
+    existingDraftsOnly,
+    readyToPublishOnly,
     dailyPublishLimit,
     maxPublishesPerRun,
     minScore,
