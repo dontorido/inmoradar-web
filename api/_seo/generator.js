@@ -485,13 +485,27 @@ async function generateOne({ opportunity, mode, autoPublish, publishedToday, pub
       maxPublishesPerRun,
       minScore
     });
-  const status = landingStatus(quality.score, canAutoPublish);
-  const indexStatus = canAutoPublish ? "index" : "noindex";
+  const wouldPublishInDryRun =
+    dryRun &&
+    autoPublish &&
+    publishIndexability.can_publish &&
+    canPublishNow({
+      mode: "publish",
+      autoPublish: true,
+      quality,
+      publishedToday,
+      publishedThisRun,
+      dailyPublishLimit,
+      maxPublishesPerRun,
+      minScore
+    });
+  const status = wouldPublishInDryRun ? "would_publish" : landingStatus(quality.score, canAutoPublish);
+  const indexStatus = canAutoPublish || wouldPublishInDryRun ? "index" : "noindex";
   const publishedAt = canAutoPublish ? now : null;
   const indexability = evaluateLandingIndexability(
     {
       ...landing,
-      status,
+      status: canAutoPublish || wouldPublishInDryRun ? "published" : status,
       index_status: indexStatus,
       quality_score: quality.score,
       word_count: quality.word_count

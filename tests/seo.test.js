@@ -1025,6 +1025,40 @@ test("PATCH de READY_TO_PUBLISH se condiciona por id y status", async () => {
   }
 });
 
+test("fetch READY_TO_PUBLISH usa consulta tolerante y columnas reales", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  let requestUrl = "";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url) => {
+    requestUrl = String(url);
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([readyToPublishLanding({ id: 7 })])
+    };
+  };
+
+  try {
+    const storage = createSeoContentPublicationStorage();
+    const rows = await storage.fetchReadyToPublishLandings({ candidateLimit: 2 });
+    const url = new URL(requestUrl);
+    assert.equal(rows.length, 1);
+    assert.equal(url.pathname, "/rest/v1/seo_landings");
+    assert.equal(url.searchParams.get("select"), "*");
+    assert.equal(url.searchParams.get("status"), "in.(ready_to_publish,READY_TO_PUBLISH)");
+    assert.equal(url.searchParams.get("limit"), "2");
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
 async function sitemapXmlForLandings(landings) {
   const previousUrl = process.env.SUPABASE_URL;
   const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1063,7 +1097,15 @@ async function sitemapXmlForLandings(landings) {
 
 test("la publicacion SEO promociona READY_TO_PUBLISH con score suficiente", async () => {
   const saved = [];
-  const candidate = readyToPublishLanding();
+  const candidate = readyToPublishLanding({
+    source_data_json: {
+      indexability: {
+        sitemap_eligible: false,
+        sitemap_reason: "status_ready_to_publish",
+        reasons: ["status_ready_to_publish", "noindex", "not_public_ready_to_publish"]
+      }
+    }
+  });
   let generationCalled = false;
   const result = await runSeoContentPublication({
     now: "2026-05-22T12:00:00.000Z",
@@ -1088,6 +1130,7 @@ test("la publicacion SEO promociona READY_TO_PUBLISH con score suficiente", asyn
 
   assert.equal(generationCalled, false);
   assert.equal(result.published_count, 1);
+  assert.equal(result.candidates_count, 1);
   assert.equal(result.draft_count, 0);
   assert.equal(result.skipped_count, 0);
   assert.equal(result.results[0].status, "published");
@@ -1096,6 +1139,9 @@ test("la publicacion SEO promociona READY_TO_PUBLISH con score suficiente", asyn
   assert.equal(saved[0].status, "published");
   assert.equal(saved[0].index_status, "index");
   assert.equal(saved[0].published_at, "2026-05-22T12:00:00.000Z");
+  assert.equal(saved[0].source_data_json.indexability.sitemap_eligible, true);
+  assert.equal(saved[0].source_data_json.indexability.reasons.includes("not_public_ready_to_publish"), false);
+  assert.equal(saved[0].source_data_json.indexability.reasons.includes("noindex"), false);
 
   const html = renderLandingHtml(saved[0]);
   assert.match(html, /<meta name="robots" content="index,follow">/);
@@ -1106,6 +1152,39 @@ test("la publicacion SEO promociona READY_TO_PUBLISH con score suficiente", asyn
   assert.equal(sitemap.statusCode, 200);
   assert.match(sitemap.xml, /https:\/\/inmoradar\.app\/guias\/comprar-para-alquilar-rentabilidad\//);
   assert.match(sitemap.xml, /<lastmod>2026-05-22<\/lastmod>/);
+});
+
+test("diagnostico READY_TO_PUBLISH valido muestra would_publish y limite por ejecucion", async () => {
+  const result = await getSeoContentPublicationDiagnostics({
+    now: "2026-05-22T12:00:00.000Z",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: readyPublicationStorage([
+      readyToPublishLanding({ id: 1, slug: "guias/comprar-para-alquilar-rentabilidad" }),
+      readyToPublishLanding({ id: 2, slug: "guias/reforma-costes-ocultos", title: "Reforma: costes ocultos" })
+    ])
+  });
+
+  const candidates = result.publication_diagnostics.evaluated_candidates;
+  assert.equal(result.generation_summary.generated_count, 2);
+  assert.equal(result.generation_summary.candidates_count, 2);
+  assert.equal(result.generation_summary.draft_count, 0);
+  assert.equal(candidates.length, 2);
+  assert.equal(candidates[0].status, "would_publish");
+  assert.equal(candidates[0].reason, "dry_run_enabled");
+  assert.notEqual(candidates[0].category, "blocked_by_status");
+  assert.equal(candidates[1].status, "blocked");
+  assert.equal(candidates[1].reason, "execution_limit_reached");
+  assert.equal(candidates[1].category, "blocked_by_limit");
 });
 
 test("la publicacion SEO no cuenta exito si el status cambia antes del PATCH", async () => {

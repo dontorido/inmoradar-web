@@ -165,9 +165,8 @@ function createSeoContentPublicationStorage() {
     async fetchReadyToPublishLandings({ candidateLimit = 25 } = {}) {
       if (!hasSupabaseConfig()) return [];
       const params = new URLSearchParams({
-        select:
-          "id,opportunity_id,slug,title,meta_title,meta_description,h1,body_html,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,updated_at,source_data_json",
-        status: "eq.ready_to_publish",
+        select: "*",
+        status: "in.(ready_to_publish,READY_TO_PUBLISH)",
         order: "quality_score.desc,updated_at.asc",
         limit: String(Math.max(1, Math.min(25, Number(candidateLimit) || 25)))
       });
@@ -352,7 +351,7 @@ function readyLandingPublicationBlocker({ landing, quality, indexability, config
   }
   const rejectionReasons = arrayOrEmpty(quality?.rejection_reasons);
   if (rejectionReasons.length) return rejectionReasons[0];
-  if (!indexability.sitemap_eligible) return indexability.sitemap_reason || indexability.primary_reason || "quality_blocked";
+  if (!indexability.can_publish) return indexability.publish_reasons?.[0] || indexability.primary_reason || "quality_blocked";
   return null;
 }
 
@@ -363,6 +362,7 @@ async function publishReadyToPublishLandings({ storage, config, now, limits, can
 
   const results = [];
   let publishedCount = 0;
+  let consumedRunSlots = 0;
   let failedCount = 0;
 
   for (const landing of candidates) {
@@ -382,7 +382,7 @@ async function publishReadyToPublishLandings({ storage, config, now, limits, can
       indexability,
       config,
       limits,
-      publishedThisRun: publishedCount
+      publishedThisRun: consumedRunSlots
     });
 
     if (blocker) {
@@ -393,6 +393,7 @@ async function publishReadyToPublishLandings({ storage, config, now, limits, can
 
     if (config.dry_run) {
       results.push(readyLandingResult({ landing, status: "would_publish", reason: "dry_run_enabled", quality, indexability }));
+      consumedRunSlots += 1;
       continue;
     }
 
@@ -419,6 +420,7 @@ async function publishReadyToPublishLandings({ storage, config, now, limits, can
         continue;
       }
       publishedCount += 1;
+      consumedRunSlots += 1;
       results.push(
         readyLandingResult({
           landing: { ...landing, ...patch },
