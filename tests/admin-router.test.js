@@ -63,6 +63,39 @@ function jsonResponse(rows) {
   };
 }
 
+test("admin seo diagnostics endpoint is read-only without Supabase", async () => {
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: undefined,
+      SUPABASE_SERVICE_ROLE_KEY: undefined,
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "true"
+    },
+    async () => {
+      const { res, payload } = createJsonResponse();
+      await adminHandler(
+        {
+          method: "GET",
+          url: "/api/admin?resource=seo-autogenerate/diagnostics&candidate_limit=2",
+          headers: { host: "inmoradar.app", authorization: "Bearer admin-test-token" }
+        },
+        res
+      );
+      const body = payload();
+
+      assert.equal(res.statusCode, 200);
+      assert.equal(body.ok, true);
+      assert.equal(body.read_only, true);
+      assert.equal(body.writes_enabled, false);
+      assert.equal(body.diagnostic_mode, "dry_run");
+      assert.ok(body.publication_diagnostics);
+      assert.ok(Array.isArray(body.publication_diagnostics.evaluated_candidates));
+      assert.ok(body.counter_diagnosis.explanation.includes("skipped_count"));
+    }
+  );
+});
+
 const RICH_SEO_BODY = `
   <section data-city-specific="true"><p>${"Logrono precio vivienda fuente fecha anuncio ".repeat(120)}</p></section>
   <section data-city-specific="true"><p>Fuente: MIVAU. Fecha del dato: 4T 2025.</p><a href="/datos">Datos</a></section>

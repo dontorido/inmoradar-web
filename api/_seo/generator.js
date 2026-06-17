@@ -351,6 +351,7 @@ function canPublishNow({ mode, autoPublish, quality, publishedToday, publishedTh
   if (mode !== "publish" || !autoPublish) return false;
   if (quality.score < minScore) return false;
   if (quality.technical_indexability_status === "blocked") return false;
+  if (quality.editorial_quality_status && !["pass", "ok"].includes(String(quality.editorial_quality_status).toLowerCase())) return false;
   if (Array.isArray(quality.rejection_reasons) && quality.rejection_reasons.length) return false;
   if (publishedThisRun >= maxPublishesPerRun) return false;
   if (dailyPublishLimit !== null && publishedToday >= dailyPublishLimit) return false;

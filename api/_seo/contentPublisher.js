@@ -1,6 +1,7 @@
 const { hasSupabaseConfig, sanitizeErrorMessage, supabaseFetch } = require("../_utils");
 const { runSeoLandingGeneration } = require("./generator");
-const { attachSeoPublicationEmailNotification, countSeoPublicationTotals } = require("./publicationEmail");
+const { evaluateLandingIndexability } = require("./indexability");
+const { attachSeoPublicationEmailNotification, buildPublicationDiagnostics, countSeoPublicationTotals } = require("./publicationEmail");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot, buildSeoDailyTargets } = require("./publishingPolicy");
 const {
   defaultSeoAutogenerationConditions,
@@ -161,6 +162,27 @@ function createSeoContentPublicationStorage() {
       const rows = await safeSupabase("seo_landings?select=status,index_status&limit=5000", []);
       return countSeoPublicationTotals(rows);
     },
+    async fetchReadyToPublishLandings({ candidateLimit = 25 } = {}) {
+      if (!hasSupabaseConfig()) return [];
+      const params = new URLSearchParams({
+        select:
+          "id,opportunity_id,slug,title,meta_title,meta_description,h1,body_html,city,province,autonomous_community,template_type,status,index_status,quality_score,word_count,canonical_url,published_at,last_generated_at,updated_at,source_data_json",
+        status: "eq.ready_to_publish",
+        order: "quality_score.desc,updated_at.asc",
+        limit: String(Math.max(1, Math.min(25, Number(candidateLimit) || 25)))
+      });
+      return safeSupabase(`seo_landings?${params.toString()}`, []);
+    },
+    async publishReadyToPublishLanding(landing, patch) {
+      if (!hasSupabaseConfig()) throw new Error("Supabase is not configured");
+      const rows = await supabaseFetch(`seo_landings?slug=eq.${encodeURIComponent(landing.slug)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(patch),
+        timeoutMs: 8000
+      });
+      return Array.isArray(rows) ? rows[0] : rows;
+    },
     async fetchAutogenerationConditions() {
       return readSeoAutogenerationConditions();
     }
@@ -218,7 +240,7 @@ function emptySummary({ config, now, requestSource, reason, rows = [], policy = 
     target_landings_per_day: config.target_landings_per_day,
     target_news_per_day: config.target_news_per_day,
     selected_content_type: dailyPolicy.selected_content_type,
-    skipped_reason: dailyPolicy.skipped_reason || reason || null,
+    skipped_reason: reason || dailyPolicy.skipped_reason || null,
     cron: {
       schedule: SCHEDULE,
       policy: `publish up to ${config.max_per_day} SEO pieces/day with configurable backoffice limits`,
@@ -246,17 +268,180 @@ function normalizeResult(item = {}) {
   };
 }
 
+function parseJsonMaybe(value, fallback = {}) {
+  if (!value) return fallback;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function arrayOrEmpty(value) {
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
+function qualityFromReadyLanding(landing = {}) {
+  const sourceData = parseJsonMaybe(landing.source_data_json, {});
+  return parseJsonMaybe(sourceData.quality, {});
+}
+
+function scoreFromReadyLanding(landing = {}, quality = {}) {
+  const score = Number(landing.quality_score ?? quality.score ?? 0);
+  return Number.isFinite(score) ? score : 0;
+}
+
+function sourceDataWithIndexability(landing = {}, indexability = {}) {
+  return {
+    ...parseJsonMaybe(landing.source_data_json, {}),
+    indexability
+  };
+}
+
+function readyLandingResult({ landing, status, reason = null, quality, indexability, saved = false, publishedAt = null }) {
+  const score = scoreFromReadyLanding(landing, quality);
+  return normalizeResult({
+    slug: landing.slug,
+    title: landing.title,
+    city: landing.city,
+    template_type: landing.template_type,
+    status,
+    reason,
+    index_status: status === "published" ? "index" : landing.index_status,
+    quality_score: score,
+    final_score: score,
+    word_count: indexability?.word_count ?? landing.word_count,
+    canonical_url: landing.canonical_url,
+    published_at: publishedAt || landing.published_at || null,
+    quality_penalties: arrayOrEmpty(quality?.penalties),
+    quality_warnings: arrayOrEmpty(quality?.warnings),
+    quality_reasons: arrayOrEmpty(quality?.rejection_reasons),
+    indexability_reasons: arrayOrEmpty(indexability?.reasons),
+    sitemap_eligible: Boolean(indexability?.sitemap_eligible),
+    sitemap_reason: indexability?.sitemap_reason || null,
+    technical_indexability_status: quality?.technical_indexability_status || null,
+    editorial_quality_status: quality?.editorial_quality_status || null,
+    saved: Boolean(saved)
+  });
+}
+
+function readyLandingPublicationBlocker({ landing, quality, indexability, config, limits, publishedThisRun }) {
+  const status = String(landing.status || "").toLowerCase();
+  const score = scoreFromReadyLanding(landing, quality);
+  if (status !== "ready_to_publish") return `status_${status || "unknown"}`;
+  if (!config.enabled) return "autogeneration_disabled";
+  if (publishedThisRun >= config.max_per_run) return "execution_limit_reached";
+  if (Number(limits.remaining_day || 0) - publishedThisRun <= 0) return "daily_limit_reached";
+  if (Number(limits.remaining_week || 0) - publishedThisRun <= 0) return "weekly_limit_reached";
+  if (score < config.min_score) return "low_score";
+  if (quality?.technical_indexability_status === "blocked") return "technical_indexability_blocked";
+  if (quality?.editorial_quality_status && !["pass", "ok"].includes(String(quality.editorial_quality_status).toLowerCase())) {
+    return "editorial_quality_blocked";
+  }
+  const rejectionReasons = arrayOrEmpty(quality?.rejection_reasons);
+  if (rejectionReasons.length) return rejectionReasons[0];
+  if (!indexability.sitemap_eligible) return indexability.sitemap_reason || indexability.primary_reason || "quality_blocked";
+  return null;
+}
+
+async function publishReadyToPublishLandings({ storage, config, now, limits, candidateLimit = 25 }) {
+  if (!storage?.fetchReadyToPublishLandings) return null;
+  const candidates = await storage.fetchReadyToPublishLandings({ candidateLimit, config, now });
+  if (!Array.isArray(candidates) || !candidates.length) return null;
+
+  const results = [];
+  let publishedCount = 0;
+  let failedCount = 0;
+
+  for (const landing of candidates) {
+    const quality = qualityFromReadyLanding(landing);
+    const score = scoreFromReadyLanding(landing, quality);
+    const publishCandidate = {
+      ...landing,
+      status: "published",
+      index_status: "index",
+      quality_score: score,
+      word_count: landing.word_count ?? quality.word_count
+    };
+    const indexability = evaluateLandingIndexability(publishCandidate, { quality, minQualityScore: config.min_score });
+    const blocker = readyLandingPublicationBlocker({
+      landing,
+      quality,
+      indexability,
+      config,
+      limits,
+      publishedThisRun: publishedCount
+    });
+
+    if (blocker) {
+      const blockedStatus = /_limit_reached$/.test(blocker) ? "blocked" : "skipped";
+      results.push(readyLandingResult({ landing, status: blockedStatus, reason: blocker, quality, indexability }));
+      continue;
+    }
+
+    if (config.dry_run) {
+      results.push(readyLandingResult({ landing, status: "would_publish", reason: "dry_run_enabled", quality, indexability }));
+      continue;
+    }
+
+    try {
+      const patch = {
+        status: "published",
+        index_status: "index",
+        published_at: now,
+        source_data_json: sourceDataWithIndexability(landing, indexability)
+      };
+      const saved = storage.publishReadyToPublishLanding
+        ? await storage.publishReadyToPublishLanding(landing, patch)
+        : null;
+      publishedCount += 1;
+      results.push(
+        readyLandingResult({
+          landing: { ...landing, ...patch },
+          status: "published",
+          quality,
+          indexability,
+          saved: saved || true,
+          publishedAt: now
+        })
+      );
+    } catch (error) {
+      failedCount += 1;
+      results.push(readyLandingResult({ landing, status: "failed", reason: safeError(error), quality, indexability }));
+    }
+  }
+
+  return {
+    ok: failedCount === 0,
+    mode: config.dry_run ? "dry_run" : "publish",
+    template_type: "ready_to_publish",
+    content_type: "mixed",
+    generated_count: results.length,
+    published_count: publishedCount,
+    failed_count: failedCount,
+    results
+  };
+}
+
 function summarizeGenerationResult({ result, config, now, requestSource, rows, policy, selectedContentType, run }) {
   const normalizedResults = (Array.isArray(result.results) ? result.results : []).map(normalizeResult);
   const publishedCount = Number(result.published_count || 0);
+  const publishedResults = normalizedResults.filter((item) => String(item.status || "").toLowerCase() === "published");
+  let publishedLandingsDelta = publishedResults.filter((item) => String(item.template_type || "") !== "editorial_guide").length;
+  let publishedNewsDelta = publishedResults.filter((item) => String(item.template_type || "") === "editorial_guide").length;
+  if (publishedCount > publishedResults.length) {
+    if (selectedContentType === "news") publishedNewsDelta += publishedCount - publishedResults.length;
+    else publishedLandingsDelta += publishedCount - publishedResults.length;
+  }
   const afterPolicy = {
     ...policy,
-    published_landings_today: policy.published_landings_today + (selectedContentType === "landing" ? publishedCount : 0),
-    published_news_today: policy.published_news_today + (selectedContentType === "news" ? publishedCount : 0),
+    published_landings_today: policy.published_landings_today + publishedLandingsDelta,
+    published_news_today: policy.published_news_today + publishedNewsDelta,
     published_total_today: policy.published_total_today + publishedCount
   };
   const wouldPublishCount = config.dry_run
-    ? normalizedResults.filter((item) => Number(item.final_score || 0) >= config.min_score).length
+    ? normalizedResults.filter((item) => ["would_publish", "published"].includes(String(item.status || "")) || Number(item.final_score || 0) >= config.min_score).length
     : 0;
   const draftCount = normalizedResults.filter((item) => ["draft", "ready_to_publish", "needs_review"].includes(String(item.status || ""))).length;
   const failedCount = normalizedResults.filter((item) => String(item.status || "") === "failed").length;
@@ -382,11 +567,45 @@ async function runSeoContentPublication(options = {}) {
       summary.settings_status = settingsState;
       return finalizeSummary({ storage, run, summary, status: "completed", env, emailNotification });
     }
+    if (currentLimits.remaining_day <= 0) {
+      const summary = emptySummary({ config, now, requestSource, reason: "daily_limit_reached", rows, policy: dailyPolicy, run });
+      summary.settings_status = settingsState;
+      return finalizeSummary({ storage, run, summary, status: "completed", env, emailNotification });
+    }
     const selectedContentType = dailyPolicy.selected_content_type;
     if (!selectedContentType) {
       const summary = emptySummary({ config, now, requestSource, reason: dailyPolicy.skipped_reason, rows, policy: dailyPolicy, run });
       summary.settings_status = settingsState;
       return finalizeSummary({ storage, run, summary, status: "completed", env, emailNotification });
+    }
+
+    const readyPublication = await publishReadyToPublishLandings({
+      storage,
+      config,
+      now,
+      limits: currentLimits,
+      candidateLimit: 25
+    });
+    if (readyPublication) {
+      const summary = summarizeGenerationResult({
+        result: readyPublication,
+        config,
+        now,
+        requestSource,
+        rows,
+        policy: dailyPolicy,
+        selectedContentType,
+        run
+      });
+      return finalizeSummary({
+        storage,
+        run,
+        summary: { ...summary, settings_status: settingsState },
+        status: summary.failed_count ? "failed" : "completed",
+        errorMessage: summary.failed_count ? "candidate_failed" : null,
+        env,
+        emailNotification
+      });
     }
 
     const result = await runGeneration({
@@ -467,12 +686,107 @@ async function getSeoContentPublicationStatus(options = {}) {
   };
 }
 
+function diagnosticTemplateType(value = "all") {
+  const normalized = String(value || "all").trim().toLowerCase();
+  if (["landing", "landings"].includes(normalized)) return "landing_random";
+  if (["news", "guide", "guides", "editorial"].includes(normalized)) return "editorial_guide";
+  return normalized || "all";
+}
+
+async function getSeoContentPublicationDiagnostics(options = {}) {
+  const now = nowIso(options.now);
+  const env = options.env || process.env;
+  const storage = options.storage || createSeoContentPublicationStorage(env);
+  const { config, settingsState } = await resolveSeoContentPublicationConfig({ storage, env, options });
+  const [recentRuns, rows] = await Promise.all([
+    storage.fetchRecentRuns ? storage.fetchRecentRuns(10) : [],
+    storage.fetchRecentPublishedRows ? storage.fetchRecentPublishedRows({ now }) : []
+  ]);
+  const dailyPolicy = buildSeoDailyPolicySnapshot(rows, { now, targets: config.daily_targets });
+  const limits = limitSnapshot({ rows, policy: dailyPolicy, config, publishedThisRun: 0, now });
+  const candidateLimit = clampInt(options.candidateLimit ?? options.candidate_limit ?? options.limit, 25, 1, 25);
+  const templateType = diagnosticTemplateType(options.templateType || options.template_type || "all");
+  const runGeneration = options.runGeneration || runSeoLandingGeneration;
+  const readyPublication = await publishReadyToPublishLandings({
+    storage,
+    config: { ...config, dry_run: true },
+    now,
+    limits,
+    candidateLimit
+  });
+  const generation = readyPublication || (await runGeneration({
+    mode: "dry_run",
+    template_type: templateType,
+    limit: 1,
+    candidateLimit,
+    autoPublish: true,
+    includeExistingDrafts: true,
+    publishFirstEligible: true,
+    maxPublishesPerRun: config.max_per_run,
+    dailyPublishLimit: config.max_per_day,
+    minScore: config.min_score,
+    publishedToday: dailyPolicy.published_total_today,
+    now
+  }));
+  const previewSummary = summarizeGenerationResult({
+    result: generation,
+    config: { ...config, dry_run: true },
+    now,
+    requestSource: "diagnostic",
+    rows,
+    policy: dailyPolicy,
+    selectedContentType: "diagnostic",
+    run: null
+  });
+  const diagnostics = buildPublicationDiagnostics(previewSummary);
+  const notPublishedCandidates = diagnostics.evaluated_candidates.filter((item) => item.status !== "published");
+
+  return {
+    ok: true,
+    read_only: true,
+    writes_enabled: false,
+    diagnostic_mode: "dry_run",
+    job_name: JOB_NAME,
+    generated_at: now,
+    template_type: templateType,
+    candidate_limit: candidateLimit,
+    config,
+    settings_status: {
+      read_only: Boolean(settingsState.read_only),
+      table_missing: Boolean(settingsState.table_missing),
+      reason: settingsState.reason || null,
+      updated_at: settingsState.updated_at || null
+    },
+    limits,
+    daily_policy: dailyPolicy,
+    latest_run: Array.isArray(recentRuns) ? recentRuns[0] || null : null,
+    recent_runs: Array.isArray(recentRuns) ? recentRuns : [],
+    generation_summary: {
+      generated_count: previewSummary.generated_count,
+      candidates_count: previewSummary.candidates_count,
+      published_count: previewSummary.published_count,
+      draft_count: previewSummary.draft_count,
+      skipped_count: previewSummary.skipped_count,
+      failed_count: previewSummary.failed_count,
+      non_published_count: notPublishedCandidates.length
+    },
+    publication_diagnostics: diagnostics,
+    counter_diagnosis: {
+      skipped_count_scope: "Only statuses skipped and would_skip increment skipped_count.",
+      low_score_not_counted_as_skip: notPublishedCandidates.filter((item) => item.meets_min_score === false && !item.counted_as_skip).length,
+      discarded_before_skip_count: diagnostics.discarded_before_skip_count,
+      explanation: diagnostics.skip_counter_explanation
+    }
+  };
+}
+
 module.exports = {
   JOB_NAME,
   MIN_PUBLISH_SCORE,
   SCHEDULE,
   buildSeoContentPublicationConfig,
   createSeoContentPublicationStorage,
+  getSeoContentPublicationDiagnostics,
   getSeoContentPublicationStatus,
   nextSeoPublishRun,
   nextSixHourRun: nextSeoPublishRun,

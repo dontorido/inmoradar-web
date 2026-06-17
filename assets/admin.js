@@ -342,6 +342,7 @@ const els = {
   seoAutogenRuns: document.querySelector("[data-seo-autogen-runs]"),
   seoAutogenRun: document.querySelector("[data-seo-autogen-run]"),
   seoAutogenNote: document.querySelector("[data-seo-autogen-note]"),
+  seoAutogenDiagnostics: document.querySelector("[data-seo-autogen-diagnostics]"),
   seoAutogenConditionsForm: document.querySelector("[data-seo-autogen-conditions-form]"),
   seoAutogenConditionsFeedback: document.querySelector("[data-seo-autogen-conditions-feedback]"),
   seoAutogenEnabled: document.querySelector("[data-seo-autogen-enabled]"),
@@ -2410,6 +2411,200 @@ function seoAutogenReasons(item = {}) {
   ]);
 }
 
+function seoAutogenNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function seoAutogenDiagnosticCandidates(source = {}) {
+  const diagnostics = source.publication_diagnostics || source || {};
+  const candidates =
+    source.candidates ||
+    diagnostics.evaluated_candidates ||
+    diagnostics.low_score_results ||
+    [];
+  return Array.isArray(candidates) ? candidates.filter(Boolean) : [];
+}
+
+function seoAutogenDiagnosticsCounts(source = {}) {
+  const diagnostics = source.publication_diagnostics || source || {};
+  const summary = source.generation_summary || {};
+  const counter = source.counter_diagnosis || {};
+  const candidates = seoAutogenDiagnosticCandidates(source);
+  const nonPublishedFallback = candidates.filter((item) => String(item.status || "").toLowerCase() !== "published").length;
+  const lowScoreFallback = candidates.filter((item) => item.meets_min_score === false && item.counted_as_skip !== true).length;
+  const beforeSkipFallback = candidates.filter((item) => item.discarded_before_skip === true || (String(item.status || "").toLowerCase() !== "published" && item.counted_as_skip !== true)).length;
+  return {
+    nonPublished: seoAutogenNumber(summary.non_published_count ?? diagnostics.non_published_count, nonPublishedFallback),
+    lowScore: seoAutogenNumber(counter.low_score_not_counted_as_skip ?? diagnostics.low_score_not_counted_as_skip, lowScoreFallback),
+    beforeSkip: seoAutogenNumber(counter.discarded_before_skip_count ?? diagnostics.discarded_before_skip_count, beforeSkipFallback)
+  };
+}
+
+function seoAutogenReasonCopy(value) {
+  const code = String(value || "").trim();
+  const map = {
+    autogeneration_disabled: "La autogeneracion esta pausada.",
+    candidate_failed: "El candidato fallo durante la revision.",
+    dry_run_enabled: "La ejecucion esta en modo simulacion.",
+    city_required: "Falta la ciudad del candidato.",
+    city_level_data_missing: "Falta dato de ciudad; solo hay dato mas amplio.",
+    daily_limit_reached: "Se alcanzo el limite diario.",
+    daily_total_quota_reached: "La cuota diaria total ya esta cubierta.",
+    diagnostic_dry_run_only: "Vista previa read-only; no publica.",
+    draft_created_for_review: "Quedo como borrador para revisar.",
+    editorial_quality_blocked: "Bloqueado por revision editorial pendiente.",
+    execution_limit_reached: "Se alcanzo el maximo por ejecucion.",
+    insufficient_source_data: "Faltan datos de mercado suficientes.",
+    low_score: "Score por debajo del minimo configurado.",
+    no_candidates: "No hay candidatos disponibles.",
+    ready_but_not_published_by_run: "Esta lista, pero esta ejecucion no la publico.",
+    run_limit_reached: "Se alcanzo el maximo por ejecucion.",
+    score_below_draft_threshold: "Score demasiado bajo incluso para borrador.",
+    score_below_publish_threshold: "Score por debajo del minimo configurado.",
+    score_below_publish_threshold_drafted: "Score bajo; se dejo en borrador.",
+    source_metadata_incomplete: "Faltan fuente o fecha visible en los datos.",
+    status_ready_to_publish: "Lista para revisar, pero no publicada por esta ejecucion.",
+    target_path_exists: "La URL ya existe.",
+    unsupported_template_type: "Tipo de plantilla no soportado por el publicador.",
+    weekly_limit_reached: "Se alcanzo el limite semanal."
+  };
+  if (map[code]) return `${map[code]} (${code})`;
+  if (!code) return "Sin motivo informado.";
+  const readable = code.replace(/[_:-]+/g, " ").replace(/\s+/g, " ").trim();
+  return `${readable || "Motivo interno"} (${code})`;
+}
+
+function seoAutogenDiagnosticChips(counts = {}) {
+  const values = [
+    ["No publicables", counts.nonPublished],
+    ["Score bajo", counts.lowScore],
+    ["Descartadas antes de skip", counts.beforeSkip]
+  ];
+  return values
+    .map(([label, value]) => `<span><b>${escapeHtml(label)}:</b> ${escapeHtml(seoAutogenNumber(value, 0))}</span>`)
+    .join("");
+}
+
+function seoAutogenDiagnosticList(values, emptyText) {
+  const items = seoAutogenArray(values).slice(0, 3);
+  if (!items.length) return `<span>${escapeHtml(emptyText)}</span>`;
+  return items.map((item) => `<span>${escapeHtml(seoAutogenReasonCopy(item))}</span>`).join("");
+}
+
+function seoAutogenCandidatePath(candidate = {}) {
+  return candidate.target_path || (candidate.slug ? `/${String(candidate.slug).replace(/^\/+|\/+$/g, "")}/` : "-");
+}
+
+function seoAutogenCandidateScore(candidate = {}) {
+  const score = seoAutogenNumber(candidate.score ?? candidate.final_score ?? candidate.quality_score, null);
+  const minScore = seoAutogenNumber(candidate.min_score, null);
+  if (score === null && minScore === null) return "-";
+  if (minScore === null) return `${score}/100`;
+  return `${score}/100 min ${minScore}/100`;
+}
+
+function seoAutogenDiagnosticSource(payload = {}) {
+  const endpoint = payload.diagnostics_preview || null;
+  if (endpoint && endpoint.ok !== false) return endpoint;
+  const lastResult = payload.last_run?.result_json || {};
+  if (lastResult.publication_diagnostics) {
+    return {
+      publication_diagnostics: lastResult.publication_diagnostics,
+      generation_summary: {
+        non_published_count: lastResult.publication_diagnostics.non_published_count,
+        published_count: lastResult.published_count,
+        draft_count: lastResult.draft_count,
+        skipped_count: lastResult.skipped_count
+      }
+    };
+  }
+  return {};
+}
+
+function renderSeoAutogenDiagnostics(payload = {}) {
+  if (!els.seoAutogenDiagnostics) return;
+  const endpoint = payload.diagnostics_preview || null;
+  const endpointError = endpoint && endpoint.ok === false ? endpoint : null;
+  const source = seoAutogenDiagnosticSource(payload);
+  const candidates = seoAutogenDiagnosticCandidates(source);
+  const counts = seoAutogenDiagnosticsCounts(source);
+  const hasSignal = counts.nonPublished > 0 || counts.lowScore > 0 || counts.beforeSkip > 0;
+  const endpointMessage = endpointError
+    ? `Diagnostico read-only no disponible (${endpointError.status || endpointError.error || "error"}). Las ejecuciones siguen visibles; prueba de nuevo tras iniciar sesion.`
+    : "";
+  const intro = hasSignal
+    ? "Hay candidatos evaluados que no publicaron, aunque no todos cuentan como skip. Esto suele pasar cuando el score queda bajo el minimo o cuando el candidato se descarta antes del contador de omitidos."
+    : candidates.length
+      ? "El diagnostico no detecta candidatos bloqueados en esta vista previa."
+      : "Sin candidatos de diagnostico para mostrar ahora.";
+
+  if (endpointError && !candidates.length) {
+    els.seoAutogenDiagnostics.innerHTML = `
+      <section class="admin-seo-autogen-diagnostics-panel is-muted">
+        <div class="admin-seo-autogen-diagnostics-head">
+          <div>
+            <h3>Diagnostico de candidatos</h3>
+            <p>${escapeHtml(endpointMessage)}</p>
+          </div>
+        </div>
+      </section>
+    `;
+    return;
+  }
+
+  const rows = candidates.slice(0, 8).map((candidate) => {
+    const countedAsSkip = candidate.counted_as_skip === true;
+    const path = seoAutogenCandidatePath(candidate);
+    const reason = candidate.reason || candidate.original_reason || candidate.sitemap_reason || "";
+    return `
+      <tr>
+        <td><code>${escapeHtml(path)}</code></td>
+        <td>${chip(candidate.status || "-", statusTone(candidate.status))}</td>
+        <td>
+          <strong>${escapeHtml(seoAutogenCandidateScore(candidate))}</strong>
+          <div class="admin-subtle">${candidate.meets_min_score === false ? "No alcanza el minimo" : candidate.meets_min_score === true ? "Alcanza el minimo" : "Sin umbral"}</div>
+        </td>
+        <td>${escapeHtml(seoAutogenReasonCopy(reason))}</td>
+        <td><div class="admin-seo-autogen-token-list">${seoAutogenDiagnosticList(candidate.quality_penalties || candidate.penalties, "Sin penalizaciones")}</div></td>
+        <td><div class="admin-seo-autogen-token-list">${seoAutogenDiagnosticList(candidate.quality_warnings || candidate.warnings, "Sin warnings")}</div></td>
+        <td>${chip(countedAsSkip ? "Cuenta como skip" : "No cuenta como skip", countedAsSkip ? "draft" : "warn")}</td>
+      </tr>
+    `;
+  }).join("");
+
+  els.seoAutogenDiagnostics.innerHTML = `
+    <section class="admin-seo-autogen-diagnostics-panel${hasSignal ? " is-attention" : ""}">
+      <div class="admin-seo-autogen-diagnostics-head">
+        <div>
+          <h3>Diagnostico de candidatos</h3>
+          <p>${escapeHtml(intro)}</p>
+          ${endpointMessage ? `<p>${escapeHtml(endpointMessage)}</p>` : ""}
+        </div>
+        <div class="admin-seo-autogen-diagnostic-counters">${seoAutogenDiagnosticChips(counts)}</div>
+      </div>
+      ${rows ? `
+        <div class="admin-seo-autogen-diagnostics-table-wrap">
+          <table class="admin-seo-autogen-diagnostics-table">
+            <thead>
+              <tr>
+                <th>URL/path</th>
+                <th>Estado</th>
+                <th>Score</th>
+                <th>Motivo</th>
+                <th>Penalizaciones</th>
+                <th>Warnings</th>
+                <th>Skip</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      ` : `<p class="admin-empty-state compact">No hay candidatos en la respuesta de diagnostico.</p>`}
+    </section>
+  `;
+}
+
 function seoAutogenRunDetail(result = {}, row = {}) {
   const items = Array.isArray(result.results) ? result.results : [];
   const diagnostics = result.publication_diagnostics || {};
@@ -2550,6 +2745,8 @@ function renderSeoAutogeneration(payload = {}) {
         : "Autogeneracion pausada desde condiciones del backoffice.";
   }
 
+  renderSeoAutogenDiagnostics(payload);
+
   const runs = payload.recent_runs || [];
   if (!runs.length) {
     els.seoAutogenRuns.innerHTML = `<tr><td colspan="4">Sin ejecuciones registradas.</td></tr>`;
@@ -2560,6 +2757,8 @@ function renderSeoAutogeneration(payload = {}) {
     .map((row) => {
       const result = row.result_json || {};
       const items = Array.isArray(result.results) ? result.results : [];
+      const diagnosticCounts = seoAutogenDiagnosticsCounts({ publication_diagnostics: result.publication_diagnostics || {} });
+      const hasDiagnosticCounts = diagnosticCounts.nonPublished > 0 || diagnosticCounts.lowScore > 0 || diagnosticCounts.beforeSkip > 0;
       const counts = `${Number(result.published_count || 0)} pub · ${Number(result.draft_count || 0)} draft · ${Number(result.skipped_count || 0)} skip`;
       const legacyDetail =
         items
@@ -2582,7 +2781,10 @@ function renderSeoAutogeneration(payload = {}) {
             <div class="admin-subtle">${escapeHtml(row.run_key || "-")}</div>
           </td>
           <td>${chip(row.status || "unknown", statusTone(row.status))}</td>
-          <td>${escapeHtml(counts)}</td>
+          <td>
+            ${escapeHtml(counts)}
+            ${hasDiagnosticCounts ? `<div class="admin-seo-autogen-run-counters">${seoAutogenDiagnosticChips(diagnosticCounts)}</div>` : ""}
+          </td>
           <td><div class="admin-seo-autogen-detail">${escapeHtml(detail || row.error_message || "-")}</div></td>
         </tr>
       `;
@@ -7086,6 +7288,13 @@ async function loadSeo() {
 async function loadSeoAutogeneration() {
   if (!els.seoAutogenSummary) return;
   const payload = await api("/api/admin?resource=seo-autogenerate/run");
+  const diagnostics = await api("/api/admin?resource=seo-autogenerate/diagnostics&candidate_limit=25&template_type=all").catch((error) => ({
+    ok: false,
+    status: error.status || null,
+    error: error.payload?.error || error.message || "diagnostics_unavailable",
+    message: error.payload?.message || error.message || "Diagnostico no disponible"
+  }));
+  payload.diagnostics_preview = diagnostics;
   renderSeoAutogeneration(payload);
 }
 
@@ -7402,6 +7611,14 @@ async function runSeoAutogeneration(dryRun = false) {
   }
   if (result.would_publish_count) {
     showStatus(`Simulacion OK: publicaria ${firstPath} - score ${firstScore}`, "neutral");
+    return;
+  }
+  const diagnosticCounts = seoAutogenDiagnosticsCounts({ publication_diagnostics: result.publication_diagnostics || {} });
+  if (diagnosticCounts.nonPublished || diagnosticCounts.lowScore || diagnosticCounts.beforeSkip) {
+    showStatus(
+      `Autogeneracion sin publicacion: ${diagnosticCounts.nonPublished} no publicables, ${diagnosticCounts.lowScore} por score bajo, ${diagnosticCounts.beforeSkip} antes de skip.`,
+      "neutral"
+    );
     return;
   }
   showStatus(`Autogeneracion sin publicacion: ${first.reason || result.reason || "sin candidato elegible"}`, "neutral");

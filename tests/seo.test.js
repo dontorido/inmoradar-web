@@ -16,6 +16,7 @@ const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { canPublishNow, runSeoLandingGeneration } = require("../api/_seo/generator");
 const {
   buildSeoContentPublicationConfig,
+  getSeoContentPublicationDiagnostics,
   nextSeoPublishRun,
   runSeoContentPublication
 } = require("../api/_seo/contentPublisher");
@@ -825,8 +826,8 @@ test("la publicacion SEO operativa respeta el cupo diario 2 landings + 2 guias",
 
   assert.equal(called, false);
   assert.equal(result.published_count, 0);
-  assert.equal(result.reason, "daily_total_quota_reached");
-  assert.equal(result.skipped_reason, "daily_total_quota_reached");
+  assert.equal(result.reason, "daily_limit_reached");
+  assert.equal(result.skipped_reason, "daily_limit_reached");
 });
 
 test("la publicacion SEO usa limite diario configurable", async () => {
@@ -917,6 +918,283 @@ test("la publicacion SEO pasa score minimo configurable al quality gate", async 
   assert.equal(received.minScore, 95);
 });
 
+function readyToPublishLanding(overrides = {}) {
+  const slug = overrides.slug || "guias/comprar-para-alquilar-rentabilidad";
+  const bodyHtml =
+    overrides.body_html ||
+    `<article>
+      <section data-guide-specific="true"><p>${"comprar para alquilar rentabilidad alquiler gastos hipoteca impuestos comunidad vacancia riesgo ".repeat(90)}</p><a href="/datos">Datos</a></section>
+      <section data-guide-specific="true"><p>${"calcular escenario conservador flujo caja reforma mantenimiento seguros ibi mercado barrio demanda ".repeat(85)}</p><a href="/metodologia">Metodologia</a></section>
+      <section data-guide-specific="true"><p>Fuente: InmoRadar. Fecha del dato: 2026.</p></section>
+    </article>`;
+  const qualityScore = overrides.quality_score ?? 100;
+  return {
+    id: overrides.id || 1,
+    slug,
+    title: overrides.title || "Comprar para alquilar: rentabilidad real",
+    meta_title: overrides.meta_title || "Comprar para alquilar: rentabilidad real",
+    meta_description:
+      overrides.meta_description ||
+      "Guia para calcular la rentabilidad real de una vivienda antes de comprar para alquilar.",
+    h1: overrides.h1 || "Comprar para alquilar: rentabilidad real",
+    body_html: bodyHtml,
+    city: overrides.city || "Espana",
+    template_type: overrides.template_type || "editorial_guide",
+    status: overrides.status || "ready_to_publish",
+    index_status: overrides.index_status || "noindex",
+    quality_score: qualityScore,
+    word_count: overrides.word_count || 760,
+    canonical_url: overrides.canonical_url || `https://inmoradar.app/${slug}/`,
+    updated_at: overrides.updated_at || "2026-05-22T11:00:00.000Z",
+    source_data_json: {
+      quality: {
+        score: qualityScore,
+        word_count: overrides.word_count || 760,
+        penalties: overrides.penalties || [],
+        warnings: overrides.warnings || [],
+        rejection_reasons: overrides.rejection_reasons || [],
+        technical_indexability_status: overrides.technical_indexability_status || "ok",
+        editorial_quality_status: overrides.editorial_quality_status || "pass"
+      },
+      sources: [],
+      faq: [],
+      ...(overrides.source_data_json || {})
+    }
+  };
+}
+
+function readyPublicationStorage(candidates, savedRows = []) {
+  return {
+    async startRun() {
+      return { persisted: false, acquired: true };
+    },
+    async finishRun() {},
+    async fetchRecentPublishedRows() {
+      return [];
+    },
+    async fetchReadyToPublishLandings() {
+      return candidates;
+    },
+    async publishReadyToPublishLanding(landing, patch) {
+      const saved = { ...landing, ...patch };
+      savedRows.push(saved);
+      return saved;
+    }
+  };
+}
+
+async function sitemapXmlForLandings(landings) {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(landings)
+  });
+  const chunks = [];
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+
+  try {
+    await sitemapHandler({ method: "GET", url: "/api/sitemap.xml", headers: { host: "inmoradar.app" } }, res);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+
+  return { statusCode: res.statusCode, xml: chunks.join("") };
+}
+
+test("la publicacion SEO promociona READY_TO_PUBLISH con score suficiente", async () => {
+  const saved = [];
+  const candidate = readyToPublishLanding();
+  let generationCalled = false;
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: readyPublicationStorage([candidate], saved),
+    runGeneration: async () => {
+      generationCalled = true;
+      return { ok: true, generated_count: 0, published_count: 0, results: [] };
+    }
+  });
+
+  assert.equal(generationCalled, false);
+  assert.equal(result.published_count, 1);
+  assert.equal(result.draft_count, 0);
+  assert.equal(result.skipped_count, 0);
+  assert.equal(result.results[0].status, "published");
+  assert.equal(result.publication_diagnostics.evaluated_candidates[0].category, "published");
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].status, "published");
+  assert.equal(saved[0].index_status, "index");
+  assert.equal(saved[0].published_at, "2026-05-22T12:00:00.000Z");
+
+  const html = renderLandingHtml(saved[0]);
+  assert.match(html, /<meta name="robots" content="index,follow">/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/inmoradar\.app\/guias\/comprar-para-alquilar-rentabilidad\/">/);
+  assert.doesNotMatch(html, /noindex,follow/);
+
+  const sitemap = await sitemapXmlForLandings(saved);
+  assert.equal(sitemap.statusCode, 200);
+  assert.match(sitemap.xml, /https:\/\/inmoradar\.app\/guias\/comprar-para-alquilar-rentabilidad\//);
+  assert.match(sitemap.xml, /<lastmod>2026-05-22<\/lastmod>/);
+});
+
+test("la publicacion SEO bloquea el segundo READY_TO_PUBLISH por maximo de ejecucion", async () => {
+  const saved = [];
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: readyPublicationStorage(
+      [
+        readyToPublishLanding({ id: 1, slug: "guias/comprar-para-alquilar-rentabilidad" }),
+        readyToPublishLanding({ id: 2, slug: "guias/reforma-costes-ocultos", title: "Reforma: costes ocultos" })
+      ],
+      saved
+    )
+  });
+
+  assert.equal(result.published_count, 1);
+  assert.equal(result.skipped_count, 0);
+  assert.equal(saved.length, 1);
+  assert.equal(result.results[1].status, "blocked");
+  assert.equal(result.results[1].reason, "execution_limit_reached");
+  assert.equal(result.publication_diagnostics.evaluated_candidates[1].category, "blocked_by_limit");
+});
+
+test("la publicacion SEO no promociona READY_TO_PUBLISH por score bajo", async () => {
+  const saved = [];
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: readyPublicationStorage([readyToPublishLanding({ quality_score: 80 })], saved)
+  });
+
+  assert.equal(result.published_count, 0);
+  assert.equal(saved.length, 0);
+  assert.equal(result.results[0].reason, "low_score");
+  assert.equal(result.publication_diagnostics.evaluated_candidates[0].category, "low_score");
+});
+
+test("diagnostico read-only explica candidatos bajo score que no cuentan como skip", async () => {
+  let startRunCalled = false;
+  let finishRunCalled = false;
+  let received = null;
+  const result = await getSeoContentPublicationDiagnostics({
+    now: "2026-05-22T12:00:00.000Z",
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: {
+      async startRun() {
+        startRunCalled = true;
+      },
+      async finishRun() {
+        finishRunCalled = true;
+      },
+      async fetchRecentRuns() {
+        return [];
+      },
+      async fetchRecentPublishedRows() {
+        return [];
+      }
+    },
+    runGeneration: async (options) => {
+      received = options;
+      return {
+        ok: true,
+        mode: "dry_run",
+        template_type: options.template_type,
+        generated_count: 1,
+        published_count: 0,
+        results: [
+          {
+            slug: "guias/comparar-pisos",
+            title: "Comparar pisos antes de llamar",
+            template_type: "editorial_guide",
+            status: "ready_to_publish",
+            quality_score: 86,
+            penalties: ["contenido_generico"],
+            warnings: ["fuente_visible_debil"],
+            rejection_reasons: [],
+            indexability_reasons: ["quality_score_below_threshold"],
+            sitemap_eligible: false
+          }
+        ]
+      };
+    }
+  });
+
+  const candidate = result.publication_diagnostics.evaluated_candidates[0];
+  assert.equal(startRunCalled, false);
+  assert.equal(finishRunCalled, false);
+  assert.equal(result.read_only, true);
+  assert.equal(result.writes_enabled, false);
+  assert.equal(received.mode, "dry_run");
+  assert.equal(received.minScore, 90);
+  assert.equal(result.generation_summary.skipped_count, 0);
+  assert.equal(result.counter_diagnosis.low_score_not_counted_as_skip, 1);
+  assert.equal(candidate.reason, "score_below_publish_threshold");
+  assert.equal(candidate.score, 86);
+  assert.equal(candidate.meets_min_score, false);
+  assert.equal(candidate.counted_as_skip, false);
+  assert.equal(candidate.discarded_before_skip, true);
+  assert.deepEqual(candidate.quality_penalties, ["contenido_generico"]);
+  assert.deepEqual(candidate.quality_warnings, ["fuente_visible_debil"]);
+});
+
 test("la publicacion SEO no salta el kill switch aunque settings este activo", async () => {
   let called = false;
   const result = await runSeoContentPublication({
@@ -970,6 +1248,7 @@ test("la publicacion SEO exige score editorial minimo antes de publicar", () => 
   assert.equal(canPublishNow({ ...base, minScore: 95, quality: { score: 94 } }), false);
   assert.equal(canPublishNow({ ...base, minScore: 95, quality: { score: 95 } }), true);
   assert.equal(canPublishNow({ ...base, quality: { score: 95, technical_indexability_status: "blocked" } }), false);
+  assert.equal(canPublishNow({ ...base, quality: { score: 95, editorial_quality_status: "review" } }), false);
   assert.equal(canPublishNow({ ...base, quality: { score: 95, rejection_reasons: ["canonical_incoherent"] } }), false);
   assert.equal(canPublishNow({ ...base, quality: { score: 100 }, publishedToday: 4 }), false);
 });
