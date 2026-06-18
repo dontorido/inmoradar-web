@@ -161,7 +161,7 @@ function publishedPagesFromSummary(summary = {}) {
 function countSeoPublicationTotals(rows = []) {
   const allRows = Array.isArray(rows) ? rows : [];
   const statusOf = (row) => String(row.status || "").toLowerCase();
-  const indexStatusOf = (row) => String(row.index_status || "").toLowerCase();
+  const indexStatusOf = (row) => String(row.index_status || (statusOf(row) === "published" ? "index" : "")).toLowerCase();
   return {
     total_landings: allRows.length,
     published_landings: allRows.filter((row) => statusOf(row) === "published").length,
@@ -193,7 +193,7 @@ function resultReasons(item = {}) {
 
 function isNonPublishedDiagnosticResult(item = {}) {
   const status = String(item.status || "").toLowerCase();
-  return ["draft", "needs_review", "ready_to_publish", "skipped", "would_skip", "failed"].includes(status);
+  return ["blocked", "draft", "needs_review", "ready_to_publish", "skipped", "would_publish", "would_skip", "failed"].includes(status);
 }
 
 function skipCounterStatus(item = {}) {
@@ -220,11 +220,34 @@ function exactNonPublicationReason(item = {}, summary = {}) {
   if (qualityReasons.length) return qualityReasons[0];
   if (indexabilityReasons.length) return indexabilityReasons[0];
   if (summary.dry_run || summary.mode === "dry_run") return "diagnostic_dry_run_only";
+  if (status === "blocked") return "candidate_blocked";
   if (status === "draft") return "draft_created_for_review";
   if (status === "needs_review") return "needs_editorial_review";
   if (status === "ready_to_publish") return "ready_but_not_published_by_run";
+  if (status === "would_publish") return "dry_run_enabled";
   if (status === "failed") return "candidate_failed";
   if (skipCounterStatus(item)) return "candidate_skipped";
+  return "not_published";
+}
+
+function diagnosticCategory({ item, reason, status, minScore, score }) {
+  const reasonText = String(reason || "");
+  if (status === "published") return "published";
+  if (["execution_limit_reached", "daily_limit_reached", "weekly_limit_reached"].includes(reason)) return "blocked_by_limit";
+  if (reason === "low_score" || (minScore !== null && score < minScore)) return "low_score";
+  if (/^status_/.test(reasonText) || ["draft_created_for_review", "needs_editorial_review", "ready_but_not_published_by_run"].includes(reason)) {
+    return "blocked_by_status";
+  }
+  if (
+    arrayOrEmpty(item.quality_reasons || item.rejection_reasons).length ||
+    arrayOrEmpty(item.quality_penalties || item.penalties).length ||
+    arrayOrEmpty(item.indexability_reasons).length ||
+    /quality|canonical|index|noindex|content|technical|source|sitemap|editorial/.test(reasonText)
+  ) {
+    return "blocked_by_quality";
+  }
+  if (/disabled|dry_run|flag|not_configured/.test(reasonText)) return "blocked_by_flag";
+  if (status !== "published" && !skipCounterStatus(item)) return "discarded_before_skip";
   return "not_published";
 }
 
@@ -236,6 +259,7 @@ function publicationDiagnosticCandidate(item = {}, summary = {}) {
   const countedAsDraft = draftCounterStatus(item);
   const notPublished = status !== "published";
   const reason = exactNonPublicationReason(item, summary);
+  const category = diagnosticCategory({ item, reason, status, minScore, score });
   return {
     target_path: targetPathForResult(item),
     slug: item.slug || null,
@@ -244,6 +268,7 @@ function publicationDiagnosticCandidate(item = {}, summary = {}) {
     template_type: item.template_type || item.page_type || null,
     status,
     reason,
+    category,
     original_reason: item.reason || null,
     score,
     min_score: minScore,
@@ -314,6 +339,11 @@ function buildPublicationDiagnostics(summary = {}) {
   const reasonCounts = aggregateReasons(diagnosticResults);
   const publishedCount = safeInt(summary.published_count, 0);
   const notCountedAsSkip = evaluatedCandidates.filter((item) => item.status !== "published" && !item.counted_as_skip);
+  const categoryCounts = evaluatedCandidates.reduce((counts, item) => {
+    const key = item.category || "unknown";
+    counts[key] = (counts[key] || 0) + 1;
+    return counts;
+  }, {});
   return {
     min_score: minScoreForSummary(summary),
     evaluated_candidates_count: results.length,
@@ -325,6 +355,7 @@ function buildPublicationDiagnostics(summary = {}) {
     not_counted_as_skip_count: notCountedAsSkip.length,
     discarded_before_skip_count: evaluatedCandidates.filter((item) => item.discarded_before_skip).length,
     skip_counter_explanation: "skipped_count only counts candidates whose result status is skipped or would_skip; low-score ready_to_publish/needs_review/draft candidates can be non-published without incrementing skip.",
+    category_counts: categoryCounts,
     reason_counts: reasonCounts,
     evaluated_candidates: evaluatedCandidates.slice(0, 25),
     low_score_results: lowScoreResults.slice(0, 10),

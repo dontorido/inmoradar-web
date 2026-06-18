@@ -22,6 +22,61 @@ function parseJsonMaybe(value, fallback = {}) {
   }
 }
 
+function presentValue(value) {
+  if (value === undefined || value === null) return false;
+  return typeof value === "string" ? value.trim() !== "" : true;
+}
+
+function sourceContainers(sourceData = {}) {
+  return [
+    sourceData,
+    sourceData.landing,
+    sourceData.seo,
+    sourceData.meta,
+    sourceData.metadata,
+    sourceData.content,
+    sourceData.page
+  ].filter((entry) => entry && typeof entry === "object");
+}
+
+function landingField(landing = {}, sourceData = {}, key, aliases = []) {
+  for (const field of [key, ...aliases]) {
+    if (presentValue(landing[field])) return landing[field];
+  }
+  for (const container of sourceContainers(sourceData)) {
+    for (const field of [key, ...aliases]) {
+      if (presentValue(container[field])) return container[field];
+    }
+  }
+  return landing[key];
+}
+
+function hasLandingField(landing = {}, sourceData = {}, key, aliases = []) {
+  for (const field of [key, ...aliases]) {
+    if (hasOwn(landing, field)) return true;
+  }
+  for (const container of sourceContainers(sourceData)) {
+    for (const field of [key, ...aliases]) {
+      if (hasOwn(container, field)) return true;
+    }
+  }
+  return false;
+}
+
+function normalizeSeoLandingFields(landing = {}) {
+  const sourceData = parseJsonMaybe(landing.source_data_json);
+  return {
+    ...landing,
+    slug: landingField(landing, sourceData, "slug", ["path"]),
+    title: landingField(landing, sourceData, "title"),
+    meta_title: landingField(landing, sourceData, "meta_title", ["metaTitle"]),
+    meta_description: landingField(landing, sourceData, "meta_description", ["metaDescription", "description"]),
+    h1: landingField(landing, sourceData, "h1", ["headline"]),
+    body_html: landingField(landing, sourceData, "body_html", ["bodyHtml", "content_html", "html", "body", "content"]),
+    canonical_url: landingField(landing, sourceData, "canonical_url", ["canonicalUrl", "canonical"])
+  };
+}
+
 function qualityFromLanding(landing = {}, explicitQuality = null) {
   if (explicitQuality && typeof explicitQuality === "object") return explicitQuality;
   const sourceData = parseJsonMaybe(landing.source_data_json);
@@ -95,24 +150,33 @@ function addReason(reasons, reason) {
 }
 
 function evaluateLandingIndexability(landing = {}, options = {}) {
+  const normalizedLanding = normalizeSeoLandingFields(landing);
+  const sourceData = parseJsonMaybe(landing.source_data_json);
   const publishReasons = [];
   const indexStateReasons = [];
-  const quality = qualityFromLanding(landing, options.quality);
-  const status = String(landing.status || "").toLowerCase();
-  const indexStatus = String(landing.index_status || "").toLowerCase();
-  const score = Number(landing.quality_score ?? quality.score ?? 0);
+  const quality = qualityFromLanding(normalizedLanding, options.quality);
+  const status = String(normalizedLanding.status || "").toLowerCase();
+  const explicitIndexStatus = String(normalizedLanding.index_status || "").toLowerCase();
+  const indexStatus = explicitIndexStatus || (status === "published" ? "index" : "");
+  const score = Number(normalizedLanding.quality_score ?? quality.score ?? 0);
   const minQualityScore = Number(options.minQualityScore ?? QUALITY_GATE_SCORE_THRESHOLD);
-  const canonicalIssue = canonicalIssueReason(landing, options.baseUrl || siteUrl());
-  const wordCount = wordCountForLanding(landing);
-  const bodyHtml = String(landing.body_html || "");
+  const canonicalIssue = canonicalIssueReason(normalizedLanding, options.baseUrl || siteUrl());
+  const wordCount = wordCountForLanding(normalizedLanding);
+  const bodyHtml = String(normalizedLanding.body_html || "");
   const visibleBodyText = normalizeText(stripHtml(bodyHtml));
-  const explicitWordCount = Number(landing.word_count);
-  const hasBodyHtmlField = hasOwn(landing, "body_html");
+  const explicitWordCount = Number(normalizedLanding.word_count);
+  const hasBodyHtmlField = hasLandingField(landing, sourceData, "body_html", [
+    "bodyHtml",
+    "content_html",
+    "html",
+    "body",
+    "content"
+  ]);
   const hasEnoughExplicitWords = Number.isFinite(explicitWordCount) && explicitWordCount >= MIN_INDEXABLE_WORD_COUNT;
   const requirePublished = options.requirePublished !== false;
   const requireIndex = options.requireIndex !== false;
   const requireInternalLinks = options.requireInternalLinks !== false && Boolean(bodyHtml);
-  const expectedCanonical = landing.slug ? canonicalForSlug(normalizeSlug(landing.slug), options.baseUrl || siteUrl()) : null;
+  const expectedCanonical = normalizedLanding.slug ? canonicalForSlug(normalizeSlug(normalizedLanding.slug), options.baseUrl || siteUrl()) : null;
 
   if (requirePublished && status !== "published") addReason(indexStateReasons, `status_${status || "unknown"}`);
   if (requireIndex && indexStatus !== "index") {
@@ -124,14 +188,14 @@ function evaluateLandingIndexability(landing = {}, options = {}) {
   if (score < minQualityScore) addReason(publishReasons, "quality_score_below_threshold");
   if (canonicalIssue) addReason(publishReasons, canonicalIssue);
 
-  if (!normalizeText(landing.title || landing.meta_title)) addReason(publishReasons, "missing_title");
-  if (!normalizeText(landing.meta_description)) addReason(publishReasons, "missing_meta_description");
-  if (!normalizeText(landing.h1)) addReason(publishReasons, "missing_h1");
+  if (!normalizeText(normalizedLanding.title || normalizedLanding.meta_title)) addReason(publishReasons, "missing_title");
+  if (!normalizeText(normalizedLanding.meta_description)) addReason(publishReasons, "missing_meta_description");
+  if (!normalizeText(normalizedLanding.h1)) addReason(publishReasons, "missing_h1");
   if ((hasBodyHtmlField && !visibleBodyText) || (!hasBodyHtmlField && !hasEnoughExplicitWords)) addReason(publishReasons, "content_missing");
-  if (hasContentSignal(landing) && wordCount < MIN_INDEXABLE_WORD_COUNT) addReason(publishReasons, "low_content");
+  if (hasContentSignal(normalizedLanding) && wordCount < MIN_INDEXABLE_WORD_COUNT) addReason(publishReasons, "low_content");
   if (requireInternalLinks && internalLinkCount(bodyHtml) < MIN_INTERNAL_LINKS) addReason(publishReasons, "no_internal_links");
 
-  if (hasMojibakeText(landingText(landing))) addReason(publishReasons, "mojibake_detected");
+  if (hasMojibakeText(landingText(normalizedLanding))) addReason(publishReasons, "mojibake_detected");
   if (quality.technical_indexability_status === "blocked") addReason(publishReasons, "technical_rejection");
   for (const reason of arrayOrEmpty(quality.rejection_reasons)) addReason(publishReasons, reason);
 

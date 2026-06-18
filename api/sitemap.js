@@ -39,7 +39,24 @@ async function fetchPublishedLandings() {
     const rows = await supabaseFetch(`seo_landings?${params.toString()}`);
     landings = Array.isArray(rows) ? rows : [];
   } catch (error) {
-    console.warn("[sitemap] Supabase landing lookup failed, using seed fallback", error.message);
+    if (!/column\s+"?(index_status|published_at)"?\s+does not exist/i.test(String(error?.message || error || ""))) {
+      console.warn("[sitemap] Supabase landing lookup failed, using seed fallback", error.message);
+    } else {
+      const compatibleParams = new URLSearchParams({
+        select:
+          "slug,title,meta_title,meta_description,h1,body_html,city,template_type,canonical_url,status,quality_score,word_count,source_data_json,updated_at,last_generated_at",
+        status: "eq.published",
+        quality_score: "gte.75",
+        order: "updated_at.desc",
+        limit: "500"
+      });
+      try {
+        const rows = await supabaseFetch(`seo_landings?${compatibleParams.toString()}`);
+        landings = Array.isArray(rows) ? rows : [];
+      } catch (fallbackError) {
+        console.warn("[sitemap] Supabase landing lookup failed, using seed fallback", fallbackError.message);
+      }
+    }
   }
   for (const seed of seeds) {
     if (!landings.some((landing) => landing.slug === seed.slug)) {
@@ -52,7 +69,7 @@ async function fetchPublishedLandings() {
 }
 
 function publishedTime(landing) {
-  const value = landing.published_at || landing.updated_at || landing.last_generated_at;
+  const value = landing.published_at || landing.wp_published_at || landing.updated_at || landing.last_generated_at;
   const time = new Date(value || 0).getTime();
   return Number.isFinite(time) ? time : 0;
 }
@@ -100,7 +117,7 @@ function newsItem(landing) {
     meta: newsMeta(landing),
     city: landing.city || null,
     template_type: landing.template_type || null,
-    published_at: landing.published_at || landing.updated_at || landing.last_generated_at || null,
+    published_at: landing.published_at || landing.wp_published_at || landing.updated_at || landing.last_generated_at || null,
     updated_at: landing.updated_at || landing.last_generated_at || null
   };
 }
@@ -132,7 +149,10 @@ module.exports = async function handler(req, res) {
     const entries = [
       ...STATIC_PATHS.map((entry) => urlEntry(`${baseUrl}${entry.pathname === "/" ? "/" : entry.pathname}`, entry.lastmod)),
       ...landings.map((landing) =>
-        urlEntry(`${baseUrl}/${landing.slug.replace(/^\/+|\/+$/g, "")}/`, landing.published_at || landing.updated_at || landing.last_generated_at)
+        urlEntry(
+          `${baseUrl}/${landing.slug.replace(/^\/+|\/+$/g, "")}/`,
+          landing.published_at || landing.wp_published_at || landing.updated_at || landing.last_generated_at
+        )
       )
     ];
     const xml = `<?xml version="1.0" encoding="UTF-8"?>

@@ -274,13 +274,13 @@ function landingToOpportunity(landing) {
   };
 }
 
-async function fetchDraftLandingOpportunities({ limit, templateType }) {
+async function fetchDraftLandingOpportunities({ limit, templateType, readyToPublishOnly = false }) {
   if (!hasSupabaseConfig()) return [];
 
   const templateTypes = templateTypesForRequest(templateType);
   const params = new URLSearchParams({
     select: "id,opportunity_id,slug,title,city,province,autonomous_community,template_type,status,quality_score,updated_at",
-    status: "in.(draft,needs_review,ready_to_publish,noindex)",
+    status: readyToPublishOnly ? "in.(ready_to_publish,READY_TO_PUBLISH)" : "in.(draft,needs_review,ready_to_publish,noindex)",
     order: "updated_at.asc",
     limit: String(limit)
   });
@@ -289,7 +289,7 @@ async function fetchDraftLandingOpportunities({ limit, templateType }) {
   return Array.isArray(rows) ? rows.map(landingToOpportunity) : [];
 }
 
-async function fetchGenerationCandidates({ limit, templateType, includeExistingDrafts }) {
+async function fetchGenerationCandidates({ limit, templateType, includeExistingDrafts, existingDraftsOnly = false, readyToPublishOnly = false }) {
   if (!includeExistingDrafts) {
     return fetchPendingOpportunities({ limit, templateType });
   }
@@ -305,8 +305,8 @@ async function fetchGenerationCandidates({ limit, templateType, includeExistingD
   };
 
   const [drafts, pending] = await Promise.all([
-    fetchDraftLandingOpportunities({ limit, templateType }),
-    fetchPendingOpportunities({ limit, templateType })
+    fetchDraftLandingOpportunities({ limit, templateType, readyToPublishOnly }),
+    existingDraftsOnly ? Promise.resolve([]) : fetchPendingOpportunities({ limit, templateType })
   ]);
 
   drafts.forEach(add);
@@ -325,11 +325,24 @@ async function updateOpportunity(opportunity, patch) {
 }
 
 async function upsertLanding(landing) {
-  const result = await supabaseFetch("seo_landings?on_conflict=slug", {
-    method: "POST",
-    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-    body: JSON.stringify([landing])
-  });
+  let result;
+  try {
+    result = await supabaseFetch("seo_landings?on_conflict=slug", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify([landing])
+    });
+  } catch (error) {
+    if (!/column\s+"?(index_status|published_at)"?\s+does not exist/i.test(String(error?.message || error || ""))) {
+      throw error;
+    }
+    const { index_status: _indexStatus, published_at: _publishedAt, ...storageLanding } = landing;
+    result = await supabaseFetch("seo_landings?on_conflict=slug", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify([storageLanding])
+    });
+  }
   return Array.isArray(result) ? result[0] : result;
 }
 
@@ -342,7 +355,19 @@ async function countPublishedToday(now) {
     published_at: `gte.${start.toISOString()}`,
     limit: "5000"
   });
-  const rows = await supabaseFetch(`seo_landings?${params.toString()}`);
+  let rows;
+  try {
+    rows = await supabaseFetch(`seo_landings?${params.toString()}`);
+  } catch (error) {
+    if (!/column\s+"?published_at"?\s+does not exist/i.test(String(error?.message || error || ""))) throw error;
+    const compatibleParams = new URLSearchParams({
+      select: "id,template_type,status,updated_at,last_generated_at",
+      status: "eq.published",
+      updated_at: `gte.${start.toISOString()}`,
+      limit: "5000"
+    });
+    rows = await supabaseFetch(`seo_landings?${compatibleParams.toString()}`);
+  }
   const snapshot = buildSeoDailyPolicySnapshot(Array.isArray(rows) ? rows : [], { now });
   return snapshot.published_total_today;
 }
@@ -351,6 +376,7 @@ function canPublishNow({ mode, autoPublish, quality, publishedToday, publishedTh
   if (mode !== "publish" || !autoPublish) return false;
   if (quality.score < minScore) return false;
   if (quality.technical_indexability_status === "blocked") return false;
+  if (quality.editorial_quality_status && !["pass", "ok"].includes(String(quality.editorial_quality_status).toLowerCase())) return false;
   if (Array.isArray(quality.rejection_reasons) && quality.rejection_reasons.length) return false;
   if (publishedThisRun >= maxPublishesPerRun) return false;
   if (dailyPublishLimit !== null && publishedToday >= dailyPublishLimit) return false;
@@ -420,6 +446,7 @@ function buildLandingRecord({ opportunity, landing, sourceData, quality, indexab
       lookup_error: sourceData.lookup_error || null
     },
     published_at: publishedAt,
+    updated_at: now,
     last_generated_at: now
   };
 }
@@ -484,13 +511,27 @@ async function generateOne({ opportunity, mode, autoPublish, publishedToday, pub
       maxPublishesPerRun,
       minScore
     });
-  const status = landingStatus(quality.score, canAutoPublish);
-  const indexStatus = canAutoPublish ? "index" : "noindex";
+  const wouldPublishInDryRun =
+    dryRun &&
+    autoPublish &&
+    publishIndexability.can_publish &&
+    canPublishNow({
+      mode: "publish",
+      autoPublish: true,
+      quality,
+      publishedToday,
+      publishedThisRun,
+      dailyPublishLimit,
+      maxPublishesPerRun,
+      minScore
+    });
+  const status = wouldPublishInDryRun ? "would_publish" : landingStatus(quality.score, canAutoPublish);
+  const indexStatus = canAutoPublish || wouldPublishInDryRun ? "index" : "noindex";
   const publishedAt = canAutoPublish ? now : null;
   const indexability = evaluateLandingIndexability(
     {
       ...landing,
-      status,
+      status: canAutoPublish || wouldPublishInDryRun ? "published" : status,
       index_status: indexStatus,
       quality_score: quality.score,
       word_count: quality.word_count
@@ -524,7 +565,8 @@ async function generateOne({ opportunity, mode, autoPublish, publishedToday, pub
     sourceData,
     quality,
     saved,
-    didPublish: canAutoPublish
+    didPublish: canAutoPublish,
+    wouldPublish: wouldPublishInDryRun
   };
 }
 
@@ -542,6 +584,8 @@ async function runSeoLandingGeneration(options = {}) {
   const templateType = options.template_type || options.templateType || "price_city";
   const autoPublish = options.autoPublish === true;
   const includeExistingDrafts = options.includeExistingDrafts === true;
+  const existingDraftsOnly = options.existingDraftsOnly === true;
+  const readyToPublishOnly = options.readyToPublishOnly === true;
   const publishFirstEligible = options.publishFirstEligible === true;
   const parsedMaxPublishesPerRun = Number.parseInt(String(options.maxPublishesPerRun ?? 1), 10);
   const parsedDailyPublishLimit = Number.parseInt(String(options.dailyPublishLimit ?? 1), 10);
@@ -558,13 +602,16 @@ async function runSeoLandingGeneration(options = {}) {
     (await fetchGenerationCandidates({
       limit: publishFirstEligible ? candidateLimit : limit,
       templateType,
-      includeExistingDrafts
+      includeExistingDrafts,
+      existingDraftsOnly,
+      readyToPublishOnly
     }));
   let publishedToday = await countPublishedToday(now);
   if (Number.isFinite(Number(options.publishedToday))) {
     publishedToday = Number(options.publishedToday);
   }
   let publishedThisRun = 0;
+  let consumedThisRun = 0;
   const results = [];
 
   for (const opportunity of opportunities.slice(0, publishFirstEligible ? candidateLimit : limit)) {
@@ -573,7 +620,7 @@ async function runSeoLandingGeneration(options = {}) {
       mode,
       autoPublish,
       publishedToday,
-      publishedThisRun,
+      publishedThisRun: consumedThisRun,
       dailyPublishLimit,
       maxPublishesPerRun,
       minScore,
@@ -582,9 +629,12 @@ async function runSeoLandingGeneration(options = {}) {
     if (generated.didPublish) {
       publishedToday += 1;
       publishedThisRun += 1;
+      consumedThisRun += 1;
+    } else if (generated.wouldPublish) {
+      consumedThisRun += 1;
     }
     results.push(resultSummary(generated.record, generated.sourceData, generated.quality, generated.saved));
-    if (publishFirstEligible && generated.didPublish && publishedThisRun >= maxPublishesPerRun) break;
+    if (publishFirstEligible && consumedThisRun >= maxPublishesPerRun) break;
   }
 
   return {
@@ -597,6 +647,8 @@ async function runSeoLandingGeneration(options = {}) {
     candidate_limit: publishFirstEligible ? candidateLimit : limit,
     autoPublish,
     includeExistingDrafts,
+    existingDraftsOnly,
+    readyToPublishOnly,
     dailyPublishLimit,
     maxPublishesPerRun,
     minScore,

@@ -16,11 +16,12 @@ const { calculateSeoLandingQuality } = require("../api/_seo/quality");
 const { canPublishNow, runSeoLandingGeneration } = require("../api/_seo/generator");
 const {
   buildSeoContentPublicationConfig,
+  createSeoContentPublicationStorage,
   getSeoContentPublicationDiagnostics,
   nextSeoPublishRun,
   runSeoContentPublication
 } = require("../api/_seo/contentPublisher");
-const { maybeSendSeoPublicationEmail } = require("../api/_seo/publicationEmail");
+const { buildPublicationDiagnostics, maybeSendSeoPublicationEmail } = require("../api/_seo/publicationEmail");
 const { evaluateLandingIndexability, evaluateSitemapEligibility } = require("../api/_seo/indexability");
 const { buildSeoDailyPolicySnapshot, selectNextSeoContentType } = require("../api/_seo/publishingPolicy");
 const { getSeedPublishedLanding } = require("../api/_seo/seedPublished");
@@ -826,8 +827,8 @@ test("la publicacion SEO operativa respeta el cupo diario 2 landings + 2 guias",
 
   assert.equal(called, false);
   assert.equal(result.published_count, 0);
-  assert.equal(result.reason, "daily_total_quota_reached");
-  assert.equal(result.skipped_reason, "daily_total_quota_reached");
+  assert.equal(result.reason, "daily_limit_reached");
+  assert.equal(result.skipped_reason, "daily_limit_reached");
 });
 
 test("la publicacion SEO usa limite diario configurable", async () => {
@@ -918,6 +919,814 @@ test("la publicacion SEO pasa score minimo configurable al quality gate", async 
   assert.equal(received.minScore, 95);
 });
 
+function readyToPublishLanding(overrides = {}) {
+  const slug = overrides.slug || "guias/comprar-para-alquilar-rentabilidad";
+  const bodyHtml =
+    overrides.body_html ||
+    `<article>
+      <section data-guide-specific="true"><p>${"comprar para alquilar rentabilidad alquiler gastos hipoteca impuestos comunidad vacancia riesgo ".repeat(90)}</p><a href="/datos">Datos</a></section>
+      <section data-guide-specific="true"><p>${"calcular escenario conservador flujo caja reforma mantenimiento seguros ibi mercado barrio demanda ".repeat(85)}</p><a href="/metodologia">Metodologia</a></section>
+      <section data-guide-specific="true"><p>Fuente: InmoRadar. Fecha del dato: 2026.</p></section>
+    </article>`;
+  const qualityScore = overrides.quality_score ?? 100;
+  return {
+    id: overrides.id || 1,
+    slug,
+    title: overrides.title || "Comprar para alquilar: rentabilidad real",
+    meta_title: overrides.meta_title || "Comprar para alquilar: rentabilidad real",
+    meta_description:
+      overrides.meta_description ||
+      "Guia para calcular la rentabilidad real de una vivienda antes de comprar para alquilar.",
+    h1: overrides.h1 || "Comprar para alquilar: rentabilidad real",
+    body_html: bodyHtml,
+    city: overrides.city || "Espana",
+    template_type: overrides.template_type || "editorial_guide",
+    status: overrides.status || "ready_to_publish",
+    index_status: overrides.index_status || "noindex",
+    quality_score: qualityScore,
+    word_count: overrides.word_count || 760,
+    canonical_url: overrides.canonical_url || `https://inmoradar.app/${slug}/`,
+    updated_at: overrides.updated_at || "2026-05-22T11:00:00.000Z",
+    source_data_json: {
+      quality: {
+        score: qualityScore,
+        word_count: overrides.word_count || 760,
+        penalties: overrides.penalties || [],
+        warnings: overrides.warnings || [],
+        rejection_reasons: overrides.rejection_reasons || [],
+        technical_indexability_status: overrides.technical_indexability_status || "ok",
+        editorial_quality_status: overrides.editorial_quality_status || "pass"
+      },
+      sources: [],
+      faq: [],
+      ...(overrides.source_data_json || {})
+    }
+  };
+}
+
+function readyPublicationStorage(candidates, savedRows = []) {
+  return {
+    async startRun() {
+      return { persisted: false, acquired: true };
+    },
+    async finishRun() {},
+    async fetchRecentPublishedRows() {
+      return [];
+    },
+    async fetchReadyToPublishLandings() {
+      return candidates;
+    },
+    async publishReadyToPublishLanding(landing, patch) {
+      const saved = { ...landing, ...patch };
+      savedRows.push(saved);
+      return saved;
+    }
+  };
+}
+
+test("PATCH de READY_TO_PUBLISH se condiciona por id y status", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  let requestUrl = "";
+  let requestOptions = null;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url, options) => {
+    requestUrl = String(url);
+    requestOptions = options;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([{ id: 42, slug: "guias/comprar-para-alquilar-rentabilidad", status: "published" }])
+    };
+  };
+
+  try {
+    const storage = createSeoContentPublicationStorage();
+    const saved = await storage.publishReadyToPublishLanding(
+      { id: 42, slug: "guias/comprar-para-alquilar-rentabilidad", status: "ready_to_publish" },
+      { status: "published", index_status: "index" }
+    );
+    const url = new URL(requestUrl);
+    assert.equal(saved.id, 42);
+    assert.equal(requestOptions.method, "PATCH");
+    assert.equal(requestOptions.headers.Prefer, "return=representation");
+    assert.equal(url.pathname, "/rest/v1/seo_landings");
+    assert.equal(url.searchParams.get("id"), "eq.42");
+    assert.equal(url.searchParams.get("status"), "eq.ready_to_publish");
+    assert.equal(url.searchParams.get("slug"), null);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("PATCH de READY_TO_PUBLISH reintenta sin columnas de indexacion si el esquema no las tiene", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  const bodies = [];
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    bodies.push(body);
+    if (body.index_status || body.published_at) {
+      return {
+        ok: false,
+        status: 400,
+        text: async () => 'column "index_status" does not exist'
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([{ id: 42, slug: "guias/comprar-para-alquilar-rentabilidad", status: "published" }])
+    };
+  };
+
+  try {
+    const storage = createSeoContentPublicationStorage();
+    const saved = await storage.publishReadyToPublishLanding(
+      { id: 42, slug: "guias/comprar-para-alquilar-rentabilidad", status: "ready_to_publish" },
+      {
+        status: "published",
+        index_status: "index",
+        published_at: "2026-05-22T12:00:00.000Z",
+        updated_at: "2026-05-22T12:00:00.000Z",
+        last_generated_at: "2026-05-22T12:00:00.000Z",
+        source_data_json: { indexability: { sitemap_eligible: true } }
+      }
+    );
+    assert.equal(saved.status, "published");
+    assert.equal(bodies.length, 2);
+    assert.equal(bodies[0].index_status, "index");
+    assert.equal(bodies[0].published_at, "2026-05-22T12:00:00.000Z");
+    assert.equal(bodies[1].index_status, undefined);
+    assert.equal(bodies[1].published_at, undefined);
+    assert.equal(bodies[1].updated_at, "2026-05-22T12:00:00.000Z");
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("fetch READY_TO_PUBLISH usa consulta tolerante y columnas reales", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  let requestUrl = "";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url) => {
+    requestUrl = String(url);
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([readyToPublishLanding({ id: 7 })])
+    };
+  };
+
+  try {
+    const storage = createSeoContentPublicationStorage();
+    const rows = await storage.fetchReadyToPublishLandings({ candidateLimit: 2 });
+    const url = new URL(requestUrl);
+    assert.equal(rows.length, 1);
+    assert.equal(url.pathname, "/rest/v1/seo_landings");
+    assert.equal(url.searchParams.get("select"), "*");
+    assert.equal(url.searchParams.get("status"), "in.(ready_to_publish,READY_TO_PUBLISH)");
+    assert.equal(url.searchParams.get("limit"), "2");
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("lock horario completado no bloquea una nueva ejecucion SEO", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  const calls = [];
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), method: options.method || "GET", body: options.body ? JSON.parse(options.body) : null });
+    if (options.method === "POST" && String(options.body).includes("seo-publish:2026-05-22T12")) {
+      if (calls.filter((call) => call.method === "POST").length === 1) {
+        return { ok: true, status: 200, text: async () => "[]" };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ id: 99, run_key: "seo-publish:2026-05-22T12:retry:test" }])
+      };
+    }
+    if (String(url).includes("seo_cron_runs?select=id")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              id: 12,
+              run_key: "seo-publish:2026-05-22T12",
+              status: "completed",
+              started_at: "2026-05-22T12:00:00.000Z",
+              finished_at: "2026-05-22T12:01:00.000Z"
+            }
+          ])
+      };
+    }
+    return { ok: true, status: 200, text: async () => "[]" };
+  };
+
+  try {
+    const storage = createSeoContentPublicationStorage();
+    const run = await storage.startRun({ now: "2026-05-22T12:30:00.000Z", requestSource: "cron" });
+    assert.equal(run.acquired, true);
+    assert.equal(run.id, 99);
+    assert.match(run.run_key, /:retry:/);
+    assert.equal(run.request_source_persisted, true);
+    assert.equal(calls.findLast((call) => call.method === "POST").body[0].request_source, "cron");
+    assert.equal(calls.filter((call) => call.method === "POST").length, 2);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("lock horario reintenta sin request_source si seo_cron_runs no tiene esa columna", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  const postBodies = [];
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url, options = {}) => {
+    const body = options.body ? JSON.parse(options.body) : null;
+    if (options.method === "POST") {
+      postBodies.push(body);
+      if (postBodies.length === 1) {
+        return { ok: true, status: 200, text: async () => "[]" };
+      }
+      if (body?.[0]?.request_source) {
+        return {
+          ok: false,
+          status: 400,
+          text: async () =>
+            JSON.stringify({
+              code: "PGRST204",
+              message: "Could not find the 'request_source' column of 'seo_cron_runs' in the schema cache"
+            })
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ id: 101, run_key: body[0].run_key }])
+      };
+    }
+    if (String(url).includes("seo_cron_runs?select=id")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              id: 12,
+              run_key: "seo-publish:2026-05-22T12",
+              status: "completed",
+              started_at: "2026-05-22T12:00:00.000Z",
+              finished_at: "2026-05-22T12:01:00.000Z"
+            }
+          ])
+      };
+    }
+    return { ok: true, status: 200, text: async () => "[]" };
+  };
+
+  try {
+    const storage = createSeoContentPublicationStorage();
+    const run = await storage.startRun({ now: "2026-05-22T12:30:00.000Z", requestSource: "cron" });
+    assert.equal(run.acquired, true);
+    assert.equal(run.id, 101);
+    assert.equal(run.schema_variant, "missing_request_source");
+    assert.equal(run.request_source_persisted, false);
+    assert.equal(postBodies.length, 3);
+    assert.equal(postBodies[1][0].request_source, "cron");
+    assert.equal(postBodies[2][0].request_source, undefined);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("cron continua y publica READY_TO_PUBLISH aunque seo_cron_runs no tenga request_source", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  const candidate = readyToPublishLanding({ id: 279, slug: "guias/qa-ready-to-publish-autogen-test" });
+  const postBodies = [];
+  const patchedLandings = [];
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url, options = {}) => {
+    const requestUrl = String(url);
+    const parsedUrl = new URL(requestUrl);
+    const body = options.body ? JSON.parse(options.body) : null;
+    if (requestUrl.includes("/seo_cron_runs") && options.method === "POST") {
+      postBodies.push(body);
+      if (postBodies.length === 1) return { ok: true, status: 200, text: async () => "[]" };
+      if (body?.[0]?.request_source) {
+        return {
+          ok: false,
+          status: 400,
+          text: async () =>
+            JSON.stringify({
+              code: "PGRST204",
+              message: "Could not find the 'request_source' column of 'seo_cron_runs' in the schema cache"
+            })
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ id: 501, run_key: body[0].run_key }])
+      };
+    }
+    if (requestUrl.includes("/seo_cron_runs") && options.method === "PATCH") {
+      return { ok: true, status: 204, text: async () => "" };
+    }
+    if (requestUrl.includes("/seo_cron_runs?select=id")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              id: 12,
+              run_key: "seo-publish:2026-05-22T12",
+              status: "completed",
+              started_at: "2026-05-22T12:00:00.000Z",
+              finished_at: "2026-05-22T12:01:00.000Z"
+            }
+          ])
+      };
+    }
+    if (requestUrl.includes("/seo_landings") && options.method === "PATCH") {
+      const saved = { ...candidate, ...body };
+      patchedLandings.push(saved);
+      return { ok: true, status: 200, text: async () => JSON.stringify([saved]) };
+    }
+    if (
+      requestUrl.includes("/seo_landings") &&
+      parsedUrl.searchParams.get("status") === "in.(ready_to_publish,READY_TO_PUBLISH)"
+    ) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([candidate]) };
+    }
+    if (requestUrl.includes("/seo_landings")) {
+      return { ok: true, status: 200, text: async () => "[]" };
+    }
+    return { ok: true, status: 200, text: async () => "[]" };
+  };
+
+  try {
+    const result = await runSeoContentPublication({
+      now: "2026-05-22T12:30:00.000Z",
+      requestSource: "cron",
+      env: {
+        SEO_AUTOGENERATION_ENABLED: "true",
+        SEO_AUTOGENERATION_DRY_RUN: "false"
+      },
+      conditions: {
+        enabled: true,
+        max_per_day: 8,
+        max_per_week: 28,
+        max_per_run: 1,
+        min_score: 90
+      },
+      emailNotification: { enabled: false }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.published_count, 1);
+    assert.equal(result.candidates_count, 1);
+    assert.equal(result.cron.lock.schema_variant, "missing_request_source");
+    assert.equal(result.cron.lock.request_source_persisted, false);
+    assert.equal(patchedLandings.length, 1);
+    assert.equal(patchedLandings[0].status, "published");
+    assert.equal(postBodies.length, 3);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("lock horario running reciente sigue bloqueando la publicacion SEO", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url, options = {}) => {
+    if (options.method === "POST") {
+      return { ok: true, status: 200, text: async () => "[]" };
+    }
+    if (String(url).includes("seo_cron_runs?select=id")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              id: 12,
+              run_key: "seo-publish:2026-05-22T12",
+              status: "running",
+              started_at: "2026-05-22T12:25:00.000Z"
+            }
+          ])
+      };
+    }
+    return { ok: true, status: 200, text: async () => "[]" };
+  };
+
+  try {
+    const storage = createSeoContentPublicationStorage();
+    const run = await storage.startRun({ now: "2026-05-22T12:30:00.000Z", requestSource: "cron" });
+    assert.equal(run.acquired, false);
+    assert.equal(run.reason, "cron_already_running");
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+async function sitemapXmlForLandings(landings) {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(landings)
+  });
+  const chunks = [];
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+
+  try {
+    await sitemapHandler({ method: "GET", url: "/api/sitemap.xml", headers: { host: "inmoradar.app" } }, res);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+
+  return { statusCode: res.statusCode, xml: chunks.join("") };
+}
+
+test("la publicacion SEO promociona READY_TO_PUBLISH con score suficiente", async () => {
+  const saved = [];
+  const candidate = readyToPublishLanding({
+    source_data_json: {
+      indexability: {
+        sitemap_eligible: false,
+        sitemap_reason: "status_ready_to_publish",
+        reasons: ["status_ready_to_publish", "noindex", "not_public_ready_to_publish"]
+      }
+    }
+  });
+  let generationCalled = false;
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: readyPublicationStorage([candidate], saved),
+    runGeneration: async () => {
+      generationCalled = true;
+      return { ok: true, generated_count: 0, published_count: 0, results: [] };
+    }
+  });
+
+  assert.equal(generationCalled, false);
+  assert.equal(result.published_count, 1);
+  assert.equal(result.candidates_count, 1);
+  assert.equal(result.draft_count, 0);
+  assert.equal(result.skipped_count, 0);
+  assert.equal(result.results[0].status, "published");
+  assert.equal(result.publication_diagnostics.evaluated_candidates[0].category, "published");
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].status, "published");
+  assert.equal(saved[0].index_status, "index");
+  assert.equal(saved[0].published_at, "2026-05-22T12:00:00.000Z");
+  assert.equal(saved[0].source_data_json.indexability.sitemap_eligible, true);
+  assert.equal(saved[0].source_data_json.indexability.reasons.includes("not_public_ready_to_publish"), false);
+  assert.equal(saved[0].source_data_json.indexability.reasons.includes("noindex"), false);
+
+  const html = renderLandingHtml(saved[0]);
+  assert.match(html, /<meta name="robots" content="index,follow">/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/inmoradar\.app\/guias\/comprar-para-alquilar-rentabilidad\/">/);
+  assert.doesNotMatch(html, /noindex,follow/);
+
+  const sitemap = await sitemapXmlForLandings(saved);
+  assert.equal(sitemap.statusCode, 200);
+  assert.match(sitemap.xml, /https:\/\/inmoradar\.app\/guias\/comprar-para-alquilar-rentabilidad\//);
+  assert.match(sitemap.xml, /<lastmod>2026-05-22<\/lastmod>/);
+});
+
+test("diagnostico READY_TO_PUBLISH valido muestra would_publish y limite por ejecucion", async () => {
+  const result = await getSeoContentPublicationDiagnostics({
+    now: "2026-05-22T12:00:00.000Z",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: readyPublicationStorage([
+      readyToPublishLanding({ id: 1, slug: "guias/comprar-para-alquilar-rentabilidad" }),
+      readyToPublishLanding({ id: 2, slug: "guias/reforma-costes-ocultos", title: "Reforma: costes ocultos" })
+    ])
+  });
+
+  const candidates = result.publication_diagnostics.evaluated_candidates;
+  assert.equal(result.generation_summary.generated_count, 2);
+  assert.equal(result.generation_summary.candidates_count, 2);
+  assert.equal(result.generation_summary.draft_count, 0);
+  assert.equal(candidates.length, 2);
+  assert.equal(candidates[0].status, "would_publish");
+  assert.equal(candidates[0].reason, "dry_run_enabled");
+  assert.notEqual(candidates[0].category, "blocked_by_status");
+  assert.equal(candidates[1].status, "blocked");
+  assert.equal(candidates[1].reason, "execution_limit_reached");
+  assert.equal(candidates[1].category, "blocked_by_limit");
+});
+
+test("cron real reutiliza candidatas existentes que diagnostico marcaria como would_publish", async () => {
+  const seenTemplates = [];
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [];
+      },
+      async fetchReadyToPublishLandings() {
+        return [];
+      }
+    },
+    runGeneration: async (options) => {
+      seenTemplates.push({
+        template_type: options.template_type,
+        existingDraftsOnly: options.existingDraftsOnly,
+        readyToPublishOnly: options.readyToPublishOnly
+      });
+      if (options.template_type !== "all" || options.existingDraftsOnly !== true || options.readyToPublishOnly !== true) {
+        return { ok: true, generated_count: 0, published_count: 0, results: [] };
+      }
+      return {
+        ok: true,
+        mode: "publish",
+        template_type: "all",
+        generated_count: 2,
+        published_count: 1,
+        results: [
+          {
+            slug: "guias/comprar-para-alquilar-rentabilidad",
+            title: "Comprar para alquilar: rentabilidad real",
+            template_type: "editorial_guide",
+            status: "published",
+            index_status: "index",
+            quality_score: 100,
+            final_score: 100,
+            sitemap_eligible: true
+          },
+          {
+            slug: "guias/reforma-costes-ocultos",
+            title: "Reforma: costes ocultos",
+            template_type: "editorial_guide",
+            status: "blocked",
+            reason: "execution_limit_reached",
+            quality_score: 100,
+            final_score: 100,
+            sitemap_eligible: true
+          }
+        ]
+      };
+    }
+  });
+
+  assert.deepEqual(seenTemplates, [{ template_type: "all", existingDraftsOnly: true, readyToPublishOnly: true }]);
+  assert.equal(result.published_count, 1);
+  assert.equal(result.candidates_count, 2);
+  assert.equal(result.publication_diagnostics.evaluated_candidates_count, 2);
+  assert.equal(result.publication_diagnostics.evaluated_candidates[0].category, "published");
+  assert.equal(result.publication_diagnostics.evaluated_candidates[1].reason, "execution_limit_reached");
+  assert.equal(result.publication_diagnostics.evaluated_candidates[1].category, "blocked_by_limit");
+});
+
+test("la publicacion SEO no cuenta exito si el status cambia antes del PATCH", async () => {
+  const candidate = readyToPublishLanding();
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [];
+      },
+      async fetchReadyToPublishLandings() {
+        return [candidate];
+      },
+      async publishReadyToPublishLanding() {
+        return null;
+      }
+    }
+  });
+
+  assert.equal(result.published_count, 0);
+  assert.equal(result.skipped_count, 0);
+  assert.equal(result.results[0].status, "blocked");
+  assert.equal(result.results[0].reason, "status_changed_before_publish");
+  assert.equal(result.publication_diagnostics.evaluated_candidates[0].category, "blocked_by_status");
+});
+
+test("la publicacion SEO bloquea el segundo READY_TO_PUBLISH por maximo de ejecucion", async () => {
+  const saved = [];
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: readyPublicationStorage(
+      [
+        readyToPublishLanding({ id: 1, slug: "guias/comprar-para-alquilar-rentabilidad" }),
+        readyToPublishLanding({ id: 2, slug: "guias/reforma-costes-ocultos", title: "Reforma: costes ocultos" })
+      ],
+      saved
+    )
+  });
+
+  assert.equal(result.published_count, 1);
+  assert.equal(result.skipped_count, 0);
+  assert.equal(saved.length, 1);
+  assert.equal(result.results[1].status, "blocked");
+  assert.equal(result.results[1].reason, "execution_limit_reached");
+  assert.equal(result.publication_diagnostics.evaluated_candidates[1].category, "blocked_by_limit");
+});
+
+test("la publicacion SEO no promociona READY_TO_PUBLISH por score bajo", async () => {
+  const saved = [];
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: readyPublicationStorage([readyToPublishLanding({ quality_score: 80 })], saved)
+  });
+
+  assert.equal(result.published_count, 0);
+  assert.equal(saved.length, 0);
+  assert.equal(result.results[0].reason, "low_score");
+  assert.equal(result.publication_diagnostics.evaluated_candidates[0].category, "low_score");
+});
+
+test("diagnostico clasifica calidad missing antes que flags operativas", () => {
+  const diagnostics = buildPublicationDiagnostics({
+    config: { min_score: 90 },
+    results: [
+      {
+        slug: "guias/canonical-missing",
+        status: "skipped",
+        reason: "canonical_missing",
+        quality_score: 100,
+        indexability_reasons: ["canonical_missing"]
+      },
+      {
+        slug: "guias/content-missing",
+        status: "skipped",
+        reason: "content_missing",
+        quality_score: 100,
+        indexability_reasons: ["content_missing"]
+      },
+      {
+        slug: "guias/autogen-disabled",
+        status: "skipped",
+        reason: "autogeneration_disabled",
+        quality_score: 100
+      },
+      {
+        slug: "guias/dry-run",
+        status: "would_publish",
+        reason: "dry_run_enabled",
+        quality_score: 100
+      }
+    ]
+  });
+  const bySlug = Object.fromEntries(diagnostics.evaluated_candidates.map((candidate) => [candidate.slug, candidate]));
+
+  assert.equal(bySlug["guias/canonical-missing"].category, "blocked_by_quality");
+  assert.equal(bySlug["guias/content-missing"].category, "blocked_by_quality");
+  assert.equal(bySlug["guias/autogen-disabled"].category, "blocked_by_flag");
+  assert.equal(bySlug["guias/dry-run"].category, "blocked_by_flag");
+});
+
 test("diagnostico read-only explica candidatos bajo score que no cuentan como skip", async () => {
   let startRunCalled = false;
   let finishRunCalled = false;
@@ -989,6 +1798,172 @@ test("diagnostico read-only explica candidatos bajo score que no cuentan como sk
   assert.deepEqual(candidate.quality_warnings, ["fuente_visible_debil"]);
 });
 
+test("diagnostico read-only expone fuente real de seo_landings y candidatos objetivo", async () => {
+  let startRunCalled = false;
+  let finishRunCalled = false;
+  let publishCalled = false;
+  const ready = readyToPublishLanding({ id: 10, slug: "guias/comprar-para-alquilar-rentabilidad" });
+  const result = await getSeoContentPublicationDiagnostics({
+    now: "2026-05-22T12:00:00.000Z",
+    searchTerms: ["comprar-para-alquilar-rentabilidad", "slug-inexistente"],
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false",
+      SUPABASE_SERVICE_ROLE_KEY: "redaction-sentinel"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: {
+      async startRun() {
+        startRunCalled = true;
+      },
+      async finishRun() {
+        finishRunCalled = true;
+      },
+      async fetchRecentRuns() {
+        return [];
+      },
+      async fetchRecentPublishedRows() {
+        return [];
+      },
+      async fetchReadyToPublishLandings() {
+        return [];
+      },
+      async publishReadyToPublishLanding() {
+        publishCalled = true;
+      },
+      async fetchSeoLandingsSourceSnapshot() {
+        return {
+          ok: true,
+          schema_variant: "missing_index_status",
+          missing_columns: ["index_status", "published_at"],
+          total_rows: 2,
+          status_counts: { ready_to_publish: 1, published: 1 },
+          ready_to_publish_count: 1,
+          published_count: 1,
+          draft_count: 0,
+          needs_review_count: 0,
+          noindex_count: 0,
+          latest_rows: [
+            { slug: ready.slug, status: "ready_to_publish", title: ready.title, quality_score: 100 },
+            { slug: "guias/publicada", status: "published", title: "Publicada", quality_score: 94 }
+          ],
+          ready_to_publish_examples: [{ slug: ready.slug, status: "ready_to_publish", title: ready.title, quality_score: 100 }],
+          published_examples: [{ slug: "guias/publicada", status: "published", title: "Publicada", quality_score: 94 }],
+          search_results: [
+            {
+              search: "comprar-para-alquilar-rentabilidad",
+              exists: true,
+              matches: [{ slug: ready.slug, status: "ready_to_publish", title: ready.title, quality_score: 100 }]
+            },
+            { search: "slug-inexistente", exists: false, matches: [] }
+          ],
+          _target_candidate_rows: {
+            "comprar-para-alquilar-rentabilidad": ready,
+            "slug-inexistente": null
+          }
+        };
+      }
+    },
+    runGeneration: async () => ({ ok: true, generated_count: 0, published_count: 0, results: [] })
+  });
+
+  assert.equal(startRunCalled, false);
+  assert.equal(finishRunCalled, false);
+  assert.equal(publishCalled, false);
+  assert.equal(result.read_only, true);
+  assert.equal(result.writes_enabled, false);
+  assert.equal(result.seo_landings_source.total_rows, 2);
+  assert.deepEqual(result.seo_landings_source.status_counts, { ready_to_publish: 1, published: 1 });
+  assert.equal(result.seo_landings_source.ready_to_publish_count, 1);
+  assert.equal(result.seo_landings_source.published_count, 1);
+  assert.equal(result.seo_landings_source.schema_variant, "missing_index_status");
+  assert.deepEqual(result.seo_landings_source.missing_columns, ["index_status", "published_at"]);
+  assert.equal(result.seo_landings_source._target_candidate_rows, undefined);
+  assert.equal(result.publication_source_diagnosis.cron_can_see_ready_candidates, true);
+  assert.equal(result.publication_source_diagnosis.ready_candidate_count, 1);
+  assert.equal(result.target_landings[0].exists, true);
+  assert.equal(result.target_landings[0].status, "ready_to_publish");
+  assert.equal(result.target_landings[0].would_be_cron_candidate, true);
+  assert.equal(result.target_landings[1].exists, false);
+  assert.equal(result.target_landings[1].reason, "not_found");
+  assert.doesNotMatch(JSON.stringify(result), /redaction-sentinel/);
+});
+
+test("snapshot seo_landings es read-only y tolera esquema sin index_status ni published_at", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  const methods = [];
+  const selects = [];
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url, options = {}) => {
+    methods.push(options.method || "GET");
+    const request = new URL(String(url));
+    const select = request.searchParams.get("select") || "";
+    selects.push(select);
+    if (select === "index_status" || select === "published_at") {
+      return {
+        ok: false,
+        status: 400,
+        text: async () => `column "${select}" does not exist`
+      };
+    }
+    if (request.pathname.endsWith("/seo_landings") && select.includes("slug") && select.includes("status")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            readyToPublishLanding({ id: 1, slug: "guias/comprar-para-alquilar-rentabilidad" }),
+            readyToPublishLanding({ id: 2, slug: "guias/publicada", status: "published", quality_score: 94 })
+          ])
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([])
+    };
+  };
+
+  try {
+    const storage = createSeoContentPublicationStorage();
+    const snapshot = await storage.fetchSeoLandingsSourceSnapshot({
+      sampleLimit: 5,
+      searchTerms: ["comprar-para-alquilar-rentabilidad", "slug-inexistente"]
+    });
+
+    assert.ok(methods.length > 0);
+    assert.ok(methods.every((method) => method === "GET"));
+    assert.equal(snapshot.ok, true);
+    assert.equal(snapshot.schema_variant, "missing_index_status");
+    assert.ok(snapshot.missing_columns.includes("index_status"));
+    assert.ok(snapshot.missing_columns.includes("published_at"));
+    assert.equal(snapshot.total_rows, 2);
+    assert.equal(snapshot.status_counts.ready_to_publish, 1);
+    assert.equal(snapshot.status_counts.published, 1);
+    assert.ok(selects.some((select) => select.includes("meta_description")));
+    assert.ok(selects.some((select) => select.includes("h1")));
+    assert.ok(selects.some((select) => select.includes("body_html")));
+    assert.ok(selects.some((select) => select.includes("word_count")));
+    assert.equal(snapshot.search_results[0].exists, true);
+    assert.equal(snapshot.search_results[1].exists, false);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
 test("la publicacion SEO no salta el kill switch aunque settings este activo", async () => {
   let called = false;
   const result = await runSeoContentPublication({
@@ -1042,6 +2017,7 @@ test("la publicacion SEO exige score editorial minimo antes de publicar", () => 
   assert.equal(canPublishNow({ ...base, minScore: 95, quality: { score: 94 } }), false);
   assert.equal(canPublishNow({ ...base, minScore: 95, quality: { score: 95 } }), true);
   assert.equal(canPublishNow({ ...base, quality: { score: 95, technical_indexability_status: "blocked" } }), false);
+  assert.equal(canPublishNow({ ...base, quality: { score: 95, editorial_quality_status: "review" } }), false);
   assert.equal(canPublishNow({ ...base, quality: { score: 95, rejection_reasons: ["canonical_incoherent"] } }), false);
   assert.equal(canPublishNow({ ...base, quality: { score: 100 }, publishedToday: 4 }), false);
 });
@@ -1066,6 +2042,63 @@ test("indexability respeta score minimo configurable en cero", () => {
   assert.equal(result.min_quality_score, 0);
   assert.equal(result.can_publish, true);
   assert.equal(result.reasons.includes("quality_score_below_threshold"), false);
+});
+
+test("indexability acepta metadatos y cuerpo desde columnas directas de seo_landings", () => {
+  const landing = {
+    ...readyToPublishLanding({ slug: "guias/qa-ready-to-publish-autogen-test" }),
+    status: "published",
+    index_status: "index"
+  };
+  const result = evaluateLandingIndexability(landing, { minQualityScore: 90 });
+
+  assert.equal(result.can_publish, true);
+  assert.equal(result.sitemap_eligible, true);
+  assert.deepEqual(result.publish_reasons, []);
+});
+
+test("indexability acepta metadatos y cuerpo desde source_data_json como fallback", () => {
+  const sourceLanding = readyToPublishLanding({ slug: "guias/source-data-only" });
+  const landing = {
+    slug: sourceLanding.slug,
+    status: "published",
+    index_status: "index",
+    quality_score: 100,
+    canonical_url: sourceLanding.canonical_url,
+    source_data_json: {
+      title: sourceLanding.title,
+      meta_title: sourceLanding.meta_title,
+      meta_description: sourceLanding.meta_description,
+      h1: sourceLanding.h1,
+      body_html: sourceLanding.body_html,
+      quality: sourceLanding.source_data_json.quality
+    }
+  };
+  const result = evaluateLandingIndexability(landing, { minQualityScore: 90 });
+
+  assert.equal(result.can_publish, true);
+  assert.equal(result.sitemap_eligible, true);
+  assert.deepEqual(result.publish_reasons, []);
+});
+
+test("indexability mantiene blockers reales si faltan meta, h1 o contenido suficiente", () => {
+  const missingMeta = { ...readyToPublishLanding({ slug: "guias/missing-meta" }), status: "published", index_status: "index" };
+  missingMeta.meta_description = "";
+  const missingH1 = { ...readyToPublishLanding({ slug: "guias/missing-h1" }), status: "published", index_status: "index" };
+  missingH1.h1 = "";
+  const shortBody = {
+    ...readyToPublishLanding({
+      slug: "guias/short-body",
+      body_html: '<article><p>Contenido corto.</p><a href="/datos">Datos</a><a href="/metodologia">Metodologia</a></article>',
+      word_count: 2
+    }),
+    status: "published",
+    index_status: "index"
+  };
+
+  assert.ok(evaluateLandingIndexability(missingMeta, { minQualityScore: 90 }).publish_reasons.includes("missing_meta_description"));
+  assert.ok(evaluateLandingIndexability(missingH1, { minQualityScore: 90 }).publish_reasons.includes("missing_h1"));
+  assert.ok(evaluateLandingIndexability(shortBody, { minQualityScore: 90 }).publish_reasons.includes("low_content"));
 });
 
 test("las landings publicas cargan analitica solo tras consentimiento", () => {
@@ -1332,6 +2365,72 @@ test("sitemap consulta solo landings publicadas indexables y con quality_score s
   assert.equal(params.get("status"), "eq.published");
   assert.equal(params.get("index_status"), "eq.index");
   assert.equal(params.get("quality_score"), "gte.75");
+});
+
+test("sitemap cae a columnas compatibles si seo_landings no tiene index_status ni published_at", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  const requestedUrls = [];
+  const landing = readyToPublishLanding({
+    status: "published",
+    slug: "guias/comprar-para-alquilar-rentabilidad",
+    updated_at: "2026-05-22T12:00:00.000Z"
+  });
+  delete landing.index_status;
+  delete landing.published_at;
+
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url) => {
+    requestedUrls.push(String(url));
+    if (String(url).includes("index_status")) {
+      return {
+        ok: false,
+        status: 400,
+        text: async () => 'column "index_status" does not exist'
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([landing])
+    };
+  };
+
+  const chunks = [];
+  const req = {
+    method: "GET",
+    url: "/api/sitemap.xml",
+    headers: { host: "inmoradar.app" }
+  };
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+
+  try {
+    await sitemapHandler(req, res);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+
+  const landingRequests = requestedUrls.filter((url) => url.includes("/rest/v1/seo_landings"));
+  assert.equal(landingRequests.length, 2);
+  assert.equal(new URL(landingRequests[1]).searchParams.get("index_status"), null);
+  const xml = chunks.join("");
+  assert.match(xml, /https:\/\/inmoradar\.app\/guias\/comprar-para-alquilar-rentabilidad\//);
+  assert.match(xml, /<lastmod>2026-05-22<\/lastmod>/);
 });
 
 test("sitemap publica solo URLs canonicas sin www e incluye hubs SEO indexables", async () => {
