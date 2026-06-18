@@ -13,6 +13,7 @@ const SCHEDULE = "0 */4 * * *";
 const SCHEDULE_INTERVAL_HOURS = 4;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
+const RUN_LOCK_STALE_MS = 15 * 60 * 1000;
 const MIN_PUBLISH_SCORE = 85;
 
 function safeError(error) {
@@ -103,6 +104,13 @@ function isMissingSeoPublicationColumn(error) {
   return /column\s+"?(index_status|published_at)"?\s+does not exist/i.test(String(error?.message || error || ""));
 }
 
+function isActiveRunLock(row, now) {
+  if (String(row?.status || "").toLowerCase() !== "running") return false;
+  const started = Date.parse(row.started_at || "");
+  if (!Number.isFinite(started)) return true;
+  return new Date(now).getTime() - started < RUN_LOCK_STALE_MS;
+}
+
 function createSeoContentPublicationStorage() {
   return {
     async startRun({ now, requestSource }) {
@@ -125,7 +133,34 @@ function createSeoContentPublicationStorage() {
         timeoutMs: 5000
       });
       const row = Array.isArray(rows) ? rows[0] : rows;
-      if (!row?.id) return { persisted: true, acquired: false, reason: "cron_already_running_or_completed" };
+      if (!row?.id) {
+        const existingRows = await safeSupabase(
+          `seo_cron_runs?select=id,run_key,status,started_at,finished_at&run_key=eq.${encodeURIComponent(runKey)}&limit=1`,
+          []
+        );
+        const existing = Array.isArray(existingRows) ? existingRows[0] : null;
+        if (isActiveRunLock(existing, now)) {
+          return { persisted: true, acquired: false, reason: "cron_already_running", existing_run: existing };
+        }
+        const retryRunKey = `${runKey}:retry:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+        const retryRows = await supabaseFetch("seo_cron_runs?on_conflict=run_key", {
+          method: "POST",
+          headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
+          body: JSON.stringify([
+            {
+              job_name: JOB_NAME,
+              run_key: retryRunKey,
+              request_source: requestSource,
+              status: "running",
+              started_at: now
+            }
+          ]),
+          timeoutMs: 5000
+        });
+        const retryRow = Array.isArray(retryRows) ? retryRows[0] : retryRows;
+        if (!retryRow?.id) return { persisted: true, acquired: false, reason: "cron_retry_lock_not_acquired", existing_run: existing };
+        return { persisted: true, acquired: true, id: retryRow.id, run_key: retryRow.run_key, retried_from_run_key: runKey };
+      }
       return { persisted: true, acquired: true, id: row.id, run_key: row.run_key };
     },
     async finishRun(run, patch) {

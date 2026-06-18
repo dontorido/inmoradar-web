@@ -1112,6 +1112,102 @@ test("fetch READY_TO_PUBLISH usa consulta tolerante y columnas reales", async ()
   }
 });
 
+test("lock horario completado no bloquea una nueva ejecucion SEO", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  const calls = [];
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), method: options.method || "GET", body: options.body ? JSON.parse(options.body) : null });
+    if (options.method === "POST" && String(options.body).includes("seo-publish:2026-05-22T12")) {
+      if (calls.filter((call) => call.method === "POST").length === 1) {
+        return { ok: true, status: 200, text: async () => "[]" };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ id: 99, run_key: "seo-publish:2026-05-22T12:retry:test" }])
+      };
+    }
+    if (String(url).includes("seo_cron_runs?select=id")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              id: 12,
+              run_key: "seo-publish:2026-05-22T12",
+              status: "completed",
+              started_at: "2026-05-22T12:00:00.000Z",
+              finished_at: "2026-05-22T12:01:00.000Z"
+            }
+          ])
+      };
+    }
+    return { ok: true, status: 200, text: async () => "[]" };
+  };
+
+  try {
+    const storage = createSeoContentPublicationStorage();
+    const run = await storage.startRun({ now: "2026-05-22T12:30:00.000Z", requestSource: "cron" });
+    assert.equal(run.acquired, true);
+    assert.equal(run.id, 99);
+    assert.match(run.run_key, /:retry:/);
+    assert.equal(calls.filter((call) => call.method === "POST").length, 2);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("lock horario running reciente sigue bloqueando la publicacion SEO", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url, options = {}) => {
+    if (options.method === "POST") {
+      return { ok: true, status: 200, text: async () => "[]" };
+    }
+    if (String(url).includes("seo_cron_runs?select=id")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              id: 12,
+              run_key: "seo-publish:2026-05-22T12",
+              status: "running",
+              started_at: "2026-05-22T12:25:00.000Z"
+            }
+          ])
+      };
+    }
+    return { ok: true, status: 200, text: async () => "[]" };
+  };
+
+  try {
+    const storage = createSeoContentPublicationStorage();
+    const run = await storage.startRun({ now: "2026-05-22T12:30:00.000Z", requestSource: "cron" });
+    assert.equal(run.acquired, false);
+    assert.equal(run.reason, "cron_already_running");
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
 async function sitemapXmlForLandings(landings) {
   const previousUrl = process.env.SUPABASE_URL;
   const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
