@@ -973,7 +973,13 @@ async function handleSeoAutogenerationDiagnostics(req, url) {
   }
   const result = await getSeoContentPublicationDiagnostics({
     template_type: url.searchParams.get("template_type") || url.searchParams.get("scope") || "all",
-    candidateLimit: url.searchParams.get("candidate_limit") || url.searchParams.get("limit") || undefined
+    candidateLimit: url.searchParams.get("candidate_limit") || url.searchParams.get("limit") || undefined,
+    searchTerms:
+      url.searchParams.getAll("search").concat(
+        url.searchParams.getAll("slug"),
+        url.searchParams.getAll("path"),
+        url.searchParams.getAll("target_slug")
+      )
   });
   return { status: 200, payload: result };
 }

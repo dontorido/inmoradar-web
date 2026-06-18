@@ -1623,6 +1623,166 @@ test("diagnostico read-only explica candidatos bajo score que no cuentan como sk
   assert.deepEqual(candidate.quality_warnings, ["fuente_visible_debil"]);
 });
 
+test("diagnostico read-only expone fuente real de seo_landings y candidatos objetivo", async () => {
+  let startRunCalled = false;
+  let finishRunCalled = false;
+  let publishCalled = false;
+  const ready = readyToPublishLanding({ id: 10, slug: "guias/comprar-para-alquilar-rentabilidad" });
+  const result = await getSeoContentPublicationDiagnostics({
+    now: "2026-05-22T12:00:00.000Z",
+    searchTerms: ["comprar-para-alquilar-rentabilidad", "slug-inexistente"],
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false",
+      SUPABASE_SERVICE_ROLE_KEY: "redaction-sentinel"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: {
+      async startRun() {
+        startRunCalled = true;
+      },
+      async finishRun() {
+        finishRunCalled = true;
+      },
+      async fetchRecentRuns() {
+        return [];
+      },
+      async fetchRecentPublishedRows() {
+        return [];
+      },
+      async fetchReadyToPublishLandings() {
+        return [];
+      },
+      async publishReadyToPublishLanding() {
+        publishCalled = true;
+      },
+      async fetchSeoLandingsSourceSnapshot() {
+        return {
+          ok: true,
+          schema_variant: "missing_index_status",
+          missing_columns: ["index_status", "published_at"],
+          total_rows: 2,
+          status_counts: { ready_to_publish: 1, published: 1 },
+          ready_to_publish_count: 1,
+          published_count: 1,
+          draft_count: 0,
+          needs_review_count: 0,
+          noindex_count: 0,
+          latest_rows: [
+            { slug: ready.slug, status: "ready_to_publish", title: ready.title, quality_score: 100 },
+            { slug: "guias/publicada", status: "published", title: "Publicada", quality_score: 94 }
+          ],
+          ready_to_publish_examples: [{ slug: ready.slug, status: "ready_to_publish", title: ready.title, quality_score: 100 }],
+          published_examples: [{ slug: "guias/publicada", status: "published", title: "Publicada", quality_score: 94 }],
+          search_results: [
+            {
+              search: "comprar-para-alquilar-rentabilidad",
+              exists: true,
+              matches: [{ slug: ready.slug, status: "ready_to_publish", title: ready.title, quality_score: 100 }]
+            },
+            { search: "slug-inexistente", exists: false, matches: [] }
+          ],
+          _target_candidate_rows: {
+            "comprar-para-alquilar-rentabilidad": ready,
+            "slug-inexistente": null
+          }
+        };
+      }
+    },
+    runGeneration: async () => ({ ok: true, generated_count: 0, published_count: 0, results: [] })
+  });
+
+  assert.equal(startRunCalled, false);
+  assert.equal(finishRunCalled, false);
+  assert.equal(publishCalled, false);
+  assert.equal(result.read_only, true);
+  assert.equal(result.writes_enabled, false);
+  assert.equal(result.seo_landings_source.total_rows, 2);
+  assert.deepEqual(result.seo_landings_source.status_counts, { ready_to_publish: 1, published: 1 });
+  assert.equal(result.seo_landings_source.ready_to_publish_count, 1);
+  assert.equal(result.seo_landings_source.published_count, 1);
+  assert.equal(result.seo_landings_source.schema_variant, "missing_index_status");
+  assert.deepEqual(result.seo_landings_source.missing_columns, ["index_status", "published_at"]);
+  assert.equal(result.seo_landings_source._target_candidate_rows, undefined);
+  assert.equal(result.publication_source_diagnosis.cron_can_see_ready_candidates, true);
+  assert.equal(result.publication_source_diagnosis.ready_candidate_count, 1);
+  assert.equal(result.target_landings[0].exists, true);
+  assert.equal(result.target_landings[0].status, "ready_to_publish");
+  assert.equal(result.target_landings[0].would_be_cron_candidate, true);
+  assert.equal(result.target_landings[1].exists, false);
+  assert.equal(result.target_landings[1].reason, "not_found");
+  assert.doesNotMatch(JSON.stringify(result), /redaction-sentinel/);
+});
+
+test("snapshot seo_landings es read-only y tolera esquema sin index_status ni published_at", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  const methods = [];
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url, options = {}) => {
+    methods.push(options.method || "GET");
+    const request = new URL(String(url));
+    const select = request.searchParams.get("select") || "";
+    if (select === "index_status" || select === "published_at") {
+      return {
+        ok: false,
+        status: 400,
+        text: async () => `column "${select}" does not exist`
+      };
+    }
+    if (request.pathname.endsWith("/seo_landings") && select.includes("slug") && select.includes("status")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            readyToPublishLanding({ id: 1, slug: "guias/comprar-para-alquilar-rentabilidad" }),
+            readyToPublishLanding({ id: 2, slug: "guias/publicada", status: "published", quality_score: 94 })
+          ])
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([])
+    };
+  };
+
+  try {
+    const storage = createSeoContentPublicationStorage();
+    const snapshot = await storage.fetchSeoLandingsSourceSnapshot({
+      sampleLimit: 5,
+      searchTerms: ["comprar-para-alquilar-rentabilidad", "slug-inexistente"]
+    });
+
+    assert.ok(methods.length > 0);
+    assert.ok(methods.every((method) => method === "GET"));
+    assert.equal(snapshot.ok, true);
+    assert.equal(snapshot.schema_variant, "missing_index_status");
+    assert.ok(snapshot.missing_columns.includes("index_status"));
+    assert.ok(snapshot.missing_columns.includes("published_at"));
+    assert.equal(snapshot.total_rows, 2);
+    assert.equal(snapshot.status_counts.ready_to_publish, 1);
+    assert.equal(snapshot.status_counts.published, 1);
+    assert.equal(snapshot.search_results[0].exists, true);
+    assert.equal(snapshot.search_results[1].exists, false);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
 test("la publicacion SEO no salta el kill switch aunque settings este activo", async () => {
   let called = false;
   const result = await runSeoContentPublication({

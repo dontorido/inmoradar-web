@@ -104,11 +104,87 @@ function isMissingSeoPublicationColumn(error) {
   return /column\s+"?(index_status|published_at)"?\s+does not exist/i.test(String(error?.message || error || ""));
 }
 
+function compactObject(value = {}) {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
+}
+
+function normalizeSearchTerm(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^https?:\/\/[^/]+/i, "")
+    .replace(/^\/+|\/+$/g, "");
+}
+
+function normalizeSearchTerms(values = []) {
+  const list = Array.isArray(values) ? values : [values];
+  return [...new Set(list.map(normalizeSearchTerm).filter(Boolean))];
+}
+
 function isActiveRunLock(row, now) {
   if (String(row?.status || "").toLowerCase() !== "running") return false;
   const started = Date.parse(row.started_at || "");
   if (!Number.isFinite(started)) return true;
   return new Date(now).getTime() - started < RUN_LOCK_STALE_MS;
+}
+
+async function probeSeoLandingColumns(columns = []) {
+  const availability = {};
+  await Promise.all(
+    columns.map(async (column) => {
+      const rows = await safeSupabase(`seo_landings?select=${encodeURIComponent(column)}&limit=1`, null);
+      availability[column] = Array.isArray(rows);
+    })
+  );
+  return availability;
+}
+
+function schemaVariantFromAvailability(availability = {}, inaccessible = false) {
+  if (inaccessible) return "unknown";
+  const hasContentColumn = ["body_html", "body", "content_html", "html"].some((column) => availability[column]);
+  if (!availability.quality_score || !availability.canonical_url || !hasContentColumn) return "minimal";
+  if (!availability.index_status && availability.published_at) return "missing_index_status";
+  if (availability.index_status && !availability.published_at) return "missing_published_at";
+  if (!availability.index_status && !availability.published_at) return "missing_index_status";
+  return "full";
+}
+
+function seoLandingSelectFromAvailability(availability = {}) {
+  const requiredColumns = ["id", "slug", "title", "status", "updated_at", "last_generated_at", "source_data_json"];
+  const optionalColumns = [
+    "path",
+    "quality_score",
+    "canonical_url",
+    "body_html",
+    "body",
+    "content_html",
+    "html",
+    "index_status",
+    "published_at"
+  ];
+  const columns = [];
+  for (const column of requiredColumns) {
+    if (availability[column] !== false) columns.push(column);
+  }
+  for (const column of optionalColumns) {
+    if (availability[column]) columns.push(column);
+  }
+  return [...new Set(columns)].join(",");
+}
+
+function publicSeoLandingRow(row = {}) {
+  return compactObject({
+    id: row.id ?? null,
+    slug: row.slug || row.path || null,
+    path: row.path || (row.slug ? `/${String(row.slug).replace(/^\/+|\/+$/g, "")}/` : null),
+    title: row.title || null,
+    status: row.status || null,
+    quality_score: row.quality_score ?? null,
+    canonical_url: row.canonical_url || null,
+    index_status: row.index_status || null,
+    published_at: row.published_at || null,
+    updated_at: row.updated_at || null,
+    last_generated_at: row.last_generated_at || null
+  });
 }
 
 function createSeoContentPublicationStorage() {
@@ -211,6 +287,122 @@ function createSeoContentPublicationStorage() {
         (await safeSupabase("seo_landings?select=status,index_status&limit=5000", null)) ||
         (await safeSupabase("seo_landings?select=status,quality_score,source_data_json&limit=5000", []));
       return countSeoPublicationTotals(rows);
+    },
+    async fetchSeoLandingsSourceSnapshot({ sampleLimit = 10, searchTerms = [] } = {}) {
+      if (!hasSupabaseConfig()) {
+        return {
+          ok: false,
+          reason: "supabase_not_configured",
+          schema_variant: "unknown",
+          missing_columns: [],
+          total_rows: 0,
+          status_counts: {},
+          ready_to_publish_count: 0,
+          published_count: 0,
+          latest_rows: [],
+          ready_to_publish_examples: [],
+          published_examples: [],
+          search_results: []
+        };
+      }
+      const expectedColumns = [
+        "id",
+        "slug",
+        "path",
+        "title",
+        "status",
+        "quality_score",
+        "canonical_url",
+        "body_html",
+        "body",
+        "content_html",
+        "html",
+        "index_status",
+        "published_at",
+        "updated_at",
+        "last_generated_at",
+        "source_data_json"
+      ];
+      const availability = await probeSeoLandingColumns(expectedColumns);
+      const select = seoLandingSelectFromAvailability(availability);
+      const params = new URLSearchParams({
+        select,
+        limit: "5000"
+      });
+      if (availability.updated_at) params.set("order", "updated_at.desc");
+      const rows = await safeSupabase(`seo_landings?${params.toString()}`, null);
+      if (!Array.isArray(rows)) {
+        return {
+          ok: false,
+          reason: "seo_landings_unreadable",
+          schema_variant: "unknown",
+          missing_columns: expectedColumns.filter((column) => availability[column] === false),
+          total_rows: 0,
+          status_counts: {},
+          ready_to_publish_count: 0,
+          published_count: 0,
+          latest_rows: [],
+          ready_to_publish_examples: [],
+          published_examples: [],
+          search_results: []
+        };
+      }
+      const normalizedLimit = Math.max(1, Math.min(50, Number(sampleLimit) || 10));
+      const statusCounts = {};
+      for (const row of rows) {
+        const status = String(row.status || "unknown").toLowerCase();
+        statusCounts[status] = (statusCounts[status] || 0) + 1;
+      }
+      const publicRows = rows.map(publicSeoLandingRow);
+      const searchNeedles = normalizeSearchTerms(searchTerms);
+      const searchResults = searchNeedles.map((term) => {
+        const matches = rows.filter((row) => {
+          const publicRow = publicSeoLandingRow(row);
+          const haystack = [publicRow.slug, publicRow.path, publicRow.canonical_url, publicRow.title].filter(Boolean).join(" ").toLowerCase();
+          return haystack.includes(term.toLowerCase());
+        });
+        return {
+          search: term,
+          exists: matches.length > 0,
+          matches: matches.slice(0, normalizedLimit).map(publicSeoLandingRow)
+        };
+      });
+      const targetCandidateRows = Object.fromEntries(
+        searchNeedles.map((term) => {
+          const match = rows.find((row) => {
+            const publicRow = publicSeoLandingRow(row);
+            const haystack = [publicRow.slug, publicRow.path, publicRow.canonical_url, publicRow.title].filter(Boolean).join(" ").toLowerCase();
+            return haystack.includes(term.toLowerCase());
+          });
+          return [term, match || null];
+        })
+      );
+      const missingColumns = expectedColumns.filter((column) => availability[column] === false);
+
+      return {
+        ok: true,
+        schema_variant: schemaVariantFromAvailability(availability),
+        missing_columns: missingColumns,
+        column_availability: availability,
+        total_rows: rows.length,
+        total_rows_limit: 5000,
+        total_rows_may_be_capped: rows.length >= 5000,
+        status_counts: statusCounts,
+        ready_to_publish_count: Number(statusCounts.ready_to_publish || 0),
+        published_count: Number(statusCounts.published || 0),
+        draft_count: Number(statusCounts.draft || 0),
+        needs_review_count: Number(statusCounts.needs_review || 0),
+        noindex_count: Number(statusCounts.noindex || 0),
+        latest_rows: publicRows.slice(0, normalizedLimit),
+        ready_to_publish_examples: publicRows
+          .filter((row) => String(row.status || "").toLowerCase() === "ready_to_publish")
+          .slice(0, normalizedLimit),
+        published_examples: publicRows
+          .filter((row) => String(row.status || "").toLowerCase() === "published")
+          .slice(0, normalizedLimit),
+        search_results: searchResults,
+        _target_candidate_rows: targetCandidateRows
+      };
     },
     async fetchReadyToPublishLandings({ candidateLimit = 25 } = {}) {
       if (!hasSupabaseConfig()) return [];
@@ -415,6 +607,92 @@ function readyLandingPublicationBlocker({ landing, quality, indexability, config
   if (rejectionReasons.length) return rejectionReasons[0];
   if (!indexability.can_publish) return indexability.publish_reasons?.[0] || indexability.primary_reason || "quality_blocked";
   return null;
+}
+
+function diagnoseSeoLandingSource({ snapshot, config, limits }) {
+  const safeSnapshot = snapshot || {};
+  const readyCount = Number(safeSnapshot.ready_to_publish_count || 0);
+  const cronCanSeeReadyCandidates = readyCount > 0;
+  let reasonIfZero = null;
+  if (!safeSnapshot.ok) reasonIfZero = safeSnapshot.reason || "seo_landings_unreadable";
+  else if (Number(safeSnapshot.total_rows || 0) === 0) reasonIfZero = "seo_landings_empty";
+  else if (!readyCount) reasonIfZero = "no_ready_to_publish_rows";
+
+  return {
+    cron_can_see_ready_candidates: cronCanSeeReadyCandidates,
+    ready_candidate_count: readyCount,
+    reason_if_zero: reasonIfZero,
+    probable_next_step: cronCanSeeReadyCandidates
+      ? "Run a single protected cron validation only after confirming quotas and dry_run=false."
+      : "Create or restore seo_landings rows with status ready_to_publish, then rerun this read-only diagnostic."
+  };
+}
+
+function candidateDiagnosisFromLanding(row, { config, limits, publishedThisRun = 0 } = {}) {
+  if (!row?.exists) {
+    return {
+      would_be_cron_candidate: false,
+      reason: "not_found"
+    };
+  }
+  const landing = row.match || {};
+  const quality = qualityFromReadyLanding(landing);
+  const score = scoreFromReadyLanding(landing, quality);
+  const publishCandidate = {
+    ...landing,
+    status: "published",
+    index_status: "index",
+    quality_score: score,
+    word_count: landing.word_count ?? quality.word_count
+  };
+  const indexability = evaluateLandingIndexability(publishCandidate, { quality, minQualityScore: config.min_score });
+  const blocker = readyLandingPublicationBlocker({
+    landing,
+    quality,
+    indexability,
+    config,
+    limits,
+    publishedThisRun
+  });
+  return {
+    would_be_cron_candidate: !blocker,
+    reason: blocker || "ready_to_publish_candidate",
+    score,
+    min_score: config.min_score,
+    meets_min_score: score >= config.min_score,
+    technical_indexability_status: quality?.technical_indexability_status || null,
+    editorial_quality_status: quality?.editorial_quality_status || null,
+    indexability_reasons: arrayOrEmpty(indexability.reasons),
+    sitemap_eligible_after_publish: Boolean(indexability.sitemap_eligible)
+  };
+}
+
+function targetLandingDiagnostics({ snapshot, config, limits, targetTerms }) {
+  const bySearch = new Map((snapshot?.search_results || []).map((item) => [item.search, item]));
+  const rawMatches = snapshot?._target_candidate_rows || {};
+  return normalizeSearchTerms(targetTerms).map((term) => {
+    const searchResult = bySearch.get(term) || { search: term, exists: false, matches: [] };
+    const match = Array.isArray(searchResult.matches) ? searchResult.matches[0] || null : null;
+    const rawMatch = rawMatches[term] || null;
+    const diagnosis = candidateDiagnosisFromLanding(
+      {
+        exists: Boolean(searchResult.exists && rawMatch),
+        match: rawMatch
+      },
+      { config, limits }
+    );
+    return {
+      search: term,
+      exists: Boolean(searchResult.exists),
+      status: match?.status || null,
+      slug: match?.slug || null,
+      path: match?.path || null,
+      title: match?.title || null,
+      quality_score: match?.quality_score ?? null,
+      ...diagnosis,
+      match_count: Array.isArray(searchResult.matches) ? searchResult.matches.length : 0
+    };
+  });
 }
 
 async function publishReadyToPublishLandings({ storage, config, now, limits, candidateLimit = 25 }) {
@@ -846,6 +1124,31 @@ async function getSeoContentPublicationDiagnostics(options = {}) {
   const limits = limitSnapshot({ rows, policy: dailyPolicy, config, publishedThisRun: 0, now });
   const candidateLimit = clampInt(options.candidateLimit ?? options.candidate_limit ?? options.limit, 25, 1, 25);
   const templateType = diagnosticTemplateType(options.templateType || options.template_type || "all");
+  const requestedTargetTerms = normalizeSearchTerms(
+    options.searchTerms || options.search_terms || options.search || options.slug || options.path
+  );
+  const targetTerms = requestedTargetTerms.length
+    ? requestedTargetTerms
+    : ["guias/comprar-para-alquilar-rentabilidad", "guias/reforma-costes-ocultos"];
+  const sourceSnapshot = storage.fetchSeoLandingsSourceSnapshot
+    ? await storage.fetchSeoLandingsSourceSnapshot({
+        sampleLimit: candidateLimit,
+        searchTerms: targetTerms
+      })
+    : {
+        ok: false,
+        reason: "seo_landings_snapshot_unavailable",
+        schema_variant: "unknown",
+        missing_columns: [],
+        total_rows: 0,
+        status_counts: {},
+        ready_to_publish_count: 0,
+        published_count: 0,
+        latest_rows: [],
+        ready_to_publish_examples: [],
+        published_examples: [],
+        search_results: []
+      };
   const runGeneration = options.runGeneration || runSeoLandingGeneration;
   const readyPublication = await publishReadyToPublishLandings({
     storage,
@@ -882,6 +1185,9 @@ async function getSeoContentPublicationDiagnostics(options = {}) {
   });
   const diagnostics = buildPublicationDiagnostics(previewSummary);
   const notPublishedCandidates = diagnostics.evaluated_candidates.filter((item) => item.status !== "published");
+  const targetDiagnostics = targetLandingDiagnostics({ snapshot: sourceSnapshot, config, limits, targetTerms });
+  const publicSourceSnapshot = { ...sourceSnapshot };
+  delete publicSourceSnapshot._target_candidate_rows;
 
   return {
     ok: true,
@@ -912,6 +1218,9 @@ async function getSeoContentPublicationDiagnostics(options = {}) {
       failed_count: previewSummary.failed_count,
       non_published_count: notPublishedCandidates.length
     },
+    seo_landings_source: publicSourceSnapshot,
+    target_landings: targetDiagnostics,
+    publication_source_diagnosis: diagnoseSeoLandingSource({ snapshot: sourceSnapshot, config, limits }),
     publication_diagnostics: diagnostics,
     counter_diagnosis: {
       skipped_count_scope: "Only statuses skipped and would_skip increment skipped_count.",
