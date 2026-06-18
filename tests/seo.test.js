@@ -1156,7 +1156,182 @@ test("lock horario completado no bloquea una nueva ejecucion SEO", async () => {
     assert.equal(run.acquired, true);
     assert.equal(run.id, 99);
     assert.match(run.run_key, /:retry:/);
+    assert.equal(run.request_source_persisted, true);
+    assert.equal(calls.findLast((call) => call.method === "POST").body[0].request_source, "cron");
     assert.equal(calls.filter((call) => call.method === "POST").length, 2);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("lock horario reintenta sin request_source si seo_cron_runs no tiene esa columna", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  const postBodies = [];
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url, options = {}) => {
+    const body = options.body ? JSON.parse(options.body) : null;
+    if (options.method === "POST") {
+      postBodies.push(body);
+      if (postBodies.length === 1) {
+        return { ok: true, status: 200, text: async () => "[]" };
+      }
+      if (body?.[0]?.request_source) {
+        return {
+          ok: false,
+          status: 400,
+          text: async () =>
+            JSON.stringify({
+              code: "PGRST204",
+              message: "Could not find the 'request_source' column of 'seo_cron_runs' in the schema cache"
+            })
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ id: 101, run_key: body[0].run_key }])
+      };
+    }
+    if (String(url).includes("seo_cron_runs?select=id")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              id: 12,
+              run_key: "seo-publish:2026-05-22T12",
+              status: "completed",
+              started_at: "2026-05-22T12:00:00.000Z",
+              finished_at: "2026-05-22T12:01:00.000Z"
+            }
+          ])
+      };
+    }
+    return { ok: true, status: 200, text: async () => "[]" };
+  };
+
+  try {
+    const storage = createSeoContentPublicationStorage();
+    const run = await storage.startRun({ now: "2026-05-22T12:30:00.000Z", requestSource: "cron" });
+    assert.equal(run.acquired, true);
+    assert.equal(run.id, 101);
+    assert.equal(run.schema_variant, "missing_request_source");
+    assert.equal(run.request_source_persisted, false);
+    assert.equal(postBodies.length, 3);
+    assert.equal(postBodies[1][0].request_source, "cron");
+    assert.equal(postBodies[2][0].request_source, undefined);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("cron continua y publica READY_TO_PUBLISH aunque seo_cron_runs no tenga request_source", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  const candidate = readyToPublishLanding({ id: 279, slug: "guias/qa-ready-to-publish-autogen-test" });
+  const postBodies = [];
+  const patchedLandings = [];
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url, options = {}) => {
+    const requestUrl = String(url);
+    const parsedUrl = new URL(requestUrl);
+    const body = options.body ? JSON.parse(options.body) : null;
+    if (requestUrl.includes("/seo_cron_runs") && options.method === "POST") {
+      postBodies.push(body);
+      if (postBodies.length === 1) return { ok: true, status: 200, text: async () => "[]" };
+      if (body?.[0]?.request_source) {
+        return {
+          ok: false,
+          status: 400,
+          text: async () =>
+            JSON.stringify({
+              code: "PGRST204",
+              message: "Could not find the 'request_source' column of 'seo_cron_runs' in the schema cache"
+            })
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify([{ id: 501, run_key: body[0].run_key }])
+      };
+    }
+    if (requestUrl.includes("/seo_cron_runs") && options.method === "PATCH") {
+      return { ok: true, status: 204, text: async () => "" };
+    }
+    if (requestUrl.includes("/seo_cron_runs?select=id")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              id: 12,
+              run_key: "seo-publish:2026-05-22T12",
+              status: "completed",
+              started_at: "2026-05-22T12:00:00.000Z",
+              finished_at: "2026-05-22T12:01:00.000Z"
+            }
+          ])
+      };
+    }
+    if (requestUrl.includes("/seo_landings") && options.method === "PATCH") {
+      const saved = { ...candidate, ...body };
+      patchedLandings.push(saved);
+      return { ok: true, status: 200, text: async () => JSON.stringify([saved]) };
+    }
+    if (
+      requestUrl.includes("/seo_landings") &&
+      parsedUrl.searchParams.get("status") === "in.(ready_to_publish,READY_TO_PUBLISH)"
+    ) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([candidate]) };
+    }
+    if (requestUrl.includes("/seo_landings")) {
+      return { ok: true, status: 200, text: async () => "[]" };
+    }
+    return { ok: true, status: 200, text: async () => "[]" };
+  };
+
+  try {
+    const result = await runSeoContentPublication({
+      now: "2026-05-22T12:30:00.000Z",
+      requestSource: "cron",
+      env: {
+        SEO_AUTOGENERATION_ENABLED: "true",
+        SEO_AUTOGENERATION_DRY_RUN: "false"
+      },
+      conditions: {
+        enabled: true,
+        max_per_day: 8,
+        max_per_week: 28,
+        max_per_run: 1,
+        min_score: 90
+      },
+      emailNotification: { enabled: false }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.published_count, 1);
+    assert.equal(result.candidates_count, 1);
+    assert.equal(result.cron.lock.schema_variant, "missing_request_source");
+    assert.equal(result.cron.lock.request_source_persisted, false);
+    assert.equal(patchedLandings.length, 1);
+    assert.equal(patchedLandings[0].status, "published");
+    assert.equal(postBodies.length, 3);
   } finally {
     global.fetch = previousFetch;
     if (previousUrl === undefined) delete process.env.SUPABASE_URL;

@@ -104,6 +104,15 @@ function isMissingSeoPublicationColumn(error) {
   return /column\s+"?(index_status|published_at)"?\s+does not exist/i.test(String(error?.message || error || ""));
 }
 
+function isMissingSeoCronRequestSourceColumn(error) {
+  const message = String(error?.message || error || "");
+  return (
+    (/PGRST204/i.test(message) && /request_source/i.test(message) && /seo_cron_runs/i.test(message)) ||
+    /column\s+"?request_source"?\s+does not exist/i.test(message) ||
+    /Could not find the '?request_source'?\s+column of '?seo_cron_runs'?/i.test(message)
+  );
+}
+
 function compactObject(value = {}) {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
@@ -219,23 +228,46 @@ function createSeoContentPublicationStorage() {
           return { persisted: true, acquired: false, reason: "cron_already_running", existing_run: existing };
         }
         const retryRunKey = `${runKey}:retry:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
-        const retryRows = await supabaseFetch("seo_cron_runs?on_conflict=run_key", {
-          method: "POST",
-          headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
-          body: JSON.stringify([
-            {
-              job_name: JOB_NAME,
-              run_key: retryRunKey,
-              request_source: requestSource,
-              status: "running",
-              started_at: now
-            }
-          ]),
-          timeoutMs: 5000
-        });
+        let requestSourcePersisted = true;
+        let schemaVariant = null;
+        const retryPayload = {
+          job_name: JOB_NAME,
+          run_key: retryRunKey,
+          request_source: requestSource,
+          status: "running",
+          started_at: now
+        };
+        let retryRows;
+        try {
+          retryRows = await supabaseFetch("seo_cron_runs?on_conflict=run_key", {
+            method: "POST",
+            headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
+            body: JSON.stringify([retryPayload]),
+            timeoutMs: 5000
+          });
+        } catch (error) {
+          if (!isMissingSeoCronRequestSourceColumn(error)) throw error;
+          const { request_source: _requestSource, ...compatibleRetryPayload } = retryPayload;
+          requestSourcePersisted = false;
+          schemaVariant = "missing_request_source";
+          retryRows = await supabaseFetch("seo_cron_runs?on_conflict=run_key", {
+            method: "POST",
+            headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
+            body: JSON.stringify([compatibleRetryPayload]),
+            timeoutMs: 5000
+          });
+        }
         const retryRow = Array.isArray(retryRows) ? retryRows[0] : retryRows;
         if (!retryRow?.id) return { persisted: true, acquired: false, reason: "cron_retry_lock_not_acquired", existing_run: existing };
-        return { persisted: true, acquired: true, id: retryRow.id, run_key: retryRow.run_key, retried_from_run_key: runKey };
+        return {
+          persisted: true,
+          acquired: true,
+          id: retryRow.id,
+          run_key: retryRow.run_key,
+          retried_from_run_key: runKey,
+          request_source_persisted: requestSourcePersisted,
+          schema_variant: schemaVariant
+        };
       }
       return { persisted: true, acquired: true, id: row.id, run_key: row.run_key };
     },
