@@ -1900,12 +1900,14 @@ test("snapshot seo_landings es read-only y tolera esquema sin index_status ni pu
   const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const previousFetch = global.fetch;
   const methods = [];
+  const selects = [];
   process.env.SUPABASE_URL = "https://example.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
   global.fetch = async (url, options = {}) => {
     methods.push(options.method || "GET");
     const request = new URL(String(url));
     const select = request.searchParams.get("select") || "";
+    selects.push(select);
     if (select === "index_status" || select === "published_at") {
       return {
         ok: false,
@@ -1947,6 +1949,10 @@ test("snapshot seo_landings es read-only y tolera esquema sin index_status ni pu
     assert.equal(snapshot.total_rows, 2);
     assert.equal(snapshot.status_counts.ready_to_publish, 1);
     assert.equal(snapshot.status_counts.published, 1);
+    assert.ok(selects.some((select) => select.includes("meta_description")));
+    assert.ok(selects.some((select) => select.includes("h1")));
+    assert.ok(selects.some((select) => select.includes("body_html")));
+    assert.ok(selects.some((select) => select.includes("word_count")));
     assert.equal(snapshot.search_results[0].exists, true);
     assert.equal(snapshot.search_results[1].exists, false);
   } finally {
@@ -2036,6 +2042,63 @@ test("indexability respeta score minimo configurable en cero", () => {
   assert.equal(result.min_quality_score, 0);
   assert.equal(result.can_publish, true);
   assert.equal(result.reasons.includes("quality_score_below_threshold"), false);
+});
+
+test("indexability acepta metadatos y cuerpo desde columnas directas de seo_landings", () => {
+  const landing = {
+    ...readyToPublishLanding({ slug: "guias/qa-ready-to-publish-autogen-test" }),
+    status: "published",
+    index_status: "index"
+  };
+  const result = evaluateLandingIndexability(landing, { minQualityScore: 90 });
+
+  assert.equal(result.can_publish, true);
+  assert.equal(result.sitemap_eligible, true);
+  assert.deepEqual(result.publish_reasons, []);
+});
+
+test("indexability acepta metadatos y cuerpo desde source_data_json como fallback", () => {
+  const sourceLanding = readyToPublishLanding({ slug: "guias/source-data-only" });
+  const landing = {
+    slug: sourceLanding.slug,
+    status: "published",
+    index_status: "index",
+    quality_score: 100,
+    canonical_url: sourceLanding.canonical_url,
+    source_data_json: {
+      title: sourceLanding.title,
+      meta_title: sourceLanding.meta_title,
+      meta_description: sourceLanding.meta_description,
+      h1: sourceLanding.h1,
+      body_html: sourceLanding.body_html,
+      quality: sourceLanding.source_data_json.quality
+    }
+  };
+  const result = evaluateLandingIndexability(landing, { minQualityScore: 90 });
+
+  assert.equal(result.can_publish, true);
+  assert.equal(result.sitemap_eligible, true);
+  assert.deepEqual(result.publish_reasons, []);
+});
+
+test("indexability mantiene blockers reales si faltan meta, h1 o contenido suficiente", () => {
+  const missingMeta = { ...readyToPublishLanding({ slug: "guias/missing-meta" }), status: "published", index_status: "index" };
+  missingMeta.meta_description = "";
+  const missingH1 = { ...readyToPublishLanding({ slug: "guias/missing-h1" }), status: "published", index_status: "index" };
+  missingH1.h1 = "";
+  const shortBody = {
+    ...readyToPublishLanding({
+      slug: "guias/short-body",
+      body_html: '<article><p>Contenido corto.</p><a href="/datos">Datos</a><a href="/metodologia">Metodologia</a></article>',
+      word_count: 2
+    }),
+    status: "published",
+    index_status: "index"
+  };
+
+  assert.ok(evaluateLandingIndexability(missingMeta, { minQualityScore: 90 }).publish_reasons.includes("missing_meta_description"));
+  assert.ok(evaluateLandingIndexability(missingH1, { minQualityScore: 90 }).publish_reasons.includes("missing_h1"));
+  assert.ok(evaluateLandingIndexability(shortBody, { minQualityScore: 90 }).publish_reasons.includes("low_content"));
 });
 
 test("las landings publicas cargan analitica solo tras consentimiento", () => {
