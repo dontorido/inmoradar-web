@@ -325,11 +325,24 @@ async function updateOpportunity(opportunity, patch) {
 }
 
 async function upsertLanding(landing) {
-  const result = await supabaseFetch("seo_landings?on_conflict=slug", {
-    method: "POST",
-    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-    body: JSON.stringify([landing])
-  });
+  let result;
+  try {
+    result = await supabaseFetch("seo_landings?on_conflict=slug", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify([landing])
+    });
+  } catch (error) {
+    if (!/column\s+"?(index_status|published_at)"?\s+does not exist/i.test(String(error?.message || error || ""))) {
+      throw error;
+    }
+    const { index_status: _indexStatus, published_at: _publishedAt, ...storageLanding } = landing;
+    result = await supabaseFetch("seo_landings?on_conflict=slug", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify([storageLanding])
+    });
+  }
   return Array.isArray(result) ? result[0] : result;
 }
 
@@ -342,7 +355,19 @@ async function countPublishedToday(now) {
     published_at: `gte.${start.toISOString()}`,
     limit: "5000"
   });
-  const rows = await supabaseFetch(`seo_landings?${params.toString()}`);
+  let rows;
+  try {
+    rows = await supabaseFetch(`seo_landings?${params.toString()}`);
+  } catch (error) {
+    if (!/column\s+"?published_at"?\s+does not exist/i.test(String(error?.message || error || ""))) throw error;
+    const compatibleParams = new URLSearchParams({
+      select: "id,template_type,status,updated_at,last_generated_at",
+      status: "eq.published",
+      updated_at: `gte.${start.toISOString()}`,
+      limit: "5000"
+    });
+    rows = await supabaseFetch(`seo_landings?${compatibleParams.toString()}`);
+  }
   const snapshot = buildSeoDailyPolicySnapshot(Array.isArray(rows) ? rows : [], { now });
   return snapshot.published_total_today;
 }
@@ -421,6 +446,7 @@ function buildLandingRecord({ opportunity, landing, sourceData, quality, indexab
       lookup_error: sourceData.lookup_error || null
     },
     published_at: publishedAt,
+    updated_at: now,
     last_generated_at: now
   };
 }

@@ -1025,6 +1025,59 @@ test("PATCH de READY_TO_PUBLISH se condiciona por id y status", async () => {
   }
 });
 
+test("PATCH de READY_TO_PUBLISH reintenta sin columnas de indexacion si el esquema no las tiene", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  const bodies = [];
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    bodies.push(body);
+    if (body.index_status || body.published_at) {
+      return {
+        ok: false,
+        status: 400,
+        text: async () => 'column "index_status" does not exist'
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([{ id: 42, slug: "guias/comprar-para-alquilar-rentabilidad", status: "published" }])
+    };
+  };
+
+  try {
+    const storage = createSeoContentPublicationStorage();
+    const saved = await storage.publishReadyToPublishLanding(
+      { id: 42, slug: "guias/comprar-para-alquilar-rentabilidad", status: "ready_to_publish" },
+      {
+        status: "published",
+        index_status: "index",
+        published_at: "2026-05-22T12:00:00.000Z",
+        updated_at: "2026-05-22T12:00:00.000Z",
+        last_generated_at: "2026-05-22T12:00:00.000Z",
+        source_data_json: { indexability: { sitemap_eligible: true } }
+      }
+    );
+    assert.equal(saved.status, "published");
+    assert.equal(bodies.length, 2);
+    assert.equal(bodies[0].index_status, "index");
+    assert.equal(bodies[0].published_at, "2026-05-22T12:00:00.000Z");
+    assert.equal(bodies[1].index_status, undefined);
+    assert.equal(bodies[1].published_at, undefined);
+    assert.equal(bodies[1].updated_at, "2026-05-22T12:00:00.000Z");
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
 test("fetch READY_TO_PUBLISH usa consulta tolerante y columnas reales", async () => {
   const previousUrl = process.env.SUPABASE_URL;
   const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1818,6 +1871,72 @@ test("sitemap consulta solo landings publicadas indexables y con quality_score s
   assert.equal(params.get("status"), "eq.published");
   assert.equal(params.get("index_status"), "eq.index");
   assert.equal(params.get("quality_score"), "gte.75");
+});
+
+test("sitemap cae a columnas compatibles si seo_landings no tiene index_status ni published_at", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  const requestedUrls = [];
+  const landing = readyToPublishLanding({
+    status: "published",
+    slug: "guias/comprar-para-alquilar-rentabilidad",
+    updated_at: "2026-05-22T12:00:00.000Z"
+  });
+  delete landing.index_status;
+  delete landing.published_at;
+
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (url) => {
+    requestedUrls.push(String(url));
+    if (String(url).includes("index_status")) {
+      return {
+        ok: false,
+        status: 400,
+        text: async () => 'column "index_status" does not exist'
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify([landing])
+    };
+  };
+
+  const chunks = [];
+  const req = {
+    method: "GET",
+    url: "/api/sitemap.xml",
+    headers: { host: "inmoradar.app" }
+  };
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+
+  try {
+    await sitemapHandler(req, res);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+
+  const landingRequests = requestedUrls.filter((url) => url.includes("/rest/v1/seo_landings"));
+  assert.equal(landingRequests.length, 2);
+  assert.equal(new URL(landingRequests[1]).searchParams.get("index_status"), null);
+  const xml = chunks.join("");
+  assert.match(xml, /https:\/\/inmoradar\.app\/guias\/comprar-para-alquilar-rentabilidad\//);
+  assert.match(xml, /<lastmod>2026-05-22<\/lastmod>/);
 });
 
 test("sitemap publica solo URLs canonicas sin www e incluye hubs SEO indexables", async () => {

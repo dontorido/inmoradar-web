@@ -25,8 +25,24 @@ async function fetchLanding(slug) {
     const landing = Array.isArray(result) ? result[0] || null : null;
     return landing || getSeedPublishedLanding(slug);
   } catch (error) {
-    console.warn("[seo-page] Supabase landing lookup failed, using seed fallback", error.message);
-    return getSeedPublishedLanding(slug);
+    if (!/column\s+"?(index_status|published_at)"?\s+does not exist/i.test(String(error?.message || error || ""))) {
+      console.warn("[seo-page] Supabase landing lookup failed, using seed fallback", error.message);
+      return getSeedPublishedLanding(slug);
+    }
+    const compatibleParams = new URLSearchParams({
+      select:
+        "id,slug,title,meta_title,meta_description,h1,body_html,city,template_type,canonical_url,status,quality_score,source_data_json,updated_at,last_generated_at",
+      slug: `eq.${slug}`,
+      limit: "1"
+    });
+    try {
+      const result = await supabaseFetch(`seo_landings?${compatibleParams.toString()}`);
+      const landing = Array.isArray(result) ? result[0] || null : null;
+      return landing || getSeedPublishedLanding(slug);
+    } catch (fallbackError) {
+      console.warn("[seo-page] Supabase landing lookup failed, using seed fallback", fallbackError.message);
+      return getSeedPublishedLanding(slug);
+    }
   }
 }
 
@@ -37,7 +53,7 @@ function jsonLd(payload) {
 function structuredData(landing, canonical) {
   const faq = landing?.source_data_json?.faq || [];
   const sources = landing?.source_data_json?.sources || [];
-  const published = landing.published_at || landing.last_generated_at || landing.updated_at || new Date().toISOString();
+  const published = landing.published_at || landing.wp_published_at || landing.last_generated_at || landing.updated_at || new Date().toISOString();
   const modified = landing.updated_at || landing.last_generated_at || published;
   const description = landing.meta_description || stripHtml(landing.body_html).slice(0, 155);
   const sourceOrganizations = [...new Set(sources.map((source) => source.source).filter(Boolean))].map((name) => ({
@@ -310,8 +326,8 @@ function buildDynamicPriceCityBodyHtml(landing) {
       autonomousCommunity: landing.autonomous_community || "",
       slug: String(landing.slug || "").replace(/^precio-metro-cuadrado\//, ""),
       sourceData,
-      publishedAt: landing.published_at || landing.last_generated_at || landing.updated_at || new Date(),
-      updatedAt: landing.updated_at || landing.last_generated_at || landing.published_at || new Date()
+      publishedAt: landing.published_at || landing.wp_published_at || landing.last_generated_at || landing.updated_at || new Date(),
+      updatedAt: landing.updated_at || landing.last_generated_at || landing.published_at || landing.wp_published_at || new Date()
     });
   } catch (error) {
     console.warn("[seo-page] Dynamic price city body render failed", error.message);

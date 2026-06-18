@@ -99,6 +99,10 @@ async function safeSupabase(path, fallback = []) {
   }
 }
 
+function isMissingSeoPublicationColumn(error) {
+  return /column\s+"?(index_status|published_at)"?\s+does not exist/i.test(String(error?.message || error || ""));
+}
+
 function createSeoContentPublicationStorage() {
   return {
     async startRun({ now, requestSource }) {
@@ -148,18 +152,29 @@ function createSeoContentPublicationStorage() {
     async fetchRecentPublishedRows({ now, days = 8 }) {
       if (!hasSupabaseConfig()) return [];
       const since = new Date(new Date(now).getTime() - days * DAY_MS).toISOString();
-      const params = new URLSearchParams({
+      const fullParams = new URLSearchParams({
         select: "id,template_type,status,published_at,updated_at,last_generated_at",
         status: "eq.published",
         published_at: `gte.${since}`,
         order: "published_at.desc",
         limit: "5000"
       });
-      return safeSupabase(`seo_landings?${params.toString()}`, []);
+      const fullRows = await safeSupabase(`seo_landings?${fullParams.toString()}`, null);
+      if (Array.isArray(fullRows)) return fullRows;
+      const compatibleParams = new URLSearchParams({
+        select: "id,template_type,status,updated_at,last_generated_at",
+        status: "eq.published",
+        updated_at: `gte.${since}`,
+        order: "updated_at.desc",
+        limit: "5000"
+      });
+      return safeSupabase(`seo_landings?${compatibleParams.toString()}`, []);
     },
     async fetchSeoPublicationTotals() {
       if (!hasSupabaseConfig()) return null;
-      const rows = await safeSupabase("seo_landings?select=status,index_status&limit=5000", []);
+      const rows =
+        (await safeSupabase("seo_landings?select=status,index_status&limit=5000", null)) ||
+        (await safeSupabase("seo_landings?select=status,quality_score,source_data_json&limit=5000", []));
       return countSeoPublicationTotals(rows);
     },
     async fetchReadyToPublishLandings({ candidateLimit = 25 } = {}) {
@@ -185,12 +200,24 @@ function createSeoContentPublicationStorage() {
       } else {
         throw new Error("landing_identifier_missing");
       }
-      const rows = await supabaseFetch(`seo_landings?${params.toString()}`, {
-        method: "PATCH",
-        headers: { Prefer: "return=representation" },
-        body: JSON.stringify(patch),
-        timeoutMs: 8000
-      });
+      let rows;
+      try {
+        rows = await supabaseFetch(`seo_landings?${params.toString()}`, {
+          method: "PATCH",
+          headers: { Prefer: "return=representation" },
+          body: JSON.stringify(patch),
+          timeoutMs: 8000
+        });
+      } catch (error) {
+        if (!isMissingSeoPublicationColumn(error)) throw error;
+        const { index_status: _indexStatus, published_at: _publishedAt, ...compatiblePatch } = patch;
+        rows = await supabaseFetch(`seo_landings?${params.toString()}`, {
+          method: "PATCH",
+          headers: { Prefer: "return=representation" },
+          body: JSON.stringify(compatiblePatch),
+          timeoutMs: 8000
+        });
+      }
       return Array.isArray(rows) ? rows[0] || null : rows || null;
     },
     async fetchAutogenerationConditions() {
@@ -402,6 +429,8 @@ async function publishReadyToPublishLandings({ storage, config, now, limits, can
         status: "published",
         index_status: "index",
         published_at: now,
+        updated_at: now,
+        last_generated_at: now,
         source_data_json: sourceDataWithIndexability(landing, indexability)
       };
       const saved = storage.publishReadyToPublishLanding

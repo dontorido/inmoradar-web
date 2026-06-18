@@ -161,7 +161,7 @@ function publishedPagesFromSummary(summary = {}) {
 function countSeoPublicationTotals(rows = []) {
   const allRows = Array.isArray(rows) ? rows : [];
   const statusOf = (row) => String(row.status || "").toLowerCase();
-  const indexStatusOf = (row) => String(row.index_status || "").toLowerCase();
+  const indexStatusOf = (row) => String(row.index_status || (statusOf(row) === "published" ? "index" : "")).toLowerCase();
   return {
     total_landings: allRows.length,
     published_landings: allRows.filter((row) => statusOf(row) === "published").length,

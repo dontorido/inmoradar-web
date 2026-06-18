@@ -99,7 +99,8 @@ function evaluateLandingIndexability(landing = {}, options = {}) {
   const indexStateReasons = [];
   const quality = qualityFromLanding(landing, options.quality);
   const status = String(landing.status || "").toLowerCase();
-  const indexStatus = String(landing.index_status || "").toLowerCase();
+  const explicitIndexStatus = String(landing.index_status || "").toLowerCase();
+  const indexStatus = explicitIndexStatus || (status === "published" ? "index" : "");
   const score = Number(landing.quality_score ?? quality.score ?? 0);
   const minQualityScore = Number(options.minQualityScore ?? QUALITY_GATE_SCORE_THRESHOLD);
   const canonicalIssue = canonicalIssueReason(landing, options.baseUrl || siteUrl());
