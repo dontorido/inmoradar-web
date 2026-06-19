@@ -497,6 +497,10 @@ test("seo autogeneration workflow llama al resource real de api/admin", () => {
 
   assert.match(workflow, /\$SITE_URL\/api\/admin\?resource=seo-autogenerate\/run/);
   assert.doesNotMatch(workflow, /\$SITE_URL\/api\/admin\/seo-autogenerate\/run/);
+  assert.match(workflow, /SITE_URL: https:\/\/inmoradar\.app/);
+  assert.match(workflow, /--location/);
+  assert.match(workflow, /Unexpected SEO cron response/);
+  assert.doesNotMatch(workflow, /SITE_URL: https:\/\/www\.inmoradar\.app/);
 });
 
 test("seo autogeneration usa la misma logica para cron y manual", async () => {

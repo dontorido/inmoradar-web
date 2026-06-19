@@ -8,27 +8,12 @@ on:
 jobs:
   publish-seo-and-social:
     runs-on: ubuntu-latest
+    env:
+      SITE_URL: https://inmoradar.app
     steps:
       - name: Trigger InmoRadar SEO cron
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          SITE_URL: https://www.inmoradar.app
-        run: |
-          if [ -z "$CRON_SECRET" ]; then
-            echo "::error title=Missing CRON_SECRET::Falta el secret CRON_SECRET en GitHub Actions. Anadelo en Settings > Secrets and variables > Actions > New repository secret y usa el mismo valor que en Vercel."
-            exit 1
-          fi
-          curl --fail-with-body \
-            --retry 2 \
-            --retry-delay 5 \
-            --request POST \
-            --header "x-cron-secret: $CRON_SECRET" \
-            "$SITE_URL/api/admin?resource=seo-autogenerate/run"
-
-      - name: Trigger InmoRadar LinkedIn daily draft
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          SITE_URL: https://www.inmoradar.app
         run: |
           if [ -z "$CRON_SECRET" ]; then
             echo "::error title=Missing CRON_SECRET::Falta el secret CRON_SECRET en GitHub Actions. Anadelo en Settings > Secrets and variables > Actions > New repository secret y usa el mismo valor que en Vercel."
@@ -37,12 +22,44 @@ jobs:
           response="$(curl --fail-with-body \
             --silent \
             --show-error \
+            --location \
+            --retry 2 \
+            --retry-delay 5 \
+            --request POST \
+            --header "x-cron-secret: $CRON_SECRET" \
+            "$SITE_URL/api/admin?resource=seo-autogenerate/run")"
+          echo "$response"
+          if ! echo "$response" | grep -q '^{'; then
+            echo "::error title=Unexpected SEO cron response::El endpoint SEO no devolvio JSON. Revisa redirecciones, dominio y HTML intermedio."
+            exit 1
+          fi
+          if echo "$response" | grep -q '"ok":false'; then
+            echo "::error title=SEO cron failed::El endpoint SEO devolvio ok=false. Revisa el log anterior."
+            exit 1
+          fi
+
+      - name: Trigger InmoRadar LinkedIn daily draft
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error title=Missing CRON_SECRET::Falta el secret CRON_SECRET en GitHub Actions. Anadelo en Settings > Secrets and variables > Actions > New repository secret y usa el mismo valor que en Vercel."
+            exit 1
+          fi
+          response="$(curl --fail-with-body \
+            --silent \
+            --show-error \
+            --location \
             --retry 2 \
             --retry-delay 5 \
             --request POST \
             --header "x-cron-secret: $CRON_SECRET" \
             "$SITE_URL/api/admin?resource=linkedin/daily")"
           echo "$response"
+          if ! echo "$response" | grep -q '^{'; then
+            echo "::error title=Unexpected LinkedIn cron response::El endpoint LinkedIn no devolvio JSON. Revisa redirecciones, dominio y HTML intermedio."
+            exit 1
+          fi
           if echo "$response" | grep -q '"ok":false'; then
             echo "::error title=LinkedIn cron failed::El endpoint de LinkedIn devolvio ok=false. Revisa el log anterior."
             exit 1
@@ -51,7 +68,6 @@ jobs:
       - name: Trigger InmoRadar Meta autopublisher
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          SITE_URL: https://www.inmoradar.app
         run: |
           if [ -z "$CRON_SECRET" ]; then
             echo "::error title=Missing CRON_SECRET::Falta el secret CRON_SECRET en GitHub Actions. Anadelo en Settings > Secrets and variables > Actions > New repository secret y usa el mismo valor que en Vercel."
@@ -60,12 +76,17 @@ jobs:
           response="$(curl --fail-with-body \
             --silent \
             --show-error \
+            --location \
             --retry 2 \
             --retry-delay 5 \
             --request POST \
             --header "x-cron-secret: $CRON_SECRET" \
             "$SITE_URL/api/admin?resource=meta/daily")"
           echo "$response"
+          if ! echo "$response" | grep -q '^{'; then
+            echo "::error title=Unexpected Meta cron response::El endpoint Meta no devolvio JSON. Revisa redirecciones, dominio y HTML intermedio."
+            exit 1
+          fi
           if echo "$response" | grep -q '"ok":false'; then
             echo "::error title=Meta cron failed::El endpoint de Meta devolvio ok=false. Revisa el log anterior."
             exit 1
