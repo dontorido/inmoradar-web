@@ -131,7 +131,11 @@ function adminTokenFromRequest(req) {
 function assertAdmin(req, res) {
   const expected = process.env.ADMIN_IMPORT_TOKEN;
   if (!expected) {
-    json(res, 500, { ok: false, error: "admin_token_not_configured" });
+    json(res, 500, {
+      ok: false,
+      error: "admin_token_not_configured",
+      message: "Falta ADMIN_IMPORT_TOKEN en Vercel Production. Anade esa variable de entorno y vuelve a desplegar para ver datos del backoffice."
+    });
     return false;
   }
   if (adminTokenFromRequest(req) !== expected) {
