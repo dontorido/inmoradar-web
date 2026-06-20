@@ -12,6 +12,9 @@ test("SEO Autogeneration muestra copy de Vercel Cron 4h sin textos obsoletos", (
   const html = fs.readFileSync(path.join(root, "admin.html"), "utf8");
   const adminJs = fs.readFileSync(path.join(root, "assets", "admin.js"), "utf8");
   const copy = `${html}\n${adminJs}`;
+  const autogenPanel = html.match(/<article class="admin-panel admin-seo-autogen-panel"[\s\S]*?<\/article>/)?.[0] || "";
+  const autogenLoader = adminJs.match(/async function loadSeoAutogeneration\(\)[\s\S]*?async function loadKpis/)?.[0] || "";
+  const previewRenderer = adminJs.match(/function renderSeoOpportunitiesPreview[\s\S]*?function renderSeoSummary/)?.[0] || "";
 
   assert.match(copy, /cada 4 horas vía Vercel Cron/);
   assert.match(copy, /Condiciones de autogeneraci&oacute;n/);
@@ -23,8 +26,14 @@ test("SEO Autogeneration muestra copy de Vercel Cron 4h sin textos obsoletos", (
   assert.match(copy, /data-seo-autogen-conditions-form/);
   assert.match(copy, /data-seo-autogen-diagnostics/);
   assert.match(copy, /data-seo-opportunities-preview/);
+  assert.match(autogenPanel, /data-seo-opportunities-preview/);
+  assert.match(autogenPanel, /data-seo-autogen-opportunities-preview/);
   assert.match(copy, /Preview backlog SEO/);
+  assert.match(copy, /Solo lectura: no crea oportunidades ni publica contenido/);
   assert.match(copy, /seo\/opportunities\/preview&content_type=landing&template=all&limit=50/);
+  assert.match(autogenLoader, /loadSeoOpportunitiesPreview\(\)/);
+  assert.doesNotMatch(previewRenderer, /<button/);
+  assert.doesNotMatch(previewRenderer, /method:\s*["'](?:POST|PATCH)["']/);
   assert.match(copy, /Diagnostico de candidatos/);
   assert.match(copy, /No publicables/);
   assert.match(copy, /Score bajo/);

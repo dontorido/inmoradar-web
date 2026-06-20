@@ -333,6 +333,8 @@ const els = {
   premiumRows: document.querySelector("[data-premium-rows]"),
   seoSummary: document.querySelector("[data-seo-summary]"),
   seoOpportunitiesPreview: document.querySelector("[data-seo-opportunities-preview]"),
+  seoOpportunitiesPreviews: document.querySelectorAll("[data-seo-opportunities-preview]"),
+  seoAutogenOpportunitiesPreview: document.querySelector("[data-seo-autogen-opportunities-preview]"),
   seoRows: document.querySelector("[data-seo-rows]"),
   seoPagination: document.querySelector("[data-seo-pagination]"),
   premiumFilter: document.querySelector("[data-premium-filter]"),
@@ -2272,7 +2274,7 @@ function renderSeo(payload) {
   state.seo.hasNextPage = Boolean(payload.has_next_page);
   state.seo.hasPreviousPage = Boolean(payload.has_previous_page);
   renderSeoSummary(payload.summary || {}, rows);
-  renderSeoOpportunitiesPreview(payload.opportunities_preview || null);
+  renderSeoOpportunitiesPreview(payload.opportunities_preview || null, "landings");
 
   if (!rows.length) {
     els.seoRows.innerHTML = `<tr><td colspan="6">No hay landings con este filtro.</td></tr>`;
@@ -2310,23 +2312,36 @@ function renderSeo(payload) {
   renderSeoPagination(payload);
 }
 
-function renderSeoOpportunitiesPreview(preview = null) {
-  if (!els.seoOpportunitiesPreview) return;
+function seoOpportunitiesPreviewTargets(target = "all") {
+  if (target === "landings") return [els.seoOpportunitiesPreview].filter(Boolean);
+  if (target === "autogeneration") return [els.seoAutogenOpportunitiesPreview].filter(Boolean);
+  return Array.from(els.seoOpportunitiesPreviews || []).filter(Boolean);
+}
+
+function renderSeoOpportunitiesPreview(preview = null, target = "all") {
+  const targets = seoOpportunitiesPreviewTargets(target);
+  if (!targets.length) return;
+  const setHtml = (html) => {
+    targets.forEach((element) => {
+      element.innerHTML = html;
+    });
+  };
   if (!preview) {
-    els.seoOpportunitiesPreview.innerHTML = "";
+    setHtml("");
     return;
   }
   if (preview.ok === false) {
-    els.seoOpportunitiesPreview.innerHTML = `
+    setHtml(`
       <section class="admin-seo-autogen-diagnostics-panel is-muted">
         <div class="admin-seo-autogen-diagnostics-head">
           <div>
             <h3>Preview backlog SEO</h3>
+            <p>Solo lectura: no crea oportunidades ni publica contenido.</p>
             <p>${escapeHtml(preview.message || preview.error || "Preview no disponible")}</p>
           </div>
         </div>
       </section>
-    `;
+    `);
     return;
   }
   const summary = preview.summary || {};
@@ -2348,11 +2363,12 @@ function renderSeoOpportunitiesPreview(preview = null) {
       </tr>
     `;
   }).join("");
-  els.seoOpportunitiesPreview.innerHTML = `
+  setHtml(`
     <section class="admin-seo-autogen-diagnostics-panel">
       <div class="admin-seo-autogen-diagnostics-head">
         <div>
           <h3>Preview backlog SEO</h3>
+          <p>Solo lectura: no crea oportunidades ni publica contenido.</p>
           <p>${escapeHtml(`Seedables: ${seoAutogenNumber(summary.seedable_count, 0)} | Existentes: ${seoAutogenNumber(summary.existing_opportunities_count, 0)} | Slugs usados: ${seoAutogenNumber(summary.used_slugs_count, 0)}`)}</p>
           ${warnings.length ? `<p>${escapeHtml(`Warnings: ${warnings.join(", ")}`)}</p>` : ""}
         </div>
@@ -2380,7 +2396,7 @@ function renderSeoOpportunitiesPreview(preview = null) {
         </div>
       ` : `<p class="admin-empty-state compact">No hay oportunidades candidatas en el preview.</p>`}
     </section>
-  `;
+  `);
 }
 
 function renderSeoSummary(summary = {}, fallbackRows = []) {
@@ -7401,6 +7417,15 @@ async function loadDashboard() {
   await Promise.all([loadExtensionUsage(), loadAnalytics()]);
 }
 
+async function loadSeoOpportunitiesPreview() {
+  return api("/api/admin?resource=seo/opportunities/preview&content_type=landing&template=all&limit=50").catch((error) => ({
+    ok: false,
+    status: error.status || null,
+    error: error.payload?.error || error.message || "seo_opportunities_preview_unavailable",
+    message: error.payload?.message || error.message || "Preview de oportunidades no disponible"
+  }));
+}
+
 async function loadSeo() {
   const params = new URLSearchParams({
     limit: String(state.seo.pageSize || 10),
@@ -7409,12 +7434,7 @@ async function loadSeo() {
   });
   const [payload, preview] = await Promise.all([
     api(`/api/admin?resource=seo/landings&${params.toString()}`),
-    api("/api/admin?resource=seo/opportunities/preview&content_type=landing&template=all&limit=50").catch((error) => ({
-      ok: false,
-      status: error.status || null,
-      error: error.payload?.error || error.message || "seo_opportunities_preview_unavailable",
-      message: error.payload?.message || error.message || "Preview de oportunidades no disponible"
-    }))
+    loadSeoOpportunitiesPreview()
   ]);
   payload.opportunities_preview = preview;
   renderSeo(payload);
@@ -7422,15 +7442,20 @@ async function loadSeo() {
 
 async function loadSeoAutogeneration() {
   if (!els.seoAutogenSummary) return;
-  const payload = await api("/api/admin?resource=seo-autogenerate/run");
-  const diagnostics = await api("/api/admin?resource=seo-autogenerate/diagnostics&candidate_limit=25&template_type=all").catch((error) => ({
-    ok: false,
-    status: error.status || null,
-    error: error.payload?.error || error.message || "diagnostics_unavailable",
-    message: error.payload?.message || error.message || "Diagnostico no disponible"
-  }));
+  const [payload, diagnostics, preview] = await Promise.all([
+    api("/api/admin?resource=seo-autogenerate/run"),
+    api("/api/admin?resource=seo-autogenerate/diagnostics&candidate_limit=25&template_type=all").catch((error) => ({
+      ok: false,
+      status: error.status || null,
+      error: error.payload?.error || error.message || "diagnostics_unavailable",
+      message: error.payload?.message || error.message || "Diagnostico no disponible"
+    })),
+    loadSeoOpportunitiesPreview()
+  ]);
   payload.diagnostics_preview = diagnostics;
+  payload.opportunities_preview = preview;
   renderSeoAutogeneration(payload);
+  renderSeoOpportunitiesPreview(payload.opportunities_preview || null, "autogeneration");
 }
 
 async function loadKpis() {
