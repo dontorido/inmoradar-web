@@ -18,6 +18,10 @@ const SUPPORTED_TEMPLATE_TYPES = [...LANDING_TEMPLATE_TYPES, ...EDITORIAL_TEMPLA
 const RANDOM_LANDING_TEMPLATE_TYPES = new Set(["random", "mixed", "landing_random", "landings"]);
 const RANDOM_ALL_TEMPLATE_TYPES = new Set(["all"]);
 const RANDOM_NEWS_TEMPLATE_TYPES = new Set(["news", "guides", "editorial"]);
+const SEO_OPPORTUNITY_SEED_CONFIRMATION = "SEED_SEO_OPPORTUNITIES";
+const SEO_OPPORTUNITY_SEED_MAX_LIMIT = 50;
+const SEO_OPPORTUNITY_SEED_DEFAULT_LIMIT = 10;
+const SEO_OPPORTUNITY_SEED_SOURCES = new Set(["market_price_sources"]);
 
 const DEFAULT_SEED_OPPORTUNITIES = [
   {
@@ -250,9 +254,12 @@ function previewCandidateFromOpportunity(opportunity, source, qualityNotes = [])
     content_type: seoContentTypeForTemplate(opportunity.template_type),
     template: opportunity.template_type,
     city: opportunity.city || null,
+    province: opportunity.province || null,
+    autonomous_community: opportunity.autonomous_community || null,
     keyword: opportunity.keyword || null,
     slug: opportunitySlug(opportunity),
     intent: opportunity.intent || "informational",
+    search_priority: Number(opportunity.search_priority || 0),
     source,
     quality_notes: uniqueList(qualityNotes)
   };
@@ -383,7 +390,8 @@ function previewSummary(candidates = [], templateTypes = []) {
 async function getSeoOpportunitiesPreview(options = {}) {
   const contentType = String(options.contentType || options.content_type || "landing").toLowerCase();
   const template = String(options.template || options.template_type || "all").toLowerCase();
-  const limit = Math.max(1, Math.min(200, Number.parseInt(String(options.limit || 50), 10) || 50));
+  const maxLimit = Math.max(1, Number.parseInt(String(options.maxLimit || options.max_limit || 200), 10) || 200);
+  const limit = Math.max(1, Math.min(maxLimit, Number.parseInt(String(options.limit || 50), 10) || 50));
   let templateTypes = [];
   const warnings = [];
 
@@ -506,6 +514,265 @@ async function getSeoOpportunitiesPreview(options = {}) {
     summary: previewSummary(candidates, templateTypes),
     candidates: candidates.slice(0, limit),
     warnings
+  };
+}
+
+function clampSeedOpportunityLimit(limit) {
+  const parsed = Number.parseInt(String(limit || SEO_OPPORTUNITY_SEED_DEFAULT_LIMIT), 10);
+  if (!Number.isFinite(parsed)) return SEO_OPPORTUNITY_SEED_DEFAULT_LIMIT;
+  return Math.max(1, Math.min(SEO_OPPORTUNITY_SEED_MAX_LIMIT, parsed));
+}
+
+function normalizeSeedList(value = []) {
+  const raw = Array.isArray(value) ? value : String(value || "").split(",");
+  return uniqueList(raw.map((item) => String(item || "").trim()));
+}
+
+function normalizeSeedRequest(input = {}) {
+  const confirm = String(input.confirm || "").trim();
+  const dryRun = input.dry_run === false || input.dryRun === false ? false : true;
+  const contentType = String(input.content_type || input.contentType || "landing").toLowerCase();
+  const template = String(input.template || input.template_type || input.templateType || "").toLowerCase();
+  const source = String(input.source || "market_price_sources").toLowerCase();
+  return {
+    confirm,
+    dry_run: dryRun,
+    content_type: contentType,
+    template,
+    source,
+    limit: clampSeedOpportunityLimit(input.limit),
+    cities: normalizeSeedList(input.cities),
+    min_quality_notes: normalizeSeedList(input.min_quality_notes || input.minQualityNotes)
+  };
+}
+
+function seedValidationFailure(error, message, extra = {}) {
+  return {
+    ok: false,
+    status: 400,
+    error,
+    message,
+    dry_run: true,
+    read_only: true,
+    writes_enabled: false,
+    inserted_count: 0,
+    skipped_count: 0,
+    error_count: 0,
+    inserted: [],
+    skipped: [],
+    errors: [],
+    ...extra
+  };
+}
+
+function validateSeedRequest(request) {
+  if (request.confirm !== SEO_OPPORTUNITY_SEED_CONFIRMATION) {
+    return seedValidationFailure(
+      "seed_confirmation_required",
+      `Confirma la accion con confirm="${SEO_OPPORTUNITY_SEED_CONFIRMATION}".`
+    );
+  }
+  if (request.content_type !== "landing") {
+    return seedValidationFailure("unsupported_content_type", "El seed controlado solo acepta content_type=landing.");
+  }
+  if (!LANDING_TEMPLATE_TYPES.includes(request.template)) {
+    return seedValidationFailure("unsupported_template", "Elige una template landing concreta permitida.", {
+      allowed_templates: LANDING_TEMPLATE_TYPES
+    });
+  }
+  if (!SEO_OPPORTUNITY_SEED_SOURCES.has(request.source)) {
+    return seedValidationFailure("unsupported_source", "La fuente permitida para seed controlado es market_price_sources.", {
+      allowed_sources: [...SEO_OPPORTUNITY_SEED_SOURCES]
+    });
+  }
+  return null;
+}
+
+function sourceMatches(candidate = {}, source) {
+  return String(candidate.source || "")
+    .split("+")
+    .map((item) => item.trim().toLowerCase())
+    .includes(source);
+}
+
+function qualityNotesMatch(candidate = {}, requiredNotes = []) {
+  if (!requiredNotes.length) return true;
+  const notes = new Set((candidate.quality_notes || []).map((note) => String(note || "").toLowerCase()));
+  return requiredNotes.every((note) => notes.has(String(note || "").toLowerCase()));
+}
+
+function cityMatches(candidate = {}, cities = []) {
+  if (!cities.length) return true;
+  const allowed = new Set(cities.map(normalizedOpportunityCity));
+  return allowed.has(normalizedOpportunityCity(candidate.city));
+}
+
+function seedCandidatePublic(candidate = {}, extra = {}) {
+  return {
+    content_type: candidate.content_type || "landing",
+    template: candidate.template || null,
+    city: candidate.city || null,
+    keyword: candidate.keyword || null,
+    slug: candidate.slug || null,
+    intent: candidate.intent || "informational",
+    source: candidate.source || null,
+    quality_notes: uniqueList(candidate.quality_notes || []),
+    collision: Boolean(candidate.collision),
+    collision_reason: candidate.collision_reason || null,
+    already_exists: Boolean(candidate.already_exists),
+    is_seedable: candidate.is_seedable === true,
+    ...extra
+  };
+}
+
+function opportunityRowFromPreviewCandidate(candidate = {}) {
+  return {
+    keyword: candidate.keyword,
+    city: candidate.city,
+    province: candidate.province || "",
+    autonomous_community: candidate.autonomous_community || "",
+    intent: candidate.intent || "informational",
+    template_type: candidate.template,
+    search_priority: Number(candidate.search_priority || 70),
+    status: "pending"
+  };
+}
+
+async function revalidateSeedCandidateCollisions(candidates, templateTypes, fetchRows) {
+  if (!candidates.length) return [];
+  const templateFilter = templateTypes.length === 1 ? `eq.${templateTypes[0]}` : `in.(${templateTypes.join(",")})`;
+  const landingParams = new URLSearchParams({
+    select: "slug,status,template_type,city,title",
+    limit: "5000"
+  });
+  const opportunityParams = new URLSearchParams({
+    select: "keyword,city,template_type,status,intent,search_priority",
+    template_type: templateFilter,
+    limit: "5000"
+  });
+  const [landings, opportunities] = await Promise.all([
+    fetchRows(`seo_landings?${landingParams.toString()}`),
+    fetchRows(`seo_landing_opportunities?${opportunityParams.toString()}`)
+  ]);
+  const existingOpportunityKeys = new Set((Array.isArray(opportunities) ? opportunities : []).map(opportunityKey));
+  const existingLandingSlugs = new Set((Array.isArray(landings) ? landings : []).map((landing) => landing.slug).filter(Boolean));
+  return candidates.map((candidate) => applyOpportunityCollisions(candidate, existingOpportunityKeys, existingLandingSlugs));
+}
+
+async function seedSeoOpportunitiesFromPreview(input = {}, options = {}) {
+  const request = normalizeSeedRequest(input);
+  const validationError = validateSeedRequest(request);
+  if (validationError) return validationError;
+
+  const fetchRows = options.fetchRows || (hasSupabaseConfig() ? (path) => supabaseFetch(path, { timeoutMs: 8000 }) : null);
+  const insertRow = options.insertRow || (hasSupabaseConfig()
+    ? (row) => supabaseFetch("seo_landing_opportunities", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify([row]),
+        timeoutMs: 8000
+      })
+    : null);
+
+  if (!fetchRows) {
+    return {
+      ...seedValidationFailure("supabase_not_configured", "Supabase no esta configurado para leer el preview.", { status: 500 }),
+      dry_run: request.dry_run,
+      filters: request
+    };
+  }
+  if (!request.dry_run && !insertRow) {
+    return {
+      ...seedValidationFailure("supabase_not_configured", "Supabase no esta configurado para escribir oportunidades.", { status: 500 }),
+      dry_run: false,
+      filters: request
+    };
+  }
+
+  const preview = await getSeoOpportunitiesPreview({
+    content_type: request.content_type,
+    template: request.template,
+    limit: options.previewLimit || 5000,
+    maxLimit: options.previewMaxLimit || 5000,
+    fetchRows
+  });
+  const candidates = (Array.isArray(preview.candidates) ? preview.candidates : [])
+    .filter((candidate) =>
+      candidate.is_seedable === true &&
+      candidate.collision === false &&
+      candidate.already_exists === false &&
+      candidate.template === request.template &&
+      sourceMatches(candidate, request.source) &&
+      cityMatches(candidate, request.cities) &&
+      qualityNotesMatch(candidate, request.min_quality_notes)
+    )
+    .slice(0, request.limit);
+
+  const revalidated = await revalidateSeedCandidateCollisions(candidates, [request.template], fetchRows);
+  const insertable = [];
+  const skipped = [];
+  for (const candidate of revalidated) {
+    if (candidate.is_seedable === true && candidate.collision === false && candidate.already_exists === false) {
+      insertable.push(candidate);
+    } else {
+      skipped.push(seedCandidatePublic(candidate, {
+        reason: candidate.collision_reason || "collision"
+      }));
+    }
+  }
+
+  const base = {
+    ok: true,
+    dry_run: request.dry_run,
+    read_only: request.dry_run,
+    writes_enabled: !request.dry_run,
+    filters: {
+      content_type: request.content_type,
+      template: request.template,
+      source: request.source,
+      limit: request.limit,
+      cities: request.cities,
+      min_quality_notes: request.min_quality_notes
+    },
+    preview_summary: preview.summary || {},
+    warnings: preview.warnings || [],
+    would_insert_count: insertable.length,
+    would_insert: insertable.map((candidate) => seedCandidatePublic(candidate, { row: opportunityRowFromPreviewCandidate(candidate) })),
+    inserted_count: 0,
+    skipped_count: skipped.length,
+    error_count: 0,
+    inserted: [],
+    skipped,
+    errors: []
+  };
+
+  if (request.dry_run) return base;
+
+  const inserted = [];
+  const errors = [];
+  for (const candidate of insertable) {
+    const row = opportunityRowFromPreviewCandidate(candidate);
+    try {
+      const result = await insertRow(row, candidate);
+      const saved = Array.isArray(result) ? result[0] || row : result || row;
+      inserted.push(seedCandidatePublic(candidate, { row: saved }));
+    } catch (error) {
+      errors.push(seedCandidatePublic(candidate, {
+        reason: "insert_failed",
+        error: String(error?.message || error || "insert_failed").slice(0, 300)
+      }));
+    }
+  }
+
+  return {
+    ...base,
+    read_only: false,
+    writes_enabled: true,
+    inserted_count: inserted.length,
+    skipped_count: skipped.length,
+    error_count: errors.length,
+    inserted,
+    errors
   };
 }
 
@@ -1091,5 +1358,6 @@ module.exports = {
   DEFAULT_SEED_OPPORTUNITIES,
   getSeoCandidateSourceDiagnostics,
   getSeoOpportunitiesPreview,
+  seedSeoOpportunitiesFromPreview,
   runSeoLandingGeneration
 };

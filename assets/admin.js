@@ -9,6 +9,7 @@ const ANALYTICS_MAX_RANGE_DAYS = 90;
 const EXTENSION_USAGE_DEFAULT_PRESET = "30d";
 const EXTENSION_USAGE_TIMEZONE = "Europe/Madrid";
 const SEO_AUTOGENERATION_TIMEZONE = "Europe/Madrid";
+const SEO_OPPORTUNITY_SEED_CONFIRMATION = "SEED_SEO_OPPORTUNITIES";
 const EXTENSION_USAGE_PRESETS = new Set(["24h", "7d", "30d", "month", "all", "custom"]);
 const INITIAL_ADMIN_PATH = window.location.pathname || "";
 const INITIAL_MARKETING_SUBSECTION = INITIAL_ADMIN_PATH.includes("/backoffice/marketing/viraliza")
@@ -183,6 +184,9 @@ const state = {
   seoAutogeneration: {
     status: null,
     recentRuns: []
+  },
+  seoOpportunitySeed: {
+    lastResult: null
   },
   parking: {
     lastProbe: null
@@ -2318,6 +2322,98 @@ function seoOpportunitiesPreviewTargets(target = "all") {
   return Array.from(els.seoOpportunitiesPreviews || []).filter(Boolean);
 }
 
+function seoOpportunitySeedResultItems(result = {}) {
+  if (result.dry_run) return Array.isArray(result.would_insert) ? result.would_insert : [];
+  return Array.isArray(result.inserted) ? result.inserted : [];
+}
+
+function renderSeoOpportunitySeedRows(items = []) {
+  if (!items.length) return `<p class="admin-empty-state compact">No hay oportunidades pendientes para crear con estos filtros.</p>`;
+  return `
+    <div class="admin-seo-autogen-diagnostics-table-wrap">
+      <table class="admin-seo-autogen-diagnostics-table">
+        <thead>
+          <tr>
+            <th>Keyword/slug</th>
+            <th>Ciudad</th>
+            <th>Template</th>
+            <th>Fuente</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item) => `
+            <tr>
+              <td>
+                <strong>${escapeHtml(item.keyword || "-")}</strong>
+                <div class="admin-subtle"><code>${escapeHtml(item.slug || "-")}</code></div>
+              </td>
+              <td>${escapeHtml(item.city || "-")}</td>
+              <td>${escapeHtml(item.template || "-")}</td>
+              <td>${escapeHtml(item.source || "-")}</td>
+              <td>${escapeHtml(item.row?.status || (item.is_seedable ? "pending" : item.reason || "-"))}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderSeoOpportunitySeedResultHtml(result = null) {
+  if (!result) return "";
+  const items = seoOpportunitySeedResultItems(result);
+  const skipped = Array.isArray(result.skipped) ? result.skipped : [];
+  const errors = Array.isArray(result.errors) ? result.errors : [];
+  const title = result.dry_run ? "Preview de oportunidades a crear" : "Resultado del seed controlado";
+  return `
+    <section class="admin-seo-autogen-diagnostics-panel is-muted">
+      <div class="admin-seo-autogen-diagnostics-head">
+        <div>
+          <h4>${escapeHtml(title)}</h4>
+          <p>No publica, no crea landings, solo crea oportunidades pending.</p>
+        </div>
+        <div class="admin-seo-autogen-diagnostic-counters">
+          <span><b>Insertarian:</b> ${escapeHtml(result.would_insert_count || items.length || 0)}</span>
+          <span><b>Insertadas:</b> ${escapeHtml(result.inserted_count || 0)}</span>
+          <span><b>Skipped:</b> ${escapeHtml(result.skipped_count || skipped.length || 0)}</span>
+          <span><b>Errors:</b> ${escapeHtml(result.error_count || errors.length || 0)}</span>
+        </div>
+      </div>
+      ${renderSeoOpportunitySeedRows(items)}
+      ${skipped.length ? `<p class="admin-empty-state compact">Skipped: ${escapeHtml(skipped.map((item) => `${item.slug || item.keyword || "-"} (${item.reason || item.collision_reason || "skipped"})`).join("; "))}</p>` : ""}
+      ${errors.length ? `<p class="admin-empty-state compact">Errors: ${escapeHtml(errors.map((item) => `${item.slug || item.keyword || "-"} (${item.error || item.reason || "error"})`).join("; "))}</p>` : ""}
+    </section>
+  `;
+}
+
+function renderSeoOpportunitySeedControls(target = "all") {
+  if (target !== "autogeneration") return "";
+  const result = state.seoOpportunitySeed.lastResult;
+  const canConfirm = Boolean(result?.dry_run && Number(result.would_insert_count || 0) > 0);
+  return `
+    <div class="admin-seo-autogen-conditions-actions">
+      <form class="admin-filter" data-seo-opportunity-seed-form>
+        <select name="template" aria-label="Template SEO seed">
+          <option value="expensive_listing_city">expensive_listing_city</option>
+          <option value="rent_city">rent_city</option>
+          <option value="price_city">price_city</option>
+        </select>
+        <input name="limit" type="number" min="1" max="50" step="1" value="10" aria-label="Limite seed SEO">
+        <input name="cities" placeholder="Ciudades opcional, separadas por coma" aria-label="Ciudades seed SEO">
+        <button class="admin-button tiny ghost" type="submit" data-seo-opportunity-seed-dry-run>Crear oportunidades pendientes, no publicar</button>
+      </form>
+      <p class="admin-empty-state compact">No publica, no crea landings, solo crea oportunidades pending.</p>
+      <p class="admin-empty-state compact" data-seo-opportunity-seed-feedback role="status" aria-live="polite"></p>
+    </div>
+    <div class="admin-seo-autogen-conditions-actions" data-seo-opportunity-seed-confirm-panel${canConfirm ? "" : " hidden"}>
+      <input data-seo-opportunity-seed-confirm placeholder="${SEO_OPPORTUNITY_SEED_CONFIRMATION}" aria-label="Confirmacion seed SEO">
+      <button class="admin-button tiny ghost" type="button" data-seo-opportunity-seed-execute>Confirmar creacion pending</button>
+    </div>
+    <div data-seo-opportunity-seed-result>${renderSeoOpportunitySeedResultHtml(result)}</div>
+  `;
+}
+
 function renderSeoOpportunitiesPreview(preview = null, target = "all") {
   const targets = seoOpportunitiesPreviewTargets(target);
   if (!targets.length) return;
@@ -2395,6 +2491,7 @@ function renderSeoOpportunitiesPreview(preview = null, target = "all") {
           </table>
         </div>
       ` : `<p class="admin-empty-state compact">No hay oportunidades candidatas en el preview.</p>`}
+      ${renderSeoOpportunitySeedControls(target)}
     </section>
   `);
 }
@@ -7426,6 +7523,69 @@ async function loadSeoOpportunitiesPreview() {
   }));
 }
 
+function seoOpportunitySeedRoot() {
+  return els.seoAutogenOpportunitiesPreview || document;
+}
+
+function setSeoOpportunitySeedFeedback(message = "", tone = "neutral") {
+  const feedback = seoOpportunitySeedRoot().querySelector("[data-seo-opportunity-seed-feedback]");
+  if (!feedback) return;
+  feedback.textContent = message;
+  feedback.dataset.tone = tone;
+}
+
+function renderSeoOpportunitySeedResult(result = null) {
+  const root = seoOpportunitySeedRoot();
+  const target = root.querySelector("[data-seo-opportunity-seed-result]");
+  const panel = root.querySelector("[data-seo-opportunity-seed-confirm-panel]");
+  if (target) target.innerHTML = renderSeoOpportunitySeedResultHtml(result);
+  if (panel) panel.hidden = !(result?.dry_run && Number(result.would_insert_count || 0) > 0);
+}
+
+function seoOpportunitySeedPayload(dryRun = true) {
+  const root = seoOpportunitySeedRoot();
+  const form = root.querySelector("[data-seo-opportunity-seed-form]");
+  const data = form ? new FormData(form) : new FormData();
+  const rawLimit = Number.parseInt(String(data.get("limit") || "10"), 10);
+  const cities = String(data.get("cities") || "")
+    .split(",")
+    .map((city) => city.trim())
+    .filter(Boolean);
+  return {
+    confirm: SEO_OPPORTUNITY_SEED_CONFIRMATION,
+    dry_run: dryRun,
+    content_type: "landing",
+    template: String(data.get("template") || "expensive_listing_city"),
+    source: "market_price_sources",
+    limit: Math.max(1, Math.min(50, Number.isFinite(rawLimit) ? rawLimit : 10)),
+    cities,
+    min_quality_notes: ["has_sale_data", "has_rent_data"]
+  };
+}
+
+async function runSeoOpportunitySeed(dryRun = true) {
+  if (!dryRun) {
+    const confirmation = seoOpportunitySeedRoot().querySelector("[data-seo-opportunity-seed-confirm]");
+    if (String(confirmation?.value || "").trim() !== SEO_OPPORTUNITY_SEED_CONFIRMATION) {
+      setSeoOpportunitySeedFeedback(`Escribe ${SEO_OPPORTUNITY_SEED_CONFIRMATION} para crear oportunidades pending.`, "warn");
+      return null;
+    }
+  }
+  setSeoOpportunitySeedFeedback(dryRun ? "Calculando dry-run de oportunidades pending..." : "Creando oportunidades pending...", "neutral");
+  const result = await api("/api/admin?resource=seo/opportunities/seed-preview", {
+    method: "POST",
+    body: JSON.stringify(seoOpportunitySeedPayload(dryRun))
+  });
+  state.seoOpportunitySeed.lastResult = result;
+  renderSeoOpportunitySeedResult(result);
+  const message = dryRun
+    ? `Dry-run listo: ${Number(result.would_insert_count || 0)} oportunidades pending candidatas.`
+    : `Seed completado: ${Number(result.inserted_count || 0)} insertadas, ${Number(result.skipped_count || 0)} skipped, ${Number(result.error_count || 0)} errores.`;
+  setSeoOpportunitySeedFeedback(message, result.error_count ? "warn" : "good");
+  showStatus(message, result.error_count ? "neutral" : "good");
+  return result;
+}
+
 async function loadSeo() {
   const params = new URLSearchParams({
     limit: String(state.seo.pageSize || 10),
@@ -7934,6 +8094,24 @@ if (els.seoAutogenConditionsForm) {
     });
   });
 }
+document.addEventListener("submit", (event) => {
+  if (!event.target.matches("[data-seo-opportunity-seed-form]")) return;
+  event.preventDefault();
+  runSeoOpportunitySeed(true).catch((error) => {
+    const message = error.payload?.message || error.message || "No se pudo calcular el dry-run de oportunidades SEO.";
+    setSeoOpportunitySeedFeedback(message, "bad");
+    showStatus(message, "bad");
+  });
+});
+document.addEventListener("click", (event) => {
+  const button = event.target?.closest?.("[data-seo-opportunity-seed-execute]");
+  if (!button) return;
+  runSeoOpportunitySeed(false).catch((error) => {
+    const message = error.payload?.message || error.message || "No se pudo crear oportunidades pending.";
+    setSeoOpportunitySeedFeedback(message, "bad");
+    showStatus(message, "bad");
+  });
+});
 if (els.linkedinRefresh) {
   els.linkedinRefresh.addEventListener("click", () => loadLinkedIn().catch((error) => showStatus(error.message, "bad")));
 }

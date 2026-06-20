@@ -17,7 +17,7 @@ const {
   getSeoContentPublicationStatus,
   runSeoContentPublication
 } = require("./_seo/contentPublisher");
-const { getSeoOpportunitiesPreview, runSeoLandingGeneration } = require("./_seo/generator");
+const { getSeoOpportunitiesPreview, runSeoLandingGeneration, seedSeoOpportunitiesFromPreview } = require("./_seo/generator");
 const { evaluateLandingIndexability } = require("./_seo/indexability");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
 const { createKpiSettingsHandler } = require("./_admin/handlers/kpis");
@@ -951,6 +951,15 @@ async function handleSeoOpportunitiesPreview(req, url) {
     limit: url.searchParams.get("limit") || 50
   });
   return { status: 200, payload: result };
+}
+
+async function handleSeoOpportunitiesSeedPreview(req) {
+  if (req.method !== "POST") {
+    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  }
+  const body = await readJsonBody(req);
+  const result = await seedSeoOpportunitiesFromPreview(body);
+  return { status: result.status || (result.ok === false ? 400 : 200), payload: result };
 }
 
 function dryRunOverrideFromRequest(req, url, body) {
@@ -5321,6 +5330,10 @@ async function handleAdminRequest(req, res) {
     }
     if (resource === "seo/opportunities/preview") {
       const result = await handleSeoOpportunitiesPreview(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "seo/opportunities/seed-preview") {
+      const result = await handleSeoOpportunitiesSeedPreview(req);
       return json(res, result.status, result.payload);
     }
     if (resource === "linkedin" || resource.startsWith("linkedin/")) {
