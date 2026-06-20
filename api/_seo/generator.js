@@ -217,6 +217,298 @@ function publicOpportunityDiagnostic(opportunity = {}) {
   };
 }
 
+function uniqueList(values = []) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function normalizedOpportunityCity(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function candidateTemplateTypesForPreview({ contentType = "landing", template = "all" } = {}) {
+  const normalizedContentType = String(contentType || "landing").toLowerCase();
+  const normalizedTemplate = String(template || "all").toLowerCase();
+  const baseTypes =
+    normalizedContentType === "news"
+      ? EDITORIAL_TEMPLATE_TYPES
+      : normalizedContentType === "all"
+        ? SUPPORTED_TEMPLATE_TYPES
+        : LANDING_TEMPLATE_TYPES;
+
+  if (["all", "random", "mixed"].includes(normalizedTemplate)) return baseTypes;
+  const requested = templateTypesForRequest(normalizedTemplate);
+  return requested.filter((templateType) => baseTypes.includes(templateType));
+}
+
+function previewCandidateFromOpportunity(opportunity, source, qualityNotes = []) {
+  return {
+    content_type: seoContentTypeForTemplate(opportunity.template_type),
+    template: opportunity.template_type,
+    city: opportunity.city || null,
+    keyword: opportunity.keyword || null,
+    slug: opportunitySlug(opportunity),
+    intent: opportunity.intent || "informational",
+    source,
+    quality_notes: uniqueList(qualityNotes)
+  };
+}
+
+function previewCandidateKey(candidate = {}) {
+  if (candidate.template === "editorial_guide") {
+    return `${candidate.template}|${String(candidate.keyword || "").toLowerCase()}`;
+  }
+  return `${candidate.template}|${normalizedOpportunityCity(candidate.city || candidate.keyword)}`;
+}
+
+function mergePreviewCandidates(candidates = []) {
+  const byKey = new Map();
+  for (const candidate of candidates) {
+    const key = previewCandidateKey(candidate);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, {
+        ...candidate,
+        _sources: uniqueList([candidate.source]),
+        quality_notes: uniqueList(candidate.quality_notes)
+      });
+      continue;
+    }
+    existing._sources = uniqueList([...(existing._sources || []), candidate.source]);
+    existing.source = existing._sources.join("+");
+    existing.quality_notes = uniqueList([...(existing.quality_notes || []), ...(candidate.quality_notes || [])]);
+  }
+  return [...byKey.values()].map(({ _sources, ...candidate }) => candidate);
+}
+
+function marketRowsToPreviewOpportunities(rows = [], templateTypes = LANDING_TEMPLATE_TYPES) {
+  const byCity = new Map();
+  for (const row of rows) {
+    const city = String(row.municipality || row.city || row.zone_name || "").trim();
+    if (!city) continue;
+    const key = normalizedOpportunityCity(city);
+    if (!key) continue;
+    const entry = byCity.get(key) || {
+      city,
+      province: row.province || "",
+      autonomous_community: row.autonomous_community || "",
+      operations: new Set(),
+      sources: new Set()
+    };
+    if (row.operation) entry.operations.add(String(row.operation).toLowerCase());
+    if (row.source) entry.sources.add(String(row.source));
+    if (!entry.province && row.province) entry.province = row.province;
+    if (!entry.autonomous_community && row.autonomous_community) entry.autonomous_community = row.autonomous_community;
+    byCity.set(key, entry);
+  }
+
+  const opportunities = [];
+  for (const entry of byCity.values()) {
+    const hasSaleData = entry.operations.has("sale");
+    const hasRentData = entry.operations.has("rent");
+    for (const templateType of templateTypes) {
+      if (templateType === "editorial_guide") continue;
+      if (templateType === "price_city" && !hasSaleData) continue;
+      if (templateType === "rent_city" && !hasRentData) continue;
+      if (templateType === "expensive_listing_city" && !hasSaleData) continue;
+      const config = TEMPLATE_CONFIG[templateType];
+      opportunities.push({
+        keyword: config.keyword(entry.city),
+        city: entry.city,
+        province: entry.province,
+        autonomous_community: entry.autonomous_community,
+        intent: config.intent,
+        template_type: templateType,
+        search_priority: 70,
+        status: "pending",
+        _quality_notes: [
+          hasSaleData ? "has_sale_data" : null,
+          hasRentData ? "has_rent_data" : null,
+          entry.sources.size ? `sources:${[...entry.sources].sort().join(",")}` : null
+        ].filter(Boolean)
+      });
+    }
+  }
+  return opportunities;
+}
+
+function applyOpportunityCollisions(candidate, existingOpportunityKeys, existingLandingSlugs) {
+  const opportunity = {
+    template_type: candidate.template,
+    city: candidate.city,
+    keyword: candidate.keyword
+  };
+  const alreadyExists = existingOpportunityKeys.has(opportunityKey(opportunity));
+  const slugExists = existingLandingSlugs.has(candidate.slug);
+  const reasons = [
+    alreadyExists ? "existing_opportunity" : null,
+    slugExists ? "slug_already_used" : null
+  ].filter(Boolean);
+  return {
+    ...candidate,
+    collision: reasons.length > 0,
+    collision_reason: reasons.length ? reasons.join("+") : null,
+    already_exists: alreadyExists,
+    is_seedable: reasons.length === 0
+  };
+}
+
+function previewSummary(candidates = [], templateTypes = []) {
+  const byTemplate = Object.fromEntries(
+    templateTypes.map((templateType) => [
+      templateType,
+      {
+        total: candidates.filter((candidate) => candidate.template === templateType).length,
+        seedable: candidates.filter((candidate) => candidate.template === templateType && candidate.is_seedable).length
+      }
+    ])
+  );
+  return {
+    total_candidates: candidates.length,
+    seedable_count: candidates.filter((candidate) => candidate.is_seedable).length,
+    existing_opportunities_count: candidates.filter((candidate) => candidate.already_exists).length,
+    used_slugs_count: candidates.filter((candidate) => String(candidate.collision_reason || "").includes("slug_already_used")).length,
+    exhausted_templates: Object.entries(byTemplate)
+      .filter(([, counts]) => counts.total > 0 && counts.seedable === 0)
+      .map(([templateType]) => templateType),
+    uncovered_cities: uniqueList(candidates.filter((candidate) => candidate.is_seedable && candidate.city).map((candidate) => candidate.city)).slice(0, 25),
+    by_template: byTemplate
+  };
+}
+
+async function getSeoOpportunitiesPreview(options = {}) {
+  const contentType = String(options.contentType || options.content_type || "landing").toLowerCase();
+  const template = String(options.template || options.template_type || "all").toLowerCase();
+  const limit = Math.max(1, Math.min(200, Number.parseInt(String(options.limit || 50), 10) || 50));
+  let templateTypes = [];
+  const warnings = [];
+
+  try {
+    templateTypes = candidateTemplateTypesForPreview({ contentType, template });
+  } catch (error) {
+    warnings.push("unsupported_template_filter");
+    templateTypes = [];
+  }
+
+  const fetchRows = options.fetchRows || (hasSupabaseConfig() ? (path) => supabaseFetch(path, { timeoutMs: 8000 }) : null);
+  if (!templateTypes.length) {
+    return {
+      ok: true,
+      read_only: true,
+      writes_enabled: false,
+      content_type: contentType,
+      template,
+      template_types: [],
+      summary: previewSummary([], []),
+      candidates: [],
+      warnings: [...warnings, "no_supported_templates_for_preview"]
+    };
+  }
+
+  if (!fetchRows) {
+    const candidates = poolForTemplateTypes(templateTypes)
+      .map((opportunity) => previewCandidateFromOpportunity(opportunity, "controlled_seed_pool", ["existing_state_unavailable"]))
+      .map((candidate) => ({
+        ...candidate,
+        collision: true,
+        collision_reason: "existing_state_unavailable",
+        already_exists: false,
+        is_seedable: false
+      }));
+    return {
+      ok: true,
+      read_only: true,
+      writes_enabled: false,
+      content_type: contentType,
+      template,
+      template_types: templateTypes,
+      summary: previewSummary(candidates, templateTypes),
+      candidates: candidates.slice(0, limit),
+      warnings: ["supabase_not_configured_preview_uses_static_catalog_only"]
+    };
+  }
+
+  const templateFilter = templateTypes.length === 1 ? `eq.${templateTypes[0]}` : `in.(${templateTypes.join(",")})`;
+  const landingParams = new URLSearchParams({
+    select: "slug,status,template_type,city,title",
+    limit: "5000"
+  });
+  const opportunityParams = new URLSearchParams({
+    select: "keyword,city,template_type,status,intent,search_priority",
+    template_type: templateFilter,
+    limit: "5000"
+  });
+  const marketParams = new URLSearchParams({
+    select: "municipality,province,autonomous_community,operation,source,period_date,price_eur_m2,confidence_score",
+    municipality: "not.is.null",
+    price_eur_m2: "not.is.null",
+    limit: "5000"
+  });
+
+  let landingRows = [];
+  let opportunityRows = [];
+  let marketRows = [];
+  let existingStateAvailable = true;
+  try {
+    const [landings, opportunities] = await Promise.all([
+      fetchRows(`seo_landings?${landingParams.toString()}`),
+      fetchRows(`seo_landing_opportunities?${opportunityParams.toString()}`)
+    ]);
+    landingRows = Array.isArray(landings) ? landings : [];
+    opportunityRows = Array.isArray(opportunities) ? opportunities : [];
+  } catch (error) {
+    existingStateAvailable = false;
+    warnings.push("existing_state_unavailable");
+  }
+
+  try {
+    const rows = await fetchRows(`market_price_sources?${marketParams.toString()}`);
+    marketRows = Array.isArray(rows) ? rows : [];
+    if (!marketRows.length) warnings.push("market_price_sources_empty");
+  } catch (error) {
+    warnings.push("market_price_sources_unavailable");
+  }
+
+  const controlledCandidates = poolForTemplateTypes(templateTypes).map((opportunity) =>
+    previewCandidateFromOpportunity(opportunity, "controlled_seed_pool", ["controlled_seed_pool"])
+  );
+  const marketCandidates = marketRowsToPreviewOpportunities(marketRows, templateTypes).map((opportunity) =>
+    previewCandidateFromOpportunity(opportunity, "market_price_sources", opportunity._quality_notes || ["market_price_sources"])
+  );
+  const existingOpportunityKeys = new Set(opportunityRows.map(opportunityKey));
+  const existingLandingSlugs = new Set(landingRows.map((landing) => landing.slug).filter(Boolean));
+  const candidates = mergePreviewCandidates([...controlledCandidates, ...marketCandidates])
+    .map((candidate) => existingStateAvailable
+      ? applyOpportunityCollisions(candidate, existingOpportunityKeys, existingLandingSlugs)
+      : {
+          ...candidate,
+          collision: true,
+          collision_reason: "existing_state_unavailable",
+          already_exists: false,
+          is_seedable: false
+        })
+    .sort((left, right) => {
+      if (left.is_seedable !== right.is_seedable) return left.is_seedable ? -1 : 1;
+      return String(left.template).localeCompare(String(right.template)) || String(left.city || "").localeCompare(String(right.city || ""));
+    });
+
+  return {
+    ok: true,
+    read_only: true,
+    writes_enabled: false,
+    content_type: contentType,
+    template,
+    template_types: templateTypes,
+    summary: previewSummary(candidates, templateTypes),
+    candidates: candidates.slice(0, limit),
+    warnings
+  };
+}
+
 function inferCandidateSourceEmptyReason(diagnostics = {}) {
   if (!diagnostics.selected_content_type || !diagnostics.template_types?.length) return "selected_type_without_source";
   if (diagnostics.ready_to_publish_count > 0) return null;
@@ -798,5 +1090,6 @@ module.exports = {
   canPublishNow,
   DEFAULT_SEED_OPPORTUNITIES,
   getSeoCandidateSourceDiagnostics,
+  getSeoOpportunitiesPreview,
   runSeoLandingGeneration
 };

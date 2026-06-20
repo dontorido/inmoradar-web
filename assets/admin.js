@@ -332,6 +332,7 @@ const els = {
   analyticsRefreshButtons: document.querySelectorAll("[data-analytics-refresh]"),
   premiumRows: document.querySelector("[data-premium-rows]"),
   seoSummary: document.querySelector("[data-seo-summary]"),
+  seoOpportunitiesPreview: document.querySelector("[data-seo-opportunities-preview]"),
   seoRows: document.querySelector("[data-seo-rows]"),
   seoPagination: document.querySelector("[data-seo-pagination]"),
   premiumFilter: document.querySelector("[data-premium-filter]"),
@@ -2271,6 +2272,7 @@ function renderSeo(payload) {
   state.seo.hasNextPage = Boolean(payload.has_next_page);
   state.seo.hasPreviousPage = Boolean(payload.has_previous_page);
   renderSeoSummary(payload.summary || {}, rows);
+  renderSeoOpportunitiesPreview(payload.opportunities_preview || null);
 
   if (!rows.length) {
     els.seoRows.innerHTML = `<tr><td colspan="6">No hay landings con este filtro.</td></tr>`;
@@ -2306,6 +2308,79 @@ function renderSeo(payload) {
     })
     .join("");
   renderSeoPagination(payload);
+}
+
+function renderSeoOpportunitiesPreview(preview = null) {
+  if (!els.seoOpportunitiesPreview) return;
+  if (!preview) {
+    els.seoOpportunitiesPreview.innerHTML = "";
+    return;
+  }
+  if (preview.ok === false) {
+    els.seoOpportunitiesPreview.innerHTML = `
+      <section class="admin-seo-autogen-diagnostics-panel is-muted">
+        <div class="admin-seo-autogen-diagnostics-head">
+          <div>
+            <h3>Preview backlog SEO</h3>
+            <p>${escapeHtml(preview.message || preview.error || "Preview no disponible")}</p>
+          </div>
+        </div>
+      </section>
+    `;
+    return;
+  }
+  const summary = preview.summary || {};
+  const candidates = Array.isArray(preview.candidates) ? preview.candidates : [];
+  const warnings = Array.isArray(preview.warnings) ? preview.warnings.filter(Boolean) : [];
+  const rows = candidates.slice(0, 8).map((candidate) => {
+    const seedable = candidate.is_seedable === true;
+    return `
+      <tr>
+        <td>
+          <strong>${escapeHtml(candidate.keyword || "-")}</strong>
+          <div class="admin-subtle"><code>${escapeHtml(candidate.slug || "-")}</code></div>
+        </td>
+        <td>${escapeHtml(candidate.city || "-")}</td>
+        <td>${chip(candidate.template || "-", statusTone(seedable ? "ready" : "blocked"))}</td>
+        <td>${escapeHtml(candidate.source || "-")}</td>
+        <td>${chip(seedable ? "Seedable" : "Colision", seedable ? "good" : "warn")}</td>
+        <td>${escapeHtml(candidate.collision_reason || candidate.quality_notes?.join(", ") || "-")}</td>
+      </tr>
+    `;
+  }).join("");
+  els.seoOpportunitiesPreview.innerHTML = `
+    <section class="admin-seo-autogen-diagnostics-panel">
+      <div class="admin-seo-autogen-diagnostics-head">
+        <div>
+          <h3>Preview backlog SEO</h3>
+          <p>${escapeHtml(`Seedables: ${seoAutogenNumber(summary.seedable_count, 0)} | Existentes: ${seoAutogenNumber(summary.existing_opportunities_count, 0)} | Slugs usados: ${seoAutogenNumber(summary.used_slugs_count, 0)}`)}</p>
+          ${warnings.length ? `<p>${escapeHtml(`Warnings: ${warnings.join(", ")}`)}</p>` : ""}
+        </div>
+        <div class="admin-seo-autogen-diagnostic-counters">
+          <span><b>Total:</b> ${escapeHtml(seoAutogenNumber(summary.total_candidates, 0))}</span>
+          <span><b>Seedables:</b> ${escapeHtml(seoAutogenNumber(summary.seedable_count, 0))}</span>
+          <span><b>Templates agotadas:</b> ${escapeHtml((summary.exhausted_templates || []).length)}</span>
+        </div>
+      </div>
+      ${rows ? `
+        <div class="admin-seo-autogen-diagnostics-table-wrap">
+          <table class="admin-seo-autogen-diagnostics-table">
+            <thead>
+              <tr>
+                <th>Keyword/slug</th>
+                <th>Ciudad</th>
+                <th>Template</th>
+                <th>Fuente</th>
+                <th>Estado</th>
+                <th>Motivo/notas</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      ` : `<p class="admin-empty-state compact">No hay oportunidades candidatas en el preview.</p>`}
+    </section>
+  `;
 }
 
 function renderSeoSummary(summary = {}, fallbackRows = []) {
@@ -7332,7 +7407,16 @@ async function loadSeo() {
     page: String(state.seo.page || 1),
     status: state.seo.status || "all"
   });
-  const payload = await api(`/api/admin?resource=seo/landings&${params.toString()}`);
+  const [payload, preview] = await Promise.all([
+    api(`/api/admin?resource=seo/landings&${params.toString()}`),
+    api("/api/admin?resource=seo/opportunities/preview&content_type=landing&template=all&limit=50").catch((error) => ({
+      ok: false,
+      status: error.status || null,
+      error: error.payload?.error || error.message || "seo_opportunities_preview_unavailable",
+      message: error.payload?.message || error.message || "Preview de oportunidades no disponible"
+    }))
+  ]);
+  payload.opportunities_preview = preview;
   renderSeo(payload);
 }
 

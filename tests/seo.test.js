@@ -15,7 +15,7 @@ const {
 const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../lib/seo/cityGuideTemplates");
 
 const { calculateSeoLandingQuality } = require("../api/_seo/quality");
-const { canPublishNow, getSeoCandidateSourceDiagnostics, runSeoLandingGeneration } = require("../api/_seo/generator");
+const { canPublishNow, getSeoCandidateSourceDiagnostics, getSeoOpportunitiesPreview, runSeoLandingGeneration } = require("../api/_seo/generator");
 const {
   buildSeoContentPublicationConfig,
   createSeoContentPublicationStorage,
@@ -1808,6 +1808,64 @@ test("diagnostico de fuente SEO detecta seed agotado por slugs existentes", asyn
   assert.equal(result.existing_slug_collisions_count, existingGuideLandings.length);
   assert.equal(result.existing_slug_collisions_sample[0].template_type, "editorial_guide");
   assert.equal(result.candidate_source_empty_reason, "seed_exhausted_by_existing_slugs");
+});
+
+test("preview de oportunidades SEO propone ciudades nuevas sin escribir backlog", async () => {
+  const paths = [];
+  const result = await getSeoOpportunitiesPreview({
+    content_type: "landing",
+    template: "all",
+    limit: 100,
+    fetchRows: async (path) => {
+      paths.push(path);
+      if (path.startsWith("seo_landings?")) {
+        return [{ slug: "precio-metro-cuadrado/logrono", template_type: "price_city", status: "published" }];
+      }
+      if (path.startsWith("seo_landing_opportunities?")) {
+        return [{ keyword: "precio alquiler metro cuadrado Madrid", city: "Madrid", template_type: "rent_city", status: "pending" }];
+      }
+      if (path.startsWith("market_price_sources?")) {
+        return [
+          {
+            municipality: "Girona",
+            province: "Girona",
+            autonomous_community: "Cataluna",
+            operation: "sale",
+            source: "idealista_public_report",
+            price_eur_m2: 3200
+          },
+          {
+            municipality: "Girona",
+            province: "Girona",
+            autonomous_community: "Cataluna",
+            operation: "rent",
+            source: "idealista_public_report",
+            price_eur_m2: 14
+          }
+        ];
+      }
+      return [];
+    }
+  });
+
+  const gironaRent = result.candidates.find((candidate) => candidate.slug === "precio-alquiler/girona");
+  const madridRent = result.candidates.find((candidate) => candidate.slug === "precio-alquiler/madrid");
+  const logronoPrice = result.candidates.find((candidate) => candidate.slug === "precio-metro-cuadrado/logrono");
+
+  assert.equal(result.ok, true);
+  assert.equal(result.read_only, true);
+  assert.equal(result.writes_enabled, false);
+  assert.ok(gironaRent);
+  assert.equal(gironaRent.is_seedable, true);
+  assert.equal(gironaRent.source, "market_price_sources");
+  assert.equal(gironaRent.intent, "informational");
+  assert.ok(gironaRent.quality_notes.includes("has_rent_data"));
+  assert.equal(madridRent.already_exists, true);
+  assert.equal(madridRent.collision_reason, "existing_opportunity");
+  assert.equal(logronoPrice.collision_reason, "slug_already_used");
+  assert.ok(result.summary.seedable_count > 0);
+  assert.ok(result.summary.uncovered_cities.includes("Girona"));
+  assert.equal(paths.some((path) => /on_conflict|method=POST|method=PATCH|generate-landings/i.test(path)), false);
 });
 
 test("la publicacion SEO bloqueada por limites informa publication_limits_reached sin candidatos publicos", async () => {
