@@ -1685,6 +1685,145 @@ test("la publicacion SEO no promociona READY_TO_PUBLISH por score bajo", async (
   assert.equal(saved.length, 0);
   assert.equal(result.results[0].reason, "low_score");
   assert.equal(result.publication_diagnostics.evaluated_candidates[0].category, "low_score");
+  assert.equal(result.publication_diagnostics.candidates_generated, 1);
+  assert.equal(result.publication_diagnostics.candidates_low_score, 1);
+  assert.equal(result.publication_diagnostics.candidates_publishable, 0);
+  assert.equal(result.publication_diagnostics.empty_reason, "all_candidates_below_min_score");
+});
+
+test("la publicacion SEO sin candidatos generados devuelve diagnostico claro", async () => {
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [];
+      },
+      async fetchReadyToPublishLandings() {
+        return [];
+      }
+    },
+    runGeneration: async () => {
+      return {
+        ok: true,
+        generated_count: 0,
+        published_count: 0,
+        results: []
+      };
+    }
+  });
+
+  assert.equal(result.published_count, 0);
+  assert.equal(result.draft_count, 0);
+  assert.equal(result.skipped_count, 0);
+  assert.equal(result.failed_count, 0);
+  assert.equal(result.publication_diagnostics.candidates_generated, 0);
+  assert.equal(result.publication_diagnostics.candidates_after_policy, 0);
+  assert.equal(result.publication_diagnostics.empty_reason, "no_candidates_generated");
+});
+
+test("la publicacion SEO bloqueada por limites informa publication_limits_reached sin candidatos publicos", async () => {
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [];
+      },
+      async fetchReadyToPublishLandings() {
+        return [];
+      }
+    },
+    runGeneration: async (options) => {
+      if (options.template_type === "all") {
+        return {
+          ok: true,
+          mode: "publish",
+          template_type: "all",
+          generated_count: 0,
+          published_count: 0,
+          results: []
+        };
+      }
+      return {
+        ok: true,
+        mode: "publish",
+        template_type: options.template_type,
+        generated_count: 1,
+        published_count: 0,
+        results: [
+          {
+            slug: "guias/comprar-para-alquilar-rentabilidad",
+            title: "Comprar para alquilar: rentabilidad real",
+            template_type: "editorial_guide",
+            status: "blocked",
+            reason: "execution_limit_reached",
+            quality_score: 100,
+            final_score: 100
+          }
+        ]
+      };
+    }
+  });
+
+  assert.equal(result.published_count, 0);
+  assert.equal(result.draft_count, 0);
+  assert.equal(result.skipped_count, 0);
+  assert.equal(result.failed_count, 0);
+  assert.equal(result.publication_diagnostics.empty_reason, "publication_limits_reached");
+  assert.equal(result.publication_diagnostics.candidates_publishable, 0);
+  assert.equal(result.publication_diagnostics.candidates_low_score, 0);
+});
+
+test("diagnostico de candidatos low score vacio no fuerza texto de low_score_results", () => {
+  const diagnostics = buildPublicationDiagnostics({
+    empty_reason: "publication_limits_reached",
+    config: { min_score: 90 },
+    results: [
+      {
+        slug: "guias/execution-limit",
+        status: "blocked",
+        reason: "execution_limit_reached",
+        quality_score: 100,
+        indexability_reasons: ["some_rule"]
+      }
+    ]
+  });
+
+  assert.equal(diagnostics.low_score_results.length, 0);
+  assert.equal(diagnostics.candidates_low_score, 0);
+  assert.equal(diagnostics.empty_reason, "publication_limits_reached");
+  assert.equal(diagnostics.next_steps.some((step) => /low_score_results/.test(step)), false);
 });
 
 test("diagnostico clasifica calidad missing antes que flags operativas", () => {

@@ -305,7 +305,9 @@ function aggregateReasons(results = []) {
     .sort((left, right) => right.count - left.count || left.reason.localeCompare(right.reason));
 }
 
-function nextStepsForNoPublication(reasonCounts = []) {
+function nextStepsForNoPublication(reasonCounts = [], options = {}) {
+  const hasLowScoreResults = options.hasLowScoreResults === true;
+  const emptyReason = options.emptyReason || null;
   const reasons = reasonCounts.map((item) => item.reason).join(" | ");
   const steps = [];
   if (/sin fuente visible|source/i.test(reasons)) {
@@ -324,18 +326,25 @@ function nextStepsForNoPublication(reasonCounts = []) {
     steps.push("Mejorar datos, plantilla y unicidad hasta superar el umbral configurado; no bajar el quality gate.");
   }
   if (!steps.length) {
-    steps.push("Revisar publication_diagnostics.low_score_results para ver penalizaciones, warnings y score de cada candidato.");
+    if (hasLowScoreResults) {
+      steps.push("Revisar publication_diagnostics.low_score_results para ver penalizaciones, warnings y score de cada candidato.");
+    } else if (emptyReason) {
+      steps.push(`Consultar publication_diagnostics.empty_reason (${emptyReason}) para revisar el bloqueo actual.`);
+    } else {
+      steps.push("Revisar publication_diagnostics.empty_reason para ver el bloqueo real de la corrida.");
+    }
   }
   return unique(steps);
 }
 
 function buildPublicationDiagnostics(summary = {}) {
   const results = Array.isArray(summary.results) ? summary.results : [];
+  const candidateDiagnostics = summary.candidate_diagnostics || {};
   const diagnosticResults = results.filter(isNonPublishedDiagnosticResult);
   const evaluatedCandidates = results.map((item) => publicationDiagnosticCandidate(item, summary));
   const lowScoreResults = diagnosticResults
     .map((item) => publicationDiagnosticCandidate(item, summary))
-    .filter((item) => item.meets_min_score === false || item.status !== "published");
+    .filter((item) => item.meets_min_score === false);
   const reasonCounts = aggregateReasons(diagnosticResults);
   const publishedCount = safeInt(summary.published_count, 0);
   const notCountedAsSkip = evaluatedCandidates.filter((item) => item.status !== "published" && !item.counted_as_skip);
@@ -347,6 +356,14 @@ function buildPublicationDiagnostics(summary = {}) {
   return {
     min_score: minScoreForSummary(summary),
     evaluated_candidates_count: results.length,
+    candidates_generated: safeInt(candidateDiagnostics.candidates_generated, summary.candidates_generated ?? 0),
+    candidates_after_policy: safeInt(candidateDiagnostics.candidates_after_policy, summary.candidates_after_policy ?? 0),
+    candidates_scored: safeInt(candidateDiagnostics.candidates_scored, summary.candidates_scored ?? 0),
+    candidates_low_score: safeInt(candidateDiagnostics.candidates_low_score, summary.candidates_low_score ?? 0),
+    candidates_publishable: safeInt(candidateDiagnostics.candidates_publishable, summary.candidates_publishable ?? 0),
+    candidates_published: safeInt(candidateDiagnostics.candidates_published, summary.candidates_published ?? 0),
+    candidates_drafted: safeInt(candidateDiagnostics.candidates_drafted, summary.candidates_drafted ?? 0),
+    candidates_skipped: safeInt(candidateDiagnostics.candidates_skipped, summary.candidates_skipped ?? 0),
     published_count: publishedCount,
     draft_count: safeInt(summary.draft_count, 0),
     skipped_count: safeInt(summary.skipped_count, 0),
@@ -356,10 +373,15 @@ function buildPublicationDiagnostics(summary = {}) {
     discarded_before_skip_count: evaluatedCandidates.filter((item) => item.discarded_before_skip).length,
     skip_counter_explanation: "skipped_count only counts candidates whose result status is skipped or would_skip; low-score ready_to_publish/needs_review/draft candidates can be non-published without incrementing skip.",
     category_counts: categoryCounts,
-    reason_counts: reasonCounts,
+    reason_counts: candidateDiagnostics.reason_counts || reasonCounts,
     evaluated_candidates: evaluatedCandidates.slice(0, 25),
     low_score_results: lowScoreResults.slice(0, 10),
-    next_steps: publishedCount === 0 ? nextStepsForNoPublication(reasonCounts) : []
+    selected_content_type: summary.selected_content_type || null,
+    empty_reason: summary.empty_reason || null,
+    next_steps: publishedCount === 0 ? nextStepsForNoPublication(reasonCounts, {
+      hasLowScoreResults: lowScoreResults.length > 0,
+      emptyReason: summary.empty_reason
+    }) : []
   };
 }
 

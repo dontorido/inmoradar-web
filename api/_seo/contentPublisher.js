@@ -34,6 +34,128 @@ function clampInt(value, fallback, min, max) {
   return Math.max(min, Math.min(max, number));
 }
 
+function safeInt(value, fallback = 0) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function inferEmptyReasonFromRunSummary({ reason, selectedContentType = null, policy = {} }) {
+  const effectiveSelectedContentType = selectedContentType === null ? policy?.selected_content_type || null : selectedContentType;
+  return inferEmptyReasonFromCandidates({
+    reason,
+    selectedContentType: effectiveSelectedContentType,
+    candidateStats: {
+      candidates_generated: 0,
+      candidates_after_policy: 0,
+      candidates_scored: 0,
+      candidates_low_score: 0,
+      candidates_publishable: 0,
+      candidates_published: 0,
+      candidates_drafted: 0,
+      candidates_skipped: 0
+    },
+    policy
+  });
+}
+
+const POLICY_REASON_SET = new Set([
+  "autogeneration_disabled",
+  "daily_limit_reached",
+  "weekly_limit_reached",
+  "execution_limit_reached",
+  "run_limit_reached",
+  "daily_total_quota_reached",
+  "daily_2_plus_2_quota_reached",
+  "publication_limits_reached"
+]);
+
+function isPolicyFilteredReason(reason) {
+  return POLICY_REASON_SET.has(String(reason || "").toLowerCase());
+}
+
+function inferEmptyReasonFromCandidates({
+  reason,
+  selectedContentType,
+  candidateStats
+}) {
+  const normalizedReason = String(reason || "").toLowerCase();
+  if (["publication_limits_reached", "daily_limit_reached", "weekly_limit_reached", "execution_limit_reached", "run_limit_reached", "daily_total_quota_reached", "daily_2_plus_2_quota_reached"].includes(normalizedReason)) {
+    return "publication_limits_reached";
+  }
+  if (["autogeneration_disabled", "supabase_not_configured", "cron_already_running_or_completed", "candidate_failed"].includes(normalizedReason)) {
+    return "unknown_empty_results";
+  }
+  if (candidateStats.candidates_generated === 0) {
+    return selectedContentType === null ? "no_selected_content_type" : "no_candidates_generated";
+  }
+  const hasPolicyReason = Array.isArray(candidateStats.reason_counts) && candidateStats.reason_counts.some((item) => isPolicyFilteredReason(item.reason));
+  if (hasPolicyReason && candidateStats.candidates_publishable === 0) {
+    return "publication_limits_reached";
+  }
+  if (candidateStats.candidates_after_policy === 0) return "all_candidates_filtered_before_scoring";
+  if (candidateStats.candidates_low_score > 0 && candidateStats.candidates_publishable === 0) return "all_candidates_below_min_score";
+  return "unknown_empty_results";
+}
+
+function summarizeCandidateDiagnosticsFromResults(results = [], config = {}) {
+  const minScore = safeInt(config.min_score, 0);
+  const reasonCounts = {};
+  let candidatesGenerated = 0;
+  let candidatesScored = 0;
+  let candidatesLowScore = 0;
+  let candidatesBlockedByPolicy = 0;
+  let candidatesPublishable = 0;
+  let candidatesPublished = 0;
+  let candidatesDrafted = 0;
+  let candidatesSkipped = 0;
+
+  for (const item of results) {
+    const status = String(item.status || "").toLowerCase();
+    const reason = String(item.reason || "");
+    const rawScore = Number(item.final_score ?? item.quality_score ?? item.score);
+    const score = Number.isFinite(rawScore) ? rawScore : null;
+
+    if (reason) {
+      reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+    }
+    candidatesGenerated += 1;
+    if (Number.isFinite(score)) {
+      candidatesScored += 1;
+      if (score < minScore) candidatesLowScore += 1;
+    }
+    if (status === "published") candidatesPublished += 1;
+    if (status === "draft" || status === "ready_to_publish" || status === "needs_review") candidatesDrafted += 1;
+    if (status === "skipped" || status === "would_skip") candidatesSkipped += 1;
+    if (isPolicyFilteredReason(reason)) candidatesBlockedByPolicy += 1;
+
+    const isPublishable = status === "published" ||
+      status === "would_publish" ||
+      (
+        status !== "failed" &&
+        status !== "blocked" &&
+        status !== "skipped" &&
+        status !== "would_skip" &&
+        !isPolicyFilteredReason(reason) &&
+        Number.isFinite(score) &&
+        Number(score) >= minScore
+      );
+    if (isPublishable) candidatesPublishable += 1;
+  }
+
+  return {
+    candidates_generated: candidatesGenerated,
+    candidates_after_policy: Math.max(0, candidatesGenerated - candidatesBlockedByPolicy),
+    candidates_scored: candidatesScored,
+    candidates_low_score: candidatesLowScore,
+    candidates_publishable: candidatesPublishable,
+    candidates_published: candidatesPublished,
+    candidates_drafted: candidatesDrafted,
+    candidates_skipped: candidatesSkipped,
+    reason_counts: Object.entries(reasonCounts).map(([reason, count]) => ({ reason, count }))
+  };
+}
+
 function nowIso(value) {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) return new Date().toISOString();
@@ -523,6 +645,8 @@ function limitSnapshot({ rows, policy, config, publishedThisRun, now }) {
 
 function emptySummary({ config, now, requestSource, reason, rows = [], policy = null, run = null }) {
   const dailyPolicy = policy || buildSeoDailyPolicySnapshot(rows, { now, targets: config.daily_targets });
+  const selectedContentType = dailyPolicy.selected_content_type || null;
+  const candidateSummary = summarizeCandidateDiagnosticsFromResults([], config);
   const limits = limitSnapshot({ rows, policy: dailyPolicy, config, publishedThisRun: 0, now });
   return {
     ok: true,
@@ -547,8 +671,14 @@ function emptySummary({ config, now, requestSource, reason, rows = [], policy = 
     published_news_today: dailyPolicy.published_news_today,
     target_landings_per_day: config.target_landings_per_day,
     target_news_per_day: config.target_news_per_day,
-    selected_content_type: dailyPolicy.selected_content_type,
+    selected_content_type: selectedContentType,
     skipped_reason: reason || dailyPolicy.skipped_reason || null,
+    empty_reason: inferEmptyReasonFromCandidates({
+      reason: reason || dailyPolicy.skipped_reason,
+      selectedContentType,
+      candidateStats: candidateSummary
+    }),
+    candidate_diagnostics: candidateSummary,
     cron: {
       schedule: SCHEDULE,
       policy: `publish up to ${config.max_per_day} SEO pieces/day with configurable backoffice limits`,
@@ -839,6 +969,8 @@ async function publishReadyToPublishLandings({ storage, config, now, limits, can
 
 function summarizeGenerationResult({ result, config, now, requestSource, rows, policy, selectedContentType, run }) {
   const normalizedResults = (Array.isArray(result.results) ? result.results : []).map(normalizeResult);
+  const candidateDiagnostics = summarizeCandidateDiagnosticsFromResults(normalizedResults, config);
+  const candidateResultReason = String(result.reason || "").toLowerCase();
   const publishedCount = Number(result.published_count || 0);
   const publishedResults = normalizedResults.filter((item) => String(item.status || "").toLowerCase() === "published");
   let publishedLandingsDelta = publishedResults.filter((item) => String(item.template_type || "") !== "editorial_guide").length;
@@ -859,6 +991,17 @@ function summarizeGenerationResult({ result, config, now, requestSource, rows, p
   const draftCount = normalizedResults.filter((item) => ["draft", "ready_to_publish", "needs_review"].includes(String(item.status || ""))).length;
   const failedCount = normalizedResults.filter((item) => String(item.status || "") === "failed").length;
   const skippedCount = normalizedResults.filter((item) => ["skipped", "would_skip"].includes(String(item.status || ""))).length;
+  const candidatesGenerated = candidateDiagnostics.candidates_generated;
+  const candidatesScored = candidateDiagnostics.candidates_scored;
+  const candidatesAfterPolicy = candidateDiagnostics.candidates_after_policy;
+  const lowScore = candidateDiagnostics.candidates_low_score;
+  const emptyReason = (publishedCount === 0 && draftCount === 0 && skippedCount === 0 && failedCount === 0)
+    ? inferEmptyReasonFromCandidates({
+      reason: candidateResultReason,
+      selectedContentType,
+      candidateStats: candidateDiagnostics
+    })
+    : null;
 
   return {
     ...result,
@@ -869,6 +1012,15 @@ function summarizeGenerationResult({ result, config, now, requestSource, rows, p
     started_at: now,
     finished_at: new Date().toISOString(),
     candidates_count: Number(result.generated_count || normalizedResults.length || 0),
+    candidates_generated: candidatesGenerated,
+    candidates_after_policy: candidatesAfterPolicy,
+    candidates_scored: candidatesScored,
+    candidates_low_score: lowScore,
+    candidates_publishable: candidateDiagnostics.candidates_publishable,
+    candidates_published: candidateDiagnostics.candidates_published,
+    candidates_drafted: candidateDiagnostics.candidates_drafted,
+    candidates_skipped: candidateDiagnostics.candidates_skipped,
+    candidate_diagnostics: candidateDiagnostics,
     published_count: publishedCount,
     would_publish_count: wouldPublishCount,
     draft_count: draftCount,
@@ -884,6 +1036,7 @@ function summarizeGenerationResult({ result, config, now, requestSource, rows, p
     target_landings_per_day: config.target_landings_per_day,
     target_news_per_day: config.target_news_per_day,
     selected_content_type: selectedContentType,
+    empty_reason: emptyReason,
     skipped_reason: null,
     cron: {
       schedule: SCHEDULE,
@@ -956,6 +1109,7 @@ async function runSeoContentPublication(options = {}) {
       if (run && run.acquired === false) {
         const summary = emptySummary({ config, now, requestSource, reason: run.reason || "cron_already_running_or_completed", run });
         summary.settings_status = settingsState;
+        summary.empty_reason = inferEmptyReasonFromRunSummary({ reason: run.reason || "cron_already_running_or_completed", policy: buildSeoDailyPolicySnapshot([], { now, targets: config.daily_targets }) });
         return finalizeSummary({ storage, run, summary, status: "skipped", env, emailNotification });
       }
     }
@@ -978,11 +1132,13 @@ async function runSeoContentPublication(options = {}) {
     if (currentLimits.remaining_week <= 0) {
       const summary = emptySummary({ config, now, requestSource, reason: "weekly_limit_reached", rows, policy: dailyPolicy, run });
       summary.settings_status = settingsState;
+      summary.empty_reason = "publication_limits_reached";
       return finalizeSummary({ storage, run, summary, status: "completed", env, emailNotification });
     }
     if (currentLimits.remaining_day <= 0) {
       const summary = emptySummary({ config, now, requestSource, reason: "daily_limit_reached", rows, policy: dailyPolicy, run });
       summary.settings_status = settingsState;
+      summary.empty_reason = "publication_limits_reached";
       return finalizeSummary({ storage, run, summary, status: "completed", env, emailNotification });
     }
     const selectedContentType = dailyPolicy.selected_content_type;
@@ -1067,6 +1223,7 @@ async function runSeoContentPublication(options = {}) {
     if (!selectedContentType) {
       const summary = emptySummary({ config, now, requestSource, reason: dailyPolicy.skipped_reason, rows, policy: dailyPolicy, run });
       summary.settings_status = settingsState;
+      summary.empty_reason = "no_selected_content_type";
       return finalizeSummary({ storage, run, summary, status: "completed", env, emailNotification });
     }
 
