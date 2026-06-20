@@ -630,6 +630,34 @@ test("admin seo landings handler keeps filters and pagination read-only", async 
   assert.ok(paths.every((path) => !/generate-landings|seo-autogenerate|sitemap/i.test(path)));
 });
 
+test("admin seo opportunities preview endpoint is read-only", async () => {
+  const paths = [];
+  const result = await callAdmin("seo/opportunities/preview", {
+    query: "content_type=landing&template=all&limit=100",
+    fetchImpl: async (url) => {
+      const path = apiPath(url);
+      paths.push(path);
+      if (path.startsWith("seo_landings?")) return jsonResponse([]);
+      if (path.startsWith("seo_landing_opportunities?")) return jsonResponse([]);
+      if (path.startsWith("market_price_sources?")) {
+        return jsonResponse([
+          { municipality: "Girona", province: "Girona", autonomous_community: "Cataluna", operation: "sale", source: "idealista_public_report", price_eur_m2: 3200 },
+          { municipality: "Girona", province: "Girona", autonomous_community: "Cataluna", operation: "rent", source: "idealista_public_report", price_eur_m2: 14 }
+        ]);
+      }
+      return jsonResponse([]);
+    }
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.read_only, true);
+  assert.equal(result.payload.writes_enabled, false);
+  assert.ok(result.payload.candidates.some((candidate) => candidate.slug === "precio-alquiler/girona" && candidate.is_seedable));
+  assert.ok(paths.every((path) => /^(seo_landings|seo_landing_opportunities|market_price_sources)\?/.test(path)));
+  assert.ok(paths.every((path) => !/on_conflict|generate-landings|seo-autogenerate/i.test(path)));
+});
+
 test("admin read-only router preserves summary payload shape", async () => {
   const result = await callAdmin("summary");
 

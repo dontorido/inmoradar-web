@@ -17,7 +17,7 @@ const {
   getSeoContentPublicationStatus,
   runSeoContentPublication
 } = require("./_seo/contentPublisher");
-const { runSeoLandingGeneration } = require("./_seo/generator");
+const { getSeoOpportunitiesPreview, runSeoLandingGeneration } = require("./_seo/generator");
 const { evaluateLandingIndexability } = require("./_seo/indexability");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
 const { createKpiSettingsHandler } = require("./_admin/handlers/kpis");
@@ -937,6 +937,18 @@ async function handleSeoGenerate(req) {
     publishFirstEligible: body.publishFirstEligible === true,
     dailyPublishLimit: typeof body.dailyPublishLimit === "number" ? body.dailyPublishLimit : undefined,
     maxPublishesPerRun: typeof body.maxPublishesPerRun === "number" ? body.maxPublishesPerRun : undefined
+  });
+  return { status: 200, payload: result };
+}
+
+async function handleSeoOpportunitiesPreview(req, url) {
+  if (req.method !== "GET") {
+    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  }
+  const result = await getSeoOpportunitiesPreview({
+    content_type: url.searchParams.get("content_type") || "landing",
+    template: url.searchParams.get("template") || url.searchParams.get("template_type") || "all",
+    limit: url.searchParams.get("limit") || 50
   });
   return { status: 200, payload: result };
 }
@@ -5305,6 +5317,10 @@ async function handleAdminRequest(req, res) {
     }
     if (resource === "seo/generate-landings") {
       const result = await handleSeoGenerate(req);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "seo/opportunities/preview") {
+      const result = await handleSeoOpportunitiesPreview(req, url);
       return json(res, result.status, result.payload);
     }
     if (resource === "linkedin" || resource.startsWith("linkedin/")) {
