@@ -194,6 +194,142 @@ function poolForTemplateTypes(templateTypes) {
   return CONTROLLED_SEO_OPPORTUNITIES.filter((opportunity) => allowed.has(opportunity.template_type));
 }
 
+function countBy(rows = [], field) {
+  return rows.reduce((counts, row) => {
+    const key = String(row?.[field] || "unknown").toLowerCase();
+    counts[key] = (counts[key] || 0) + 1;
+    return counts;
+  }, {});
+}
+
+function candidateTemplateTypeForContentType(selectedContentType) {
+  if (selectedContentType === "news") return "editorial_guide";
+  if (selectedContentType === "landing") return "landing_random";
+  return null;
+}
+
+function publicOpportunityDiagnostic(opportunity = {}) {
+  return {
+    slug: opportunitySlug(opportunity),
+    template_type: opportunity.template_type || null,
+    keyword: opportunity.keyword || null,
+    city: opportunity.city || null
+  };
+}
+
+function inferCandidateSourceEmptyReason(diagnostics = {}) {
+  if (!diagnostics.selected_content_type || !diagnostics.template_types?.length) return "selected_type_without_source";
+  if (diagnostics.ready_to_publish_count > 0) return null;
+  if (diagnostics.pending_opportunities_count > 0) return "ready_to_publish_empty";
+  if (diagnostics.seedable_opportunities_count > 0) return "pending_opportunities_empty";
+  if (diagnostics.existing_slug_collisions_count > 0) return "seed_exhausted_by_existing_slugs";
+  if (diagnostics.controlled_opportunities_count > 0) return "seed_backlog_empty";
+  return "unknown_candidate_source_empty";
+}
+
+async function getSeoCandidateSourceDiagnostics(options = {}) {
+  const selectedContentType = options.selectedContentType ?? options.selected_content_type ?? null;
+  const templateType = options.templateType || options.template_type || candidateTemplateTypeForContentType(selectedContentType);
+  const candidateLimit = clampCandidateLimit(options.candidateLimit || options.candidate_limit || 25);
+  let templateTypes = [];
+
+  try {
+    templateTypes = templateType ? templateTypesForRequest(templateType) : [];
+  } catch {
+    templateTypes = [];
+  }
+
+  const base = {
+    ok: true,
+    read_only: true,
+    selected_content_type: selectedContentType,
+    template_type: templateType || null,
+    template_types: templateTypes,
+    ready_to_publish_count: 0,
+    pending_opportunities_count: 0,
+    pending_opportunities_by_template: {},
+    pending_opportunities_by_status: {},
+    seedable_opportunities_count: 0,
+    existing_slug_collisions_count: 0,
+    existing_slug_collisions_sample: []
+  };
+
+  if (!selectedContentType || !templateTypes.length) {
+    return {
+      ...base,
+      candidate_source_empty_reason: "selected_type_without_source"
+    };
+  }
+
+  const fetchRows = options.fetchRows || (hasSupabaseConfig() ? (path) => supabaseFetch(path) : null);
+  if (!fetchRows) {
+    return {
+      ...base,
+      ok: false,
+      reason: "supabase_not_configured",
+      candidate_source_empty_reason: "unknown_candidate_source_empty"
+    };
+  }
+
+  try {
+    const templateFilter = templateTypes.length === 1 ? `eq.${templateTypes[0]}` : `in.(${templateTypes.join(",")})`;
+    const readyParams = new URLSearchParams({
+      select: "slug,status,template_type,title,quality_score",
+      status: "in.(ready_to_publish,READY_TO_PUBLISH)",
+      limit: "1000"
+    });
+    const opportunityParams = new URLSearchParams({
+      select: "keyword,city,template_type,status,search_priority",
+      template_type: templateFilter,
+      limit: "1000"
+    });
+    const landingParams = new URLSearchParams({
+      select: "slug,status,template_type,title",
+      template_type: templateFilter,
+      limit: "1000"
+    });
+    const [readyRowsRaw, opportunityRowsRaw, existingLandingRowsRaw] = await Promise.all([
+      fetchRows(`seo_landings?${readyParams.toString()}`),
+      fetchRows(`seo_landing_opportunities?${opportunityParams.toString()}`),
+      fetchRows(`seo_landings?${landingParams.toString()}`)
+    ]);
+    const readyRows = Array.isArray(readyRowsRaw) ? readyRowsRaw : [];
+    const opportunityRows = Array.isArray(opportunityRowsRaw) ? opportunityRowsRaw : [];
+    const existingLandingRows = Array.isArray(existingLandingRowsRaw) ? existingLandingRowsRaw : [];
+    const pendingRows = opportunityRows.filter((row) => String(row.status || "").toLowerCase() === "pending");
+    const pool = poolForTemplateTypes(templateTypes);
+    const existingOpportunityKeys = new Set(opportunityRows.map(opportunityKey));
+    const existingLandingSlugs = new Set(existingLandingRows.map((landing) => landing.slug).filter(Boolean));
+    const seedableOpportunities = pool.filter(
+      (opportunity) => !existingOpportunityKeys.has(opportunityKey(opportunity)) && !existingLandingSlugs.has(opportunitySlug(opportunity))
+    );
+    const slugCollisions = pool.filter((opportunity) => existingLandingSlugs.has(opportunitySlug(opportunity)));
+    const diagnostics = {
+      ...base,
+      ready_to_publish_count: readyRows.length,
+      pending_opportunities_count: pendingRows.length,
+      pending_opportunities_by_template: countBy(pendingRows, "template_type"),
+      pending_opportunities_by_status: countBy(opportunityRows, "status"),
+      opportunities_total_count: opportunityRows.length,
+      controlled_opportunities_count: pool.length,
+      seedable_opportunities_count: seedableOpportunities.length,
+      existing_slug_collisions_count: slugCollisions.length,
+      existing_slug_collisions_sample: slugCollisions.slice(0, candidateLimit).map(publicOpportunityDiagnostic)
+    };
+    return {
+      ...diagnostics,
+      candidate_source_empty_reason: inferCandidateSourceEmptyReason(diagnostics)
+    };
+  } catch {
+    return {
+      ...base,
+      ok: false,
+      reason: "candidate_source_diagnostics_failed",
+      candidate_source_empty_reason: "unknown_candidate_source_empty"
+    };
+  }
+}
+
 async function fetchPendingOpportunities({ limit, templateType }) {
   const templateTypes = templateTypesForRequest(templateType);
   const isRandom = templateTypes.length > 1;
@@ -661,5 +797,6 @@ async function runSeoLandingGeneration(options = {}) {
 module.exports = {
   canPublishNow,
   DEFAULT_SEED_OPPORTUNITIES,
+  getSeoCandidateSourceDiagnostics,
   runSeoLandingGeneration
 };

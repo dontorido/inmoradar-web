@@ -8,12 +8,14 @@ const { buildPriceCityLanding } = require("../api/_seo/priceCity");
 const {
   EDITORIAL_GUIDE_TOPICS,
   buildEditorialGuideLanding,
-  buildEditorialGuideSourceData
+  buildEditorialGuideSourceData,
+  editorialGuideOpportunities,
+  editorialGuideSlugForOpportunity
 } = require("../api/_seo/editorialGuides");
 const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../lib/seo/cityGuideTemplates");
 
 const { calculateSeoLandingQuality } = require("../api/_seo/quality");
-const { canPublishNow, runSeoLandingGeneration } = require("../api/_seo/generator");
+const { canPublishNow, getSeoCandidateSourceDiagnostics, runSeoLandingGeneration } = require("../api/_seo/generator");
 const {
   buildSeoContentPublicationConfig,
   createSeoContentPublicationStorage,
@@ -1692,6 +1694,7 @@ test("la publicacion SEO no promociona READY_TO_PUBLISH por score bajo", async (
 });
 
 test("la publicacion SEO sin candidatos generados devuelve diagnostico claro", async () => {
+  let sourceDiagnosticsCalled = 0;
   const result = await runSeoContentPublication({
     now: "2026-05-22T12:00:00.000Z",
     requestSource: "cron",
@@ -1725,16 +1728,86 @@ test("la publicacion SEO sin candidatos generados devuelve diagnostico claro", a
         published_count: 0,
         results: []
       };
+    },
+    getCandidateSourceDiagnostics: async ({ selectedContentType }) => {
+      sourceDiagnosticsCalled += 1;
+      assert.equal(selectedContentType, "landing");
+      return {
+        ok: true,
+        read_only: true,
+        selected_content_type: "landing",
+        ready_to_publish_count: 0,
+        pending_opportunities_count: 0,
+        pending_opportunities_by_template: {},
+        pending_opportunities_by_status: {},
+        seedable_opportunities_count: 3,
+        existing_slug_collisions_count: 0,
+        existing_slug_collisions_sample: [],
+        candidate_source_empty_reason: "pending_opportunities_empty"
+      };
     }
   });
 
+  assert.equal(sourceDiagnosticsCalled, 1);
   assert.equal(result.published_count, 0);
   assert.equal(result.draft_count, 0);
   assert.equal(result.skipped_count, 0);
   assert.equal(result.failed_count, 0);
+  assert.equal(result.config.min_score, 90);
+  assert.equal(result.config.max_per_day, 8);
+  assert.equal(result.config.max_per_week, 28);
+  assert.equal(result.config.max_per_run, 1);
   assert.equal(result.publication_diagnostics.candidates_generated, 0);
   assert.equal(result.publication_diagnostics.candidates_after_policy, 0);
   assert.equal(result.publication_diagnostics.empty_reason, "no_candidates_generated");
+  assert.equal(result.candidate_source_diagnostics.candidate_source_empty_reason, "pending_opportunities_empty");
+  assert.equal(result.publication_diagnostics.candidate_source_empty_reason, "pending_opportunities_empty");
+  assert.equal(
+    result.publication_diagnostics.candidate_source_diagnostics.pending_opportunities_count,
+    0
+  );
+});
+
+test("diagnostico de fuente SEO detecta pending vacio sin crear oportunidades", async () => {
+  const paths = [];
+  const result = await getSeoCandidateSourceDiagnostics({
+    selectedContentType: "news",
+    fetchRows: async (path) => {
+      paths.push(path);
+      return [];
+    }
+  });
+
+  assert.equal(result.read_only, true);
+  assert.equal(result.selected_content_type, "news");
+  assert.equal(result.ready_to_publish_count, 0);
+  assert.equal(result.pending_opportunities_count, 0);
+  assert.equal(result.seedable_opportunities_count, editorialGuideOpportunities().length);
+  assert.equal(result.candidate_source_empty_reason, "pending_opportunities_empty");
+  assert.equal(paths.some((path) => /on_conflict|method=POST|method=PATCH/i.test(path)), false);
+});
+
+test("diagnostico de fuente SEO detecta seed agotado por slugs existentes", async () => {
+  const existingGuideLandings = editorialGuideOpportunities().map((opportunity) => ({
+    slug: editorialGuideSlugForOpportunity(opportunity),
+    status: "published",
+    template_type: "editorial_guide"
+  }));
+  const result = await getSeoCandidateSourceDiagnostics({
+    selectedContentType: "news",
+    fetchRows: async (path) => {
+      const url = new URL(`https://example.test/${path}`);
+      if (path.startsWith("seo_landing_opportunities?")) return [];
+      if (url.searchParams.get("status")) return [];
+      return existingGuideLandings;
+    }
+  });
+
+  assert.equal(result.pending_opportunities_count, 0);
+  assert.equal(result.seedable_opportunities_count, 0);
+  assert.equal(result.existing_slug_collisions_count, existingGuideLandings.length);
+  assert.equal(result.existing_slug_collisions_sample[0].template_type, "editorial_guide");
+  assert.equal(result.candidate_source_empty_reason, "seed_exhausted_by_existing_slugs");
 });
 
 test("la publicacion SEO bloqueada por limites informa publication_limits_reached sin candidatos publicos", async () => {

@@ -26,6 +26,10 @@ test("SEO Autogeneration muestra copy de Vercel Cron 4h sin textos obsoletos", (
   assert.match(copy, /No publicables/);
   assert.match(copy, /Score bajo/);
   assert.match(copy, /Descartadas antes de skip/);
+  assert.match(copy, /Fuente de candidatos/);
+  assert.match(copy, /Seed agotado/);
+  assert.match(copy, /candidate_source_diagnostics/);
+  assert.match(copy, /seed_exhausted_by_existing_slugs/);
   assert.match(copy, /seo-autogenerate\/diagnostics&candidate_limit=25&template_type=all/);
   assert.match(copy, /L[ií]mite diario: \$\{dayLimit\} publicaciones/);
   assert.match(copy, /L[ií]mite semanal: \$\{weekLimit\} publicaciones/);
