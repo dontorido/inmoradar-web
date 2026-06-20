@@ -658,6 +658,75 @@ test("admin seo opportunities preview endpoint is read-only", async () => {
   assert.ok(paths.every((path) => !/on_conflict|generate-landings|seo-autogenerate/i.test(path)));
 });
 
+test("admin seo opportunities seed-preview rejects missing confirmation", async () => {
+  const calls = [];
+  const result = await callAdmin("seo/opportunities/seed-preview", {
+    method: "POST",
+    body: {
+      dry_run: true,
+      content_type: "landing",
+      template: "expensive_listing_city",
+      source: "market_price_sources",
+      limit: 10
+    },
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ path: apiPath(url), method: options.method || "GET" });
+      return jsonResponse([]);
+    }
+  });
+
+  assert.equal(result.statusCode, 400);
+  assert.equal(result.payload.ok, false);
+  assert.equal(result.payload.error, "seed_confirmation_required");
+  assert.equal(calls.length, 0);
+});
+
+test("admin seo opportunities seed-preview inserts only pending opportunities after dry-run filters", async () => {
+  const calls = [];
+  const result = await callAdmin("seo/opportunities/seed-preview", {
+    method: "POST",
+    body: {
+      confirm: "SEED_SEO_OPPORTUNITIES",
+      dry_run: false,
+      content_type: "landing",
+      template: "expensive_listing_city",
+      source: "market_price_sources",
+      limit: 10,
+      cities: ["Girona"],
+      min_quality_notes: ["has_sale_data", "has_rent_data"]
+    },
+    fetchImpl: async (url, options = {}) => {
+      const path = apiPath(url);
+      calls.push({ path, method: options.method || "GET", body: options.body || "" });
+      if (path.startsWith("seo_landings?")) return jsonResponse([]);
+      if (path.startsWith("seo_landing_opportunities?")) return jsonResponse([]);
+      if (path.startsWith("market_price_sources?")) {
+        return jsonResponse([
+          { municipality: "Girona", province: "Girona", autonomous_community: "Cataluna", operation: "sale", source: "mivau_appraisal", price_eur_m2: 3200 },
+          { municipality: "Girona", province: "Girona", autonomous_community: "Cataluna", operation: "rent", source: "serpapi", price_eur_m2: 14 }
+        ]);
+      }
+      if (path === "seo_landing_opportunities" && options.method === "POST") {
+        return jsonResponse(JSON.parse(options.body));
+      }
+      return jsonResponse([]);
+    }
+  });
+  const writeCalls = calls.filter((call) => call.method === "POST");
+  const writtenRows = writeCalls.flatMap((call) => JSON.parse(call.body));
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.dry_run, false);
+  assert.equal(result.payload.inserted_count, 1);
+  assert.equal(result.payload.skipped_count, 0);
+  assert.equal(writeCalls.length, 1);
+  assert.equal(writeCalls[0].path, "seo_landing_opportunities");
+  assert.equal(writtenRows[0].status, "pending");
+  assert.equal(writtenRows[0].template_type, "expensive_listing_city");
+  assert.ok(calls.every((call) => !/runSeoLandingGeneration|generate-landings|upsert|publish/i.test(call.path)));
+});
+
 test("admin read-only router preserves summary payload shape", async () => {
   const result = await callAdmin("summary");
 

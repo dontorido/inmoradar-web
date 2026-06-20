@@ -15,7 +15,13 @@ const {
 const { buildExpensiveListingCityLanding, buildRentCityLanding } = require("../lib/seo/cityGuideTemplates");
 
 const { calculateSeoLandingQuality } = require("../api/_seo/quality");
-const { canPublishNow, getSeoCandidateSourceDiagnostics, getSeoOpportunitiesPreview, runSeoLandingGeneration } = require("../api/_seo/generator");
+const {
+  canPublishNow,
+  getSeoCandidateSourceDiagnostics,
+  getSeoOpportunitiesPreview,
+  runSeoLandingGeneration,
+  seedSeoOpportunitiesFromPreview
+} = require("../api/_seo/generator");
 const {
   buildSeoContentPublicationConfig,
   createSeoContentPublicationStorage,
@@ -1866,6 +1872,101 @@ test("preview de oportunidades SEO propone ciudades nuevas sin escribir backlog"
   assert.ok(result.summary.seedable_count > 0);
   assert.ok(result.summary.uncovered_cities.includes("Girona"));
   assert.equal(paths.some((path) => /on_conflict|method=POST|method=PATCH|generate-landings/i.test(path)), false);
+});
+
+test("seed controlado de oportunidades SEO en dry-run no escribe y respeta filtros", async () => {
+  const writes = [];
+  const result = await seedSeoOpportunitiesFromPreview(
+    {
+      confirm: "SEED_SEO_OPPORTUNITIES",
+      dry_run: true,
+      content_type: "landing",
+      template: "expensive_listing_city",
+      source: "market_price_sources",
+      limit: 10,
+      cities: ["Girona"],
+      min_quality_notes: ["has_sale_data", "has_rent_data"]
+    },
+    {
+      fetchRows: async (path) => {
+        if (path.startsWith("seo_landings?")) return [];
+        if (path.startsWith("seo_landing_opportunities?")) return [];
+        if (path.startsWith("market_price_sources?")) {
+          return [
+            { municipality: "Girona", province: "Girona", autonomous_community: "Cataluna", operation: "sale", source: "mivau_appraisal", price_eur_m2: 3200 },
+            { municipality: "Girona", province: "Girona", autonomous_community: "Cataluna", operation: "rent", source: "serpapi", price_eur_m2: 14 },
+            { municipality: "Pamplona", province: "Navarra", autonomous_community: "Navarra", operation: "sale", source: "mivau_appraisal", price_eur_m2: 2600 }
+          ];
+        }
+        return [];
+      },
+      insertRow: async (row) => {
+        writes.push(row);
+        return [row];
+      }
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.dry_run, true);
+  assert.equal(result.read_only, true);
+  assert.equal(result.writes_enabled, false);
+  assert.equal(result.would_insert_count, 1);
+  assert.equal(result.would_insert[0].slug, "saber-si-piso-esta-caro/girona");
+  assert.equal(result.would_insert[0].row.status, "pending");
+  assert.equal(result.would_insert[0].row.template_type, "expensive_listing_city");
+  assert.equal(writes.length, 0);
+});
+
+test("seed controlado de oportunidades SEO limita 50 y salta colisiones revalidadas", async () => {
+  const marketRows = Array.from({ length: 60 }, (_, index) => {
+    const city = `Ciudad ${String(index + 1).padStart(3, "0")}`;
+    return [
+      { municipality: city, province: "Test", autonomous_community: "Test", operation: "sale", source: "mivau_appraisal", price_eur_m2: 2000 + index },
+      { municipality: city, province: "Test", autonomous_community: "Test", operation: "rent", source: "serpapi", price_eur_m2: 10 + index }
+    ];
+  }).flat();
+  const writes = [];
+  let landingReads = 0;
+  const result = await seedSeoOpportunitiesFromPreview(
+    {
+      confirm: "SEED_SEO_OPPORTUNITIES",
+      dry_run: false,
+      content_type: "landing",
+      template: "expensive_listing_city",
+      source: "market_price_sources",
+      limit: 999,
+      min_quality_notes: ["has_sale_data", "has_rent_data"]
+    },
+    {
+      fetchRows: async (path) => {
+        if (path.startsWith("seo_landings?")) {
+          landingReads += 1;
+          return landingReads === 1 ? [] : [{ slug: "saber-si-piso-esta-caro/ciudad-001", template_type: "expensive_listing_city" }];
+        }
+        if (path.startsWith("seo_landing_opportunities?")) return [];
+        if (path.startsWith("market_price_sources?")) return marketRows;
+        return [];
+      },
+      insertRow: async (row) => {
+        writes.push(row);
+        return [{ id: `seed-${writes.length}`, ...row }];
+      }
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.dry_run, false);
+  assert.equal(result.read_only, false);
+  assert.equal(result.writes_enabled, true);
+  assert.equal(result.would_insert_count, 49);
+  assert.equal(result.inserted_count, 49);
+  assert.equal(result.skipped_count, 1);
+  assert.equal(result.errors.length, 0);
+  assert.equal(writes.length, 49);
+  assert.ok(writes.every((row) => row.status === "pending"));
+  assert.ok(writes.every((row) => row.template_type === "expensive_listing_city"));
+  assert.equal(result.skipped[0].reason, "slug_already_used");
 });
 
 test("la publicacion SEO bloqueada por limites informa publication_limits_reached sin candidatos publicos", async () => {
