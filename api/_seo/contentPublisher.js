@@ -1,5 +1,5 @@
 const { hasSupabaseConfig, sanitizeErrorMessage, supabaseFetch } = require("../_utils");
-const { runSeoLandingGeneration } = require("./generator");
+const { getSeoCandidateSourceDiagnostics, runSeoLandingGeneration } = require("./generator");
 const { evaluateLandingIndexability } = require("./indexability");
 const { attachSeoPublicationEmailNotification, buildPublicationDiagnostics, countSeoPublicationTotals } = require("./publicationEmail");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot, buildSeoDailyTargets } = require("./publishingPolicy");
@@ -1060,6 +1060,48 @@ async function finishRun(storage, run, summary, status = "completed", errorMessa
   }
 }
 
+async function resolveCandidateSourceDiagnostics({
+  storage,
+  getCandidateSourceDiagnostics,
+  selectedContentType,
+  candidateLimit = 25,
+  now
+}) {
+  const diagnosticFn =
+    getCandidateSourceDiagnostics ||
+    storage?.fetchCandidateSourceDiagnostics ||
+    getSeoCandidateSourceDiagnostics;
+  if (!diagnosticFn) return null;
+  try {
+    return await diagnosticFn({
+      selectedContentType,
+      selected_content_type: selectedContentType,
+      candidateLimit,
+      candidate_limit: candidateLimit,
+      now
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      read_only: true,
+      selected_content_type: selectedContentType || null,
+      candidate_source_empty_reason: "unknown_candidate_source_empty",
+      reason: "candidate_source_diagnostics_failed",
+      error: safeError(error)
+    };
+  }
+}
+
+async function attachCandidateSourceDiagnostics(summary, context = {}) {
+  if (summary?.empty_reason !== "no_candidates_generated") return summary;
+  const candidateSourceDiagnostics = await resolveCandidateSourceDiagnostics(context);
+  if (!candidateSourceDiagnostics) return summary;
+  return {
+    ...summary,
+    candidate_source_diagnostics: candidateSourceDiagnostics
+  };
+}
+
 async function finalizeSummary({ storage, run, summary, status = "completed", errorMessage = null, env, emailNotification }) {
   const finalSummary = await attachSeoPublicationEmailNotification({
     summary,
@@ -1241,7 +1283,7 @@ async function runSeoContentPublication(options = {}) {
       publishedToday: dailyPolicy.published_total_today,
       now
     });
-    const summary = summarizeGenerationResult({
+    let summary = summarizeGenerationResult({
       result,
       config,
       now,
@@ -1250,6 +1292,13 @@ async function runSeoContentPublication(options = {}) {
       policy: dailyPolicy,
       selectedContentType,
       run
+    });
+    summary = await attachCandidateSourceDiagnostics(summary, {
+      storage,
+      getCandidateSourceDiagnostics: options.getCandidateSourceDiagnostics,
+      selectedContentType,
+      candidateLimit: 25,
+      now
     });
     return finalizeSummary({
       storage,
@@ -1384,7 +1433,17 @@ async function getSeoContentPublicationDiagnostics(options = {}) {
     selectedContentType: "diagnostic",
     run: null
   });
-  const diagnostics = buildPublicationDiagnostics(previewSummary);
+  const candidateSourceDiagnostics = await resolveCandidateSourceDiagnostics({
+    storage,
+    getCandidateSourceDiagnostics: options.getCandidateSourceDiagnostics,
+    selectedContentType: dailyPolicy.selected_content_type,
+    candidateLimit,
+    now
+  });
+  const diagnostics = buildPublicationDiagnostics({
+    ...previewSummary,
+    candidate_source_diagnostics: candidateSourceDiagnostics
+  });
   const notPublishedCandidates = diagnostics.evaluated_candidates.filter((item) => item.status !== "published");
   const targetDiagnostics = targetLandingDiagnostics({ snapshot: sourceSnapshot, config, limits, targetTerms });
   const publicSourceSnapshot = { ...sourceSnapshot };
@@ -1422,6 +1481,7 @@ async function getSeoContentPublicationDiagnostics(options = {}) {
     seo_landings_source: publicSourceSnapshot,
     target_landings: targetDiagnostics,
     publication_source_diagnosis: diagnoseSeoLandingSource({ snapshot: sourceSnapshot, config, limits }),
+    candidate_source_diagnostics: candidateSourceDiagnostics,
     publication_diagnostics: diagnostics,
     counter_diagnosis: {
       skipped_count_scope: "Only statuses skipped and would_skip increment skipped_count.",

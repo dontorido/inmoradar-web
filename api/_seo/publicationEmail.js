@@ -340,6 +340,7 @@ function nextStepsForNoPublication(reasonCounts = [], options = {}) {
 function buildPublicationDiagnostics(summary = {}) {
   const results = Array.isArray(summary.results) ? summary.results : [];
   const candidateDiagnostics = summary.candidate_diagnostics || {};
+  const candidateSourceDiagnostics = summary.candidate_source_diagnostics || null;
   const diagnosticResults = results.filter(isNonPublishedDiagnosticResult);
   const evaluatedCandidates = results.map((item) => publicationDiagnosticCandidate(item, summary));
   const lowScoreResults = diagnosticResults
@@ -378,6 +379,8 @@ function buildPublicationDiagnostics(summary = {}) {
     low_score_results: lowScoreResults.slice(0, 10),
     selected_content_type: summary.selected_content_type || null,
     empty_reason: summary.empty_reason || null,
+    candidate_source_diagnostics: candidateSourceDiagnostics,
+    candidate_source_empty_reason: candidateSourceDiagnostics?.candidate_source_empty_reason || null,
     next_steps: publishedCount === 0 ? nextStepsForNoPublication(reasonCounts, {
       hasLowScoreResults: lowScoreResults.length > 0,
       emptyReason: summary.empty_reason

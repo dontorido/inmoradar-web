@@ -2489,6 +2489,26 @@ function seoAutogenEmptyReasonCopy(value) {
   return code ? `Motivo no determinado (${code})` : "Motivo no determinado";
 }
 
+function seoAutogenCandidateSourceCopy(source = {}) {
+  const reason = String(source?.candidate_source_empty_reason || "").trim();
+  if (!reason) return "";
+  const map = {
+    ready_to_publish_empty: "Fuente de candidatos: no hay landings ready_to_publish para promover.",
+    pending_opportunities_empty: "Fuente de candidatos: sin landings listas y sin oportunidades pending.",
+    seed_backlog_empty: "Fuente de candidatos: el backlog controlado no tiene oportunidades seedables.",
+    seed_exhausted_by_existing_slugs: "Seed agotado: los slugs base ya existen.",
+    selected_type_without_source: "Fuente de candidatos: el tipo seleccionado no tiene fuente configurada.",
+    unknown_candidate_source_empty: "Fuente de candidatos: motivo no determinado."
+  };
+  const selectedType = source.selected_content_type ? `Tipo seleccionado: ${source.selected_content_type}.` : "";
+  const counts = [
+    `ready_to_publish: ${seoAutogenNumber(source.ready_to_publish_count, 0)}`,
+    `pending: ${seoAutogenNumber(source.pending_opportunities_count, 0)}`,
+    `seedable: ${seoAutogenNumber(source.seedable_opportunities_count, 0)}`
+  ].join("; ");
+  return [map[reason] || `Fuente de candidatos: ${reason}.`, selectedType, counts].filter(Boolean).join(" ");
+}
+
 function seoAutogenDiagnosticChips(counts = {}) {
   const values = [
     ["No publicables", counts.nonPublished],
@@ -2525,6 +2545,8 @@ function seoAutogenDiagnosticSource(payload = {}) {
   if (lastResult.publication_diagnostics) {
     return {
       publication_diagnostics: lastResult.publication_diagnostics,
+      candidate_source_diagnostics:
+        lastResult.candidate_source_diagnostics || lastResult.publication_diagnostics.candidate_source_diagnostics || null,
       generation_summary: {
         non_published_count: lastResult.publication_diagnostics.non_published_count,
         published_count: lastResult.published_count,
@@ -2543,6 +2565,9 @@ function renderSeoAutogenDiagnostics(payload = {}) {
   const source = seoAutogenDiagnosticSource(payload);
   const candidates = seoAutogenDiagnosticCandidates(source);
   const counts = seoAutogenDiagnosticsCounts(source);
+  const sourceDetail = seoAutogenCandidateSourceCopy(
+    source.candidate_source_diagnostics || source.publication_diagnostics?.candidate_source_diagnostics
+  );
   const hasSignal = counts.nonPublished > 0 || counts.lowScore > 0 || counts.beforeSkip > 0;
   const endpointMessage = endpointError
     ? `Diagnostico read-only no disponible (${endpointError.status || endpointError.error || "error"}). Las ejecuciones siguen visibles; prueba de nuevo tras iniciar sesion.`
@@ -2593,6 +2618,7 @@ function renderSeoAutogenDiagnostics(payload = {}) {
         <div>
           <h3>Diagnostico de candidatos</h3>
           <p>${escapeHtml(intro)}</p>
+          ${sourceDetail ? `<p>${escapeHtml(sourceDetail)}</p>` : ""}
           ${endpointMessage ? `<p>${escapeHtml(endpointMessage)}</p>` : ""}
         </div>
         <div class="admin-seo-autogen-diagnostic-counters">${seoAutogenDiagnosticChips(counts)}</div>
@@ -2627,6 +2653,10 @@ function seoAutogenRunDetail(result = {}, row = {}) {
   const skippedCount = Number(result.skipped_count || 0);
   const hasNoActionCounts = publishedCount === 0 && draftCount === 0 && skippedCount === 0;
   const emptyReasonCopy = hasNoActionCounts && diagnostics.empty_reason ? seoAutogenEmptyReasonCopy(diagnostics.empty_reason) : "";
+  const candidateSourceCopy =
+    hasNoActionCounts && diagnostics.empty_reason === "no_candidates_generated"
+      ? seoAutogenCandidateSourceCopy(diagnostics.candidate_source_diagnostics || result.candidate_source_diagnostics)
+      : "";
   const itemDetail = items
     .slice(0, 3)
     .map((item) => {
@@ -2645,6 +2675,7 @@ function seoAutogenRunDetail(result = {}, row = {}) {
   const emailDetail = email?.enabled ? `Email: ${email.sent ? "enviado" : email.reason || "pendiente"}` : "";
   return [
     emptyReasonCopy,
+    candidateSourceCopy,
     itemDetail,
     reasonCounts ? `Diagnostico: ${reasonCounts}` : "",
     nextStep ? `Siguiente: ${nextStep}` : "",
