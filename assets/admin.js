@@ -2475,6 +2475,20 @@ function seoAutogenReasonCopy(value) {
   return `${readable || "Motivo interno"} (${code})`;
 }
 
+function seoAutogenEmptyReasonCopy(value) {
+  const code = String(value || "").trim();
+  const map = {
+    no_candidates_generated: "Sin candidatos generados",
+    all_candidates_filtered_before_scoring: "Candidatos filtrados antes de scoring",
+    all_candidates_below_min_score: "Todos por debajo del score mínimo",
+    publication_limits_reached: "Bloqueado por límites",
+    no_selected_content_type: "Sin tipo de contenido seleccionado",
+    unknown_empty_results: "Motivo no determinado"
+  };
+  if (map[code]) return `${map[code]} (${code})`;
+  return code ? `Motivo no determinado (${code})` : "Motivo no determinado";
+}
+
 function seoAutogenDiagnosticChips(counts = {}) {
   const values = [
     ["No publicables", counts.nonPublished],
@@ -2608,6 +2622,11 @@ function renderSeoAutogenDiagnostics(payload = {}) {
 function seoAutogenRunDetail(result = {}, row = {}) {
   const items = Array.isArray(result.results) ? result.results : [];
   const diagnostics = result.publication_diagnostics || {};
+  const publishedCount = Number(result.published_count || 0);
+  const draftCount = Number(result.draft_count || 0);
+  const skippedCount = Number(result.skipped_count || 0);
+  const hasNoActionCounts = publishedCount === 0 && draftCount === 0 && skippedCount === 0;
+  const emptyReasonCopy = hasNoActionCounts && diagnostics.empty_reason ? seoAutogenEmptyReasonCopy(diagnostics.empty_reason) : "";
   const itemDetail = items
     .slice(0, 3)
     .map((item) => {
@@ -2625,6 +2644,7 @@ function seoAutogenRunDetail(result = {}, row = {}) {
   const email = result.email_notification;
   const emailDetail = email?.enabled ? `Email: ${email.sent ? "enviado" : email.reason || "pendiente"}` : "";
   return [
+    emptyReasonCopy,
     itemDetail,
     reasonCounts ? `Diagnostico: ${reasonCounts}` : "",
     nextStep ? `Siguiente: ${nextStep}` : "",
