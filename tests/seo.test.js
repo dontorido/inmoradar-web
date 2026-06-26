@@ -3233,7 +3233,7 @@ test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () 
   assert.match(localServer, /article\.html/);
 });
 
-test("Vercel Cron publica SEO real cada cuatro horas sin cambiar limites", () => {
+test("Vercel Cron SEO usa varias ventanas sin cambiar limites de publicacion", () => {
   const root = path.join(__dirname, "..");
   const vercel = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
   const seoCron = vercel.crons.find((cron) => cron.path === "/api/cron/seo-publish");
@@ -3243,7 +3243,7 @@ test("Vercel Cron publica SEO real cada cuatro horas sin cambiar limites", () =>
   assert.equal(fs.existsSync(path.join(root, "api", "cron", "seo-publish.js")), true);
   assert.deepEqual(seoCron, {
     path: "/api/cron/seo-publish",
-    schedule: "0 */4 * * *"
+    schedule: "0 6,8,10,12,14 * * *"
   });
   assert.equal(config.schedule, "0 */4 * * *");
   assert.equal(config.max_per_run, 1);
