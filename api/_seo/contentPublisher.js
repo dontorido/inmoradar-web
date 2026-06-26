@@ -2,7 +2,13 @@ const { hasSupabaseConfig, sanitizeErrorMessage, supabaseFetch } = require("../_
 const { getSeoCandidateSourceDiagnostics, runSeoLandingGeneration } = require("./generator");
 const { evaluateLandingIndexability } = require("./indexability");
 const { attachSeoPublicationEmailNotification, buildPublicationDiagnostics, countSeoPublicationTotals } = require("./publicationEmail");
-const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot, buildSeoDailyTargets } = require("./publishingPolicy");
+const {
+  SEO_DAILY_TARGETS,
+  buildSeoDailyPolicySnapshot,
+  buildSeoDailyTargets,
+  hasSeoContentTypeAvailability,
+  selectNextSeoContentType
+} = require("./publishingPolicy");
 const {
   defaultSeoAutogenerationConditions,
   readSeoAutogenerationConditions
@@ -995,7 +1001,13 @@ function summarizeGenerationResult({ result, config, now, requestSource, rows, p
   const candidatesScored = candidateDiagnostics.candidates_scored;
   const candidatesAfterPolicy = candidateDiagnostics.candidates_after_policy;
   const lowScore = candidateDiagnostics.candidates_low_score;
-  const emptyReason = (publishedCount === 0 && draftCount === 0 && skippedCount === 0 && failedCount === 0)
+  const onlyLowScoreCandidates =
+    candidateDiagnostics.candidates_low_score > 0 &&
+    candidateDiagnostics.candidates_publishable === 0 &&
+    publishedCount === 0 &&
+    draftCount === 0 &&
+    failedCount === 0;
+  const emptyReason = (publishedCount === 0 && draftCount === 0 && (skippedCount === 0 || onlyLowScoreCandidates) && failedCount === 0)
     ? inferEmptyReasonFromCandidates({
       reason: candidateResultReason,
       selectedContentType,
@@ -1092,6 +1104,78 @@ async function resolveCandidateSourceDiagnostics({
   }
 }
 
+function candidateAvailabilityFromDiagnostics(diagnostics = {}) {
+  const availability = {
+    ok: diagnostics?.ok !== false,
+    ready_to_publish_count: Number(diagnostics?.ready_to_publish_count || 0),
+    pending_opportunities_count: Number(diagnostics?.pending_opportunities_count || 0),
+    seedable_opportunities_count: Number(diagnostics?.seedable_opportunities_count || 0),
+    candidate_source_empty_reason: diagnostics?.candidate_source_empty_reason || null
+  };
+  return {
+    ...availability,
+    has_candidates: hasSeoContentTypeAvailability(availability)
+  };
+}
+
+async function resolveContentTypeAvailability({
+  dailyPolicy,
+  storage,
+  getCandidateSourceDiagnostics,
+  candidateLimit = 25,
+  now
+}) {
+  const preferredContentType = dailyPolicy?.selected_content_type || null;
+  const diagnosticsByContentType = {};
+  const availability = {};
+  const loadContentType = async (contentType) => {
+    if (!contentType || diagnosticsByContentType[contentType]) return;
+    const diagnostics = await resolveCandidateSourceDiagnostics({
+      storage,
+      getCandidateSourceDiagnostics,
+      selectedContentType: contentType,
+      candidateLimit,
+      now
+    });
+    diagnosticsByContentType[contentType] = diagnostics;
+    availability[contentType] = candidateAvailabilityFromDiagnostics(diagnostics);
+  };
+
+  await loadContentType(preferredContentType);
+  if (preferredContentType && !hasSeoContentTypeAvailability(availability[preferredContentType])) {
+    await loadContentType(preferredContentType === "news" ? "landing" : "news");
+  }
+
+  return {
+    availability,
+    diagnosticsByContentType
+  };
+}
+
+function applyCandidateAvailabilityToPolicy(dailyPolicy, targets, availability) {
+  const selection = selectNextSeoContentType(dailyPolicy, targets, { availability });
+  return {
+    ...dailyPolicy,
+    selected_content_type: selection.selected_content_type,
+    skipped_reason: selection.skipped_reason,
+    selected_content_type_policy_adjustment: selection.policy_adjustment || null,
+    content_type_availability: availability
+  };
+}
+
+function cachedCandidateSourceDiagnostics(diagnosticsByContentType = {}, fallback = null) {
+  const hasCachedDiagnostics = diagnosticsByContentType && Object.keys(diagnosticsByContentType).length > 0;
+  if (!hasCachedDiagnostics && !fallback) return null;
+  return async (options = {}) => {
+    const selectedContentType = options.selectedContentType ?? options.selected_content_type ?? null;
+    if (selectedContentType && diagnosticsByContentType[selectedContentType]) {
+      return diagnosticsByContentType[selectedContentType];
+    }
+    if (fallback) return fallback(options);
+    return null;
+  };
+}
+
 async function attachCandidateSourceDiagnostics(summary, context = {}) {
   if (summary?.empty_reason !== "no_candidates_generated") return summary;
   const candidateSourceDiagnostics = await resolveCandidateSourceDiagnostics(context);
@@ -1169,7 +1253,7 @@ async function runSeoContentPublication(options = {}) {
     }
 
     const rows = storage.fetchRecentPublishedRows ? await storage.fetchRecentPublishedRows({ now }) : [];
-    const dailyPolicy = buildSeoDailyPolicySnapshot(rows, { now, targets: config.daily_targets });
+    let dailyPolicy = buildSeoDailyPolicySnapshot(rows, { now, targets: config.daily_targets });
     const currentLimits = limitSnapshot({ rows, policy: dailyPolicy, config, publishedThisRun: 0, now });
     if (currentLimits.remaining_week <= 0) {
       const summary = emptySummary({ config, now, requestSource, reason: "weekly_limit_reached", rows, policy: dailyPolicy, run });
@@ -1183,8 +1267,6 @@ async function runSeoContentPublication(options = {}) {
       summary.empty_reason = "publication_limits_reached";
       return finalizeSummary({ storage, run, summary, status: "completed", env, emailNotification });
     }
-    const selectedContentType = dailyPolicy.selected_content_type;
-
     // Existing ready_to_publish rows have already passed editorial generation and are
     // promoted against total quotas; the daily content-type mix applies to fallback generation.
     const readyPublication = await publishReadyToPublishLandings({
@@ -1202,7 +1284,7 @@ async function runSeoContentPublication(options = {}) {
         requestSource,
         rows,
         policy: dailyPolicy,
-        selectedContentType,
+        selectedContentType: dailyPolicy.selected_content_type,
         run
       });
       return finalizeSummary({
@@ -1248,7 +1330,7 @@ async function runSeoContentPublication(options = {}) {
         requestSource,
         rows,
         policy: dailyPolicy,
-        selectedContentType: selectedContentType || "existing_ready",
+        selectedContentType: dailyPolicy.selected_content_type || "existing_ready",
         run
       });
       return finalizeSummary({
@@ -1261,6 +1343,16 @@ async function runSeoContentPublication(options = {}) {
         emailNotification
       });
     }
+
+    const candidateSourceState = await resolveContentTypeAvailability({
+      dailyPolicy,
+      storage,
+      getCandidateSourceDiagnostics: options.getCandidateSourceDiagnostics,
+      candidateLimit: 25,
+      now
+    });
+    dailyPolicy = applyCandidateAvailabilityToPolicy(dailyPolicy, config.daily_targets, candidateSourceState.availability);
+    const selectedContentType = dailyPolicy.selected_content_type;
 
     if (!selectedContentType) {
       const summary = emptySummary({ config, now, requestSource, reason: dailyPolicy.skipped_reason, rows, policy: dailyPolicy, run });
@@ -1295,7 +1387,10 @@ async function runSeoContentPublication(options = {}) {
     });
     summary = await attachCandidateSourceDiagnostics(summary, {
       storage,
-      getCandidateSourceDiagnostics: options.getCandidateSourceDiagnostics,
+      getCandidateSourceDiagnostics: cachedCandidateSourceDiagnostics(
+        candidateSourceState.diagnosticsByContentType,
+        options.getCandidateSourceDiagnostics
+      ),
       selectedContentType,
       candidateLimit: 25,
       now

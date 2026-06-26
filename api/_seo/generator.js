@@ -786,6 +786,25 @@ function inferCandidateSourceEmptyReason(diagnostics = {}) {
   return "unknown_candidate_source_empty";
 }
 
+async function getLandingPreviewSeedableSummary({ selectedContentType, templateType, fetchRows }) {
+  if (selectedContentType !== "landing") return null;
+  try {
+    const preview = await getSeoOpportunitiesPreview({
+      content_type: "landing",
+      template: templateType || "all",
+      limit: 1,
+      maxLimit: 5000,
+      fetchRows
+    });
+    return {
+      seedable_count: Number(preview?.summary?.seedable_count || 0),
+      warnings: Array.isArray(preview?.warnings) ? preview.warnings : []
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function getSeoCandidateSourceDiagnostics(options = {}) {
   const selectedContentType = options.selectedContentType ?? options.selected_content_type ?? null;
   const templateType = options.templateType || options.template_type || candidateTemplateTypeForContentType(selectedContentType);
@@ -863,6 +882,8 @@ async function getSeoCandidateSourceDiagnostics(options = {}) {
       (opportunity) => !existingOpportunityKeys.has(opportunityKey(opportunity)) && !existingLandingSlugs.has(opportunitySlug(opportunity))
     );
     const slugCollisions = pool.filter((opportunity) => existingLandingSlugs.has(opportunitySlug(opportunity)));
+    const previewSeedableSummary = await getLandingPreviewSeedableSummary({ selectedContentType, templateType, fetchRows });
+    const seedableCount = Math.max(seedableOpportunities.length, Number(previewSeedableSummary?.seedable_count || 0));
     const diagnostics = {
       ...base,
       ready_to_publish_count: readyRows.length,
@@ -871,7 +892,10 @@ async function getSeoCandidateSourceDiagnostics(options = {}) {
       pending_opportunities_by_status: countBy(opportunityRows, "status"),
       opportunities_total_count: opportunityRows.length,
       controlled_opportunities_count: pool.length,
-      seedable_opportunities_count: seedableOpportunities.length,
+      seedable_opportunities_count: seedableCount,
+      controlled_seedable_opportunities_count: seedableOpportunities.length,
+      preview_seedable_opportunities_count: previewSeedableSummary?.seedable_count ?? null,
+      preview_warnings: previewSeedableSummary?.warnings || [],
       existing_slug_collisions_count: slugCollisions.length,
       existing_slug_collisions_sample: slugCollisions.slice(0, candidateLimit).map(publicOpportunityDiagnostic)
     };

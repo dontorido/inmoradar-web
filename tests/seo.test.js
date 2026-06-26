@@ -31,7 +31,7 @@ const {
 } = require("../api/_seo/contentPublisher");
 const { buildPublicationDiagnostics, maybeSendSeoPublicationEmail } = require("../api/_seo/publicationEmail");
 const { evaluateLandingIndexability, evaluateSitemapEligibility } = require("../api/_seo/indexability");
-const { buildSeoDailyPolicySnapshot, selectNextSeoContentType } = require("../api/_seo/publishingPolicy");
+const { buildSeoDailyPolicySnapshot, buildSeoDailyTargets, selectNextSeoContentType } = require("../api/_seo/publishingPolicy");
 const { getSeedPublishedLanding } = require("../api/_seo/seedPublished");
 const { siteUrl } = require("../api/_seo/text");
 const sitemapHandler = require("../api/sitemap");
@@ -490,6 +490,66 @@ test("la politica SEO 2+2 salta cuando ya se llenaron landings y guias", () => {
   assert.equal(selection.skipped_reason, "daily_total_quota_reached");
 });
 
+test("la politica SEO usa landing cuando hay pending landing y news esta vacio", () => {
+  const selection = selectNextSeoContentType(
+    {
+      published_landings_today: 1,
+      published_news_today: 0,
+      published_total_today: 1
+    },
+    buildSeoDailyTargets({ total: 10 }),
+    {
+      availability: {
+        news: { pending_opportunities_count: 0, seedable_opportunities_count: 0 },
+        landing: { pending_opportunities_count: 3, seedable_opportunities_count: 0 }
+      }
+    }
+  );
+
+  assert.equal(selection.selected_content_type, "landing");
+  assert.equal(selection.policy_adjustment, "candidate_availability_fallback");
+});
+
+test("la politica SEO usa landing cuando hay seedable landing y news esta vacio", () => {
+  const selection = selectNextSeoContentType(
+    {
+      published_landings_today: 1,
+      published_news_today: 0,
+      published_total_today: 1
+    },
+    buildSeoDailyTargets({ total: 10 }),
+    {
+      availability: {
+        news: { pending_opportunities_count: 0, seedable_opportunities_count: 0 },
+        landing: { pending_opportunities_count: 0, seedable_opportunities_count: 20 }
+      }
+    }
+  );
+
+  assert.equal(selection.selected_content_type, "landing");
+  assert.equal(selection.policy_adjustment, "candidate_availability_fallback");
+});
+
+test("la politica SEO usa news si landing no tiene candidatos y news si", () => {
+  const selection = selectNextSeoContentType(
+    {
+      published_landings_today: 0,
+      published_news_today: 0,
+      published_total_today: 0
+    },
+    buildSeoDailyTargets({ total: 10 }),
+    {
+      availability: {
+        landing: { pending_opportunities_count: 0, seedable_opportunities_count: 0 },
+        news: { pending_opportunities_count: 2, seedable_opportunities_count: 0 }
+      }
+    }
+  );
+
+  assert.equal(selection.selected_content_type, "news");
+  assert.equal(selection.policy_adjustment, "candidate_availability_fallback");
+});
+
 test("el generador SEO crea guias editoriales indexables cuando alcanzan calidad", async () => {
   const result = await runSeoLandingGeneration({
     mode: "dry_run",
@@ -606,6 +666,166 @@ test("la publicacion SEO operativa selecciona guias cuando falta cuota editorial
   assert.equal(result.published_news_today, 2);
   assert.equal(result.published_landings_today, 2);
   assert.equal(result.results[0].target_path, "/guias/antes-de-llamar-por-un-piso/");
+});
+
+test("la publicacion SEO usa landing si news esta vacio y hay backlog landing", async () => {
+  const generationCalls = [];
+  const diagnosticCalls = [];
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [
+          { template_type: "price_city", status: "published", published_at: "2026-05-22T08:00:00.000Z" }
+        ];
+      },
+      async fetchReadyToPublishLandings() {
+        return [];
+      }
+    },
+    config: { enabled: true, dryRun: false, maxPerDay: 10 },
+    getCandidateSourceDiagnostics: async ({ selectedContentType }) => {
+      diagnosticCalls.push(selectedContentType);
+      if (selectedContentType === "news") {
+        return {
+          ok: true,
+          selected_content_type: "news",
+          ready_to_publish_count: 0,
+          pending_opportunities_count: 0,
+          seedable_opportunities_count: 0,
+          candidate_source_empty_reason: "seed_exhausted_by_existing_slugs"
+        };
+      }
+      return {
+        ok: true,
+        selected_content_type: "landing",
+        ready_to_publish_count: 0,
+        pending_opportunities_count: 2,
+        seedable_opportunities_count: 0,
+        candidate_source_empty_reason: "ready_to_publish_empty"
+      };
+    },
+    runGeneration: async (options) => {
+      if (options.readyToPublishOnly) {
+        return {
+          ok: true,
+          mode: "publish",
+          template_type: options.template_type,
+          content_type: "mixed",
+          generated_count: 0,
+          published_count: 0,
+          results: []
+        };
+      }
+      generationCalls.push(options);
+      return {
+        ok: true,
+        mode: "publish",
+        template_type: options.template_type,
+        content_type: "landing",
+        generated_count: 1,
+        published_count: 1,
+        results: [
+          {
+            slug: "saber-si-piso-esta-caro/tarragona",
+            template_type: "expensive_listing_city",
+            quality_score: 94,
+            status: "published",
+            index_status: "index"
+          }
+        ]
+      };
+    }
+  });
+
+  assert.deepEqual(diagnosticCalls, ["news", "landing"]);
+  assert.equal(generationCalls.length, 1);
+  assert.equal(generationCalls[0].template_type, "landing_random");
+  assert.equal(result.selected_content_type, "landing");
+  assert.equal(result.daily_policy.selected_content_type_policy_adjustment, "candidate_availability_fallback");
+  assert.equal(result.published_count, 1);
+});
+
+test("la publicacion SEO usa news si landing esta vacio y news tiene backlog", async () => {
+  let generationOptions = null;
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [];
+      },
+      async fetchReadyToPublishLandings() {
+        return [];
+      }
+    },
+    config: { enabled: true, dryRun: false, maxPerDay: 10 },
+    getCandidateSourceDiagnostics: async ({ selectedContentType }) => {
+      if (selectedContentType === "landing") {
+        return {
+          ok: true,
+          selected_content_type: "landing",
+          ready_to_publish_count: 0,
+          pending_opportunities_count: 0,
+          seedable_opportunities_count: 0,
+          candidate_source_empty_reason: "seed_exhausted_by_existing_slugs"
+        };
+      }
+      return {
+        ok: true,
+        selected_content_type: "news",
+        ready_to_publish_count: 0,
+        pending_opportunities_count: 1,
+        seedable_opportunities_count: 0,
+        candidate_source_empty_reason: "ready_to_publish_empty"
+      };
+    },
+    runGeneration: async (options) => {
+      if (options.readyToPublishOnly) {
+        return {
+          ok: true,
+          mode: "publish",
+          template_type: options.template_type,
+          content_type: "mixed",
+          generated_count: 0,
+          published_count: 0,
+          results: []
+        };
+      }
+      generationOptions = options;
+      return {
+        ok: true,
+        mode: "publish",
+        template_type: options.template_type,
+        content_type: "news",
+        generated_count: 1,
+        published_count: 1,
+        results: [
+          {
+            slug: "guias/antes-de-llamar-por-un-piso",
+            template_type: "editorial_guide",
+            quality_score: 94,
+            status: "published",
+            index_status: "index"
+          }
+        ]
+      };
+    }
+  });
+
+  assert.equal(generationOptions.template_type, "editorial_guide");
+  assert.equal(result.selected_content_type, "news");
+  assert.equal(result.daily_policy.selected_content_type_policy_adjustment, "candidate_availability_fallback");
+  assert.equal(result.published_count, 1);
 });
 
 test("email SEO no se envia si esta desactivado, en dry-run o sin publicaciones", async () => {
@@ -1774,6 +1994,76 @@ test("la publicacion SEO sin candidatos generados devuelve diagnostico claro", a
   );
 });
 
+test("la publicacion SEO mantiene no_candidates_generated sin candidatos landing ni news", async () => {
+  const diagnosticCalls = [];
+  const result = await runSeoContentPublication({
+    now: "2026-05-22T12:00:00.000Z",
+    requestSource: "cron",
+    env: {
+      SEO_AUTOGENERATION_ENABLED: "true",
+      SEO_AUTOGENERATION_DRY_RUN: "false"
+    },
+    conditions: {
+      enabled: true,
+      max_per_day: 8,
+      max_per_week: 28,
+      max_per_run: 1,
+      min_score: 90
+    },
+    storage: {
+      async startRun() {
+        return { persisted: false, acquired: true };
+      },
+      async finishRun() {},
+      async fetchRecentPublishedRows() {
+        return [];
+      },
+      async fetchReadyToPublishLandings() {
+        return [];
+      }
+    },
+    runGeneration: async (options) => {
+      if (options.readyToPublishOnly) {
+        return {
+          ok: true,
+          generated_count: 0,
+          published_count: 0,
+          results: []
+        };
+      }
+      assert.equal(options.template_type, "landing_random");
+      return {
+        ok: true,
+        generated_count: 0,
+        published_count: 0,
+        results: []
+      };
+    },
+    getCandidateSourceDiagnostics: async ({ selectedContentType }) => {
+      diagnosticCalls.push(selectedContentType);
+      return {
+        ok: true,
+        read_only: true,
+        selected_content_type: selectedContentType,
+        ready_to_publish_count: 0,
+        pending_opportunities_count: 0,
+        pending_opportunities_by_template: {},
+        pending_opportunities_by_status: {},
+        seedable_opportunities_count: 0,
+        existing_slug_collisions_count: 0,
+        existing_slug_collisions_sample: [],
+        candidate_source_empty_reason: "seed_exhausted_by_existing_slugs"
+      };
+    }
+  });
+
+  assert.deepEqual(diagnosticCalls, ["landing", "news"]);
+  assert.equal(result.selected_content_type, "landing");
+  assert.equal(result.empty_reason, "no_candidates_generated");
+  assert.equal(result.publication_diagnostics.empty_reason, "no_candidates_generated");
+  assert.equal(result.candidate_source_diagnostics.selected_content_type, "landing");
+});
+
 test("diagnostico de fuente SEO detecta pending vacio sin crear oportunidades", async () => {
   const paths = [];
   const result = await getSeoCandidateSourceDiagnostics({
@@ -1814,6 +2104,49 @@ test("diagnostico de fuente SEO detecta seed agotado por slugs existentes", asyn
   assert.equal(result.existing_slug_collisions_count, existingGuideLandings.length);
   assert.equal(result.existing_slug_collisions_sample[0].template_type, "editorial_guide");
   assert.equal(result.candidate_source_empty_reason, "seed_exhausted_by_existing_slugs");
+});
+
+test("diagnostico de fuente SEO cuenta seedables landing del preview read-only", async () => {
+  const paths = [];
+  const result = await getSeoCandidateSourceDiagnostics({
+    selectedContentType: "landing",
+    fetchRows: async (path) => {
+      paths.push(path);
+      if (path.startsWith("market_price_sources?")) {
+        return [
+          {
+            municipality: "Girona",
+            province: "Girona",
+            autonomous_community: "CataluÃ±a",
+            operation: "sale",
+            source: "mivau_appraisal",
+            period_date: "2026-05-01",
+            price_eur_m2: 2600,
+            confidence_score: 0.9
+          },
+          {
+            municipality: "Girona",
+            province: "Girona",
+            autonomous_community: "CataluÃ±a",
+            operation: "rent",
+            source: "serpapi",
+            period_date: "2026-05-01",
+            price_eur_m2: 15,
+            confidence_score: 0.9
+          }
+        ];
+      }
+      return [];
+    }
+  });
+
+  assert.equal(result.read_only, true);
+  assert.equal(result.selected_content_type, "landing");
+  assert.ok(result.preview_seedable_opportunities_count >= 3);
+  assert.ok(result.seedable_opportunities_count >= result.preview_seedable_opportunities_count);
+  assert.equal(result.candidate_source_empty_reason, "pending_opportunities_empty");
+  assert.equal(paths.some((path) => path.startsWith("market_price_sources?")), true);
+  assert.equal(paths.some((path) => /on_conflict|method=POST|method=PATCH/i.test(path)), false);
 });
 
 test("preview de oportunidades SEO propone ciudades nuevas sin escribir backlog", async () => {

@@ -59,7 +59,53 @@ function summarizeSeoPublications(rows = [], options = {}) {
   };
 }
 
-function selectNextSeoContentType(summary = {}, targets = SEO_DAILY_TARGETS) {
+function seoContentTypeAvailabilityCount(source = {}) {
+  return (
+    Number(source.ready_to_publish_count || 0) +
+    Number(source.pending_opportunities_count || 0) +
+    Number(source.seedable_opportunities_count || 0)
+  );
+}
+
+function hasSeoContentTypeAvailability(source = {}) {
+  if (!source || typeof source !== "object") return false;
+  if (source.has_candidates === true) return true;
+  return seoContentTypeAvailabilityCount(source) > 0;
+}
+
+function normalizedContentAvailability(options = {}) {
+  const availability = options.availability || options.content_type_availability || options.contentAvailability || null;
+  if (!availability || typeof availability !== "object") return null;
+  return {
+    landing: availability.landing || availability.landings || null,
+    news: availability.news || availability.guides || null
+  };
+}
+
+function applyContentAvailabilitySelection(selectedContentType, options = {}) {
+  if (!selectedContentType) return { selected_content_type: selectedContentType, policy_adjustment: null };
+  const availability = normalizedContentAvailability(options);
+  if (!availability) return { selected_content_type: selectedContentType, policy_adjustment: null };
+  const alternateContentType = selectedContentType === "news" ? "landing" : selectedContentType === "landing" ? "news" : null;
+  if (!alternateContentType) return { selected_content_type: selectedContentType, policy_adjustment: null };
+  const selectedAvailability = availability[selectedContentType];
+  const alternateAvailability = availability[alternateContentType];
+  if (!selectedAvailability || !alternateAvailability) {
+    return { selected_content_type: selectedContentType, policy_adjustment: null };
+  }
+  if (hasSeoContentTypeAvailability(selectedAvailability)) {
+    return { selected_content_type: selectedContentType, policy_adjustment: null };
+  }
+  if (hasSeoContentTypeAvailability(alternateAvailability)) {
+    return {
+      selected_content_type: alternateContentType,
+      policy_adjustment: "candidate_availability_fallback"
+    };
+  }
+  return { selected_content_type: selectedContentType, policy_adjustment: null };
+}
+
+function selectNextSeoContentType(summary = {}, targets = SEO_DAILY_TARGETS, options = {}) {
   const publishedLandings = Number(summary.published_landings_today || 0);
   const publishedNews = Number(summary.published_news_today || 0);
   const publishedTotal = Number(summary.published_total_today || 0);
@@ -71,10 +117,16 @@ function selectNextSeoContentType(summary = {}, targets = SEO_DAILY_TARGETS) {
   if (landingRemaining <= 0 && newsRemaining <= 0) {
     return { selected_content_type: null, skipped_reason: "daily_2_plus_2_quota_reached" };
   }
-  if (landingRemaining <= 0) return { selected_content_type: "news", skipped_reason: null };
-  if (newsRemaining <= 0) return { selected_content_type: "landing", skipped_reason: null };
-  if (publishedLandings <= publishedNews) return { selected_content_type: "landing", skipped_reason: null };
-  return { selected_content_type: "news", skipped_reason: null };
+  let selectedContentType = "news";
+  if (landingRemaining <= 0) selectedContentType = "news";
+  else if (newsRemaining <= 0) selectedContentType = "landing";
+  else selectedContentType = publishedLandings <= publishedNews ? "landing" : "news";
+  const availabilitySelection = applyContentAvailabilitySelection(selectedContentType, options);
+  return {
+    selected_content_type: availabilitySelection.selected_content_type,
+    skipped_reason: null,
+    policy_adjustment: availabilitySelection.policy_adjustment
+  };
 }
 
 function buildSeoDailyPolicySnapshot(rows = [], options = {}) {
@@ -83,14 +135,17 @@ function buildSeoDailyPolicySnapshot(rows = [], options = {}) {
     now: options.now,
     timeZone: targets.timeZone
   });
-  const selection = selectNextSeoContentType(summary, targets);
+  const contentAvailability = normalizedContentAvailability(options);
+  const selection = selectNextSeoContentType(summary, targets, { availability: contentAvailability });
   return {
     ...summary,
     target_landings_per_day: targets.landings,
     target_news_per_day: targets.news,
     target_total_per_day: targets.total,
     selected_content_type: selection.selected_content_type,
-    skipped_reason: selection.skipped_reason
+    skipped_reason: selection.skipped_reason,
+    selected_content_type_policy_adjustment: selection.policy_adjustment || null,
+    content_type_availability: contentAvailability || undefined
   };
 }
 
@@ -99,6 +154,7 @@ module.exports = {
   buildSeoDailyTargets,
   buildSeoDailyPolicySnapshot,
   dateKeyForTimeZone,
+  hasSeoContentTypeAvailability,
   isSeoNewsTemplateType,
   selectNextSeoContentType,
   seoContentTypeForTemplate,
