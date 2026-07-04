@@ -23,6 +23,15 @@ const {
   seedSeoOpportunitiesFromPreview
 } = require("../api/_seo/generator");
 const {
+  BLOCKED_BRAND_SLUG_TERMS,
+  HOME_LIFE_SEO_CLUSTERS,
+  HOME_TOPIC_MAX_PER_CLUSTER,
+  HOME_TOPIC_TEMPLATE_TYPE,
+  SEO_HOME_TOPIC_CONFIRMATION,
+  getSeoHomeTopicOpportunitiesPreview,
+  seedSeoHomeTopicOpportunities
+} = require("../api/_seo/homeLifeTopics");
+const {
   buildSeoContentPublicationConfig,
   createSeoContentPublicationStorage,
   getSeoContentPublicationDiagnostics,
@@ -2439,6 +2448,196 @@ test("seed controlado informa cuando los filtros dejan fuera todos los seedables
   assert.ok(result.seedable_count > 0);
   assert.equal(result.seed_diagnostics.source_mismatch_count, result.seedable_count);
   assert.equal(result.empty_reason, "source_filter_excluded_all");
+});
+
+test("preview de oportunidades home-life genera mezcla de clusters con limite por cluster", async () => {
+  const result = await getSeoHomeTopicOpportunitiesPreview(
+    { limit: 50 },
+    {
+      fetchRows: async () => []
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.read_only, true);
+  assert.equal(result.writes_enabled, false);
+  assert.equal(result.confirmation_required, true);
+  assert.ok(result.clusters.length >= 10);
+  assert.ok(result.would_insert_count > result.clusters.length);
+  assert.equal(result.home_topic_diagnostics.total_candidates, HOME_LIFE_SEO_CLUSTERS.length * HOME_TOPIC_MAX_PER_CLUSTER);
+
+  const perCluster = result.would_insert.reduce((counts, item) => {
+    counts[item.cluster_id] = (counts[item.cluster_id] || 0) + 1;
+    return counts;
+  }, {});
+  assert.ok(Object.keys(perCluster).length > 1);
+  assert.ok(Object.values(perCluster).every((count) => count <= HOME_TOPIC_MAX_PER_CLUSTER));
+  assert.ok(result.would_insert.every((item) => item.template_type === HOME_TOPIC_TEMPLATE_TYPE));
+});
+
+test("seed home-life confirmado crea solo oportunidades pending y no drafts ni landings", async () => {
+  const writes = [];
+  const readPaths = [];
+  const result = await seedSeoHomeTopicOpportunities(
+    {
+      confirm: SEO_HOME_TOPIC_CONFIRMATION,
+      dry_run: false,
+      limit: 6
+    },
+    {
+      fetchRows: async (path) => {
+        readPaths.push(path);
+        return [];
+      },
+      insertRow: async (row) => {
+        writes.push(row);
+        return [{ id: `home-${writes.length}`, ...row }];
+      }
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.dry_run, false);
+  assert.equal(result.read_only, false);
+  assert.equal(result.writes_enabled, true);
+  assert.equal(result.inserted_count, 6);
+  assert.equal(result.skipped_count, result.home_topic_diagnostics.total_candidates - 6);
+  assert.equal(result.errors_count, 0);
+  assert.equal(writes.length, 6);
+  assert.ok(writes.every((row) => row.status === "pending"));
+  assert.ok(writes.every((row) => row.template_type === HOME_TOPIC_TEMPLATE_TYPE));
+  assert.ok(writes.every((row) => row.brief_json?.product_block_required === true));
+  assert.equal(readPaths.some((path) => /seo_landings\?/.test(path)), true);
+  assert.equal(readPaths.some((path) => /method=POST|method=PATCH|generate-landings/i.test(path)), false);
+});
+
+test("seed home-life con confirmacion invalida no inserta ni consulta candidatos", async () => {
+  const calls = [];
+  const result = await seedSeoHomeTopicOpportunities(
+    {
+      confirm: "SEED",
+      dry_run: false,
+      limit: 10
+    },
+    {
+      fetchRows: async (path) => {
+        calls.push(path);
+        return [];
+      },
+      insertRow: async () => {
+        throw new Error("should_not_insert");
+      }
+    }
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "seed_home_topics_confirmation_invalid");
+  assert.match(result.message, /SEED_SEO_HOME_TOPICS/);
+  assert.equal(result.inserted_count, 0);
+  assert.equal(result.empty_reason, "invalid_confirmation");
+  assert.equal(calls.length, 0);
+});
+
+test("seed home-life deduplica slugs existentes y oportunidades pending existentes", async () => {
+  const result = await getSeoHomeTopicOpportunitiesPreview(
+    { limit: 12 },
+    {
+      fetchRows: async (path) => {
+        if (path.startsWith("seo_landings?")) {
+          return [{ slug: "coste-real-comprar-vivienda", template_type: HOME_TOPIC_TEMPLATE_TYPE, status: "published" }];
+        }
+        if (path.startsWith("seo_landing_opportunities?")) {
+          return [
+            {
+              keyword: "como controlar factura luz casa",
+              city: "Espana",
+              template_type: HOME_TOPIC_TEMPLATE_TYPE,
+              status: "pending",
+              suggested_slug: "/como-controlar-factura-luz-casa/"
+            }
+          ];
+        }
+        return [];
+      }
+    }
+  );
+
+  const slugs = result.would_insert.map((item) => item.suggested_slug);
+  assert.equal(result.ok, true);
+  assert.equal(result.already_existing_count, 1);
+  assert.equal(result.already_pending_count, 1);
+  assert.equal(slugs.includes("/coste-real-comprar-vivienda/"), false);
+  assert.equal(slugs.includes("/como-controlar-factura-luz-casa/"), false);
+  assert.equal(result.skipped.some((item) => item.reason === "already_existing"), true);
+  assert.equal(result.skipped.some((item) => item.reason === "already_pending"), true);
+});
+
+test("diagnostico home-life incluye per_cluster_counts y per_template_counts", async () => {
+  const result = await getSeoHomeTopicOpportunitiesPreview(
+    { limit: 20 },
+    {
+      fetchRows: async () => []
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.ok(Object.keys(result.per_cluster_counts).length > 1);
+  assert.equal(result.per_template_counts[HOME_TOPIC_TEMPLATE_TYPE], result.would_insert_count);
+  assert.deepEqual(result.home_topic_diagnostics.per_cluster_counts, result.per_cluster_counts);
+  assert.deepEqual(result.home_topic_diagnostics.per_template_counts, result.per_template_counts);
+  assert.equal(result.home_topic_diagnostics.limit_applied, 20);
+});
+
+test("briefs home-life incluyen CTA, bloque InmoRadar, disclaimer y requisitos de calidad", async () => {
+  const result = await getSeoHomeTopicOpportunitiesPreview(
+    { limit: 50 },
+    {
+      fetchRows: async () => []
+    }
+  );
+
+  assert.ok(result.would_insert.length > 0);
+  for (const item of result.would_insert) {
+    assert.equal(item.brief.cta_primary, "Analiza un piso con InmoRadar antes de contactar.");
+    assert.equal(item.brief.cta_secondary, "Instala la extension de Chrome y usala mientras revisas anuncios inmobiliarios.");
+    assert.equal(item.brief.product_block_required, true);
+    assert.match(item.brief.inmoradar_value_angle, /analizar anuncios inmobiliarios antes de contactar/);
+    assert.match(item.brief.disclaimer, /Contenido orientativo/);
+    assert.ok(item.brief.required_h2_sections.includes("Como te ayuda InmoRadar antes de contactar por un piso"));
+    assert.ok(item.brief.quality_requirements.some((requirement) => /no una landing thin/i.test(requirement)));
+  }
+});
+
+test("slugs home-life no usan marcas de terceros de forma confusa", async () => {
+  const result = await getSeoHomeTopicOpportunitiesPreview(
+    { limit: 50 },
+    {
+      fetchRows: async () => []
+    }
+  );
+
+  for (const item of result.would_insert) {
+    const normalizedSlug = String(item.suggested_slug || "").toLowerCase();
+    assert.equal(BLOCKED_BRAND_SLUG_TERMS.some((term) => normalizedSlug.includes(term)), false);
+  }
+});
+
+test("clusters home-life de riesgo alto quedan marcados con content_warnings", async () => {
+  const highRiskClusterIds = HOME_LIFE_SEO_CLUSTERS
+    .filter((cluster) => cluster.seo_risk === "high" || cluster.reputation_legal_risk === "high")
+    .map((cluster) => cluster.cluster_id);
+  const result = await getSeoHomeTopicOpportunitiesPreview(
+    { limit: 50 },
+    {
+      fetchRows: async () => []
+    }
+  );
+  const highRiskCandidates = result.would_insert.filter((item) => highRiskClusterIds.includes(item.cluster_id));
+
+  assert.ok(highRiskClusterIds.length > 0);
+  assert.ok(highRiskCandidates.length > 0);
+  assert.ok(highRiskCandidates.every((item) => item.content_warnings.length > 0));
+  assert.ok(highRiskCandidates.every((item) => item.brief.content_warnings.length > 0));
 });
 
 test("la publicacion SEO bloqueada por limites informa publication_limits_reached sin candidatos publicos", async () => {

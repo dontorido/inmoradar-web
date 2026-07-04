@@ -18,6 +18,7 @@ const {
   runSeoContentPublication
 } = require("./_seo/contentPublisher");
 const { getSeoOpportunitiesPreview, runSeoLandingGeneration, seedSeoOpportunitiesFromPreview } = require("./_seo/generator");
+const { getSeoHomeTopicOpportunitiesPreview, seedSeoHomeTopicOpportunities } = require("./_seo/homeLifeTopics");
 const { evaluateLandingIndexability } = require("./_seo/indexability");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
 const { createKpiSettingsHandler } = require("./_admin/handlers/kpis");
@@ -959,6 +960,26 @@ async function handleSeoOpportunitiesSeedPreview(req) {
   }
   const body = await readJsonBody(req);
   const result = await seedSeoOpportunitiesFromPreview(body);
+  return { status: result.status || (result.ok === false ? 400 : 200), payload: result };
+}
+
+async function handleSeoHomeTopicsPreview(req, url) {
+  if (req.method !== "GET") {
+    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  }
+  const result = await getSeoHomeTopicOpportunitiesPreview({
+    limit: url.searchParams.get("limit") || undefined,
+    clusters: url.searchParams.get("clusters") || url.searchParams.get("cluster_ids") || ""
+  });
+  return { status: result.status || (result.ok === false ? 400 : 200), payload: result };
+}
+
+async function handleSeoHomeTopicsSeed(req) {
+  if (req.method !== "POST") {
+    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  }
+  const body = await readJsonBody(req);
+  const result = await seedSeoHomeTopicOpportunities(body);
   return { status: result.status || (result.ok === false ? 400 : 200), payload: result };
 }
 
@@ -5334,6 +5355,14 @@ async function handleAdminRequest(req, res) {
     }
     if (resource === "seo/opportunities/seed-preview") {
       const result = await handleSeoOpportunitiesSeedPreview(req);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "seo/opportunities/home-topics-preview") {
+      const result = await handleSeoHomeTopicsPreview(req, url);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "seo/opportunities/home-topics-seed") {
+      const result = await handleSeoHomeTopicsSeed(req);
       return json(res, result.status, result.payload);
     }
     if (resource === "linkedin" || resource.startsWith("linkedin/")) {

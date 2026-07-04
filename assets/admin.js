@@ -10,6 +10,7 @@ const EXTENSION_USAGE_DEFAULT_PRESET = "30d";
 const EXTENSION_USAGE_TIMEZONE = "Europe/Madrid";
 const SEO_AUTOGENERATION_TIMEZONE = "Europe/Madrid";
 const SEO_OPPORTUNITY_SEED_CONFIRMATION = "SEED_SEO_OPPORTUNITIES";
+const SEO_HOME_TOPIC_SEED_CONFIRMATION = "SEED_SEO_HOME_TOPICS";
 const EXTENSION_USAGE_PRESETS = new Set(["24h", "7d", "30d", "month", "all", "custom"]);
 const INITIAL_ADMIN_PATH = window.location.pathname || "";
 const INITIAL_MARKETING_SUBSECTION = INITIAL_ADMIN_PATH.includes("/backoffice/marketing/viraliza")
@@ -186,6 +187,10 @@ const state = {
     recentRuns: []
   },
   seoOpportunitySeed: {
+    lastResult: null
+  },
+  seoHomeTopicSeed: {
+    lastPreview: null,
     lastResult: null
   },
   parking: {
@@ -2471,6 +2476,147 @@ function renderSeoOpportunitySeedControls(target = "all") {
   `;
 }
 
+function seoHomeTopicSeedResultItems(result = {}) {
+  if (result.dry_run) return Array.isArray(result.would_insert) ? result.would_insert : [];
+  return Array.isArray(result.inserted) ? result.inserted : [];
+}
+
+function renderSeoHomeTopicSeedRows(items = []) {
+  if (!items.length) return `<p class="admin-empty-state compact">No hay oportunidades tematicas insertables con estos filtros.</p>`;
+  return `
+    <div class="admin-seo-autogen-diagnostics-table-wrap">
+      <table class="admin-seo-autogen-diagnostics-table">
+        <thead>
+          <tr>
+            <th>Keyword/slug</th>
+            <th>Cluster</th>
+            <th>Template</th>
+            <th>Intent</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.slice(0, 12).map((item) => `
+            <tr>
+              <td>
+                <strong>${escapeHtml(item.primary_keyword || item.keyword || "-")}</strong>
+                <div class="admin-subtle"><code>${escapeHtml(item.suggested_slug || item.slug || "-")}</code></div>
+              </td>
+              <td>${escapeHtml(item.cluster_id || "-")}</td>
+              <td>${escapeHtml(item.template_type || "-")}</td>
+              <td>${escapeHtml(item.search_intent || item.intent || "-")}</td>
+              <td>${escapeHtml(item.row?.status || (item.reason || "pending"))}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderSeoHomeTopicCounts(counts = {}) {
+  const entries = Object.entries(counts || {});
+  if (!entries.length) return "none";
+  return entries.map(([key, value]) => `${key}: ${seoAutogenNumber(value, 0)}`).join("; ");
+}
+
+function renderSeoHomeTopicSeedDiagnostics(result = {}) {
+  const diagnostics = result.home_topic_diagnostics || result.diagnostics || {};
+  const counters = [
+    ["total_candidates", diagnostics.total_candidates ?? result.total_candidates],
+    ["insertable_candidates", diagnostics.insertable_candidates ?? result.insertable_candidates],
+    ["inserted_count", diagnostics.inserted_count ?? result.inserted_count],
+    ["skipped_count", diagnostics.skipped_count ?? result.skipped_count],
+    ["errors_count", diagnostics.errors_count ?? result.errors_count ?? result.error_count],
+    ["already_existing_count", diagnostics.already_existing_count ?? result.already_existing_count],
+    ["already_pending_count", diagnostics.already_pending_count ?? result.already_pending_count],
+    ["missing_required_fields_count", diagnostics.missing_required_fields_count ?? result.missing_required_fields_count],
+    ["unsupported_cluster_count", diagnostics.unsupported_cluster_count ?? result.unsupported_cluster_count],
+    ["limit_applied", diagnostics.limit_applied ?? result.limit_applied],
+    ["confirmation_required", diagnostics.confirmation_required ?? result.confirmation_required]
+  ].filter(([, value]) => value !== undefined && value !== null);
+  return `
+    <div class="admin-empty-state compact">
+      ${diagnostics.empty_reason || result.empty_reason ? `<p>${escapeHtml(`empty_reason: ${diagnostics.empty_reason || result.empty_reason}`)}</p>` : ""}
+      <p>${escapeHtml(counters.map(([label, value]) => `${label}: ${typeof value === "boolean" ? String(value) : seoAutogenNumber(value, value)}`).join(" | "))}</p>
+      <p>${escapeHtml(`per_cluster_counts: ${renderSeoHomeTopicCounts(diagnostics.per_cluster_counts || result.per_cluster_counts)}`)}</p>
+      <p>${escapeHtml(`per_template_counts: ${renderSeoHomeTopicCounts(diagnostics.per_template_counts || result.per_template_counts)}`)}</p>
+    </div>
+  `;
+}
+
+function renderSeoHomeTopicSeedResultHtml(result = null) {
+  if (!result) return "";
+  const items = seoHomeTopicSeedResultItems(result);
+  const skipped = Array.isArray(result.skipped) ? result.skipped : [];
+  const errors = Array.isArray(result.errors) ? result.errors : [];
+  const title = result.dry_run ? "Preview de oportunidades tematicas" : "Resultado de oportunidades tematicas";
+  return `
+    <section class="admin-seo-autogen-diagnostics-panel is-muted">
+      <div class="admin-seo-autogen-diagnostics-head">
+        <div>
+          <h4>${escapeHtml(title)}</h4>
+          <p>No publica landings. Solo crea oportunidades pending.</p>
+        </div>
+        <div class="admin-seo-autogen-diagnostic-counters">
+          <span><b>Insertarian:</b> ${escapeHtml(result.would_insert_count || items.length || 0)}</span>
+          <span><b>Insertadas:</b> ${escapeHtml(result.inserted_count || 0)}</span>
+          <span><b>Skipped:</b> ${escapeHtml(result.skipped_count || skipped.length || 0)}</span>
+          <span><b>Errors:</b> ${escapeHtml(result.errors_count ?? result.error_count ?? errors.length ?? 0)}</span>
+        </div>
+      </div>
+      ${result.ok === false ? `<p class="admin-empty-state compact">${escapeHtml(result.message || result.error || "No se pudo ejecutar el seed tematico.")}</p>` : ""}
+      ${renderSeoHomeTopicSeedRows(items)}
+      ${renderSeoHomeTopicSeedDiagnostics(result)}
+      ${skipped.length ? `<p class="admin-empty-state compact">Skipped: ${escapeHtml(skipped.slice(0, 12).map((item) => `${item.suggested_slug || item.primary_keyword || "-"} (${item.reason || "skipped"})`).join("; "))}</p>` : ""}
+      ${errors.length ? `<p class="admin-empty-state compact">Errors: ${escapeHtml(errors.slice(0, 12).map((item) => `${item.suggested_slug || item.primary_keyword || "-"} (${item.error || item.reason || "error"})`).join("; "))}</p>` : ""}
+    </section>
+  `;
+}
+
+function renderSeoHomeTopicSeedControls(target = "all") {
+  if (target !== "autogeneration") return "";
+  const preview = state.seoHomeTopicSeed.lastPreview || {};
+  const result = state.seoHomeTopicSeed.lastResult || preview;
+  const clusters = Array.isArray(preview.clusters) ? preview.clusters : [];
+  const canConfirm = Boolean(result?.dry_run !== false && Number(result.would_insert_count || result.insertable_candidates || 0) > 0);
+  const clusterList = clusters.length
+    ? clusters.map((cluster) => `${cluster.cluster_id} (${(cluster.templates || []).join(", ") || "home_life_topic"})`).join("; ")
+    : "clusters no disponibles";
+  const distribution = renderSeoHomeTopicCounts(preview.per_cluster_counts || preview.home_topic_diagnostics?.per_cluster_counts);
+  return `
+    <section class="admin-seo-autogen-diagnostics-panel">
+      <div class="admin-seo-autogen-diagnostics-head">
+        <div>
+          <h3>Crear oportunidades SEO tematicas, no publicar</h3>
+          <p>No publica landings. Solo crea oportunidades pending.</p>
+          <p>${escapeHtml(`Clusters incluidos: ${clusterList}`)}</p>
+          <p>${escapeHtml(`Distribucion esperada: ${distribution}`)}</p>
+        </div>
+        <div class="admin-seo-autogen-diagnostic-counters">
+          <span><b>total_candidates:</b> ${escapeHtml(preview.total_candidates || 0)}</span>
+          <span><b>insertable_candidates:</b> ${escapeHtml(preview.insertable_candidates || 0)}</span>
+          <span><b>limit_applied:</b> ${escapeHtml(preview.limit_applied || preview.home_topic_diagnostics?.limit_applied || 20)}</span>
+        </div>
+      </div>
+      <div class="admin-seo-autogen-conditions-actions">
+        <form class="admin-filter" data-seo-home-topic-seed-form>
+          <input name="limit" type="number" min="1" max="50" step="1" value="${escapeHtml(preview.limit_applied || 20)}" aria-label="Limite seed SEO tematico">
+          <input name="clusters" placeholder="Clusters opcional, separados por coma" aria-label="Clusters seed SEO tematico">
+          <button class="admin-button tiny ghost" type="submit" data-seo-home-topic-seed-preview>Previsualizar oportunidades tematicas</button>
+        </form>
+        <p class="admin-empty-state compact" data-seo-home-topic-seed-feedback role="status" aria-live="polite"></p>
+      </div>
+      <div class="admin-seo-autogen-conditions-actions" data-seo-home-topic-seed-confirm-panel${canConfirm ? "" : " hidden"}>
+        <p class="admin-empty-state compact">Texto exacto de confirmacion: <code>${SEO_HOME_TOPIC_SEED_CONFIRMATION}</code></p>
+        <input data-seo-home-topic-seed-confirm placeholder="${SEO_HOME_TOPIC_SEED_CONFIRMATION}" aria-label="Confirmacion seed SEO tematico">
+        <button class="admin-button tiny ghost" type="button" data-seo-home-topic-seed-execute>Crear oportunidades pending</button>
+      </div>
+      <div data-seo-home-topic-seed-result>${renderSeoHomeTopicSeedResultHtml(result)}</div>
+    </section>
+  `;
+}
+
 function renderSeoOpportunitiesPreview(preview = null, target = "all") {
   const targets = seoOpportunitiesPreviewTargets(target);
   if (!targets.length) return;
@@ -2480,7 +2626,7 @@ function renderSeoOpportunitiesPreview(preview = null, target = "all") {
     });
   };
   if (!preview) {
-    setHtml("");
+    setHtml(renderSeoHomeTopicSeedControls(target));
     return;
   }
   if (preview.ok === false) {
@@ -2494,6 +2640,7 @@ function renderSeoOpportunitiesPreview(preview = null, target = "all") {
           </div>
         </div>
       </section>
+      ${renderSeoHomeTopicSeedControls(target)}
     `);
     return;
   }
@@ -2550,6 +2697,7 @@ function renderSeoOpportunitiesPreview(preview = null, target = "all") {
       ` : `<p class="admin-empty-state compact">No hay oportunidades candidatas en el preview.</p>`}
       ${renderSeoOpportunitySeedControls(target)}
     </section>
+    ${renderSeoHomeTopicSeedControls(target)}
   `);
 }
 
@@ -7590,7 +7738,20 @@ async function loadSeoOpportunitiesPreview() {
   }));
 }
 
+async function loadSeoHomeTopicOpportunitiesPreview() {
+  return api("/api/admin?resource=seo/opportunities/home-topics-preview&limit=20").catch((error) => ({
+    ok: false,
+    status: error.status || null,
+    error: error.payload?.error || error.message || "seo_home_topics_preview_unavailable",
+    message: error.payload?.message || error.message || "Preview de oportunidades tematicas no disponible"
+  }));
+}
+
 function seoOpportunitySeedRoot() {
+  return els.seoAutogenOpportunitiesPreview || document;
+}
+
+function seoHomeTopicSeedRoot() {
   return els.seoAutogenOpportunitiesPreview || document;
 }
 
@@ -7654,6 +7815,64 @@ async function runSeoOpportunitySeed(dryRun = true) {
   return result;
 }
 
+function setSeoHomeTopicSeedFeedback(message = "", tone = "neutral") {
+  const feedback = seoHomeTopicSeedRoot().querySelector("[data-seo-home-topic-seed-feedback]");
+  if (!feedback) return;
+  feedback.textContent = message;
+  feedback.dataset.tone = tone;
+}
+
+function renderSeoHomeTopicSeedResult(result = null) {
+  const root = seoHomeTopicSeedRoot();
+  const target = root.querySelector("[data-seo-home-topic-seed-result]");
+  const panel = root.querySelector("[data-seo-home-topic-seed-confirm-panel]");
+  if (target) target.innerHTML = renderSeoHomeTopicSeedResultHtml(result);
+  if (panel) panel.hidden = !(result?.dry_run !== false && Number(result.would_insert_count || result.insertable_candidates || 0) > 0);
+}
+
+function seoHomeTopicSeedPayload(dryRun = true) {
+  const root = seoHomeTopicSeedRoot();
+  const form = root.querySelector("[data-seo-home-topic-seed-form]");
+  const data = form ? new FormData(form) : new FormData();
+  const rawLimit = Number.parseInt(String(data.get("limit") || "20"), 10);
+  const clusters = String(data.get("clusters") || "")
+    .split(",")
+    .map((cluster) => cluster.trim())
+    .filter(Boolean);
+  const confirmation = root.querySelector("[data-seo-home-topic-seed-confirm]");
+  return {
+    confirm: dryRun ? "" : String(confirmation?.value || "").trim(),
+    dry_run: dryRun,
+    limit: Math.max(1, Math.min(50, Number.isFinite(rawLimit) ? rawLimit : 20)),
+    clusters
+  };
+}
+
+async function runSeoHomeTopicSeed(dryRun = true) {
+  if (!dryRun) {
+    const confirmation = seoHomeTopicSeedRoot().querySelector("[data-seo-home-topic-seed-confirm]");
+    if (String(confirmation?.value || "").trim() !== SEO_HOME_TOPIC_SEED_CONFIRMATION) {
+      setSeoHomeTopicSeedFeedback(`Confirmacion incorrecta o incompleta. Escribe exactamente ${SEO_HOME_TOPIC_SEED_CONFIRMATION} para crear oportunidades pending.`, "warn");
+      return null;
+    }
+  }
+  setSeoHomeTopicSeedFeedback(dryRun ? "Calculando preview de oportunidades tematicas..." : "Creando oportunidades tematicas pending...", "neutral");
+  const result = await api("/api/admin?resource=seo/opportunities/home-topics-seed", {
+    method: "POST",
+    body: JSON.stringify(seoHomeTopicSeedPayload(dryRun))
+  });
+  state.seoHomeTopicSeed.lastResult = result;
+  if (dryRun) state.seoHomeTopicSeed.lastPreview = result;
+  renderSeoHomeTopicSeedResult(result);
+  const message = dryRun
+    ? `Preview tematico listo: ${Number(result.would_insert_count || 0)} oportunidades pending candidatas.`
+    : `Seed tematico completado: ${Number(result.inserted_count || 0)} insertadas, ${Number(result.skipped_count || 0)} skipped, ${Number(result.errors_count ?? result.error_count ?? 0)} errores.`;
+  setSeoHomeTopicSeedFeedback(message, result.errors_count || result.error_count ? "warn" : "good");
+  showStatus(message, result.errors_count || result.error_count ? "neutral" : "good");
+  if (!dryRun) loadSeoAutogeneration().catch((error) => showStatus(error.message, "bad"));
+  return result;
+}
+
 async function loadSeo() {
   const params = new URLSearchParams({
     limit: String(state.seo.pageSize || 10),
@@ -7670,7 +7889,7 @@ async function loadSeo() {
 
 async function loadSeoAutogeneration() {
   if (!els.seoAutogenSummary) return;
-  const [payload, diagnostics, preview] = await Promise.all([
+  const [payload, diagnostics, preview, homeTopicPreview] = await Promise.all([
     api("/api/admin?resource=seo-autogenerate/run"),
     api("/api/admin?resource=seo-autogenerate/diagnostics&candidate_limit=25&template_type=all").catch((error) => ({
       ok: false,
@@ -7678,10 +7897,13 @@ async function loadSeoAutogeneration() {
       error: error.payload?.error || error.message || "diagnostics_unavailable",
       message: error.payload?.message || error.message || "Diagnostico no disponible"
     })),
-    loadSeoOpportunitiesPreview()
+    loadSeoOpportunitiesPreview(),
+    loadSeoHomeTopicOpportunitiesPreview()
   ]);
   payload.diagnostics_preview = diagnostics;
   payload.opportunities_preview = preview;
+  payload.home_topic_opportunities_preview = homeTopicPreview;
+  state.seoHomeTopicSeed.lastPreview = homeTopicPreview;
   renderSeoAutogeneration(payload);
   renderSeoOpportunitiesPreview(payload.opportunities_preview || null, "autogeneration");
 }
@@ -8171,12 +8393,30 @@ document.addEventListener("submit", (event) => {
     showStatus(message, "bad");
   });
 });
+document.addEventListener("submit", (event) => {
+  if (!event.target.matches("[data-seo-home-topic-seed-form]")) return;
+  event.preventDefault();
+  runSeoHomeTopicSeed(true).catch((error) => {
+    const message = error.payload?.message || error.message || "No se pudo calcular el preview de oportunidades tematicas.";
+    setSeoHomeTopicSeedFeedback(message, "bad");
+    showStatus(message, "bad");
+  });
+});
 document.addEventListener("click", (event) => {
   const button = event.target?.closest?.("[data-seo-opportunity-seed-execute]");
   if (!button) return;
   runSeoOpportunitySeed(false).catch((error) => {
     const message = error.payload?.message || error.message || "No se pudo crear oportunidades pending.";
     setSeoOpportunitySeedFeedback(message, "bad");
+    showStatus(message, "bad");
+  });
+});
+document.addEventListener("click", (event) => {
+  const button = event.target?.closest?.("[data-seo-home-topic-seed-execute]");
+  if (!button) return;
+  runSeoHomeTopicSeed(false).catch((error) => {
+    const message = error.payload?.message || error.message || "No se pudo crear oportunidades tematicas pending.";
+    setSeoHomeTopicSeedFeedback(message, "bad");
     showStatus(message, "bad");
   });
 });
