@@ -60,6 +60,10 @@ function stripTags(html) {
     .trim();
 }
 
+function h1Tags(html) {
+  return String(html || "").match(/<h1\b[\s\S]*?<\/h1>/gi) || [];
+}
+
 function commercialGuideCtas(bodyHtml, position) {
   return [
     ...String(bodyHtml || "").matchAll(
@@ -1785,6 +1789,50 @@ test("landing home-life de luz se sirve solo cuando esta published/index", async
   assert.match(result.html, /<meta name="robots" content="index,follow">/);
   assert.match(result.html, /<link rel="canonical" href="https:\/\/inmoradar\.app\/como-controlar-factura-luz-casa\/">/);
   assert.match(result.html, /Como controlar la factura de la luz en casa antes de elegir vivienda/);
+});
+
+test("seo-page renderiza un H1 fallback si body_html no lo incluye", async () => {
+  const published = electricityBillHomeLifeLanding({ published_at: "2026-07-04T20:30:00.000Z" });
+  const result = await seoPageForLandings("/api/seo-page?slug=como-controlar-factura-luz-casa", {
+    "como-controlar-factura-luz-casa": published
+  });
+  const headings = h1Tags(result.html);
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(headings.length, 1);
+  assert.match(headings[0], /Como controlar la factura de la luz en casa antes de elegir vivienda/);
+  assert.match(result.html, /<meta name="robots" content="index,follow">/);
+  assert.match(result.html, /<link rel="canonical" href="https:\/\/inmoradar\.app\/como-controlar-factura-luz-casa\/">/);
+});
+
+test("seo-page no duplica H1 si body_html ya lo incluye", async () => {
+  const bodyWithH1 = `<article>
+    <h1>H1 existente en el body</h1>
+    <section><p>${"factura luz vivienda consumo energia coste real anuncio visita comparar preguntas ".repeat(90)}</p><a href="/guias/coste-real-comprar-vivienda/">Coste real</a></section>
+    <section><p>${"certificado energetico orientacion preliminar precio metro cuadrado senales riesgo decision informacion ".repeat(85)}</p><a href="/precio-metro-cuadrado/madrid/">Precio metro cuadrado</a></section>
+  </article>`;
+  const published = electricityBillHomeLifeLanding({
+    h1: "H1 del campo landing",
+    body_html: bodyWithH1,
+    published_at: "2026-07-04T20:30:00.000Z"
+  });
+  const result = await seoPageForLandings("/api/seo-page?slug=como-controlar-factura-luz-casa", {
+    "como-controlar-factura-luz-casa": published
+  });
+  const headings = h1Tags(result.html);
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(headings.length, 1);
+  assert.match(headings[0], /H1 existente en el body/);
+  assert.doesNotMatch(result.html, /H1 del campo landing/);
+});
+
+test("seo-page no renderiza H1 vacio si landing.h1 esta ausente", () => {
+  const landing = electricityBillHomeLifeLanding({ published_at: "2026-07-04T20:30:00.000Z" });
+  landing.h1 = " ";
+  const html = renderLandingHtml(landing);
+
+  assert.equal(h1Tags(html).length, 0);
 });
 
 test("migracion coste real redirige guia previa solo cuando la URL principal es indexable", async () => {

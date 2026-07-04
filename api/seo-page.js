@@ -378,6 +378,18 @@ function normalizeLandingBodyHtml(bodyHtml = "") {
     .replace(/INSTALAR INMORADAR/g, "EMPEZAR GRATIS")
     .replace(/Instalar InmoRadar/g, "Empezar gratis");
 }
+
+function bodyHtmlContainsH1(bodyHtml = "") {
+  return /<h1\b[^>]*>/i.test(String(bodyHtml || ""));
+}
+
+function renderBodyHtmlWithH1Fallback(bodyHtml = "", h1 = "") {
+  const normalizedBodyHtml = String(bodyHtml || "");
+  const heading = String(h1 || "").trim();
+  if (!heading || bodyHtmlContainsH1(normalizedBodyHtml)) return normalizedBodyHtml;
+  return `<header class="seo-h1-fallback"><h1>${escapeHtml(heading)}</h1></header>\n    ${normalizedBodyHtml}`;
+}
+
 function buildLandingRenderContext(landing) {
   const qualityScore = Number(landing.quality_score) || 0;
   const canonical = canonicalForLanding(landing);
@@ -413,6 +425,7 @@ function renderLandingHtml(landing, renderContext = buildLandingRenderContext(la
   const robots = indexability.sitemap_eligible ? "index,follow" : "noindex,follow";
   const description = renderedLanding.meta_description || stripHtml(bodyHtml).slice(0, 155);
   const imageUrl = ogImageUrl(renderedLanding);
+  const pageBodyHtml = renderBodyHtmlWithH1Fallback(bodyHtml, renderedLanding.h1);
 
   return `<!doctype html>
 <html lang="es">
@@ -523,6 +536,17 @@ function renderLandingHtml(landing, renderContext = buildLandingRenderContext(la
       font-weight: 900;
       letter-spacing: -0.045em;
       line-height: .94;
+      margin: 0;
+      max-width: 920px;
+    }
+    .seo-h1-fallback { margin: 0 0 34px; }
+    .seo-h1-fallback h1 {
+      color: #09090B;
+      font-family: var(--display);
+      font-size: clamp(40px, 4.5rem, 76px);
+      font-weight: 900;
+      letter-spacing: 0;
+      line-height: 1;
       margin: 0;
       max-width: 920px;
     }
@@ -1018,7 +1042,7 @@ function renderLandingHtml(landing, renderContext = buildLandingRenderContext(la
   ${googleTagManagerNoscript()}
   ${siteHeaderHtml()}
   <main class="seo-shell" data-owned-analytics data-page-type="seo" data-content-type="${escapeHtml(String(renderedLanding.template_type || "").includes("guide") ? "guide" : "landing")}" data-template-type="${escapeHtml(renderedLanding.template_type || "")}" data-slug="${escapeHtml(renderedLanding.slug || "")}" data-city="${escapeHtml(renderedLanding.city || "")}" data-topic="${escapeHtml(renderedLanding.title || renderedLanding.h1 || "")}">
-    ${bodyHtml}
+    ${pageBodyHtml}
   </main>
   ${siteFooterHtml()}
   ${seoPageScript()}
