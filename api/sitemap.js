@@ -1,4 +1,5 @@
 const { hasSupabaseConfig, supabaseFetch } = require("./_utils");
+const { applySeoCanonicalMigrations } = require("./_seo/canonicalMigrations");
 const { evaluateSitemapEligibility } = require("./_seo/indexability");
 const { SEED_PUBLISHED_OPPORTUNITIES, getSeedPublishedLanding } = require("./_seo/seedPublished");
 const { escapeHtml, siteUrl } = require("./_seo/text");
@@ -63,8 +64,8 @@ async function fetchPublishedLandings() {
       landings.unshift(seed);
     }
   }
-  return landings
-    .filter((landing) => evaluateSitemapEligibility(landing).sitemap_eligible)
+  const eligibleLandings = landings.filter((landing) => evaluateSitemapEligibility(landing).sitemap_eligible);
+  return applySeoCanonicalMigrations(eligibleLandings)
     .sort((left, right) => publishedTime(right) - publishedTime(left));
 }
 

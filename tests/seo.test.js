@@ -1656,6 +1656,133 @@ async function sitemapXmlForLandings(landings) {
   return { statusCode: res.statusCode, xml: chunks.join("") };
 }
 
+function costeRealPrimaryLanding(overrides = {}) {
+  return readyToPublishLanding({
+    id: 15,
+    slug: "coste-real-comprar-vivienda",
+    title: "Coste real de comprar una vivienda: guia practica antes de contactar",
+    meta_title: "Coste real de comprar una vivienda: guia practica",
+    meta_description: "Aprende a mirar mas alla del precio del anuncio antes de contactar por una vivienda.",
+    h1: "Coste real de comprar una vivienda: guia practica antes de contactar",
+    template_type: "home_life_topic",
+    status: "published",
+    index_status: "index",
+    quality_score: 82,
+    canonical_url: "https://inmoradar.app/coste-real-comprar-vivienda/",
+    ...overrides
+  });
+}
+
+function costeRealLegacyGuide(overrides = {}) {
+  return readyToPublishLanding({
+    id: 72,
+    slug: "guias/coste-real-comprar-vivienda",
+    title: "Coste real de comprar vivienda en Espana",
+    meta_title: "Coste real de comprar vivienda en Espana | InmoRadar",
+    meta_description: "Una guia para mirar mas alla del precio del anuncio: entrada, cuota, gastos, reforma y comunidad.",
+    h1: "Coste real de comprar vivienda en Espana",
+    template_type: "editorial_guide",
+    status: "published",
+    index_status: "index",
+    quality_score: 92,
+    canonical_url: "https://inmoradar.app/guias/coste-real-comprar-vivienda/",
+    ...overrides
+  });
+}
+
+async function seoPageForLandings(url, landingsBySlug) {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  global.fetch = async (requestUrl) => {
+    const params = new URL(String(requestUrl)).searchParams;
+    const slug = String(params.get("slug") || "").replace(/^eq\./, "");
+    const landing = landingsBySlug[slug] || null;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(landing ? [landing] : [])
+    };
+  };
+
+  const chunks = [];
+  const res = {
+    statusCode: 0,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name.toLowerCase()] = value;
+    },
+    end(chunk) {
+      if (chunk) chunks.push(String(chunk));
+    }
+  };
+
+  try {
+    await seoPageHandler({ method: "GET", url, headers: { host: "inmoradar.app" } }, res);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+
+  return { statusCode: res.statusCode, headers: res.headers, html: chunks.join("") };
+}
+
+test("migracion coste real no expone URL principal mientras esta en revision", async () => {
+  const draft = costeRealPrimaryLanding({ status: "ready_to_review", index_status: "noindex" });
+  const result = await seoPageForLandings("/api/seo-page?slug=coste-real-comprar-vivienda", {
+    "coste-real-comprar-vivienda": draft
+  });
+
+  assert.equal(result.statusCode, 404);
+  assert.equal(result.headers.location, undefined);
+});
+
+test("migracion coste real redirige guia previa solo cuando la URL principal es indexable", async () => {
+  const legacy = costeRealLegacyGuide();
+  const draftPrimary = costeRealPrimaryLanding({ status: "ready_to_review", index_status: "noindex" });
+  const beforePublish = await seoPageForLandings("/api/seo-page?slug=guias/coste-real-comprar-vivienda", {
+    "coste-real-comprar-vivienda": draftPrimary,
+    "guias/coste-real-comprar-vivienda": legacy
+  });
+
+  assert.equal(beforePublish.statusCode, 200);
+  assert.equal(beforePublish.headers.location, undefined);
+  assert.match(beforePublish.html, /<link rel="canonical" href="https:\/\/inmoradar\.app\/guias\/coste-real-comprar-vivienda\/">/);
+
+  const publishedPrimary = costeRealPrimaryLanding();
+  const afterPublish = await seoPageForLandings("/api/seo-page?slug=guias/coste-real-comprar-vivienda", {
+    "coste-real-comprar-vivienda": publishedPrimary,
+    "guias/coste-real-comprar-vivienda": legacy
+  });
+
+  assert.equal(afterPublish.statusCode, 301);
+  assert.equal(afterPublish.headers.location, "https://inmoradar.app/coste-real-comprar-vivienda/");
+});
+
+test("sitemap mantiene guia previa hasta que la landing principal este publicada", async () => {
+  const sitemap = await sitemapXmlForLandings([
+    costeRealLegacyGuide(),
+    costeRealPrimaryLanding({ status: "ready_to_review", index_status: "noindex" })
+  ]);
+
+  assert.equal(sitemap.statusCode, 200);
+  assert.match(sitemap.xml, /https:\/\/inmoradar\.app\/guias\/coste-real-comprar-vivienda\//);
+  assert.doesNotMatch(sitemap.xml, /https:\/\/inmoradar\.app\/coste-real-comprar-vivienda\//);
+});
+
+test("sitemap sustituye guia previa por URL principal cuando ambas son indexables", async () => {
+  const sitemap = await sitemapXmlForLandings([costeRealLegacyGuide(), costeRealPrimaryLanding()]);
+
+  assert.equal(sitemap.statusCode, 200);
+  assert.match(sitemap.xml, /https:\/\/inmoradar\.app\/coste-real-comprar-vivienda\//);
+  assert.doesNotMatch(sitemap.xml, /https:\/\/inmoradar\.app\/guias\/coste-real-comprar-vivienda\//);
+});
+
 test("la publicacion SEO promociona READY_TO_PUBLISH con score suficiente", async () => {
   const saved = [];
   const candidate = readyToPublishLanding({
@@ -3951,6 +4078,7 @@ test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () 
   assert.match(vercel, /"source": "\/precio-alquiler\/?"/);
   assert.match(vercel, /"source": "\/saber-si-piso-esta-caro\/?"/);
   assert.match(vercel, /saber-si-piso-esta-caro\/:city/);
+  assert.match(vercel, /coste-real-comprar-vivienda/);
   assert.match(vercel, /guias\/:slug/);
   assert.match(vercel, /"source": "\/datos"/);
   assert.match(vercel, /"source": "\/noticias\/:slug"/);
@@ -3959,6 +4087,7 @@ test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () 
   assert.match(redirects, /\/precio-alquiler \/precio-alquiler\.html/);
   assert.match(redirects, /\/saber-si-piso-esta-caro \/saber-si-piso-esta-caro\.html/);
   assert.match(redirects, /saber-si-piso-esta-caro\/:city/);
+  assert.match(redirects, /\/coste-real-comprar-vivienda \/api\/seo-page\?slug=coste-real-comprar-vivienda 200/);
   assert.match(redirects, /guias\/:slug/);
   assert.match(redirects, /\/datos \/datos\.html/);
   assert.match(redirects, /\/noticias\/:slug \/article\.html/);
@@ -3967,6 +4096,7 @@ test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () 
   assert.match(localServer, /precio-alquiler\.html/);
   assert.match(localServer, /saber-si-piso-esta-caro\.html/);
   assert.match(localServer, /saber-si-piso-esta-caro/);
+  assert.match(localServer, /coste-real-comprar-vivienda/);
   assert.match(localServer, /guias/);
   assert.match(localServer, /\/datos\.html/);
   assert.match(localServer, /article\.html/);
