@@ -22,6 +22,11 @@ const SEO_OPPORTUNITY_SEED_CONFIRMATION = "SEED_SEO_OPPORTUNITIES";
 const SEO_OPPORTUNITY_SEED_MAX_LIMIT = 50;
 const SEO_OPPORTUNITY_SEED_DEFAULT_LIMIT = 10;
 const SEO_OPPORTUNITY_SEED_SOURCES = new Set(["market_price_sources"]);
+const SEED_REQUIRED_QUALITY_NOTES_BY_TEMPLATE = {
+  price_city: ["has_sale_data"],
+  rent_city: ["has_rent_data"],
+  expensive_listing_city: ["has_sale_data"]
+};
 
 const DEFAULT_SEED_OPPORTUNITIES = [
   {
@@ -528,12 +533,17 @@ function normalizeSeedList(value = []) {
   return uniqueList(raw.map((item) => String(item || "").trim()));
 }
 
+function defaultSeedQualityNotes(template) {
+  return SEED_REQUIRED_QUALITY_NOTES_BY_TEMPLATE[template] || [];
+}
+
 function normalizeSeedRequest(input = {}) {
   const confirm = String(input.confirm || "").trim();
   const dryRun = input.dry_run === false || input.dryRun === false ? false : true;
   const contentType = String(input.content_type || input.contentType || "landing").toLowerCase();
   const template = String(input.template || input.template_type || input.templateType || "").toLowerCase();
   const source = String(input.source || "market_price_sources").toLowerCase();
+  const rawMinQualityNotes = input.min_quality_notes ?? input.minQualityNotes;
   return {
     confirm,
     dry_run: dryRun,
@@ -542,7 +552,23 @@ function normalizeSeedRequest(input = {}) {
     source,
     limit: clampSeedOpportunityLimit(input.limit),
     cities: normalizeSeedList(input.cities),
-    min_quality_notes: normalizeSeedList(input.min_quality_notes || input.minQualityNotes)
+    min_quality_notes:
+      rawMinQualityNotes === undefined ? defaultSeedQualityNotes(template) : normalizeSeedList(rawMinQualityNotes)
+  };
+}
+
+function emptySeedDiagnostics(extra = {}) {
+  return {
+    seedable_count: 0,
+    seed_preview_candidates_count: 0,
+    deduped_candidates_count: 0,
+    already_existing_count: 0,
+    missing_required_fields_count: 0,
+    score_too_low_count: 0,
+    unsupported_content_type_count: 0,
+    limit_applied: 0,
+    empty_reason: null,
+    ...extra
   };
 }
 
@@ -555,21 +581,32 @@ function seedValidationFailure(error, message, extra = {}) {
     dry_run: true,
     read_only: true,
     writes_enabled: false,
+    would_insert_count: 0,
     inserted_count: 0,
     skipped_count: 0,
     error_count: 0,
     inserted: [],
     skipped: [],
     errors: [],
+    seed_diagnostics: emptySeedDiagnostics({
+      empty_reason: error === "seed_confirmation_required" || error === "seed_confirmation_invalid" ? "invalid_confirmation" : error
+    }),
+    empty_reason: error === "seed_confirmation_required" || error === "seed_confirmation_invalid" ? "invalid_confirmation" : error,
     ...extra
   };
 }
 
 function validateSeedRequest(request) {
-  if (request.confirm !== SEO_OPPORTUNITY_SEED_CONFIRMATION) {
+  if (!request.confirm) {
     return seedValidationFailure(
       "seed_confirmation_required",
-      `Confirma la accion con confirm="${SEO_OPPORTUNITY_SEED_CONFIRMATION}".`
+      `Confirma la accion con el texto exacto "${SEO_OPPORTUNITY_SEED_CONFIRMATION}".`
+    );
+  }
+  if (request.confirm !== SEO_OPPORTUNITY_SEED_CONFIRMATION) {
+    return seedValidationFailure(
+      "seed_confirmation_invalid",
+      `Confirmacion incorrecta o incompleta. Escribe exactamente "${SEO_OPPORTUNITY_SEED_CONFIRMATION}".`
     );
   }
   if (request.content_type !== "landing") {
@@ -605,6 +642,117 @@ function cityMatches(candidate = {}, cities = []) {
   if (!cities.length) return true;
   const allowed = new Set(cities.map(normalizedOpportunityCity));
   return allowed.has(normalizedOpportunityCity(candidate.city));
+}
+
+function missingSeedCandidateFields(candidate = {}) {
+  return [
+    candidate.keyword ? null : "keyword",
+    candidate.city ? null : "city",
+    candidate.template ? null : "template",
+    candidate.slug ? null : "slug"
+  ].filter(Boolean);
+}
+
+function inferSeedEmptyReason(diagnostics = {}) {
+  if (Number(diagnostics.would_insert_count || 0) > 0) return null;
+  const previewCount = Number(diagnostics.seed_preview_candidates_count || 0);
+  const seedableCount = Number(diagnostics.seedable_count || 0);
+  if (!previewCount) return "no_seed_preview_candidates";
+  if (Number(diagnostics.unsupported_content_type_count || 0) >= previewCount) return "unsupported_content_type";
+  if (Number(diagnostics.missing_required_fields_count || 0) >= previewCount) return "missing_required_fields";
+  if (!seedableCount && Number(diagnostics.already_existing_count || 0) > 0) return "all_candidates_already_existing";
+  if (!seedableCount && Number(diagnostics.slug_already_used_count || 0) > 0) return "all_candidates_already_existing";
+  if (!seedableCount) return "no_seedable_candidates";
+  if (!Number(diagnostics.after_source_filter_count || 0) && Number(diagnostics.source_mismatch_count || 0) > 0) {
+    return "source_filter_excluded_all";
+  }
+  if (!Number(diagnostics.after_city_filter_count || 0) && Number(diagnostics.city_filter_mismatch_count || 0) > 0) {
+    return "city_filter_excluded_all";
+  }
+  if (!Number(diagnostics.deduped_candidates_count || 0) && Number(diagnostics.quality_notes_mismatch_count || 0) > 0) {
+    return "quality_notes_filter_excluded_all";
+  }
+  if (Number(diagnostics.revalidated_candidates_count || 0) > 0 && Number(diagnostics.revalidation_collision_count || 0) >= Number(diagnostics.revalidated_candidates_count || 0)) {
+    return "revalidation_collisions_excluded_all";
+  }
+  if (!Number(diagnostics.deduped_candidates_count || 0)) return "filters_excluded_all";
+  return "unknown_seed_empty";
+}
+
+function buildSeedDiagnostics({ request, preview, previewCandidates, preLimitCandidates, limitedCandidates, revalidated, insertable }) {
+  const summary = preview?.summary || {};
+  const diagnostics = {
+    seedable_count: Number(summary.seedable_count ?? previewCandidates.filter((candidate) => candidate.is_seedable === true).length),
+    seed_preview_candidates_count: previewCandidates.length,
+    preview_total_candidates_count: Number(summary.total_candidates ?? previewCandidates.length),
+    deduped_candidates_count: preLimitCandidates.length,
+    limited_candidates_count: limitedCandidates.length,
+    revalidated_candidates_count: revalidated.length,
+    already_existing_count: previewCandidates.filter((candidate) => candidate.already_exists === true).length,
+    slug_already_used_count: previewCandidates.filter((candidate) => String(candidate.collision_reason || "").includes("slug_already_used")).length,
+    missing_required_fields_count: 0,
+    score_too_low_count: 0,
+    unsupported_content_type_count: 0,
+    template_mismatch_count: 0,
+    source_mismatch_count: 0,
+    city_filter_mismatch_count: 0,
+    quality_notes_mismatch_count: 0,
+    after_source_filter_count: 0,
+    after_city_filter_count: 0,
+    after_quality_filter_count: preLimitCandidates.length,
+    revalidation_collision_count: revalidated.length - insertable.length,
+    limit_applied: request.limit,
+    limit_truncated_count: Math.max(0, preLimitCandidates.length - limitedCandidates.length),
+    would_insert_count: insertable.length,
+    source_table: request.source,
+    preview_tables: ["seo_landings", "seo_landing_opportunities", "market_price_sources"],
+    filters_applied: {
+      content_type: request.content_type,
+      template: request.template,
+      source: request.source,
+      limit: request.limit,
+      cities: request.cities,
+      min_quality_notes: request.min_quality_notes
+    },
+    empty_reason: null
+  };
+
+  const revalidatedAlreadyExisting = revalidated.filter((candidate) => candidate.already_exists === true).length;
+  const revalidatedSlugCollisions = revalidated.filter((candidate) => String(candidate.collision_reason || "").includes("slug_already_used")).length;
+  diagnostics.already_existing_count = Math.max(diagnostics.already_existing_count, revalidatedAlreadyExisting);
+  diagnostics.slug_already_used_count = Math.max(diagnostics.slug_already_used_count, revalidatedSlugCollisions);
+
+  for (const candidate of previewCandidates) {
+    if (candidate.content_type !== request.content_type) {
+      diagnostics.unsupported_content_type_count += 1;
+      continue;
+    }
+    if (candidate.template !== request.template) {
+      diagnostics.template_mismatch_count += 1;
+      continue;
+    }
+    if (missingSeedCandidateFields(candidate).length) {
+      diagnostics.missing_required_fields_count += 1;
+      continue;
+    }
+    if (candidate.is_seedable !== true || candidate.collision === true || candidate.already_exists === true) continue;
+    if (!sourceMatches(candidate, request.source)) {
+      diagnostics.source_mismatch_count += 1;
+      continue;
+    }
+    diagnostics.after_source_filter_count += 1;
+    if (!cityMatches(candidate, request.cities)) {
+      diagnostics.city_filter_mismatch_count += 1;
+      continue;
+    }
+    diagnostics.after_city_filter_count += 1;
+    if (!qualityNotesMatch(candidate, request.min_quality_notes)) {
+      diagnostics.quality_notes_mismatch_count += 1;
+    }
+  }
+
+  diagnostics.empty_reason = inferSeedEmptyReason(diagnostics);
+  return diagnostics;
 }
 
 function seedCandidatePublic(candidate = {}, extra = {}) {
@@ -696,17 +844,20 @@ async function seedSeoOpportunitiesFromPreview(input = {}, options = {}) {
     maxLimit: options.previewMaxLimit || 5000,
     fetchRows
   });
-  const candidates = (Array.isArray(preview.candidates) ? preview.candidates : [])
-    .filter((candidate) =>
+  const previewCandidates = Array.isArray(preview.candidates) ? preview.candidates : [];
+  const preLimitCandidates = previewCandidates.filter(
+    (candidate) =>
+      candidate.content_type === request.content_type &&
+      candidate.template === request.template &&
       candidate.is_seedable === true &&
       candidate.collision === false &&
       candidate.already_exists === false &&
-      candidate.template === request.template &&
+      !missingSeedCandidateFields(candidate).length &&
       sourceMatches(candidate, request.source) &&
       cityMatches(candidate, request.cities) &&
       qualityNotesMatch(candidate, request.min_quality_notes)
-    )
-    .slice(0, request.limit);
+  );
+  const candidates = preLimitCandidates.slice(0, request.limit);
 
   const revalidated = await revalidateSeedCandidateCollisions(candidates, [request.template], fetchRows);
   const insertable = [];
@@ -720,6 +871,15 @@ async function seedSeoOpportunitiesFromPreview(input = {}, options = {}) {
       }));
     }
   }
+  const seedDiagnostics = buildSeedDiagnostics({
+    request,
+    preview,
+    previewCandidates,
+    preLimitCandidates,
+    limitedCandidates: candidates,
+    revalidated,
+    insertable
+  });
 
   const base = {
     ok: true,
@@ -735,6 +895,16 @@ async function seedSeoOpportunitiesFromPreview(input = {}, options = {}) {
       min_quality_notes: request.min_quality_notes
     },
     preview_summary: preview.summary || {},
+    seed_diagnostics: seedDiagnostics,
+    seedable_count: seedDiagnostics.seedable_count,
+    seed_preview_candidates_count: seedDiagnostics.seed_preview_candidates_count,
+    deduped_candidates_count: seedDiagnostics.deduped_candidates_count,
+    already_existing_count: seedDiagnostics.already_existing_count,
+    missing_required_fields_count: seedDiagnostics.missing_required_fields_count,
+    score_too_low_count: seedDiagnostics.score_too_low_count,
+    unsupported_content_type_count: seedDiagnostics.unsupported_content_type_count,
+    limit_applied: seedDiagnostics.limit_applied,
+    empty_reason: seedDiagnostics.empty_reason,
     warnings: preview.warnings || [],
     would_insert_count: insertable.length,
     would_insert: insertable.map((candidate) => seedCandidatePublic(candidate, { row: opportunityRowFromPreviewCandidate(candidate) })),

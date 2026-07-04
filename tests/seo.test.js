@@ -2302,6 +2302,145 @@ test("seed controlado de oportunidades SEO limita 50 y salta colisiones revalida
   assert.equal(result.skipped[0].reason, "slug_already_used");
 });
 
+test("seed controlado convierte seedables sin ready ni pending en oportunidades pending", async () => {
+  const fetchRows = async (path) => {
+    if (path.startsWith("seo_landings?")) return [];
+    if (path.startsWith("seo_landing_opportunities?")) return [];
+    if (path.startsWith("market_price_sources?")) {
+      return [
+        { municipality: "Girona", province: "Girona", autonomous_community: "Cataluna", operation: "sale", source: "mivau_appraisal", price_eur_m2: 3200 },
+        { municipality: "Lugo", province: "Lugo", autonomous_community: "Galicia", operation: "sale", source: "mivau_appraisal", price_eur_m2: 1400 }
+      ];
+    }
+    return [];
+  };
+  const diagnostics = await getSeoCandidateSourceDiagnostics({
+    selectedContentType: "landing",
+    fetchRows
+  });
+  const result = await seedSeoOpportunitiesFromPreview(
+    {
+      confirm: "SEED_SEO_OPPORTUNITIES",
+      dry_run: true,
+      content_type: "landing",
+      template: "expensive_listing_city",
+      source: "market_price_sources",
+      limit: 10
+    },
+    { fetchRows }
+  );
+
+  assert.equal(diagnostics.ready_to_publish_count, 0);
+  assert.equal(diagnostics.pending_opportunities_count, 0);
+  assert.ok(diagnostics.seedable_opportunities_count > 0);
+  assert.equal(result.ok, true);
+  assert.equal(result.dry_run, true);
+  assert.ok(result.would_insert_count > 0);
+  assert.equal(result.would_insert[0].row.status, "pending");
+  assert.equal(result.inserted_count, 0);
+  assert.equal(result.seed_diagnostics.limit_applied, 10);
+  assert.equal(result.seed_diagnostics.source_table, "market_price_sources");
+  assert.deepEqual(result.seed_diagnostics.filters_applied.min_quality_notes, ["has_sale_data"]);
+  assert.equal(result.empty_reason, null);
+});
+
+test("seed controlado explica duplicados detectados tras el preview seedable", async () => {
+  let opportunityReads = 0;
+  const result = await seedSeoOpportunitiesFromPreview(
+    {
+      confirm: "SEED_SEO_OPPORTUNITIES",
+      dry_run: true,
+      content_type: "landing",
+      template: "expensive_listing_city",
+      source: "market_price_sources",
+      limit: 10
+    },
+    {
+      fetchRows: async (path) => {
+        if (path.startsWith("seo_landings?")) return [];
+        if (path.startsWith("seo_landing_opportunities?")) {
+          opportunityReads += 1;
+          return opportunityReads === 1
+            ? []
+            : [{ keyword: "saber si un piso esta caro en Girona", city: "Girona", template_type: "expensive_listing_city", status: "pending" }];
+        }
+        if (path.startsWith("market_price_sources?")) {
+          return [{ municipality: "Girona", province: "Girona", autonomous_community: "Cataluna", operation: "sale", source: "mivau_appraisal", price_eur_m2: 3200 }];
+        }
+        return [];
+      }
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.ok(result.seedable_count > 0);
+  assert.equal(result.would_insert_count, 0);
+  assert.equal(result.skipped_count, 1);
+  assert.equal(result.already_existing_count, 1);
+  assert.equal(result.empty_reason, "revalidation_collisions_excluded_all");
+  assert.equal(result.seed_diagnostics.revalidation_collision_count, 1);
+  assert.equal(result.skipped[0].reason, "existing_opportunity");
+});
+
+test("seed controlado distingue confirmacion invalida de ausencia de oportunidades", async () => {
+  const calls = [];
+  const result = await seedSeoOpportunitiesFromPreview(
+    {
+      confirm: "SEED",
+      dry_run: false,
+      content_type: "landing",
+      template: "expensive_listing_city",
+      source: "market_price_sources",
+      limit: 10
+    },
+    {
+      fetchRows: async (path) => {
+        calls.push(path);
+        return [];
+      },
+      insertRow: async () => {
+        throw new Error("should_not_insert");
+      }
+    }
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "seed_confirmation_invalid");
+  assert.match(result.message, /exactamente "SEED_SEO_OPPORTUNITIES"/);
+  assert.equal(result.inserted_count, 0);
+  assert.equal(result.would_insert_count, 0);
+  assert.equal(result.empty_reason, "invalid_confirmation");
+  assert.equal(calls.length, 0);
+});
+
+test("seed controlado informa cuando los filtros dejan fuera todos los seedables", async () => {
+  const result = await seedSeoOpportunitiesFromPreview(
+    {
+      confirm: "SEED_SEO_OPPORTUNITIES",
+      dry_run: true,
+      content_type: "landing",
+      template: "expensive_listing_city",
+      source: "market_price_sources",
+      limit: 10,
+      min_quality_notes: ["has_sale_data"]
+    },
+    {
+      fetchRows: async (path) => {
+        if (path.startsWith("seo_landings?")) return [];
+        if (path.startsWith("seo_landing_opportunities?")) return [];
+        if (path.startsWith("market_price_sources?")) return [];
+        return [];
+      }
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.would_insert_count, 0);
+  assert.ok(result.seedable_count > 0);
+  assert.equal(result.seed_diagnostics.source_mismatch_count, result.seedable_count);
+  assert.equal(result.empty_reason, "source_filter_excluded_all");
+});
+
 test("la publicacion SEO bloqueada por limites informa publication_limits_reached sin candidatos publicos", async () => {
   const result = await runSeoContentPublication({
     now: "2026-05-22T12:00:00.000Z",
