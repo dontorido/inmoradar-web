@@ -11,6 +11,14 @@ const EXTENSION_USAGE_TIMEZONE = "Europe/Madrid";
 const SEO_AUTOGENERATION_TIMEZONE = "Europe/Madrid";
 const SEO_OPPORTUNITY_SEED_CONFIRMATION = "SEED_SEO_OPPORTUNITIES";
 const SEO_HOME_TOPIC_SEED_CONFIRMATION = "SEED_SEO_HOME_TOPICS";
+const SEO_PIPELINE_TEMPLATE_TYPES = [
+  { key: "price_city", label: "price_city", autopublish: true },
+  { key: "rent_city", label: "rent_city", autopublish: true },
+  { key: "expensive_listing_city", label: "expensive_listing_city", autopublish: true },
+  { key: "editorial_guide", label: "editorial_guide", autopublish: true },
+  { key: "home_life_topic", label: "home_life_topic", autopublish: false },
+  { key: "news", label: "news", autopublish: false }
+];
 const EXTENSION_USAGE_PRESETS = new Set(["24h", "7d", "30d", "month", "all", "custom"]);
 const INITIAL_ADMIN_PATH = window.location.pathname || "";
 const INITIAL_MARKETING_SUBSECTION = INITIAL_ADMIN_PATH.includes("/backoffice/marketing/viraliza")
@@ -177,6 +185,7 @@ const state = {
   },
   seo: {
     status: "all",
+    templateType: "all",
     page: 1,
     pageSize: 10,
     hasNextPage: false,
@@ -341,6 +350,8 @@ const els = {
   analyticsRefreshButtons: document.querySelectorAll("[data-analytics-refresh]"),
   premiumRows: document.querySelector("[data-premium-rows]"),
   seoSummary: document.querySelector("[data-seo-summary]"),
+  seoPipeline: document.querySelector("[data-seo-pipeline]"),
+  seoIndexability: document.querySelector("[data-seo-indexability]"),
   seoOpportunitiesPreview: document.querySelector("[data-seo-opportunities-preview]"),
   seoOpportunitiesPreviews: document.querySelectorAll("[data-seo-opportunities-preview]"),
   seoAutogenOpportunitiesPreview: document.querySelector("[data-seo-autogen-opportunities-preview]"),
@@ -2283,6 +2294,8 @@ function renderSeo(payload) {
   state.seo.hasNextPage = Boolean(payload.has_next_page);
   state.seo.hasPreviousPage = Boolean(payload.has_previous_page);
   renderSeoSummary(payload.summary || {}, rows);
+  renderSeoPipeline(payload.summary || {});
+  renderSeoIndexability(payload.summary || {}, rows);
   renderSeoOpportunitiesPreview(payload.opportunities_preview || null, "landings");
 
   if (!rows.length) {
@@ -2722,11 +2735,75 @@ function renderSeoSummary(summary = {}, fallbackRows = []) {
   const publishedWithoutSitemap = Number(summary.published_without_sitemap ?? rows.filter((row) => row.status === "published" && row.sitemap_status === "excluded").length);
   const opportunities = Number(summary.pending_opportunities ?? 0);
   const landingsToday = Number(summary.published_landings_today ?? 0);
+  const landingsWeek = Number(summary.published_landings_week ?? 0);
   const newsToday = Number(summary.published_news_today ?? 0);
   const targetLandings = Number(summary.target_landings_per_day ?? 2);
   const targetNews = Number(summary.target_news_per_day ?? 2);
   const dailyStatus = summary.seo_daily_status === "complete" ? "completo" : "pendiente";
   const averageScore = Number(summary.average_quality_score ?? 0);
+
+  els.seoSummary.innerHTML = [
+    stat("Total", total, { id: "seo-total", hint: "Landings SEO creadas" }),
+    stat("Publicadas", published, { id: "seo-published", hint: "Status published" }),
+    stat("Indexables", indexable, { id: "seo-indexable", hint: "Published + index" }),
+    stat("En sitemap", sitemapIncluded, { id: "seo-sitemap-included", hint: "Elegibles y emitidas" }),
+    stat("Fuera sitemap", sitemapExcluded, { id: "seo-sitemap-excluded", hint: "Con motivo visible" }),
+    stat("Pub. sin sitemap", publishedWithoutSitemap, { id: "seo-published-without-sitemap", hint: "Revisar antes de revalidar" }),
+    stat("Hoy landings", `${landingsToday}/${targetLandings}`, { id: "seo-today-landings", hint: "Objetivo diario programatico" }),
+    stat("Hoy guias", `${newsToday}/${targetNews}`, { id: "seo-today-guides", hint: `Objetivo diario editorial - ${dailyStatus}` }),
+    stat("Semana", landingsWeek, { id: "seo-week-landings", hint: "Publicadas esta semana" }),
+    stat("Pendientes", pending, { id: "seo-pending", hint: "Draft + revision + ready" }),
+    stat("Ready", ready, { id: "seo-ready", hint: "Listas para publicar" }),
+    stat("Revision", needsReview, { id: "seo-review", hint: "Necesitan criterio humano" }),
+    stat("Noindex", noindex, { id: "seo-noindex", hint: "Bloqueadas para indice" }),
+    stat("Oportunidades", opportunities, { id: "seo-opportunities", hint: "Pendientes de generar" }),
+    stat("Score medio", averageScore ? averageScore.toFixed(0) : 0, { id: "seo-average-score", unit: "/100", hint: "Solo landings con score" })
+  ].join("");
+}
+
+function seoPipelineCount(value) {
+  return Number(value || 0).toLocaleString("es-ES");
+}
+
+function renderSeoPipeline(summary = {}) {
+  if (!els.seoPipeline) return;
+  const source = summary.pipeline_by_template || {};
+  const knownKeys = SEO_PIPELINE_TEMPLATE_TYPES.map((item) => item.key);
+  const templateKeys = [...new Set([...knownKeys, ...Object.keys(source)])];
+  els.seoPipeline.innerHTML = templateKeys
+    .map((templateType) => {
+      const known = SEO_PIPELINE_TEMPLATE_TYPES.find((item) => item.key === templateType);
+      const row = source[templateType] || {};
+      const autopublishAllowed = typeof row.autopublish_allowed === "boolean" ? row.autopublish_allowed : Boolean(known?.autopublish);
+      const autopublishCopy = templateType === "home_life_topic"
+        ? "Manual/controlado"
+        : autopublishAllowed
+          ? "Permitido"
+          : "No permitido";
+      return `
+        <tr>
+          <td><strong>${escapeHtml(known?.label || templateType)}</strong></td>
+          <td>${seoPipelineCount(row.pending)}</td>
+          <td>${seoPipelineCount(row.needs_review)}</td>
+          <td>${seoPipelineCount(row.ready_to_publish)}</td>
+          <td>${seoPipelineCount(row.published)}</td>
+          <td>${seoPipelineCount(row.indexables)}</td>
+          <td>${seoPipelineCount(row.sitemap)}</td>
+          <td>${seoAutogenBadge(autopublishCopy, autopublishAllowed ? "good" : "muted")}</td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+function renderSeoIndexability(summary = {}, fallbackRows = []) {
+  if (!els.seoIndexability) return;
+  const rows = Array.isArray(fallbackRows) ? fallbackRows : [];
+  const published = Number(summary.published ?? rows.filter((row) => row.status === "published").length);
+  const indexable = Number(summary.indexable ?? rows.filter((row) => row.status === "published" && row.index_status === "index").length);
+  const sitemapIncluded = Number(summary.sitemap_included ?? rows.filter((row) => row.sitemap_status === "included").length);
+  const sitemapExcluded = Number(summary.sitemap_excluded ?? rows.filter((row) => row.sitemap_status === "excluded").length);
+  const publishedWithoutSitemap = Number(summary.published_without_sitemap ?? rows.filter((row) => row.status === "published" && row.sitemap_status === "excluded").length);
   const reasonEntries = Object.entries(summary.sitemap_exclusion_reasons || {})
     .sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0))
     .slice(0, 6);
@@ -2741,30 +2818,14 @@ function renderSeoSummary(summary = {}, fallbackRows = []) {
     : "<span>Sin publicaciones recientes</span>";
   const warnings = summary.warnings || {};
   const gscFlow = summary.gsc_discovered_not_indexed?.flow || "Carga el CSV de GSC y compara URL, canonical, noindex y sitemap_reason.";
-
-  els.seoSummary.innerHTML = [
-    stat("Total", total, { id: "seo-total", hint: "Landings SEO creadas" }),
-    stat("Publicadas", published, { id: "seo-published", hint: "Status published" }),
-    stat("Indexables", indexable, { id: "seo-indexable", hint: "Published + index" }),
-    stat("En sitemap", sitemapIncluded, { id: "seo-sitemap-included", hint: "Elegibles y emitidas" }),
-    stat("Fuera sitemap", sitemapExcluded, { id: "seo-sitemap-excluded", hint: "Con motivo visible" }),
-    stat("Pub. sin sitemap", publishedWithoutSitemap, { id: "seo-published-without-sitemap", hint: "Revisar antes de revalidar" }),
-    stat("Hoy landings", `${landingsToday}/${targetLandings}`, { id: "seo-today-landings", hint: "Objetivo diario programatico" }),
-    stat("Hoy guias", `${newsToday}/${targetNews}`, { id: "seo-today-guides", hint: `Objetivo diario editorial - ${dailyStatus}` }),
-    stat("Pendientes", pending, { id: "seo-pending", hint: "Draft + revision + ready" }),
-    stat("Ready", ready, { id: "seo-ready", hint: "Listas para publicar" }),
-    stat("Revision", needsReview, { id: "seo-review", hint: "Necesitan criterio humano" }),
-    stat("Noindex", noindex, { id: "seo-noindex", hint: "Bloqueadas para indice" }),
-    stat("Oportunidades", opportunities, { id: "seo-opportunities", hint: "Pendientes de generar" }),
-    stat("Score medio", averageScore ? averageScore.toFixed(0) : 0, { id: "seo-average-score", unit: "/100", hint: "Solo landings con score" }),
-    `<div class="admin-seo-diagnostics">
-      <section><strong>Motivos fuera de sitemap</strong><div>${reasonHtml}</div></section>
-      <section><strong>Warnings</strong><div><span>canonical: ${escapeHtml(warnings.canonical || 0)}</span><span>noindex: ${escapeHtml(warnings.noindex || 0)}</span><span>robots: ${escapeHtml(warnings.robots || 0)}</span><span>low_content: ${escapeHtml(warnings.low_content || 0)}</span><span>no_internal_links: ${escapeHtml(warnings.no_internal_links || 0)}</span></div></section>
-      <section><strong>Ultimas publicadas</strong><div>${latestHtml}</div></section>
-      <section><strong>Sitemap</strong><div><span>Ultima lectura: ${escapeHtml(summary.last_sitemap_generated_at ? formatCompactDate(summary.last_sitemap_generated_at) : "-")}</span></div></section>
-      <section><strong>GSC</strong><p>${escapeHtml(gscFlow)}</p></section>
-    </div>`
-  ].join("");
+  els.seoIndexability.innerHTML = `
+    <section><strong>Publicadas e indexables</strong><div><span>publicadas: ${escapeHtml(published)}</span><span>indexables: ${escapeHtml(indexable)}</span><span>en sitemap: ${escapeHtml(sitemapIncluded)}</span><span>excluidas: ${escapeHtml(sitemapExcluded)}</span><span>published sin sitemap: ${escapeHtml(publishedWithoutSitemap)}</span></div></section>
+    <section><strong>Excluidas y motivo</strong><div>${reasonHtml}</div></section>
+    <section><strong>canonical errors / robots errors</strong><div><span>canonical: ${escapeHtml(warnings.canonical || 0)}</span><span>robots: ${escapeHtml(warnings.robots || 0)}</span><span>noindex: ${escapeHtml(warnings.noindex || 0)}</span><span>low_content: ${escapeHtml(warnings.low_content || 0)}</span><span>no_internal_links: ${escapeHtml(warnings.no_internal_links || 0)}</span></div></section>
+    <section><strong>lastmod</strong><div><span>Última lectura: ${escapeHtml(summary.last_sitemap_generated_at ? formatCompactDate(summary.last_sitemap_generated_at) : "-")}</span></div></section>
+    <section><strong>Últimas publicadas</strong><div>${latestHtml}</div></section>
+    <section><strong>GSC</strong><p>${escapeHtml(gscFlow)}</p></section>
+  `;
 }
 
 function ratioLabel(current, limit) {
@@ -3171,6 +3232,13 @@ function renderSeoAutogeneration(payload = {}) {
   const limits = payload.limits || {};
   const lastRun = payload.last_run || null;
   const lastResult = lastRun?.result_json || {};
+  const jobName = payload.job_name || lastRun?.job_name || "seo-publish";
+  const scheduleLabel = config.schedule || payload.cron?.schedule || "0 */4 * * *";
+  const allowedTemplateTypes = seoAutogenArray(config.allowed_template_types);
+  const allowedTemplatesLabel = allowedTemplateTypes.length ? allowedTemplateTypes.join(", ") : "sin lista";
+  const homeLifeAutopublishLabel = allowedTemplateTypes.includes("home_life_topic")
+    ? "home_life_topic aparece en autopublish"
+    : "home_life_topic no está en autopublish";
   const enabledLabel = config.enabled ? "Activo" : "Inactivo";
   const dryRunLabel = config.dry_run ? "Simulacion" : "Publicacion real";
   const runCount = Number(limits.published_this_run || 0);
@@ -3184,6 +3252,8 @@ function renderSeoAutogeneration(payload = {}) {
     : "-";
 
   els.seoAutogenSummary.innerHTML = [
+    seoAutogenCard("Job", jobName, { hint: "job_name" }),
+    seoAutogenCard("Schedule", scheduleLabel, { hint: "Cron UTC" }),
     seoAutogenCard("Estado", enabledLabel, { badge: true, tone: config.enabled ? "good" : "muted", hint: "Kill switch" }),
     seoAutogenCard("Modo", dryRunLabel, { badge: true, tone: config.dry_run ? "warn" : "good", hint: "Controlado por entorno" }),
     seoAutogenCard("Run", ratioLabel(runCount, runLimit), { hint: "Publicado / limite", overLimit: runCount > runLimit }),
@@ -3197,11 +3267,11 @@ function renderSeoAutogeneration(payload = {}) {
   renderSeoAutogenConditions(payload);
 
   if (els.seoAutogenNote) {
-    els.seoAutogenNote.textContent = config.enabled
-      ? `Alcance: landings y guias editoriales. Limite diario: ${dayLimit} publicaciones. Limite semanal: ${weekLimit} publicaciones. Maximo ${runLimit} por ejecucion. Score minimo ${Number(config.min_score ?? 85)}/100. Ultimo resultado: ${lastResult.reason || lastRun?.status || "sin datos"}.`
-      : config.environment_enabled === false
-        ? "Kill switch activo: SEO_AUTOGENERATION_ENABLED=false."
-        : "Autogeneracion pausada desde condiciones del backoffice.";
+    const enabledNote = `job_name: ${jobName}. schedule: ${scheduleLabel}. allowed_template_types: ${allowedTemplatesLabel}. Limite diario: ${dayLimit} publicaciones. Limite semanal: ${weekLimit} publicaciones. Maximo ${runLimit} por ejecucion. Score minimo ${Number(config.min_score ?? 85)}/100. ${homeLifeAutopublishLabel}. Ultimo resultado: ${lastResult.reason || lastRun?.status || "sin datos"}.`;
+    const disabledNote = config.environment_enabled === false
+      ? "Kill switch activo: SEO_AUTOGENERATION_ENABLED=false."
+      : "Autogeneracion pausada desde condiciones del backoffice.";
+    els.seoAutogenNote.textContent = config.enabled ? enabledNote : `${disabledNote} ${enabledNote}`;
   }
 
   renderSeoAutogenDiagnostics(payload);
@@ -7884,6 +7954,7 @@ async function loadSeo() {
     page: String(state.seo.page || 1),
     status: state.seo.status || "all"
   });
+  if (state.seo.templateType && state.seo.templateType !== "all") params.set("template_type", state.seo.templateType);
   const [payload, preview] = await Promise.all([
     api(`/api/admin?resource=seo/landings&${params.toString()}`),
     loadSeoOpportunitiesPreview()
@@ -8366,6 +8437,7 @@ els.seoFilter.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = new FormData(els.seoFilter);
   state.seo.status = String(form.get("status") || "all");
+  state.seo.templateType = String(form.get("template_type") || "all");
   state.seo.page = 1;
   await loadSeo();
 });
