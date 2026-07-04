@@ -26,6 +26,8 @@
 /saber-si-piso-esta-caro/:city/ /api/seo-page?slug=saber-si-piso-esta-caro/:city 200
 /coste-real-comprar-vivienda /api/seo-page?slug=coste-real-comprar-vivienda 200
 /coste-real-comprar-vivienda/ /api/seo-page?slug=coste-real-comprar-vivienda 200
+/como-controlar-factura-luz-casa /api/seo-page?slug=como-controlar-factura-luz-casa 200
+/como-controlar-factura-luz-casa/ /api/seo-page?slug=como-controlar-factura-luz-casa 200
 /guias/:slug /api/seo-page?slug=guias/:slug 200
 /guias/:slug/ /api/seo-page?slug=guias/:slug 200
 /que-analiza /que-analiza.html 200

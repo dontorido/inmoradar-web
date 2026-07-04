@@ -72,6 +72,8 @@
     { "source": "/saber-si-piso-esta-caro/:city/", "destination": "/api/seo-page?slug=saber-si-piso-esta-caro/:city" },
     { "source": "/coste-real-comprar-vivienda", "destination": "/api/seo-page?slug=coste-real-comprar-vivienda" },
     { "source": "/coste-real-comprar-vivienda/", "destination": "/api/seo-page?slug=coste-real-comprar-vivienda" },
+    { "source": "/como-controlar-factura-luz-casa", "destination": "/api/seo-page?slug=como-controlar-factura-luz-casa" },
+    { "source": "/como-controlar-factura-luz-casa/", "destination": "/api/seo-page?slug=como-controlar-factura-luz-casa" },
     { "source": "/guias/:slug", "destination": "/api/seo-page?slug=guias/:slug" },
     { "source": "/guias/:slug/", "destination": "/api/seo-page?slug=guias/:slug" },
     { "source": "/admin", "destination": "/admin.html" },
