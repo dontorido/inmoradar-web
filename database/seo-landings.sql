@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS seo_landing_opportunities (
   search_priority INTEGER NOT NULL DEFAULT 0,
   data_available BOOLEAN NOT NULL DEFAULT FALSE,
   quality_score NUMERIC(5,2),
+  cluster_id TEXT,
+  suggested_slug TEXT,
+  brief_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (
     status IN (
       'pending',
@@ -24,6 +27,15 @@ CREATE TABLE IF NOT EXISTS seo_landing_opportunities (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE seo_landing_opportunities
+ADD COLUMN IF NOT EXISTS cluster_id TEXT;
+
+ALTER TABLE seo_landing_opportunities
+ADD COLUMN IF NOT EXISTS suggested_slug TEXT;
+
+ALTER TABLE seo_landing_opportunities
+ADD COLUMN IF NOT EXISTS brief_json JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS seo_landings (
   id BIGSERIAL PRIMARY KEY,
@@ -66,6 +78,13 @@ ON seo_landing_opportunities(keyword, city, template_type);
 
 CREATE INDEX IF NOT EXISTS idx_seo_landing_opportunities_queue
 ON seo_landing_opportunities(status, template_type, search_priority DESC);
+
+CREATE INDEX IF NOT EXISTS idx_seo_landing_opportunities_cluster
+ON seo_landing_opportunities(cluster_id, status, search_priority DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_seo_landing_opportunities_suggested_slug
+ON seo_landing_opportunities(suggested_slug)
+WHERE suggested_slug IS NOT NULL AND suggested_slug <> '';
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_seo_landings_slug
 ON seo_landings(slug);
