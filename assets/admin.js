@@ -11,6 +11,7 @@ const EXTENSION_USAGE_TIMEZONE = "Europe/Madrid";
 const SEO_AUTOGENERATION_TIMEZONE = "Europe/Madrid";
 const SEO_OPPORTUNITY_SEED_CONFIRMATION = "SEED_SEO_OPPORTUNITIES";
 const SEO_HOME_TOPIC_SEED_CONFIRMATION = "SEED_SEO_HOME_TOPICS";
+const SEO_ROW_PUBLISH_CONFIRMATION = "PUBLICAR_LANDING";
 const SEO_PIPELINE_TEMPLATE_TYPES = [
   { key: "price_city", label: "price_city", autopublish: true },
   { key: "rent_city", label: "rent_city", autopublish: true },
@@ -2322,7 +2323,7 @@ function renderSeo(payload) {
           <td>
             <div class="admin-row-actions">
               <button class="admin-button tiny ghost" type="button" data-seo-action="regenerate" data-slug="${escapeHtml(row.slug)}" aria-label="Regenerar landing">Regenerar</button>
-              <button class="admin-button tiny" type="button" data-seo-action="publish" data-slug="${escapeHtml(row.slug)}" aria-label="Publicar landing" data-tooltip="Acción sensible: publica esta landing si pasa los gates existentes.">Publicar</button>
+              <button class="admin-button tiny" type="button" data-seo-action="publish" data-slug="${escapeHtml(row.slug)}" data-title="${escapeHtml(row.title || row.slug)}" data-template-type="${escapeHtml(row.template_type || "-")}" data-status="${escapeHtml(row.status || "-")}" aria-label="Publicar landing" data-tooltip="Acción sensible: requiere escribir PUBLICAR_LANDING. Esta acción puede hacer la página pública e indexable.">Publicar</button>
               <button class="admin-button tiny ghost" type="button" data-seo-action="noindex" data-slug="${escapeHtml(row.slug)}" aria-label="Bloquear landing y marcar noindex">Bloquear</button>
             </div>
           </td>
@@ -8333,6 +8334,23 @@ async function runSeoRowAction(action, slug) {
   }
 }
 
+function confirmSeoRowPublish(button) {
+  const slug = String(button?.dataset?.slug || "-");
+  const title = String(button?.dataset?.title || slug);
+  const templateType = String(button?.dataset?.templateType || "-");
+  const status = String(button?.dataset?.status || "-");
+  const message = [
+    "Confirmación requerida para publicar esta landing SEO.",
+    `Title: ${title}`,
+    `Slug: ${slug}`,
+    `Template_type: ${templateType}`,
+    `Status actual: ${status}`,
+    "Esta acción puede hacer la página pública e indexable.",
+    `Escribe exactamente ${SEO_ROW_PUBLISH_CONFIRMATION} para publicar.`
+  ].join("\n");
+  return String(window.prompt(message, "") || "").trim() === SEO_ROW_PUBLISH_CONFIRMATION;
+}
+
 els.tokenForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = new FormData(els.tokenForm);
@@ -9058,6 +9076,10 @@ els.seoRows.addEventListener("click", (event) => {
   if (!button) return;
   const action = button.dataset.seoAction;
   const slug = button.dataset.slug;
+  if (action === "publish" && !confirmSeoRowPublish(button)) {
+    showStatus("Publicación cancelada: confirmación requerida.", "neutral");
+    return;
+  }
   runSeoRowAction(action, slug).catch((error) => showStatus(error.message, "bad"));
 });
 
