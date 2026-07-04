@@ -15,9 +15,8 @@ const SEO_PIPELINE_TEMPLATE_TYPES = [
   { key: "price_city", label: "price_city", autopublish: true },
   { key: "rent_city", label: "rent_city", autopublish: true },
   { key: "expensive_listing_city", label: "expensive_listing_city", autopublish: true },
-  { key: "editorial_guide", label: "editorial_guide", autopublish: true },
-  { key: "home_life_topic", label: "home_life_topic", autopublish: false },
-  { key: "news", label: "news", autopublish: false }
+  { key: "editorial_guide", label: "Guías editoriales / noticias", help: "Incluye contenido editorial y guías.", autopublish: true },
+  { key: "home_life_topic", label: "home_life_topic", autopublish: false }
 ];
 const EXTENSION_USAGE_PRESETS = new Set(["24h", "7d", "30d", "month", "all", "custom"]);
 const INITIAL_ADMIN_PATH = window.location.pathname || "";
@@ -2279,7 +2278,7 @@ function renderSeoQualityGate(row = {}) {
         ${chip(row.technical_indexability_status || "-", statusTone(row.technical_indexability_status))}
         ${chip(row.editorial_quality_status || "-", statusTone(row.editorial_quality_status))}
       </div>
-      ${seoQualityLine("Senales", row.quality_signals, "good")}
+      ${seoQualityLine("Señales", row.quality_signals, "good")}
       ${seoQualityLine("Alertas", warnings, "warn")}
       ${seoQualityLine("Penalizaciones", row.quality_penalties, "bad")}
       <div class="admin-subtle">Sitemap: ${escapeHtml(row.sitemap_reason || "-")}</div>
@@ -2322,9 +2321,9 @@ function renderSeo(payload) {
           </td>
           <td>
             <div class="admin-row-actions">
-              <button class="admin-icon-button" type="button" data-seo-action="regenerate" data-slug="${escapeHtml(row.slug)}" aria-label="Regenerar landing">R</button>
-              <button class="admin-icon-button" type="button" data-seo-action="publish" data-slug="${escapeHtml(row.slug)}" aria-label="Publicar landing">P</button>
-              <button class="admin-icon-button" type="button" data-seo-action="noindex" data-slug="${escapeHtml(row.slug)}" aria-label="Marcar noindex">N</button>
+              <button class="admin-button tiny ghost" type="button" data-seo-action="regenerate" data-slug="${escapeHtml(row.slug)}" aria-label="Regenerar landing">Regenerar</button>
+              <button class="admin-button tiny" type="button" data-seo-action="publish" data-slug="${escapeHtml(row.slug)}" aria-label="Publicar landing" data-tooltip="Acción sensible: publica esta landing si pasa los gates existentes.">Publicar</button>
+              <button class="admin-button tiny ghost" type="button" data-seo-action="noindex" data-slug="${escapeHtml(row.slug)}" aria-label="Bloquear landing y marcar noindex">Bloquear</button>
             </div>
           </td>
         </tr>
@@ -2384,13 +2383,13 @@ function seoSeedEmptyReasonLabel(reason = "") {
     unsupported_content_type: "Tipo de contenido no soportado",
     missing_required_fields: "Campos requeridos ausentes",
     all_candidates_already_existing: "Todos descartados por duplicado",
-    no_seedable_candidates: "Sin seedables tras deduplicacion",
+    no_seedable_candidates: "Sin seedables tras deduplicación",
     source_filter_excluded_all: "El filtro de fuente excluye todo",
     city_filter_excluded_all: "El filtro de ciudad excluye todo",
     quality_notes_filter_excluded_all: "El filtro de calidad excluye todo",
     revalidation_collisions_excluded_all: "Duplicados detectados al revalidar",
     filters_excluded_all: "Filtros sin candidatos insertables",
-    invalid_confirmation: "Confirmacion invalida"
+    invalid_confirmation: "Confirmación inválida"
   };
   if (!reason) return "";
   return `${labels[reason] || "Motivo no determinado"} (${reason})`;
@@ -2437,7 +2436,7 @@ function renderSeoOpportunitySeedResultHtml(result = null) {
           <p>No publica, no crea landings, solo crea oportunidades pending.</p>
         </div>
         <div class="admin-seo-autogen-diagnostic-counters">
-          <span><b>Insertarian:</b> ${escapeHtml(result.would_insert_count || items.length || 0)}</span>
+          <span><b>Insertarían:</b> ${escapeHtml(result.would_insert_count || items.length || 0)}</span>
           <span><b>Insertadas:</b> ${escapeHtml(result.inserted_count || 0)}</span>
           <span><b>Skipped:</b> ${escapeHtml(result.skipped_count || skipped.length || 0)}</span>
           <span><b>Errors:</b> ${escapeHtml(result.error_count || errors.length || 0)}</span>
@@ -2473,7 +2472,7 @@ function renderSeoOpportunitySeedControls(target = "all") {
           <option value="rent_city">rent_city</option>
           <option value="price_city">price_city</option>
         </select>
-        <input name="limit" type="number" min="1" max="50" step="1" value="10" aria-label="Limite seed SEO">
+        <input name="limit" type="number" min="1" max="50" step="1" value="10" aria-label="Límite seed SEO">
         <input name="cities" placeholder="Ciudades opcional, separadas por coma" aria-label="Ciudades seed SEO">
         <button class="admin-button tiny ghost" type="submit" data-seo-opportunity-seed-dry-run>Crear oportunidades pendientes, no publicar</button>
       </form>
@@ -2481,9 +2480,9 @@ function renderSeoOpportunitySeedControls(target = "all") {
       <p class="admin-empty-state compact" data-seo-opportunity-seed-feedback role="status" aria-live="polite"></p>
     </div>
     <div class="admin-seo-autogen-conditions-actions" data-seo-opportunity-seed-confirm-panel${canConfirm ? "" : " hidden"}>
-      <p class="admin-empty-state compact">Texto exacto de confirmacion: <code>${SEO_OPPORTUNITY_SEED_CONFIRMATION}</code></p>
-      <input data-seo-opportunity-seed-confirm placeholder="${SEO_OPPORTUNITY_SEED_CONFIRMATION}" aria-label="Confirmacion seed SEO">
-      <button class="admin-button tiny ghost" type="button" data-seo-opportunity-seed-execute>Confirmar creacion pending</button>
+      <p class="admin-empty-state compact">Texto exacto de confirmación: <code>${SEO_OPPORTUNITY_SEED_CONFIRMATION}</code></p>
+      <input data-seo-opportunity-seed-confirm placeholder="${SEO_OPPORTUNITY_SEED_CONFIRMATION}" aria-label="Confirmación seed SEO">
+      <button class="admin-button tiny ghost" type="button" data-seo-opportunity-seed-execute>Confirmar creación pending</button>
     </div>
     <div data-seo-opportunity-seed-result>${renderSeoOpportunitySeedResultHtml(result)}</div>
   `;
@@ -2495,7 +2494,7 @@ function seoHomeTopicSeedResultItems(result = {}) {
 }
 
 function renderSeoHomeTopicSeedRows(items = []) {
-  if (!items.length) return `<p class="admin-empty-state compact">No hay oportunidades tematicas insertables con estos filtros.</p>`;
+  if (!items.length) return `<p class="admin-empty-state compact">No hay oportunidades temáticas insertables con estos filtros.</p>`;
   return `
     <div class="admin-seo-autogen-diagnostics-table-wrap">
       <table class="admin-seo-autogen-diagnostics-table">
@@ -2567,7 +2566,7 @@ function renderSeoHomeTopicSeedResultHtml(result = null) {
   const items = seoHomeTopicSeedResultItems(result);
   const skipped = Array.isArray(result.skipped) ? result.skipped : [];
   const errors = Array.isArray(result.errors) ? result.errors : [];
-  const title = result.dry_run ? "Preview de oportunidades tematicas" : "Resultado de oportunidades tematicas";
+  const title = result.dry_run ? "Preview de oportunidades temáticas" : "Resultado de oportunidades temáticas";
   return `
     <section class="admin-seo-autogen-diagnostics-panel is-muted">
       <div class="admin-seo-autogen-diagnostics-head">
@@ -2576,13 +2575,13 @@ function renderSeoHomeTopicSeedResultHtml(result = null) {
           <p>No publica landings. Solo crea oportunidades pending.</p>
         </div>
         <div class="admin-seo-autogen-diagnostic-counters">
-          <span><b>Insertarian:</b> ${escapeHtml(result.would_insert_count || items.length || 0)}</span>
+          <span><b>Insertarían:</b> ${escapeHtml(result.would_insert_count || items.length || 0)}</span>
           <span><b>Insertadas:</b> ${escapeHtml(result.inserted_count || 0)}</span>
           <span><b>Skipped:</b> ${escapeHtml(result.skipped_count || skipped.length || 0)}</span>
           <span><b>Errors:</b> ${escapeHtml(result.errors_count ?? result.error_count ?? errors.length ?? 0)}</span>
         </div>
       </div>
-      ${result.ok === false ? `<p class="admin-empty-state compact">${escapeHtml(result.message || result.error || "No se pudo ejecutar el seed tematico.")}</p>` : ""}
+      ${result.ok === false ? `<p class="admin-empty-state compact">${escapeHtml(result.message || result.error || "No se pudo ejecutar el seed temático.")}</p>` : ""}
       ${renderSeoHomeTopicSeedRows(items)}
       ${renderSeoHomeTopicSeedDiagnostics(result)}
       ${skipped.length ? `<p class="admin-empty-state compact">Skipped: ${escapeHtml(skipped.slice(0, 12).map((item) => `${item.suggested_slug || item.primary_keyword || "-"} (${item.reason || "skipped"})`).join("; "))}</p>` : ""}
@@ -2606,10 +2605,10 @@ function renderSeoHomeTopicSeedControls(target = "all") {
     <section class="admin-seo-autogen-diagnostics-panel">
       <div class="admin-seo-autogen-diagnostics-head">
         <div>
-          <h3>Crear oportunidades SEO tematicas, no publicar</h3>
+          <h3>Crear oportunidades SEO temáticas, no publicar</h3>
           <p>No publica landings. Solo crea oportunidades pending.</p>
           <p>${escapeHtml(`Clusters incluidos: ${clusterList}`)}</p>
-          <p>${escapeHtml(`Distribucion esperada: ${distribution}`)}</p>
+          <p>${escapeHtml(`Distribución esperada: ${distribution}`)}</p>
         </div>
         <div class="admin-seo-autogen-diagnostic-counters">
           <span><b>total_candidates:</b> ${escapeHtml(preview.total_candidates || 0)}</span>
@@ -2619,15 +2618,15 @@ function renderSeoHomeTopicSeedControls(target = "all") {
       </div>
       <div class="admin-seo-autogen-conditions-actions">
         <form class="admin-filter" data-seo-home-topic-seed-form>
-          <input name="limit" type="number" min="1" max="50" step="1" value="${escapeHtml(preview.limit_applied || 20)}" aria-label="Limite seed SEO tematico">
-          <input name="clusters" placeholder="Clusters opcional, separados por coma" aria-label="Clusters seed SEO tematico">
-          <button class="admin-button tiny ghost" type="submit" data-seo-home-topic-seed-preview>Previsualizar oportunidades tematicas</button>
+          <input name="limit" type="number" min="1" max="50" step="1" value="${escapeHtml(preview.limit_applied || 20)}" aria-label="Límite seed SEO temático">
+          <input name="clusters" placeholder="Clusters opcional, separados por coma" aria-label="Clusters seed SEO temático">
+          <button class="admin-button tiny ghost" type="submit" data-seo-home-topic-seed-preview>Previsualizar oportunidades temáticas</button>
         </form>
         <p class="admin-empty-state compact" data-seo-home-topic-seed-feedback role="status" aria-live="polite"></p>
       </div>
       <div class="admin-seo-autogen-conditions-actions" data-seo-home-topic-seed-confirm-panel${canConfirm ? "" : " hidden"}>
-        <p class="admin-empty-state compact">Texto exacto de confirmacion: <code>${SEO_HOME_TOPIC_SEED_CONFIRMATION}</code></p>
-        <input data-seo-home-topic-seed-confirm placeholder="${SEO_HOME_TOPIC_SEED_CONFIRMATION}" aria-label="Confirmacion seed SEO tematico">
+        <p class="admin-empty-state compact">Texto exacto de confirmación: <code>${SEO_HOME_TOPIC_SEED_CONFIRMATION}</code></p>
+        <input data-seo-home-topic-seed-confirm placeholder="${SEO_HOME_TOPIC_SEED_CONFIRMATION}" aria-label="Confirmación seed SEO temático">
         <button class="admin-button tiny ghost" type="button" data-seo-home-topic-seed-execute>Crear oportunidades pending</button>
       </div>
       <div data-seo-home-topic-seed-result>${renderSeoHomeTopicSeedResultHtml(result)}</div>
@@ -2749,13 +2748,13 @@ function renderSeoSummary(summary = {}, fallbackRows = []) {
     stat("En sitemap", sitemapIncluded, { id: "seo-sitemap-included", hint: "Elegibles y emitidas" }),
     stat("Fuera sitemap", sitemapExcluded, { id: "seo-sitemap-excluded", hint: "Con motivo visible" }),
     stat("Pub. sin sitemap", publishedWithoutSitemap, { id: "seo-published-without-sitemap", hint: "Revisar antes de revalidar" }),
-    stat("Hoy landings", `${landingsToday}/${targetLandings}`, { id: "seo-today-landings", hint: "Objetivo diario programatico" }),
-    stat("Hoy guias", `${newsToday}/${targetNews}`, { id: "seo-today-guides", hint: `Objetivo diario editorial - ${dailyStatus}` }),
+    stat("Hoy landings", `${landingsToday}/${targetLandings}`, { id: "seo-today-landings", hint: "Objetivo diario programático" }),
+    stat("Hoy guías", `${newsToday}/${targetNews}`, { id: "seo-today-guides", hint: `Objetivo diario editorial - ${dailyStatus}` }),
     stat("Semana", landingsWeek, { id: "seo-week-landings", hint: "Publicadas esta semana" }),
-    stat("Pendientes", pending, { id: "seo-pending", hint: "Draft + revision + ready" }),
+    stat("Pendientes", pending, { id: "seo-pending", hint: "Draft + revisión + ready" }),
     stat("Ready", ready, { id: "seo-ready", hint: "Listas para publicar" }),
-    stat("Revision", needsReview, { id: "seo-review", hint: "Necesitan criterio humano" }),
-    stat("Noindex", noindex, { id: "seo-noindex", hint: "Bloqueadas para indice" }),
+    stat("Revisión", needsReview, { id: "seo-review", hint: "Necesitan criterio humano" }),
+    stat("Noindex", noindex, { id: "seo-noindex", hint: "Bloqueadas para índice" }),
     stat("Oportunidades", opportunities, { id: "seo-opportunities", hint: "Pendientes de generar" }),
     stat("Score medio", averageScore ? averageScore.toFixed(0) : 0, { id: "seo-average-score", unit: "/100", hint: "Solo landings con score" })
   ].join("");
@@ -2767,14 +2766,18 @@ function seoPipelineCount(value) {
 
 function renderSeoPipeline(summary = {}) {
   if (!els.seoPipeline) return;
-  const source = summary.pipeline_by_template || {};
+  const source = summary.pipeline_by_template && typeof summary.pipeline_by_template === "object" && !Array.isArray(summary.pipeline_by_template)
+    ? summary.pipeline_by_template
+    : null;
   const knownKeys = SEO_PIPELINE_TEMPLATE_TYPES.map((item) => item.key);
-  const templateKeys = [...new Set([...knownKeys, ...Object.keys(source)])];
+  const hasPipelineData = Boolean(source && Object.keys(source).length);
+  const templateKeys = knownKeys;
+  const pipelineValue = (row, key) => (row ? seoPipelineCount(row[key]) : "Sin datos");
   els.seoPipeline.innerHTML = templateKeys
     .map((templateType) => {
       const known = SEO_PIPELINE_TEMPLATE_TYPES.find((item) => item.key === templateType);
-      const row = source[templateType] || {};
-      const autopublishAllowed = typeof row.autopublish_allowed === "boolean" ? row.autopublish_allowed : Boolean(known?.autopublish);
+      const row = hasPipelineData ? source[templateType] || {} : null;
+      const autopublishAllowed = typeof row?.autopublish_allowed === "boolean" ? row.autopublish_allowed : Boolean(known?.autopublish);
       const autopublishCopy = templateType === "home_life_topic"
         ? "Manual/controlado"
         : autopublishAllowed
@@ -2782,13 +2785,16 @@ function renderSeoPipeline(summary = {}) {
           : "No permitido";
       return `
         <tr>
-          <td><strong>${escapeHtml(known?.label || templateType)}</strong></td>
-          <td>${seoPipelineCount(row.pending)}</td>
-          <td>${seoPipelineCount(row.needs_review)}</td>
-          <td>${seoPipelineCount(row.ready_to_publish)}</td>
-          <td>${seoPipelineCount(row.published)}</td>
-          <td>${seoPipelineCount(row.indexables)}</td>
-          <td>${seoPipelineCount(row.sitemap)}</td>
+          <td>
+            <strong>${escapeHtml(known?.label || templateType)}</strong>
+            ${known?.help ? `<div class="admin-subtle">${escapeHtml(known.help)}</div>` : `<div class="admin-subtle">${escapeHtml(templateType)}</div>`}
+          </td>
+          <td>${pipelineValue(row, "pending")}</td>
+          <td>${pipelineValue(row, "needs_review")}</td>
+          <td>${pipelineValue(row, "ready_to_publish")}</td>
+          <td>${pipelineValue(row, "published")}</td>
+          <td>${pipelineValue(row, "indexables")}</td>
+          <td>${pipelineValue(row, "sitemap")}</td>
           <td>${seoAutogenBadge(autopublishCopy, autopublishAllowed ? "good" : "muted")}</td>
         </tr>
       `;
@@ -2799,6 +2805,11 @@ function renderSeoPipeline(summary = {}) {
 function renderSeoIndexability(summary = {}, fallbackRows = []) {
   if (!els.seoIndexability) return;
   const rows = Array.isArray(fallbackRows) ? fallbackRows : [];
+  const hasSummary = summary && typeof summary === "object" && Object.keys(summary).length > 0;
+  if (!hasSummary && !rows.length) {
+    els.seoIndexability.innerHTML = `<section><strong>Estado</strong><p>Todavía no hay diagnóstico de sitemap disponible.</p></section>`;
+    return;
+  }
   const published = Number(summary.published ?? rows.filter((row) => row.status === "published").length);
   const indexable = Number(summary.indexable ?? rows.filter((row) => row.status === "published" && row.index_status === "index").length);
   const sitemapIncluded = Number(summary.sitemap_included ?? rows.filter((row) => row.sitemap_status === "included").length);
@@ -2819,7 +2830,7 @@ function renderSeoIndexability(summary = {}, fallbackRows = []) {
   const warnings = summary.warnings || {};
   const gscFlow = summary.gsc_discovered_not_indexed?.flow || "Carga el CSV de GSC y compara URL, canonical, noindex y sitemap_reason.";
   els.seoIndexability.innerHTML = `
-    <section><strong>Publicadas e indexables</strong><div><span>publicadas: ${escapeHtml(published)}</span><span>indexables: ${escapeHtml(indexable)}</span><span>en sitemap: ${escapeHtml(sitemapIncluded)}</span><span>excluidas: ${escapeHtml(sitemapExcluded)}</span><span>published sin sitemap: ${escapeHtml(publishedWithoutSitemap)}</span></div></section>
+    <section><strong>Publicadas e indexables</strong><div><span>landings publicadas: ${escapeHtml(published)}</span><span>indexables: ${escapeHtml(indexable)}</span><span>incluidas en sitemap: ${escapeHtml(sitemapIncluded)}</span><span>excluidas de sitemap: ${escapeHtml(sitemapExcluded)}</span><span>publicadas sin sitemap: ${escapeHtml(publishedWithoutSitemap)}</span></div></section>
     <section><strong>Excluidas y motivo</strong><div>${reasonHtml}</div></section>
     <section><strong>canonical errors / robots errors</strong><div><span>canonical: ${escapeHtml(warnings.canonical || 0)}</span><span>robots: ${escapeHtml(warnings.robots || 0)}</span><span>noindex: ${escapeHtml(warnings.noindex || 0)}</span><span>low_content: ${escapeHtml(warnings.low_content || 0)}</span><span>no_internal_links: ${escapeHtml(warnings.no_internal_links || 0)}</span></div></section>
     <section><strong>lastmod</strong><div><span>Última lectura: ${escapeHtml(summary.last_sitemap_generated_at ? formatCompactDate(summary.last_sitemap_generated_at) : "-")}</span></div></section>
@@ -2903,30 +2914,30 @@ function seoAutogenDiagnosticsCounts(source = {}) {
 function seoAutogenReasonCopy(value) {
   const code = String(value || "").trim();
   const map = {
-    autogeneration_disabled: "La autogeneracion esta pausada.",
-    candidate_failed: "El candidato fallo durante la revision.",
-    dry_run_enabled: "La ejecucion esta en modo simulacion.",
+    autogeneration_disabled: "La autogeneración está pausada.",
+    candidate_failed: "El candidato falló durante la revisión.",
+    dry_run_enabled: "La ejecución está en modo simulación.",
     city_required: "Falta la ciudad del candidato.",
-    city_level_data_missing: "Falta dato de ciudad; solo hay dato mas amplio.",
-    daily_limit_reached: "Se alcanzo el limite diario.",
+    city_level_data_missing: "Falta dato de ciudad; solo hay dato más amplio.",
+    daily_limit_reached: "Se alcanzó el límite diario.",
     daily_total_quota_reached: "La cuota diaria total ya esta cubierta.",
     diagnostic_dry_run_only: "Vista previa read-only; no publica.",
-    draft_created_for_review: "Quedo como borrador para revisar.",
-    editorial_quality_blocked: "Bloqueado por revision editorial pendiente.",
-    execution_limit_reached: "Se alcanzo el maximo por ejecucion.",
+    draft_created_for_review: "Quedó como borrador para revisar.",
+    editorial_quality_blocked: "Bloqueado por revisión editorial pendiente.",
+    execution_limit_reached: "Se alcanzó el máximo por ejecución.",
     insufficient_source_data: "Faltan datos de mercado suficientes.",
-    low_score: "Score por debajo del minimo configurado.",
+    low_score: "Score por debajo del mínimo configurado.",
     no_candidates: "No hay candidatos disponibles.",
-    ready_but_not_published_by_run: "Esta lista, pero esta ejecucion no la publico.",
-    run_limit_reached: "Se alcanzo el maximo por ejecucion.",
+    ready_but_not_published_by_run: "Está lista, pero esta ejecución no la publicó.",
+    run_limit_reached: "Se alcanzó el máximo por ejecución.",
     score_below_draft_threshold: "Score demasiado bajo incluso para borrador.",
-    score_below_publish_threshold: "Score por debajo del minimo configurado.",
-    score_below_publish_threshold_drafted: "Score bajo; se dejo en borrador.",
+    score_below_publish_threshold: "Score por debajo del mínimo configurado.",
+    score_below_publish_threshold_drafted: "Score bajo; se dejó en borrador.",
     source_metadata_incomplete: "Faltan fuente o fecha visible en los datos.",
-    status_ready_to_publish: "Lista para revisar, pero no publicada por esta ejecucion.",
+    status_ready_to_publish: "Lista para revisar, pero no publicada por esta ejecución.",
     target_path_exists: "La URL ya existe.",
     unsupported_template_type: "Tipo de plantilla no soportado por el publicador.",
-    weekly_limit_reached: "Se alcanzo el limite semanal."
+    weekly_limit_reached: "Se alcanzó el límite semanal."
   };
   if (map[code]) return `${map[code]} (${code})`;
   if (!code) return "Sin motivo informado.";
@@ -3039,20 +3050,20 @@ function renderSeoAutogenDiagnostics(payload = {}) {
   );
   const hasSignal = counts.nonPublished > 0 || counts.lowScore > 0 || counts.beforeSkip > 0;
   const endpointMessage = endpointError
-    ? `Diagnostico read-only no disponible (${endpointError.status || endpointError.error || "error"}). Las ejecuciones siguen visibles; prueba de nuevo tras iniciar sesion.`
+    ? `Diagnóstico read-only no disponible (${endpointError.status || endpointError.error || "error"}). Las ejecuciones siguen visibles; prueba de nuevo tras iniciar sesión.`
     : "";
   const intro = hasSignal
-    ? "Hay candidatos evaluados que no publicaron, aunque no todos cuentan como skip. Esto suele pasar cuando el score queda bajo el minimo o cuando el candidato se descarta antes del contador de omitidos."
+    ? "Hay candidatos evaluados que no publicaron, aunque no todos cuentan como skip. Esto suele pasar cuando el score queda bajo el mínimo o cuando el candidato se descarta antes del contador de omitidos."
     : candidates.length
-      ? "El diagnostico no detecta candidatos bloqueados en esta vista previa."
-      : "Sin candidatos de diagnostico para mostrar ahora.";
+      ? "El diagnóstico no detecta candidatos bloqueados en esta vista previa."
+      : "Sin candidatos de diagnóstico para mostrar ahora.";
 
   if (endpointError && !candidates.length) {
     els.seoAutogenDiagnostics.innerHTML = `
       <section class="admin-seo-autogen-diagnostics-panel is-muted">
         <div class="admin-seo-autogen-diagnostics-head">
           <div>
-            <h3>Diagnostico de candidatos</h3>
+            <h3>Diagnóstico de candidatos</h3>
             <p>${escapeHtml(endpointMessage)}</p>
           </div>
         </div>
@@ -3071,7 +3082,7 @@ function renderSeoAutogenDiagnostics(payload = {}) {
         <td>${chip(candidate.status || "-", statusTone(candidate.status))}</td>
         <td>
           <strong>${escapeHtml(seoAutogenCandidateScore(candidate))}</strong>
-          <div class="admin-subtle">${candidate.meets_min_score === false ? "No alcanza el minimo" : candidate.meets_min_score === true ? "Alcanza el minimo" : "Sin umbral"}</div>
+          <div class="admin-subtle">${candidate.meets_min_score === false ? "No alcanza el mínimo" : candidate.meets_min_score === true ? "Alcanza el mínimo" : "Sin umbral"}</div>
         </td>
         <td>${escapeHtml(seoAutogenReasonCopy(reason))}</td>
         <td><div class="admin-seo-autogen-token-list">${seoAutogenDiagnosticList(candidate.quality_penalties || candidate.penalties, "Sin penalizaciones")}</div></td>
@@ -3085,7 +3096,7 @@ function renderSeoAutogenDiagnostics(payload = {}) {
     <section class="admin-seo-autogen-diagnostics-panel${hasSignal ? " is-attention" : ""}">
       <div class="admin-seo-autogen-diagnostics-head">
         <div>
-          <h3>Diagnostico de candidatos</h3>
+          <h3>Diagnóstico de candidatos</h3>
           <p>${escapeHtml(intro)}</p>
           ${sourceDetail ? `<p>${escapeHtml(sourceDetail)}</p>` : ""}
           ${endpointMessage ? `<p>${escapeHtml(endpointMessage)}</p>` : ""}
@@ -3109,7 +3120,7 @@ function renderSeoAutogenDiagnostics(payload = {}) {
             <tbody>${rows}</tbody>
           </table>
         </div>
-      ` : `<p class="admin-empty-state compact">No hay candidatos en la respuesta de diagnostico.</p>`}
+      ` : `<p class="admin-empty-state compact">No hay candidatos en la respuesta de diagnóstico.</p>`}
     </section>
   `;
 }
@@ -3146,7 +3157,7 @@ function seoAutogenRunDetail(result = {}, row = {}) {
     emptyReasonCopy,
     candidateSourceCopy,
     itemDetail,
-    reasonCounts ? `Diagnostico: ${reasonCounts}` : "",
+    reasonCounts ? `Diagnóstico: ${reasonCounts}` : "",
     nextStep ? `Siguiente: ${nextStep}` : "",
     emailDetail,
     result.reason,
@@ -3203,7 +3214,7 @@ function renderSeoAutogenConditions(payload = {}) {
     return;
   }
   if (config.environment_enabled === false) {
-    setSeoAutogenConditionsFeedback("Guardado disponible, pero el kill switch de entorno mantiene la autogeneracion pausada.", "warn");
+    setSeoAutogenConditionsFeedback("Guardado disponible, pero el kill switch de entorno mantiene la autogeneración pausada.", "warn");
     return;
   }
   setSeoAutogenConditionsFeedback(status.updated_at ? `Condiciones cargadas: ${formatCompactDate(status.updated_at)}` : "", "neutral");
@@ -3211,16 +3222,16 @@ function renderSeoAutogenConditions(payload = {}) {
 
 function validateSeoAutogenConditions(values = {}) {
   const rules = [
-    ["max_per_day", "Publicaciones maximas por dia", 0, 100],
-    ["max_per_week", "Publicaciones maximas por semana", 0, 700],
-    ["max_per_run", "Maximo de publicaciones por ejecucion", 1, 100],
-    ["min_score", "Score minimo", 0, 100]
+    ["max_per_day", "Publicaciones máximas por día", 0, 100],
+    ["max_per_week", "Publicaciones máximas por semana", 0, 700],
+    ["max_per_run", "Máximo de publicaciones por ejecución", 1, 100],
+    ["min_score", "Score mínimo", 0, 100]
   ];
   for (const [key, label, min, max] of rules) {
     if (!Number.isInteger(values[key])) return `${label} debe ser un entero.`;
     if (values[key] < min || values[key] > max) return `${label} debe estar entre ${min} y ${max}.`;
   }
-  if (values.enabled && values.max_per_run < 1) return "Maximo de publicaciones por ejecucion debe ser al menos 1 si la autogeneracion esta activa.";
+  if (values.enabled && values.max_per_run < 1) return "Máximo de publicaciones por ejecución debe ser al menos 1 si la autogeneración está activa.";
   return "";
 }
 
@@ -3240,7 +3251,7 @@ function renderSeoAutogeneration(payload = {}) {
     ? "home_life_topic aparece en autopublish"
     : "home_life_topic no está en autopublish";
   const enabledLabel = config.enabled ? "Activo" : "Inactivo";
-  const dryRunLabel = config.dry_run ? "Simulacion" : "Publicacion real";
+  const dryRunLabel = config.dry_run ? "Simulación" : "Publicación real";
   const runCount = Number(limits.published_this_run || 0);
   const runLimit = Number(limits.max_per_run || 1);
   const dayCount = Number(limits.published_last_24h || 0);
@@ -3256,21 +3267,21 @@ function renderSeoAutogeneration(payload = {}) {
     seoAutogenCard("Schedule", scheduleLabel, { hint: "Cron UTC" }),
     seoAutogenCard("Estado", enabledLabel, { badge: true, tone: config.enabled ? "good" : "muted", hint: "Kill switch" }),
     seoAutogenCard("Modo", dryRunLabel, { badge: true, tone: config.dry_run ? "warn" : "good", hint: "Controlado por entorno" }),
-    seoAutogenCard("Run", ratioLabel(runCount, runLimit), { hint: "Publicado / limite", overLimit: runCount > runLimit }),
-    seoAutogenCard("24h", ratioLabel(dayCount, dayLimit), { hint: "Publicado / limite", overLimit: dayCount > dayLimit }),
-    seoAutogenCard("7 dias", ratioLabel(weekCount, weekLimit), { hint: "Publicado / limite", overLimit: weekCount > weekLimit }),
+    seoAutogenCard("Run", ratioLabel(runCount, runLimit), { hint: "Publicado / límite", overLimit: runCount > runLimit }),
+    seoAutogenCard("24h", ratioLabel(dayCount, dayLimit), { hint: "Publicado / límite", overLimit: dayCount > dayLimit }),
+    seoAutogenCard("7 días", ratioLabel(weekCount, weekLimit), { hint: "Publicado / límite", overLimit: weekCount > weekLimit }),
     seoAutogenCard("Min score", `${Number(config.min_score ?? 85)} / 100`, { hint: "Umbral de calidad" }),
-    seoAutogenCard("Ultima", lastRun ? formatCompactDate(lastRun.started_at) : "-", { hint: lastRun?.status || "Sin ejecuciones" }),
-    seoAutogenCard("Proxima", nextScheduledLabel, { hint: "Cron Vercel UTC / hora Madrid" })
+    seoAutogenCard("Última", lastRun ? formatCompactDate(lastRun.started_at) : "-", { hint: lastRun?.status || "Sin ejecuciones" }),
+    seoAutogenCard("Próxima", nextScheduledLabel, { hint: "Cron Vercel UTC / hora Madrid" })
   ].join("");
 
   renderSeoAutogenConditions(payload);
 
   if (els.seoAutogenNote) {
-    const enabledNote = `job_name: ${jobName}. schedule: ${scheduleLabel}. allowed_template_types: ${allowedTemplatesLabel}. Limite diario: ${dayLimit} publicaciones. Limite semanal: ${weekLimit} publicaciones. Maximo ${runLimit} por ejecucion. Score minimo ${Number(config.min_score ?? 85)}/100. ${homeLifeAutopublishLabel}. Ultimo resultado: ${lastResult.reason || lastRun?.status || "sin datos"}.`;
+    const enabledNote = `job_name: ${jobName}. schedule: ${scheduleLabel}. allowed_template_types: ${allowedTemplatesLabel}. Límite diario: ${dayLimit} publicaciones. Límite semanal: ${weekLimit} publicaciones. Máximo ${runLimit} por ejecución. Score mínimo ${Number(config.min_score ?? 85)}/100. ${homeLifeAutopublishLabel}. Último resultado: ${lastResult.reason || lastRun?.status || "sin datos"}.`;
     const disabledNote = config.environment_enabled === false
       ? "Kill switch activo: SEO_AUTOGENERATION_ENABLED=false."
-      : "Autogeneracion pausada desde condiciones del backoffice.";
+      : "Autogeneración pausada desde condiciones del backoffice.";
     els.seoAutogenNote.textContent = config.enabled ? enabledNote : `${disabledNote} ${enabledNote}`;
   }
 
@@ -7818,7 +7829,7 @@ async function loadSeoHomeTopicOpportunitiesPreview() {
     ok: false,
     status: error.status || null,
     error: error.payload?.error || error.message || "seo_home_topics_preview_unavailable",
-    message: error.payload?.message || error.message || "Preview de oportunidades tematicas no disponible"
+    message: error.payload?.message || error.message || "Preview de oportunidades temáticas no disponible"
   }));
 }
 
@@ -7871,7 +7882,7 @@ async function runSeoOpportunitySeed(dryRun = true) {
   if (!dryRun) {
     const confirmation = seoOpportunitySeedRoot().querySelector("[data-seo-opportunity-seed-confirm]");
     if (String(confirmation?.value || "").trim() !== SEO_OPPORTUNITY_SEED_CONFIRMATION) {
-      setSeoOpportunitySeedFeedback(`Confirmacion incorrecta o incompleta. Escribe exactamente ${SEO_OPPORTUNITY_SEED_CONFIRMATION} para crear oportunidades pending.`, "warn");
+      setSeoOpportunitySeedFeedback(`Confirmación incorrecta o incompleta. Escribe exactamente ${SEO_OPPORTUNITY_SEED_CONFIRMATION} para crear oportunidades pending.`, "warn");
       return null;
     }
   }
@@ -7927,11 +7938,11 @@ async function runSeoHomeTopicSeed(dryRun = true) {
   if (!dryRun) {
     const confirmation = seoHomeTopicSeedRoot().querySelector("[data-seo-home-topic-seed-confirm]");
     if (String(confirmation?.value || "").trim() !== SEO_HOME_TOPIC_SEED_CONFIRMATION) {
-      setSeoHomeTopicSeedFeedback(`Confirmacion incorrecta o incompleta. Escribe exactamente ${SEO_HOME_TOPIC_SEED_CONFIRMATION} para crear oportunidades pending.`, "warn");
+      setSeoHomeTopicSeedFeedback(`Confirmación incorrecta o incompleta. Escribe exactamente ${SEO_HOME_TOPIC_SEED_CONFIRMATION} para crear oportunidades pending.`, "warn");
       return null;
     }
   }
-  setSeoHomeTopicSeedFeedback(dryRun ? "Calculando preview de oportunidades tematicas..." : "Creando oportunidades tematicas pending...", "neutral");
+  setSeoHomeTopicSeedFeedback(dryRun ? "Calculando preview de oportunidades temáticas..." : "Creando oportunidades temáticas pending...", "neutral");
   const result = await api("/api/admin?resource=seo/opportunities/home-topics-seed", {
     method: "POST",
     body: JSON.stringify(seoHomeTopicSeedPayload(dryRun))
@@ -7940,8 +7951,8 @@ async function runSeoHomeTopicSeed(dryRun = true) {
   if (dryRun) state.seoHomeTopicSeed.lastPreview = result;
   renderSeoHomeTopicSeedResult(result);
   const message = dryRun
-    ? `Preview tematico listo: ${Number(result.would_insert_count || 0)} oportunidades pending candidatas.`
-    : `Seed tematico completado: ${Number(result.inserted_count || 0)} insertadas, ${Number(result.skipped_count || 0)} skipped, ${Number(result.errors_count ?? result.error_count ?? 0)} errores.`;
+    ? `Preview temático listo: ${Number(result.would_insert_count || 0)} oportunidades pending candidatas.`
+    : `Seed temático completado: ${Number(result.inserted_count || 0)} insertadas, ${Number(result.skipped_count || 0)} skipped, ${Number(result.errors_count ?? result.error_count ?? 0)} errores.`;
   setSeoHomeTopicSeedFeedback(message, result.errors_count || result.error_count ? "warn" : "good");
   showStatus(message, result.errors_count || result.error_count ? "neutral" : "good");
   if (!dryRun) loadSeoAutogeneration().catch((error) => showStatus(error.message, "bad"));
@@ -7971,7 +7982,7 @@ async function loadSeoAutogeneration() {
       ok: false,
       status: error.status || null,
       error: error.payload?.error || error.message || "diagnostics_unavailable",
-      message: error.payload?.message || error.message || "Diagnostico no disponible"
+      message: error.payload?.message || error.message || "Diagnóstico no disponible"
     })),
     loadSeoOpportunitiesPreview(),
     loadSeoHomeTopicOpportunitiesPreview()
@@ -8236,7 +8247,7 @@ async function saveSeoAutogenConditions() {
   };
   await loadSeoAutogeneration();
   setSeoAutogenConditionsFeedback("Condiciones guardadas correctamente.", "good");
-  showStatus("Condiciones de autogeneracion guardadas.", "good");
+  showStatus("Condiciones de autogeneración guardadas.", "good");
 }
 
 async function runSeoGeneration(mode) {
@@ -8282,7 +8293,7 @@ async function runSeoGeneration(mode) {
 }
 
 async function runSeoAutogeneration(dryRun = false) {
-  showStatus(dryRun ? "Probando autogeneracion SEO..." : "Ejecutando autogeneracion SEO...");
+  showStatus(dryRun ? "Probando autogeneración SEO..." : "Ejecutando autogeneración SEO...");
   const result = await api("/api/admin?resource=seo-autogenerate/run", {
     method: "POST",
     body: JSON.stringify({ dry_run: dryRun })
@@ -8292,22 +8303,22 @@ async function runSeoAutogeneration(dryRun = false) {
   const firstPath = first.target_path || (first.slug ? `/${String(first.slug).replace(/^\/+|\/+$/g, "")}/` : "contenido SEO");
   const firstScore = first.final_score || first.quality_score || 0;
   if (result.published_count) {
-    showStatus(`Autogeneracion publicada: ${firstPath} - score ${firstScore}`, "good");
+    showStatus(`Autogeneración publicada: ${firstPath} - score ${firstScore}`, "good");
     return;
   }
   if (result.would_publish_count) {
-    showStatus(`Simulacion OK: publicaria ${firstPath} - score ${firstScore}`, "neutral");
+    showStatus(`Simulación OK: publicaría ${firstPath} - score ${firstScore}`, "neutral");
     return;
   }
   const diagnosticCounts = seoAutogenDiagnosticsCounts({ publication_diagnostics: result.publication_diagnostics || {} });
   if (diagnosticCounts.nonPublished || diagnosticCounts.lowScore || diagnosticCounts.beforeSkip) {
     showStatus(
-      `Autogeneracion sin publicacion: ${diagnosticCounts.nonPublished} no publicables, ${diagnosticCounts.lowScore} por score bajo, ${diagnosticCounts.beforeSkip} antes de skip.`,
+      `Autogeneración sin publicación: ${diagnosticCounts.nonPublished} no publicables, ${diagnosticCounts.lowScore} por score bajo, ${diagnosticCounts.beforeSkip} antes de skip.`,
       "neutral"
     );
     return;
   }
-  showStatus(`Autogeneracion sin publicacion: ${first.reason || result.reason || "sin candidato elegible"}`, "neutral");
+  showStatus(`Autogeneración sin publicación: ${first.reason || result.reason || "sin candidato elegible"}`, "neutral");
 }
 
 async function runSeoRowAction(action, slug) {
@@ -8474,7 +8485,7 @@ document.addEventListener("submit", (event) => {
   if (!event.target.matches("[data-seo-home-topic-seed-form]")) return;
   event.preventDefault();
   runSeoHomeTopicSeed(true).catch((error) => {
-    const message = error.payload?.message || error.message || "No se pudo calcular el preview de oportunidades tematicas.";
+    const message = error.payload?.message || error.message || "No se pudo calcular el preview de oportunidades temáticas.";
     setSeoHomeTopicSeedFeedback(message, "bad");
     showStatus(message, "bad");
   });
@@ -8492,7 +8503,7 @@ document.addEventListener("click", (event) => {
   const button = event.target?.closest?.("[data-seo-home-topic-seed-execute]");
   if (!button) return;
   runSeoHomeTopicSeed(false).catch((error) => {
-    const message = error.payload?.message || error.message || "No se pudo crear oportunidades tematicas pending.";
+    const message = error.payload?.message || error.message || "No se pudo crear oportunidades temáticas pending.";
     setSeoHomeTopicSeedFeedback(message, "bad");
     showStatus(message, "bad");
   });
