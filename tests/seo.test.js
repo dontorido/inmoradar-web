@@ -2538,6 +2538,74 @@ test("seed home-life con confirmacion invalida no inserta ni consulta candidatos
   assert.equal(calls.length, 0);
 });
 
+test("preview home-life funciona sin columnas nuevas y avisa migracion pendiente", async () => {
+  const calls = [];
+  const result = await getSeoHomeTopicOpportunitiesPreview(
+    { limit: 5 },
+    {
+      fetchRows: async (path) => {
+        calls.push(path);
+        if (path.startsWith("seo_landing_opportunities?") && path.includes("cluster_id")) {
+          const error = new Error("column seo_landing_opportunities.cluster_id does not exist");
+          error.code = "42703";
+          throw error;
+        }
+        return [];
+      }
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.read_only, true);
+  assert.equal(result.writes_enabled, false);
+  assert.equal(result.would_insert_count, 5);
+  assert.equal(result.schema_migration_available, false);
+  assert.deepEqual(result.warnings, ["missing_database_migration"]);
+  assert.equal(result.home_topic_diagnostics.schema_migration_available, false);
+  assert.equal(calls.some((path) => path.includes("cluster_id")), true);
+  assert.equal(calls.some((path) => path.includes("select=keyword%2Ccity%2Ctemplate_type%2Cstatus")), true);
+});
+
+test("seed home-life confirmado falla claro si falta migracion y no inserta", async () => {
+  const calls = [];
+  let writes = 0;
+  const result = await seedSeoHomeTopicOpportunities(
+    {
+      confirm: SEO_HOME_TOPIC_CONFIRMATION,
+      dry_run: false,
+      limit: 4
+    },
+    {
+      fetchRows: async (path) => {
+        calls.push(path);
+        if (path.startsWith("seo_landing_opportunities?") && path.includes("cluster_id")) {
+          const error = new Error("Could not find the 'cluster_id' column of 'seo_landing_opportunities' in the schema cache");
+          error.code = "PGRST204";
+          throw error;
+        }
+        return [];
+      },
+      insertRow: async () => {
+        writes += 1;
+        throw new Error("should_not_insert");
+      }
+    }
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "missing_database_migration");
+  assert.equal(result.empty_reason, "missing_database_migration");
+  assert.equal(result.inserted_count, 0);
+  assert.equal(result.error_count, 0);
+  assert.equal(result.would_insert_count, 4);
+  assert.equal(result.read_only, true);
+  assert.equal(result.writes_enabled, false);
+  assert.equal(result.schema_migration_available, false);
+  assert.deepEqual(result.warnings, ["missing_database_migration"]);
+  assert.equal(writes, 0);
+  assert.equal(calls.some((path) => path.includes("select=keyword%2Ccity%2Ctemplate_type%2Cstatus")), true);
+});
+
 test("seed home-life deduplica slugs existentes y oportunidades pending existentes", async () => {
   const result = await getSeoHomeTopicOpportunitiesPreview(
     { limit: 12 },

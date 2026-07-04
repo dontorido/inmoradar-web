@@ -48,6 +48,7 @@ test("SEO Autogeneration muestra copy de Vercel Cron 4h sin textos obsoletos", (
   assert.match(copy, /data-seo-home-topic-seed-execute/);
   assert.match(copy, /total_candidates/);
   assert.match(copy, /insertable_candidates/);
+  assert.match(copy, /schema_migration_available/);
   assert.match(copy, /per_cluster_counts/);
   assert.match(copy, /per_template_counts/);
   assert.match(autogenLoader, /loadSeoOpportunitiesPreview\(\)/);

@@ -2522,6 +2522,8 @@ function renderSeoHomeTopicCounts(counts = {}) {
 
 function renderSeoHomeTopicSeedDiagnostics(result = {}) {
   const diagnostics = result.home_topic_diagnostics || result.diagnostics || {};
+  const warnings = [...(diagnostics.warnings || []), ...(result.warnings || [])].filter(Boolean);
+  const uniqueWarnings = Array.from(new Set(warnings));
   const counters = [
     ["total_candidates", diagnostics.total_candidates ?? result.total_candidates],
     ["insertable_candidates", diagnostics.insertable_candidates ?? result.insertable_candidates],
@@ -2533,11 +2535,13 @@ function renderSeoHomeTopicSeedDiagnostics(result = {}) {
     ["missing_required_fields_count", diagnostics.missing_required_fields_count ?? result.missing_required_fields_count],
     ["unsupported_cluster_count", diagnostics.unsupported_cluster_count ?? result.unsupported_cluster_count],
     ["limit_applied", diagnostics.limit_applied ?? result.limit_applied],
-    ["confirmation_required", diagnostics.confirmation_required ?? result.confirmation_required]
+    ["confirmation_required", diagnostics.confirmation_required ?? result.confirmation_required],
+    ["schema_migration_available", diagnostics.schema_migration_available ?? result.schema_migration_available]
   ].filter(([, value]) => value !== undefined && value !== null);
   return `
     <div class="admin-empty-state compact">
       ${diagnostics.empty_reason || result.empty_reason ? `<p>${escapeHtml(`empty_reason: ${diagnostics.empty_reason || result.empty_reason}`)}</p>` : ""}
+      ${uniqueWarnings.length ? `<p>${escapeHtml(`warnings: ${uniqueWarnings.join(", ")}`)}</p>` : ""}
       <p>${escapeHtml(counters.map(([label, value]) => `${label}: ${typeof value === "boolean" ? String(value) : seoAutogenNumber(value, value)}`).join(" | "))}</p>
       <p>${escapeHtml(`per_cluster_counts: ${renderSeoHomeTopicCounts(diagnostics.per_cluster_counts || result.per_cluster_counts)}`)}</p>
       <p>${escapeHtml(`per_template_counts: ${renderSeoHomeTopicCounts(diagnostics.per_template_counts || result.per_template_counts)}`)}</p>
@@ -2579,7 +2583,8 @@ function renderSeoHomeTopicSeedControls(target = "all") {
   const preview = state.seoHomeTopicSeed.lastPreview || {};
   const result = state.seoHomeTopicSeed.lastResult || preview;
   const clusters = Array.isArray(preview.clusters) ? preview.clusters : [];
-  const canConfirm = Boolean(result?.dry_run !== false && Number(result.would_insert_count || result.insertable_candidates || 0) > 0);
+  const schemaReady = result?.schema_migration_available !== false && result?.home_topic_diagnostics?.schema_migration_available !== false;
+  const canConfirm = Boolean(schemaReady && result?.dry_run !== false && Number(result.would_insert_count || result.insertable_candidates || 0) > 0);
   const clusterList = clusters.length
     ? clusters.map((cluster) => `${cluster.cluster_id} (${(cluster.templates || []).join(", ") || "home_life_topic"})`).join("; ")
     : "clusters no disponibles";

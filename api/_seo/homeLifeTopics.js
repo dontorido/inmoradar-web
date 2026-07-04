@@ -18,6 +18,7 @@ const HOME_TOPIC_DISCLAIMER =
   "Contenido orientativo. No sustituye asesoramiento legal, tecnico, financiero, energetico ni de seguros. Verifica siempre datos, contratos, presupuestos y normativa aplicable antes de decidir.";
 
 const BLOCKED_BRAND_SLUG_TERMS = ["idealista", "fotocasa", "habitaclia", "pisos-com", "pisoscom"];
+const HOME_TOPIC_SCHEMA_COLUMNS = ["cluster_id", "suggested_slug", "brief_json"];
 
 const HOME_LIFE_SEO_CLUSTERS = [
   {
@@ -486,8 +487,21 @@ function emptyHomeTopicDiagnostics(extra = {}) {
     limit_applied: 0,
     empty_reason: null,
     confirmation_required: true,
+    schema_migration_available: null,
+    warnings: [],
     ...extra
   };
+}
+
+function isMissingHomeTopicMigrationError(error) {
+  const code = String(error?.code || "").toUpperCase();
+  const message = String(
+    error?.message || error?.details || error?.hint || error || ""
+  ).toLowerCase();
+  const mentionsHomeTopicColumn = HOME_TOPIC_SCHEMA_COLUMNS.some((column) => message.includes(column));
+  if (code === "42703" && mentionsHomeTopicColumn) return true;
+  if (code === "PGRST204" && mentionsHomeTopicColumn) return true;
+  return mentionsHomeTopicColumn && /does not exist|could not find|schema cache|unknown column|not found/.test(message);
 }
 
 function inferHomeTopicEmptyReason(diagnostics = {}) {
@@ -541,17 +555,38 @@ async function fetchHomeTopicExistingState(fetchRows) {
     select: "keyword,city,template_type,status,cluster_id,suggested_slug",
     limit: "5000"
   });
+  const fallbackOpportunityParams = new URLSearchParams({
+    select: "keyword,city,template_type,status",
+    limit: "5000"
+  });
   const landingParams = new URLSearchParams({
     select: "slug,title,template_type,status",
     limit: "5000"
   });
-  const [opportunities, landings] = await Promise.all([
-    fetchRows(`seo_landing_opportunities?${opportunityParams.toString()}`),
+  const opportunityStatePromise = fetchRows(`seo_landing_opportunities?${opportunityParams.toString()}`)
+    .then((rows) => ({
+      opportunities: Array.isArray(rows) ? rows : [],
+      schema_migration_available: true,
+      migration_warnings: []
+    }))
+    .catch(async (error) => {
+      if (!isMissingHomeTopicMigrationError(error)) throw error;
+      const fallbackRows = await fetchRows(`seo_landing_opportunities?${fallbackOpportunityParams.toString()}`);
+      return {
+        opportunities: Array.isArray(fallbackRows) ? fallbackRows : [],
+        schema_migration_available: false,
+        migration_warnings: ["missing_database_migration"]
+      };
+    });
+  const [opportunityState, landings] = await Promise.all([
+    opportunityStatePromise,
     fetchRows(`seo_landings?${landingParams.toString()}`)
   ]);
   return {
-    opportunities: Array.isArray(opportunities) ? opportunities : [],
-    landings: Array.isArray(landings) ? landings : []
+    opportunities: opportunityState.opportunities,
+    landings: Array.isArray(landings) ? landings : [],
+    schema_migration_available: opportunityState.schema_migration_available,
+    migration_warnings: opportunityState.migration_warnings
   };
 }
 
@@ -623,7 +658,9 @@ function evaluateHomeTopicCandidates({ request, catalog, existingState }) {
       reputation_legal_risk: cluster.reputation_legal_risk,
       templates: cluster.templates
     })),
-    max_per_cluster: HOME_TOPIC_MAX_PER_CLUSTER
+    max_per_cluster: HOME_TOPIC_MAX_PER_CLUSTER,
+    schema_migration_available: existingState.schema_migration_available !== false,
+    warnings: existingState.migration_warnings || []
   });
   diagnostics.empty_reason = inferHomeTopicEmptyReason(diagnostics);
   return { evaluated, insertable, skipped, diagnostics };
@@ -701,6 +738,8 @@ function homeTopicBaseResult({ request, catalog, insertable, skipped, diagnostic
     per_template_counts: diagnostics.per_template_counts,
     limit_applied: diagnostics.limit_applied,
     empty_reason: diagnostics.empty_reason,
+    schema_migration_available: diagnostics.schema_migration_available,
+    warnings: diagnostics.warnings || [],
     diagnostics,
     home_topic_diagnostics: diagnostics
   };
@@ -743,6 +782,38 @@ function invalidHomeTopicConfirmation(request) {
   };
 }
 
+function missingHomeTopicMigrationResult({ request, base, diagnostics, inserted = [], errors = [] }) {
+  const migrationDiagnostics = {
+    ...diagnostics,
+    inserted_count: inserted.length,
+    errors_count: errors.length,
+    empty_reason: "missing_database_migration",
+    schema_migration_available: false,
+    warnings: Array.from(new Set([...(diagnostics.warnings || []), "missing_database_migration"]))
+  };
+  return {
+    ...base,
+    ok: false,
+    status: 500,
+    error: "missing_database_migration",
+    message:
+      "Falta aplicar la migracion de seo_landing_opportunities para cluster_id, suggested_slug y brief_json antes de crear oportunidades pending.",
+    dry_run: request.dry_run,
+    read_only: true,
+    writes_enabled: false,
+    inserted_count: inserted.length,
+    inserted,
+    error_count: errors.length,
+    errors_count: errors.length,
+    errors,
+    empty_reason: "missing_database_migration",
+    schema_migration_available: false,
+    warnings: migrationDiagnostics.warnings,
+    diagnostics: migrationDiagnostics,
+    home_topic_diagnostics: migrationDiagnostics
+  };
+}
+
 async function seedSeoHomeTopicOpportunities(input = {}, options = {}) {
   const request = normalizeHomeTopicRequest(input);
   if (!request.dry_run && request.confirm !== SEO_HOME_TOPIC_CONFIRMATION) return invalidHomeTopicConfirmation(request);
@@ -773,6 +844,9 @@ async function seedSeoHomeTopicOpportunities(input = {}, options = {}) {
   if (plan.error) return { ...plan.error, dry_run: request.dry_run };
   const base = homeTopicBaseResult(plan);
   if (request.dry_run) return base;
+  if (plan.existingState?.schema_migration_available === false) {
+    return missingHomeTopicMigrationResult({ request, base, diagnostics: plan.diagnostics });
+  }
 
   const inserted = [];
   const errors = [];
@@ -782,6 +856,19 @@ async function seedSeoHomeTopicOpportunities(input = {}, options = {}) {
       const saved = Array.isArray(result) ? result[0] || candidate.row : result || candidate.row;
       inserted.push(candidatePublic(candidate, { row: saved }));
     } catch (error) {
+      if (isMissingHomeTopicMigrationError(error)) {
+        errors.push(candidatePublic(candidate, {
+          reason: "missing_database_migration",
+          error: "missing_database_migration"
+        }));
+        return missingHomeTopicMigrationResult({
+          request,
+          base,
+          diagnostics: plan.diagnostics,
+          inserted,
+          errors
+        });
+      }
       errors.push(candidatePublic(candidate, {
         reason: "insert_failed",
         error: String(error?.message || error || "insert_failed").slice(0, 300)
