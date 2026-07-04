@@ -261,6 +261,123 @@ async function callAdmin(resource, { method = "GET", query = "", body, env = {},
   );
 }
 
+test("admin supabase runtime diagnostics returns safe host and project ref", async () => {
+  let fetchCalls = 0;
+  const result = await callAdmin("diagnostics/supabase-runtime", {
+    env: {
+      VERCEL_ENV: "production",
+      SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co/rest/v1?debug=secret",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-super-secret"
+    },
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      throw new Error("diagnostic_must_not_fetch");
+    }
+  });
+  const serialized = JSON.stringify(result.payload);
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.read_only, true);
+  assert.equal(result.payload.source, "runtime_env");
+  assert.equal(result.payload.environment, "production");
+  assert.equal(result.payload.has_supabase_url, true);
+  assert.equal(result.payload.has_supabase_service_role_key, true);
+  assert.equal(result.payload.supabase_host, "abcdefghijklmnopqrst.supabase.co");
+  assert.equal(result.payload.supabase_project_ref, "abcdefghijklmnopqrst");
+  assert.match(result.payload.supabase_url_hash, /^[a-f0-9]{12}$/);
+  assert.equal(result.payload.error_code, null);
+  assert.equal(fetchCalls, 0);
+  assert.doesNotMatch(serialized, /service-role-super-secret|SUPABASE_SERVICE_ROLE_KEY|debug=secret|\/rest\/v1/);
+});
+
+test("admin supabase runtime diagnostics handles missing SUPABASE_URL safely", async () => {
+  const result = await callAdmin("diagnostics/supabase-runtime", {
+    env: {
+      SUPABASE_URL: undefined,
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-super-secret"
+    },
+    fetchImpl: async () => {
+      throw new Error("diagnostic_must_not_fetch");
+    }
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.read_only, true);
+  assert.equal(result.payload.has_supabase_url, false);
+  assert.equal(result.payload.has_supabase_service_role_key, true);
+  assert.equal(result.payload.supabase_host, null);
+  assert.equal(result.payload.supabase_project_ref, null);
+  assert.equal(result.payload.supabase_url_hash, null);
+  assert.equal(result.payload.error_code, "supabase_url_missing");
+  assert.doesNotMatch(JSON.stringify(result.payload), /service-role-super-secret/);
+});
+
+test("admin supabase runtime diagnostics handles invalid SUPABASE_URL safely", async () => {
+  const result = await callAdmin("diagnostics/supabase-runtime", {
+    env: {
+      SUPABASE_URL: "not a url",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-super-secret"
+    },
+    fetchImpl: async () => {
+      throw new Error("diagnostic_must_not_fetch");
+    }
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.read_only, true);
+  assert.equal(result.payload.has_supabase_url, true);
+  assert.equal(result.payload.has_supabase_service_role_key, true);
+  assert.equal(result.payload.supabase_host, null);
+  assert.equal(result.payload.supabase_project_ref, null);
+  assert.equal(result.payload.supabase_url_hash, null);
+  assert.equal(result.payload.error_code, "supabase_url_unparseable");
+  assert.doesNotMatch(JSON.stringify(result.payload), /service-role-super-secret|not a url/);
+});
+
+test("admin supabase runtime diagnostics requires admin auth and only allows GET", async () => {
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-super-secret"
+    },
+    async () => {
+      const previousFetch = global.fetch;
+      let fetchCalls = 0;
+      global.fetch = async () => {
+        fetchCalls += 1;
+        throw new Error("diagnostic_must_not_fetch");
+      };
+      try {
+        const unauthorized = createJsonResponse();
+        await adminHandler(
+          {
+            method: "GET",
+            url: "/api/admin?resource=diagnostics/supabase-runtime",
+            headers: { host: "inmoradar.app" }
+          },
+          unauthorized.res
+        );
+        assert.equal(unauthorized.res.statusCode, 401);
+        assert.deepEqual(unauthorized.payload(), { ok: false, error: "unauthorized" });
+
+        const wrongMethod = await callAdmin("diagnostics/supabase-runtime", {
+          method: "POST",
+          fetchImpl: global.fetch
+        });
+        assert.equal(wrongMethod.statusCode, 405);
+        assert.equal(wrongMethod.payload.error, "method_not_allowed");
+        assert.equal(fetchCalls, 0);
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+});
+
 test("admin router finds handler by resource and method", async () => {
   const routes = createAdminRouter([
     {

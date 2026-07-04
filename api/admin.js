@@ -260,6 +260,58 @@ function clampPage(value) {
   return Math.max(1, parsed);
 }
 
+function supabaseProjectRefFromHost(hostname) {
+  const match = String(hostname || "").toLowerCase().match(/^([a-z0-9-]+)\.supabase\.co$/);
+  return match ? match[1] : null;
+}
+
+function buildSupabaseRuntimeFingerprint(env = process.env) {
+  const rawUrl = String(env.SUPABASE_URL || "").trim();
+  const hasSupabaseUrl = Boolean(rawUrl);
+  const basePayload = {
+    ok: true,
+    read_only: true,
+    source: "runtime_env",
+    environment: env.VERCEL_ENV || env.NODE_ENV || null,
+    has_supabase_url: hasSupabaseUrl,
+    has_supabase_service_role_key: Boolean(env.SUPABASE_SERVICE_ROLE_KEY),
+    supabase_host: null,
+    supabase_project_ref: null,
+    supabase_url_hash: null
+  };
+
+  if (!hasSupabaseUrl) {
+    return {
+      ...basePayload,
+      error_code: "supabase_url_missing"
+    };
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    const hostname = parsed.hostname || null;
+    return {
+      ...basePayload,
+      supabase_host: hostname,
+      supabase_project_ref: supabaseProjectRefFromHost(hostname),
+      supabase_url_hash: crypto.createHash("sha256").update(rawUrl).digest("hex").slice(0, 12),
+      error_code: null
+    };
+  } catch (error) {
+    return {
+      ...basePayload,
+      error_code: "supabase_url_unparseable"
+    };
+  }
+}
+
+function handleSupabaseRuntimeDiagnostics() {
+  return {
+    status: 200,
+    payload: buildSupabaseRuntimeFingerprint()
+  };
+}
+
 function countBy(rows, key) {
   return rows.reduce((acc, row) => {
     const value = String(row[key] || "unknown");
@@ -5228,6 +5280,11 @@ const ADMIN_PRE_SUPABASE_READ_ONLY_ROUTES = createAdminRouter([
     resource: "analytics/learning",
     method: "GET",
     handler: ({ req, url }) => handleOwnedAnalyticsLearning(req, url)
+  },
+  {
+    resource: "diagnostics/supabase-runtime",
+    method: "GET",
+    handler: () => handleSupabaseRuntimeDiagnostics()
   }
 ]);
 
