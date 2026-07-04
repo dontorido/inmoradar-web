@@ -378,7 +378,7 @@ function normalizeLandingBodyHtml(bodyHtml = "") {
     .replace(/INSTALAR INMORADAR/g, "EMPEZAR GRATIS")
     .replace(/Instalar InmoRadar/g, "Empezar gratis");
 }
-function renderLandingHtml(landing) {
+function buildLandingRenderContext(landing) {
   const qualityScore = Number(landing.quality_score) || 0;
   const canonical = canonicalForLanding(landing);
   const dynamicLanding = buildDynamicCityGuideLanding(landing);
@@ -404,6 +404,12 @@ function renderLandingHtml(landing) {
     canonical_url: canonical,
     quality_score: qualityScore
   });
+  return { bodyHtml, canonical, indexability, qualityScore, renderedLanding };
+}
+
+function renderLandingHtml(landing, renderContext = buildLandingRenderContext(landing)) {
+  const { bodyHtml, canonical, indexability, qualityScore, renderedLanding } = renderContext;
+  const title = renderedLanding.meta_title || `${renderedLanding.title} · InmoRadar`;
   const robots = indexability.sitemap_eligible ? "index,follow" : "noindex,follow";
   const description = renderedLanding.meta_description || stripHtml(bodyHtml).slice(0, 155);
   const imageUrl = ogImageUrl(renderedLanding);
@@ -1073,6 +1079,11 @@ async function handler(req, res) {
       sendNotFound(req, res);
       return;
     }
+    const renderContext = buildLandingRenderContext(landing);
+    if (!renderContext.indexability.sitemap_eligible) {
+      sendNotFound(req, res);
+      return;
+    }
 
     res.statusCode = 200;
     res.setHeader("content-type", "text/html; charset=utf-8");
@@ -1081,7 +1092,7 @@ async function handler(req, res) {
       res.end();
       return;
     }
-    res.end(renderLandingHtml(landing));
+    res.end(renderLandingHtml(landing, renderContext));
   } catch (error) {
     console.error("[seo-page]", error);
     res.statusCode = 500;

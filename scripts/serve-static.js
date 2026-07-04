@@ -79,6 +79,8 @@ const rewrites = {
   "/saber-si-piso-esta-caro/": "/saber-si-piso-esta-caro.html",
   "/coste-real-comprar-vivienda": "/api/seo-page?slug=coste-real-comprar-vivienda",
   "/coste-real-comprar-vivienda/": "/api/seo-page?slug=coste-real-comprar-vivienda",
+  "/como-controlar-factura-luz-casa": "/api/seo-page?slug=como-controlar-factura-luz-casa",
+  "/como-controlar-factura-luz-casa/": "/api/seo-page?slug=como-controlar-factura-luz-casa",
   "/que-analiza": "/que-analiza.html",
   "/datos": "/datos.html",
   "/metodologia": "/metodologia.html",

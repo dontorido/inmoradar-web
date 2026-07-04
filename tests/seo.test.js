@@ -1690,6 +1690,29 @@ function costeRealLegacyGuide(overrides = {}) {
   });
 }
 
+function electricityBillHomeLifeLanding(overrides = {}) {
+  return readyToPublishLanding({
+    id: 338,
+    slug: "como-controlar-factura-luz-casa",
+    title: "Como controlar la factura de la luz en casa antes de elegir vivienda",
+    meta_title: "Como controlar la factura de la luz en casa antes de elegir vivienda",
+    meta_description:
+      "Checklist para revisar consumo, certificado energetico y preguntas clave antes de contactar por una vivienda.",
+    h1: "Como controlar la factura de la luz en casa antes de elegir vivienda",
+    body_html: `<article>
+      <section><p>${"factura luz vivienda consumo energia coste real anuncio visita comparar preguntas ".repeat(90)}</p><a href="/guias/coste-real-comprar-vivienda/">Coste real</a></section>
+      <section><p>${"certificado energetico orientacion preliminar precio metro cuadrado senales riesgo decision informacion ".repeat(85)}</p><a href="/precio-metro-cuadrado/madrid/">Precio metro cuadrado</a></section>
+    </article>`,
+    template_type: HOME_TOPIC_TEMPLATE_TYPE,
+    status: "published",
+    index_status: "index",
+    quality_score: 90,
+    word_count: 1002,
+    canonical_url: "https://inmoradar.app/como-controlar-factura-luz-casa/",
+    ...overrides
+  });
+}
+
 async function seoPageForLandings(url, landingsBySlug) {
   const previousUrl = process.env.SUPABASE_URL;
   const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1742,6 +1765,28 @@ test("migracion coste real no expone URL principal mientras esta en revision", a
   assert.equal(result.headers.location, undefined);
 });
 
+test("landing home-life de luz no se expone hasta que este publicada e indexable", async () => {
+  const draft = electricityBillHomeLifeLanding({ status: "ready_to_publish", index_status: "noindex", published_at: null });
+  const result = await seoPageForLandings("/api/seo-page?slug=como-controlar-factura-luz-casa", {
+    "como-controlar-factura-luz-casa": draft
+  });
+
+  assert.equal(result.statusCode, 404);
+  assert.equal(result.headers.location, undefined);
+});
+
+test("landing home-life de luz se sirve solo cuando esta published/index", async () => {
+  const published = electricityBillHomeLifeLanding({ published_at: "2026-07-04T20:30:00.000Z" });
+  const result = await seoPageForLandings("/api/seo-page?slug=como-controlar-factura-luz-casa", {
+    "como-controlar-factura-luz-casa": published
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.match(result.html, /<meta name="robots" content="index,follow">/);
+  assert.match(result.html, /<link rel="canonical" href="https:\/\/inmoradar\.app\/como-controlar-factura-luz-casa\/">/);
+  assert.match(result.html, /Como controlar la factura de la luz en casa antes de elegir vivienda/);
+});
+
 test("migracion coste real redirige guia previa solo cuando la URL principal es indexable", async () => {
   const legacy = costeRealLegacyGuide();
   const draftPrimary = costeRealPrimaryLanding({ status: "ready_to_review", index_status: "noindex" });
@@ -1773,6 +1818,15 @@ test("sitemap mantiene guia previa hasta que la landing principal este publicada
   assert.equal(sitemap.statusCode, 200);
   assert.match(sitemap.xml, /https:\/\/inmoradar\.app\/guias\/coste-real-comprar-vivienda\//);
   assert.doesNotMatch(sitemap.xml, /https:\/\/inmoradar\.app\/coste-real-comprar-vivienda\//);
+});
+
+test("sitemap no incluye home-life de luz mientras siga noindex o sin publicar", async () => {
+  const sitemap = await sitemapXmlForLandings([
+    electricityBillHomeLifeLanding({ status: "ready_to_publish", index_status: "noindex", published_at: null })
+  ]);
+
+  assert.equal(sitemap.statusCode, 200);
+  assert.doesNotMatch(sitemap.xml, /https:\/\/inmoradar\.app\/como-controlar-factura-luz-casa\//);
 });
 
 test("sitemap sustituye guia previa por URL principal cuando ambas son indexables", async () => {
@@ -4069,7 +4123,10 @@ test("el endpoint de noticias publica landings publicadas e indexables", async (
 });
 
 test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () => {
-  const vercel = fs.readFileSync(path.join(__dirname, "..", "vercel.json"), "utf8");
+  const vercelPath = path.join(__dirname, "..", "vercel.json");
+  const vercel = fs.readFileSync(vercelPath, "utf8");
+  const vercelConfig = JSON.parse(vercel);
+  const rewritesBySource = new Map(vercelConfig.rewrites.map(({ source, destination }) => [source, destination]));
   const redirects = fs.readFileSync(path.join(__dirname, "..", "_redirects"), "utf8");
   const localServer = fs.readFileSync(path.join(__dirname, "..", "scripts", "serve-static.js"), "utf8");
 
@@ -4079,6 +4136,14 @@ test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () 
   assert.match(vercel, /"source": "\/saber-si-piso-esta-caro\/?"/);
   assert.match(vercel, /saber-si-piso-esta-caro\/:city/);
   assert.match(vercel, /coste-real-comprar-vivienda/);
+  assert.equal(
+    rewritesBySource.get("/como-controlar-factura-luz-casa"),
+    "/api/seo-page?slug=como-controlar-factura-luz-casa"
+  );
+  assert.equal(
+    rewritesBySource.get("/como-controlar-factura-luz-casa/"),
+    "/api/seo-page?slug=como-controlar-factura-luz-casa"
+  );
   assert.match(vercel, /guias\/:slug/);
   assert.match(vercel, /"source": "\/datos"/);
   assert.match(vercel, /"source": "\/noticias\/:slug"/);
@@ -4088,6 +4153,8 @@ test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () 
   assert.match(redirects, /\/saber-si-piso-esta-caro \/saber-si-piso-esta-caro\.html/);
   assert.match(redirects, /saber-si-piso-esta-caro\/:city/);
   assert.match(redirects, /\/coste-real-comprar-vivienda \/api\/seo-page\?slug=coste-real-comprar-vivienda 200/);
+  assert.match(redirects, /\/como-controlar-factura-luz-casa \/api\/seo-page\?slug=como-controlar-factura-luz-casa 200/);
+  assert.match(redirects, /\/como-controlar-factura-luz-casa\/ \/api\/seo-page\?slug=como-controlar-factura-luz-casa 200/);
   assert.match(redirects, /guias\/:slug/);
   assert.match(redirects, /\/datos \/datos\.html/);
   assert.match(redirects, /\/noticias\/:slug \/article\.html/);
@@ -4097,6 +4164,8 @@ test("las rutas SEO publicas cubren precio, alquiler y analisis de anuncio", () 
   assert.match(localServer, /saber-si-piso-esta-caro\.html/);
   assert.match(localServer, /saber-si-piso-esta-caro/);
   assert.match(localServer, /coste-real-comprar-vivienda/);
+  assert.match(localServer, /"\/como-controlar-factura-luz-casa": "\/api\/seo-page\?slug=como-controlar-factura-luz-casa"/);
+  assert.match(localServer, /"\/como-controlar-factura-luz-casa\/": "\/api\/seo-page\?slug=como-controlar-factura-luz-casa"/);
   assert.match(localServer, /guias/);
   assert.match(localServer, /\/datos\.html/);
   assert.match(localServer, /article\.html/);
