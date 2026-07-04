@@ -77,6 +77,8 @@ const rewrites = {
   "/backoffice/marketing/meta": "/admin.html",
   "/saber-si-piso-esta-caro": "/saber-si-piso-esta-caro.html",
   "/saber-si-piso-esta-caro/": "/saber-si-piso-esta-caro.html",
+  "/coste-real-comprar-vivienda": "/api/seo-page?slug=coste-real-comprar-vivienda",
+  "/coste-real-comprar-vivienda/": "/api/seo-page?slug=coste-real-comprar-vivienda",
   "/que-analiza": "/que-analiza.html",
   "/datos": "/datos.html",
   "/metodologia": "/metodologia.html",

@@ -1,5 +1,11 @@
 const { hasSupabaseConfig, supabaseFetch } = require("./_utils");
 const { googleTagManagerHead, googleTagManagerNoscript } = require("./_seo/analytics");
+const {
+  canonicalMigrationForLegacySlug,
+  canonicalMigrationForPrimarySlug,
+  canonicalMigrationTargetReady,
+  canonicalMigrationUrl
+} = require("./_seo/canonicalMigrations");
 const { getSeedPublishedLanding } = require("./_seo/seedPublished");
 const { buildPrecioMetroCuadradoCiudad } = require("./_seo/priceCity");
 const { evaluateLandingIndexability } = require("./_seo/indexability");
@@ -1015,6 +1021,28 @@ function renderLandingHtml(landing) {
 </html>`;
 }
 
+function sendNotFound(req, res) {
+  res.statusCode = 404;
+  res.setHeader("content-type", "text/html; charset=utf-8");
+  res.setHeader("cache-control", "no-store, max-age=0");
+  if (req.method === "HEAD") {
+    res.end();
+    return;
+  }
+  res.end("<!doctype html><html lang=\"es\"><title>No encontrado</title><p>Landing no encontrada.</p></html>");
+}
+
+function sendPermanentRedirect(req, res, location) {
+  res.statusCode = 301;
+  res.setHeader("location", location);
+  res.setHeader("cache-control", "s-maxage=3600, stale-while-revalidate=86400");
+  if (req.method === "HEAD") {
+    res.end();
+    return;
+  }
+  res.end(`<!doctype html><html lang="es"><title>Redireccion permanente</title><p><a href="${escapeHtml(location)}">Continuar</a></p></html>`);
+}
+
 async function handler(req, res) {
   if (!["GET", "HEAD"].includes(req.method)) {
     res.statusCode = 405;
@@ -1025,16 +1053,24 @@ async function handler(req, res) {
 
   try {
     const slug = parseSlug(req);
-    const landing = await fetchLanding(slug);
-    if (!landing) {
-      res.statusCode = 404;
-      res.setHeader("content-type", "text/html; charset=utf-8");
-      res.setHeader("cache-control", "no-store, max-age=0");
-      if (req.method === "HEAD") {
-        res.end();
+    const legacyMigration = canonicalMigrationForLegacySlug(slug);
+    if (legacyMigration) {
+      const primaryLanding = await fetchLanding(legacyMigration.primary_slug);
+      if (canonicalMigrationTargetReady(primaryLanding, legacyMigration)) {
+        sendPermanentRedirect(req, res, canonicalMigrationUrl(legacyMigration));
         return;
       }
-      res.end("<!doctype html><html lang=\"es\"><title>No encontrado</title><p>Landing no encontrada.</p></html>");
+    }
+
+    const landing = await fetchLanding(slug);
+    if (!landing) {
+      sendNotFound(req, res);
+      return;
+    }
+
+    const primaryMigration = canonicalMigrationForPrimarySlug(slug);
+    if (primaryMigration && !canonicalMigrationTargetReady(landing, primaryMigration)) {
+      sendNotFound(req, res);
       return;
     }
 

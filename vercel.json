@@ -70,6 +70,8 @@
     { "source": "/saber-si-piso-esta-caro/", "destination": "/saber-si-piso-esta-caro.html" },
     { "source": "/saber-si-piso-esta-caro/:city", "destination": "/api/seo-page?slug=saber-si-piso-esta-caro/:city" },
     { "source": "/saber-si-piso-esta-caro/:city/", "destination": "/api/seo-page?slug=saber-si-piso-esta-caro/:city" },
+    { "source": "/coste-real-comprar-vivienda", "destination": "/api/seo-page?slug=coste-real-comprar-vivienda" },
+    { "source": "/coste-real-comprar-vivienda/", "destination": "/api/seo-page?slug=coste-real-comprar-vivienda" },
     { "source": "/guias/:slug", "destination": "/api/seo-page?slug=guias/:slug" },
     { "source": "/guias/:slug/", "destination": "/api/seo-page?slug=guias/:slug" },
     { "source": "/admin", "destination": "/admin.html" },
