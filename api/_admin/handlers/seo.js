@@ -66,7 +66,7 @@ function createSeoHandlers({
     const landings = Array.isArray(rows) ? rows : [];
     const opportunityRows = Array.isArray(opportunities) ? opportunities : [];
     const landingsWithSitemap = landings.map((row) => ({ row, sitemap: evaluateSitemapEligibility(row, { quality: parseJsonMaybe(parseJsonMaybe(row.source_data_json).quality) }) }));
-    const pipelineTemplateTypes = ["price_city", "rent_city", "expensive_listing_city", "editorial_guide", "home_life_topic", "news"];
+    const pipelineTemplateTypes = ["price_city", "rent_city", "expensive_listing_city", "editorial_guide", "home_life_topic"];
     const autopublishTemplateTypes = new Set(["price_city", "rent_city", "expensive_listing_city", "editorial_guide"]);
     const normalizeTemplateType = (value) => String(value || "unknown").trim().toLowerCase() || "unknown";
     const emptyPipelineBucket = (templateType) => ({

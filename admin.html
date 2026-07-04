@@ -323,7 +323,58 @@
                     <th>Autopublish</th>
                   </tr>
                 </thead>
-                <tbody data-seo-pipeline></tbody>
+                <tbody data-seo-pipeline>
+                  <tr>
+                    <td><strong>price_city</strong></td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Permitido</td>
+                  </tr>
+                  <tr>
+                    <td><strong>rent_city</strong></td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Permitido</td>
+                  </tr>
+                  <tr>
+                    <td><strong>expensive_listing_city</strong></td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Permitido</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Guías editoriales / noticias</strong><div class="admin-subtle">Incluye contenido editorial y guías.</div></td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Permitido</td>
+                  </tr>
+                  <tr>
+                    <td><strong>home_life_topic</strong></td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Sin datos</td>
+                    <td>Manual/controlado</td>
+                  </tr>
+                </tbody>
               </table>
             </div>
             <p class="admin-table-hint">pending = oportunidad creada, no es página pública. needs_review = draft creado, noindex. ready_to_publish = aprobado, no publicado. published = público si index_status=index.</p>
@@ -395,9 +446,8 @@
                   <option value="price_city">price_city</option>
                   <option value="rent_city">rent_city</option>
                   <option value="expensive_listing_city">expensive_listing_city</option>
-                  <option value="editorial_guide">editorial_guide</option>
+                  <option value="editorial_guide">Guías editoriales / noticias</option>
                   <option value="home_life_topic">home_life_topic</option>
-                  <option value="news">news</option>
                 </select>
                 <button class="admin-button tiny ghost" type="submit" data-testid="admin-seo-filter">Filtrar</button>
               </form>
@@ -446,7 +496,9 @@
                 <p class="admin-panel-sub">Publicadas, indexables, incluidas en sitemap, excluidas con motivo, canonical, robots y lastmod.</p>
               </div>
             </div>
-            <div class="admin-seo-diagnostics" data-seo-indexability aria-live="polite"></div>
+            <div class="admin-seo-diagnostics" data-seo-indexability aria-live="polite">
+              <section><strong>Estado</strong><p>Todavía no hay diagnóstico de sitemap disponible.</p></section>
+            </div>
           </article>
 
           <article class="admin-panel admin-seo-runtime-diagnostics-panel">
