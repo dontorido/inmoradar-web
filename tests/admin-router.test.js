@@ -714,7 +714,7 @@ test("admin seo landings handler keeps filters and pagination read-only", async 
   });
 
   const result = await handleSeoLandings(
-    new URL("https://inmoradar.app/api/admin?resource=seo/landings&limit=2&page=2&status=published")
+    new URL("https://inmoradar.app/api/admin?resource=seo/landings&limit=2&page=2&status=published&template_type=price_city")
   );
 
   assert.equal(result.status, 200);
@@ -736,11 +736,17 @@ test("admin seo landings handler keeps filters and pagination read-only", async 
   assert.equal(result.payload.summary.target_landings_per_day, 2);
   assert.equal(result.payload.summary.sitemap_included, 1);
   assert.equal(result.payload.summary.sitemap_excluded, 1);
+  assert.equal(result.payload.summary.pipeline_by_template.price_city.pending, 1);
+  assert.equal(result.payload.summary.pipeline_by_template.price_city.published, 1);
+  assert.equal(result.payload.summary.pipeline_by_template.price_city.indexables, 1);
+  assert.equal(result.payload.summary.pipeline_by_template.price_city.sitemap, 1);
+  assert.equal(result.payload.summary.pipeline_by_template.home_life_topic.autopublish_allowed, false);
   assert.equal(paths.length, 3);
   assert.ok(paths[0].startsWith("seo_landings?"));
   assert.match(paths[0], /limit=3/);
   assert.match(paths[0], /offset=2/);
   assert.match(paths[0], /status=eq\.published/);
+  assert.match(paths[0], /template_type=eq\.price_city/);
   assert.ok(paths[1].startsWith("seo_landings?"));
   assert.ok(paths[2].startsWith("seo_landing_opportunities?"));
   assert.ok(paths.every((path) => /^(seo_landings|seo_landing_opportunities)\?/.test(path)));

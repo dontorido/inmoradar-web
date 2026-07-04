@@ -64,7 +64,29 @@ function createSeoHandlers({
 
   function buildSeoLandingsSummary(rows = [], opportunities = [], activeStatus = "all") {
     const landings = Array.isArray(rows) ? rows : [];
+    const opportunityRows = Array.isArray(opportunities) ? opportunities : [];
     const landingsWithSitemap = landings.map((row) => ({ row, sitemap: evaluateSitemapEligibility(row, { quality: parseJsonMaybe(parseJsonMaybe(row.source_data_json).quality) }) }));
+    const pipelineTemplateTypes = ["price_city", "rent_city", "expensive_listing_city", "editorial_guide", "home_life_topic", "news"];
+    const autopublishTemplateTypes = new Set(["price_city", "rent_city", "expensive_listing_city", "editorial_guide"]);
+    const normalizeTemplateType = (value) => String(value || "unknown").trim().toLowerCase() || "unknown";
+    const emptyPipelineBucket = (templateType) => ({
+      pending: 0,
+      needs_review: 0,
+      ready_to_publish: 0,
+      published: 0,
+      indexables: 0,
+      sitemap: 0,
+      autopublish_allowed: autopublishTemplateTypes.has(templateType)
+    });
+    const pipelineByTemplate = pipelineTemplateTypes.reduce((acc, templateType) => {
+      acc[templateType] = emptyPipelineBucket(templateType);
+      return acc;
+    }, {});
+    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const ensurePipelineBucket = (templateType) => {
+      if (!pipelineByTemplate[templateType]) pipelineByTemplate[templateType] = emptyPipelineBucket(templateType);
+      return pipelineByTemplate[templateType];
+    };
     const statusCounts = landings.reduce((acc, row) => {
       const key = String(row.status || "unknown").toLowerCase();
       acc[key] = (acc[key] || 0) + 1;
@@ -84,7 +106,7 @@ function createSeoHandlers({
         : landings.length;
     const pendingLandings =
       (statusCounts.draft || 0) + (statusCounts.needs_review || 0) + (statusCounts.ready_to_publish || 0);
-    const pendingOpportunities = (Array.isArray(opportunities) ? opportunities : []).filter((row) =>
+    const pendingOpportunities = opportunityRows.filter((row) =>
       ["pending", "generating", "draft", "needs_review"].includes(String(row.status || "").toLowerCase())
     ).length;
     const dailyPolicy = buildSeoDailyPolicySnapshot(landings);
@@ -97,6 +119,22 @@ function createSeoHandlers({
         acc[reason] = (acc[reason] || 0) + 1;
         return acc;
       }, {});
+    for (const row of opportunityRows) {
+      const status = String(row.status || "").toLowerCase();
+      if (status !== "pending") continue;
+      const bucket = ensurePipelineBucket(normalizeTemplateType(row.template_type));
+      bucket.pending += 1;
+    }
+    for (const item of landingsWithSitemap) {
+      const row = item.row || {};
+      const status = String(row.status || "").toLowerCase();
+      const bucket = ensurePipelineBucket(normalizeTemplateType(row.template_type));
+      if (status === "needs_review") bucket.needs_review += 1;
+      if (status === "ready_to_publish") bucket.ready_to_publish += 1;
+      if (status === "published") bucket.published += 1;
+      if (status === "published" && String(row.index_status || "").toLowerCase() === "index") bucket.indexables += 1;
+      if (item.sitemap.sitemap_eligible) bucket.sitemap += 1;
+    }
     const latestPublished = [...landings]
       .filter((row) => String(row.status || "").toLowerCase() === "published")
       .sort((left, right) => Date.parse(right.published_at || right.updated_at || right.last_generated_at || 0) - Date.parse(left.published_at || left.updated_at || left.last_generated_at || 0))
@@ -137,10 +175,16 @@ function createSeoHandlers({
       published_without_sitemap: landingsWithSitemap.filter((item) => String(item.row.status || "").toLowerCase() === "published" && !item.sitemap.sitemap_eligible).length,
       pending_landings: pendingLandings,
       pending_opportunities: pendingOpportunities,
+      pipeline_by_template: pipelineByTemplate,
       published_landings_today: dailyPolicy.published_landings_today,
       published_news_today: dailyPolicy.published_news_today,
       target_landings_per_day: seoDailyTargets.landings,
       target_news_per_day: seoDailyTargets.news,
+      published_landings_week: landings.filter((row) => {
+        if (String(row.status || "").toLowerCase() !== "published") return false;
+        const timestamp = Date.parse(row.published_at || row.updated_at || row.last_generated_at || "");
+        return Number.isFinite(timestamp) && timestamp >= oneWeekAgo;
+      }).length,
       seo_daily_status: dailyPolicy.published_landings_today >= seoDailyTargets.landings && dailyPolicy.published_news_today >= seoDailyTargets.news ? "complete" : "pending",
       average_quality_score: scores.length
         ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
@@ -160,6 +204,7 @@ function createSeoHandlers({
     const page = clampPage(url.searchParams.get("page"));
     const offset = (page - 1) * pageSize;
     const status = String(url.searchParams.get("status") || "").trim().toLowerCase();
+    const templateType = String(url.searchParams.get("template_type") || url.searchParams.get("template") || "").trim().toLowerCase();
     const params = new URLSearchParams({
       select: landingSelect,
       order: "updated_at.desc",
@@ -167,6 +212,7 @@ function createSeoHandlers({
       offset: String(offset)
     });
     if (status && status !== "all") params.set("status", `eq.${status}`);
+    if (templateType && templateType !== "all") params.set("template_type", `eq.${templateType}`);
 
     const summaryParams = new URLSearchParams({
       select: "slug,title,meta_title,meta_description,h1,body_html,status,index_status,quality_score,word_count,canonical_url,template_type,published_at,updated_at,last_generated_at,source_data_json",
