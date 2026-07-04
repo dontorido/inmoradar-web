@@ -2360,6 +2360,51 @@ function renderSeoOpportunitySeedRows(items = []) {
   `;
 }
 
+function seoSeedEmptyReasonLabel(reason = "") {
+  const labels = {
+    no_seed_preview_candidates: "Sin candidatos en seed-preview",
+    unsupported_content_type: "Tipo de contenido no soportado",
+    missing_required_fields: "Campos requeridos ausentes",
+    all_candidates_already_existing: "Todos descartados por duplicado",
+    no_seedable_candidates: "Sin seedables tras deduplicacion",
+    source_filter_excluded_all: "El filtro de fuente excluye todo",
+    city_filter_excluded_all: "El filtro de ciudad excluye todo",
+    quality_notes_filter_excluded_all: "El filtro de calidad excluye todo",
+    revalidation_collisions_excluded_all: "Duplicados detectados al revalidar",
+    filters_excluded_all: "Filtros sin candidatos insertables",
+    invalid_confirmation: "Confirmacion invalida"
+  };
+  if (!reason) return "";
+  return `${labels[reason] || "Motivo no determinado"} (${reason})`;
+}
+
+function renderSeoOpportunitySeedDiagnostics(result = {}) {
+  const diagnostics = result.seed_diagnostics || {};
+  const emptyReason = diagnostics.empty_reason || result.empty_reason || "";
+  const filters = diagnostics.filters_applied || result.filters || {};
+  const counters = [
+    ["Seedables", diagnostics.seedable_count ?? result.seedable_count],
+    ["Seed-preview", diagnostics.seed_preview_candidates_count ?? result.seed_preview_candidates_count],
+    ["Deduped", diagnostics.deduped_candidates_count ?? result.deduped_candidates_count],
+    ["Existentes", diagnostics.already_existing_count ?? result.already_existing_count],
+    ["Campos requeridos", diagnostics.missing_required_fields_count ?? result.missing_required_fields_count],
+    ["Score bajo", diagnostics.score_too_low_count ?? result.score_too_low_count],
+    ["Tipo no soportado", diagnostics.unsupported_content_type_count ?? result.unsupported_content_type_count],
+    ["Filtro fuente", diagnostics.source_mismatch_count],
+    ["Filtro calidad", diagnostics.quality_notes_mismatch_count],
+    ["Limite aplicado", diagnostics.limit_applied ?? result.limit_applied]
+  ].filter(([, value]) => value !== undefined && value !== null);
+  if (!counters.length && !emptyReason) return "";
+  return `
+    <div class="admin-empty-state compact">
+      ${emptyReason ? `<p>${escapeHtml(seoSeedEmptyReasonLabel(emptyReason))}</p>` : ""}
+      <p>${escapeHtml(`Fuente usada: ${diagnostics.source_table || filters.source || "market_price_sources"}`)}</p>
+      <p>${escapeHtml(`Filtros: template=${filters.template || "-"}; source=${filters.source || "-"}; limit=${filters.limit || diagnostics.limit_applied || "-"}; cities=${(filters.cities || []).join(", ") || "all"}; quality=${(filters.min_quality_notes || []).join(", ") || "none"}`)}</p>
+      <p>${escapeHtml(counters.map(([label, value]) => `${label}: ${seoAutogenNumber(value, 0)}`).join(" | "))}</p>
+    </div>
+  `;
+}
+
 function renderSeoOpportunitySeedResultHtml(result = null) {
   if (!result) return "";
   const items = seoOpportunitySeedResultItems(result);
@@ -2380,11 +2425,22 @@ function renderSeoOpportunitySeedResultHtml(result = null) {
           <span><b>Errors:</b> ${escapeHtml(result.error_count || errors.length || 0)}</span>
         </div>
       </div>
+      ${result.ok === false ? `<p class="admin-empty-state compact">${escapeHtml(result.message || result.error || "No se pudo ejecutar el seed controlado.")}</p>` : ""}
       ${renderSeoOpportunitySeedRows(items)}
+      ${renderSeoOpportunitySeedDiagnostics(result)}
       ${skipped.length ? `<p class="admin-empty-state compact">Skipped: ${escapeHtml(skipped.map((item) => `${item.slug || item.keyword || "-"} (${item.reason || item.collision_reason || "skipped"})`).join("; "))}</p>` : ""}
       ${errors.length ? `<p class="admin-empty-state compact">Errors: ${escapeHtml(errors.map((item) => `${item.slug || item.keyword || "-"} (${item.error || item.reason || "error"})`).join("; "))}</p>` : ""}
     </section>
   `;
+}
+
+function seoOpportunitySeedRequiredNotes(template = "") {
+  const notesByTemplate = {
+    price_city: ["has_sale_data"],
+    rent_city: ["has_rent_data"],
+    expensive_listing_city: ["has_sale_data"]
+  };
+  return notesByTemplate[String(template || "").toLowerCase()] || [];
 }
 
 function renderSeoOpportunitySeedControls(target = "all") {
@@ -2407,6 +2463,7 @@ function renderSeoOpportunitySeedControls(target = "all") {
       <p class="admin-empty-state compact" data-seo-opportunity-seed-feedback role="status" aria-live="polite"></p>
     </div>
     <div class="admin-seo-autogen-conditions-actions" data-seo-opportunity-seed-confirm-panel${canConfirm ? "" : " hidden"}>
+      <p class="admin-empty-state compact">Texto exacto de confirmacion: <code>${SEO_OPPORTUNITY_SEED_CONFIRMATION}</code></p>
       <input data-seo-opportunity-seed-confirm placeholder="${SEO_OPPORTUNITY_SEED_CONFIRMATION}" aria-label="Confirmacion seed SEO">
       <button class="admin-button tiny ghost" type="button" data-seo-opportunity-seed-execute>Confirmar creacion pending</button>
     </div>
@@ -2663,8 +2720,18 @@ function seoAutogenReasonCopy(value) {
   return `${readable || "Motivo interno"} (${code})`;
 }
 
+const SEO_AUTOGEN_EMPTY_REASON_COPY = {
+  no_candidates_generated: "Sin candidatos generados (no_candidates_generated)",
+  all_candidates_filtered_before_scoring: "Candidatos filtrados antes de scoring (all_candidates_filtered_before_scoring)",
+  all_candidates_below_min_score: "Todos por debajo del score mínimo (all_candidates_below_min_score)",
+  publication_limits_reached: "Bloqueado por límites (publication_limits_reached)",
+  no_selected_content_type: "Sin tipo de contenido seleccionado (no_selected_content_type)",
+  unknown_empty_results: "Motivo no determinado (unknown_empty_results)"
+};
+
 function seoAutogenEmptyReasonCopy(value) {
   const code = String(value || "").trim();
+  if (SEO_AUTOGEN_EMPTY_REASON_COPY[code]) return SEO_AUTOGEN_EMPTY_REASON_COPY[code];
   const map = {
     no_candidates_generated: "Sin candidatos generados",
     all_candidates_filtered_before_scoring: "Candidatos filtrados antes de scoring",
@@ -7547,6 +7614,7 @@ function seoOpportunitySeedPayload(dryRun = true) {
   const form = root.querySelector("[data-seo-opportunity-seed-form]");
   const data = form ? new FormData(form) : new FormData();
   const rawLimit = Number.parseInt(String(data.get("limit") || "10"), 10);
+  const template = String(data.get("template") || "expensive_listing_city");
   const cities = String(data.get("cities") || "")
     .split(",")
     .map((city) => city.trim())
@@ -7555,11 +7623,11 @@ function seoOpportunitySeedPayload(dryRun = true) {
     confirm: SEO_OPPORTUNITY_SEED_CONFIRMATION,
     dry_run: dryRun,
     content_type: "landing",
-    template: String(data.get("template") || "expensive_listing_city"),
+    template,
     source: "market_price_sources",
     limit: Math.max(1, Math.min(50, Number.isFinite(rawLimit) ? rawLimit : 10)),
     cities,
-    min_quality_notes: ["has_sale_data", "has_rent_data"]
+    min_quality_notes: seoOpportunitySeedRequiredNotes(template)
   };
 }
 
@@ -7567,7 +7635,7 @@ async function runSeoOpportunitySeed(dryRun = true) {
   if (!dryRun) {
     const confirmation = seoOpportunitySeedRoot().querySelector("[data-seo-opportunity-seed-confirm]");
     if (String(confirmation?.value || "").trim() !== SEO_OPPORTUNITY_SEED_CONFIRMATION) {
-      setSeoOpportunitySeedFeedback(`Escribe ${SEO_OPPORTUNITY_SEED_CONFIRMATION} para crear oportunidades pending.`, "warn");
+      setSeoOpportunitySeedFeedback(`Confirmacion incorrecta o incompleta. Escribe exactamente ${SEO_OPPORTUNITY_SEED_CONFIRMATION} para crear oportunidades pending.`, "warn");
       return null;
     }
   }
