@@ -68,7 +68,15 @@ test("SEO Autogeneration muestra copy de Vercel Cron 4h sin textos obsoletos", (
   assert.match(copy, /Regenerar<\/button>/);
   assert.match(copy, /Publicar<\/button>/);
   assert.match(copy, /Bloquear<\/button>/);
-  assert.match(copy, /Acción sensible: publica esta landing/);
+  assert.match(copy, /PUBLICAR_LANDING/);
+  assert.match(copy, /Acción sensible: requiere escribir PUBLICAR_LANDING/);
+  assert.match(copy, /Esta acción puede hacer la página pública e indexable/);
+  assert.match(copy, /Confirmación requerida para publicar esta landing SEO/);
+  assert.match(copy, /data-template-type/);
+  assert.match(copy, /data-status/);
+  assert.match(copy, /window\.prompt/);
+  assert.match(copy, /if \(action === "publish" && !confirmSeoRowPublish\(button\)\)/);
+  assert.match(copy, /Publicación cancelada: confirmación requerida/);
   assert.match(copy, /total_candidates/);
   assert.match(copy, /insertable_candidates/);
   assert.match(copy, /schema_migration_available/);
