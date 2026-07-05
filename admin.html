@@ -421,6 +421,45 @@
             <div class="admin-seo-opportunities-preview" data-seo-opportunities-preview data-seo-autogen-opportunities-preview aria-live="polite"></div>
           </article>
 
+          <article class="admin-panel admin-seo-opportunity-inspector-panel">
+            <div class="admin-panel-head">
+              <div>
+                <span class="admin-kicker muted">Inspector read-only</span>
+                <h2>Inspector de opportunities SEO (read-only)</h2>
+                <p class="admin-panel-sub">Solo lectura. No crea drafts, no publica y no ejecuta seeds. Usa este inspector para confirmar IDs reales antes de operar. No uses IDs inferidos.</p>
+              </div>
+              <div class="admin-view-toolbar">
+                <button class="admin-button tiny ghost" type="button" data-seo-opportunity-inspector-preset="risk_signals_home_life_pending">Buscar risk_signals home-life pending</button>
+              </div>
+            </div>
+            <form class="admin-filter admin-filter-wide" data-seo-opportunity-inspector-form>
+              <select name="template_type" aria-label="template_type">
+                <option value="">template_type</option>
+                <option value="price_city">price_city</option>
+                <option value="rent_city">rent_city</option>
+                <option value="expensive_listing_city">expensive_listing_city</option>
+                <option value="editorial_guide">editorial_guide</option>
+                <option value="home_life_topic">home_life_topic</option>
+              </select>
+              <input type="search" name="cluster_id" placeholder="cluster_id">
+              <select name="status" aria-label="status">
+                <option value="">status</option>
+                <option value="pending">pending</option>
+                <option value="needs_review">needs_review</option>
+                <option value="ready_to_publish">ready_to_publish</option>
+                <option value="published">published</option>
+              </select>
+              <input type="search" name="suggested_slug" placeholder="suggested_slug">
+              <input type="search" name="keyword" placeholder="keyword">
+              <input type="number" name="limit" min="1" max="50" step="1" value="10" aria-label="limit">
+              <button class="admin-button tiny ghost" type="submit">Consultar</button>
+            </form>
+            <p class="admin-table-hint">El inspector solo consulta <code>seo_landing_opportunities</code> y landings coincidentes por slug. No a&ntilde;ade acciones mutantes.</p>
+            <div class="admin-seo-diagnostics" data-seo-opportunity-inspector-result aria-live="polite">
+              <section><strong>Estado</strong><p>Configura filtros o usa el preset para consultar opportunities reales.</p></section>
+            </div>
+          </article>
+
           <article class="admin-panel admin-seo-review-panel">
             <div class="admin-panel-head">
               <div>
