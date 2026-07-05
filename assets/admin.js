@@ -7925,7 +7925,7 @@ function renderSeoOpportunityInspector(payload = null) {
 
   els.seoOpportunityInspectorResult.innerHTML = `
     <section>
-      <strong>Diagnostico read-only</strong>
+      <strong>Diagnóstico read-only</strong>
       <div>
         <span><b>ok:</b> ${escapeHtml(Boolean(payload.ok))}</span>
         <span><b>read_only:</b> ${escapeHtml(Boolean(payload.read_only))}</span>

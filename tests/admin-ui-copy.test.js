@@ -67,6 +67,7 @@ test("SEO Autogeneration muestra copy de Vercel Cron 4h sin textos obsoletos", (
   assert.match(copy, /seo\/opportunities\/inspect/);
   assert.match(copy, /data-seo-opportunity-inspector-form/);
   assert.match(copy, /data-seo-opportunity-inspector-result/);
+  assert.match(copy, /Diagnóstico read-only/);
   assert.doesNotMatch(opportunityInspectorPanel, /data-seo-publish|data-seo-generate|data-seo-opportunity-seed|data-seo-home-topic-seed|PUBLICAR_LANDING|SEED_SEO/);
   assert.match(copy, /Crear oportunidades SEO temáticas, no publicar/);
   assert.match(copy, /No publica landings\. Solo crea oportunidades pending/);
