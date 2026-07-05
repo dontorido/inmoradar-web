@@ -753,6 +753,191 @@ test("admin seo landings handler keeps filters and pagination read-only", async 
   assert.ok(paths.every((path) => !/generate-landings|seo-autogenerate|sitemap/i.test(path)));
 });
 
+test("admin seo opportunities inspector filters rows with safe diagnostics only", async () => {
+  const calls = [];
+  const result = await callAdmin("seo/opportunities/inspect", {
+    query:
+      "template_type=home_life_topic&cluster_id=risk_signals&status=pending&suggested_slug=%2Fsenales-riesgo-anuncio-vivienda%2F&keyword=senales%20riesgo%20anuncio%20vivienda&limit=500",
+    env: {
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-super-secret",
+      SUPABASE_ANON_KEY: "anon-super-secret"
+    },
+    fetchImpl: async (url, options = {}) => {
+      const path = apiPath(url);
+      calls.push({ path, method: options.method || "GET", body: options.body || "" });
+      assert.equal(options.body, undefined);
+      assert.ok(!options.method || options.method === "GET");
+
+      if (path.startsWith("seo_landing_opportunities?")) {
+        const params = new URLSearchParams(path.split("?")[1] || "");
+        if (params.get("order")) {
+          assert.equal(params.get("template_type"), "eq.home_life_topic");
+          assert.equal(params.get("cluster_id"), "eq.risk_signals");
+          assert.equal(params.get("status"), "eq.pending");
+          assert.equal(params.get("suggested_slug"), "eq./senales-riesgo-anuncio-vivienda/");
+          assert.equal(params.get("keyword"), "eq.senales riesgo anuncio vivienda");
+          assert.equal(params.get("limit"), "50");
+          return jsonResponse([
+            {
+              id: 129,
+              keyword: "senales riesgo anuncio vivienda",
+              city: null,
+              suggested_slug: "/senales-riesgo-anuncio-vivienda/",
+              cluster_id: "risk_signals",
+              template_type: "home_life_topic",
+              status: "pending",
+              search_priority: 92,
+              created_at: "2026-07-04T19:42:00.000Z",
+              updated_at: "2026-07-04T19:42:00.000Z",
+              brief_json: {
+                primary_keyword: "señales riesgo anuncio vivienda",
+                secondary_keywords: ["señales a comprobar antes de contactar"],
+                suggested_title: "Señales de riesgo en un anuncio de vivienda",
+                suggested_h1: "Señales de riesgo en un anuncio de vivienda antes de contactar",
+                suggested_meta_description: "Checklist prudente para revisar anuncios de vivienda antes de contactar.",
+                required_h2_sections: ["Qué señales conviene comprobar"],
+                suggested_faqs: [{ question: "¿Qué debo revisar?", answer: "Datos del anuncio y coherencia." }],
+                cta_primary: "Analiza un piso con InmoRadar antes de contactar.",
+                cta_secondary: "Instala la extensión de Chrome y úsala mientras revisas anuncios inmobiliarios.",
+                inmoradar_value_angle: "Analizar anuncios, detectar señales de riesgo y comparar viviendas.",
+                disclaimer: "InmoRadar ofrece orientación y análisis preliminar.",
+                content_warnings: ["Evitar lenguaje acusatorio."],
+                quality_requirements: ["Tono prudente."]
+              },
+              service_role_key: "service-role-super-secret",
+              authorization: "Bearer leaked-token",
+              process_env: { SUPABASE_SERVICE_ROLE_KEY: "service-role-super-secret" }
+            }
+          ]);
+        }
+        if (params.get("suggested_slug") === "eq./senales-riesgo-anuncio-vivienda/") {
+          return jsonResponse([
+            { id: 129, suggested_slug: "/senales-riesgo-anuncio-vivienda/" },
+            { id: 140, suggested_slug: "/senales-riesgo-anuncio-vivienda/" }
+          ]);
+        }
+        if (params.get("keyword") === "eq.senales riesgo anuncio vivienda") {
+          return jsonResponse([
+            { id: 129, keyword: "senales riesgo anuncio vivienda", cluster_id: "risk_signals" },
+            { id: 141, keyword: "senales riesgo anuncio vivienda", cluster_id: "risk_signals" }
+          ]);
+        }
+      }
+      if (path.startsWith("seo_landings?")) {
+        const params = new URLSearchParams(path.split("?")[1] || "");
+        assert.equal(params.get("slug"), "eq.senales-riesgo-anuncio-vivienda");
+        return jsonResponse([
+          {
+            id: 338,
+            slug: "senales-riesgo-anuncio-vivienda",
+            template_type: "home_life_topic",
+            status: "needs_review",
+            index_status: "noindex",
+            published_at: null,
+            body_html: "<p>No debe salir.</p>"
+          }
+        ]);
+      }
+      return jsonResponse([]);
+    }
+  });
+  const payloadText = JSON.stringify(result.payload);
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.read_only, true);
+  assert.deepEqual(result.payload.filters_applied, {
+    template_type: "home_life_topic",
+    cluster_id: "risk_signals",
+    status: "pending",
+    suggested_slug: "/senales-riesgo-anuncio-vivienda/",
+    keyword: "senales riesgo anuncio vivienda"
+  });
+  assert.equal(result.payload.limit_applied, 50);
+  assert.equal(result.payload.count, 1);
+  assert.equal(result.payload.opportunities[0].id, 129);
+  assert.equal(result.payload.opportunities[0].brief_json.primary_keyword, "señales riesgo anuncio vivienda");
+  assert.deepEqual(result.payload.opportunities[0].brief_json.content_warnings, ["Evitar lenguaje acusatorio."]);
+  assert.equal(result.payload.duplicate_suggested_slug_count, 1);
+  assert.equal(result.payload.duplicate_keyword_cluster_count, 1);
+  assert.equal(result.payload.matching_landing_slug_count, 1);
+  assert.deepEqual(result.payload.matching_landings[0], {
+    id: 338,
+    slug: "senales-riesgo-anuncio-vivienda",
+    template_type: "home_life_topic",
+    status: "needs_review",
+    index_status: "noindex",
+    published_at: null
+  });
+  assert.equal(calls.length, 4);
+  assert.ok(calls.every((call) => call.method === "GET" && !call.body));
+  assert.ok(calls.every((call) => /^(seo_landing_opportunities|seo_landings)\?/.test(call.path)));
+  assert.ok(calls.every((call) => !/on_conflict|generate-landings|seo-autogenerate|seed|publish-landings|\/publish/i.test(call.path)));
+  assert.doesNotMatch(payloadText, /service-role-super-secret|anon-super-secret|leaked-token|authorization|process_env|body_html/i);
+});
+
+test("admin seo opportunities inspector handles no filters and empty results safely", async () => {
+  const paths = [];
+  const result = await callAdmin("seo/opportunities/inspect", {
+    fetchImpl: async (url, options = {}) => {
+      paths.push(apiPath(url));
+      assert.equal(options.body, undefined);
+      assert.ok(!options.method || options.method === "GET");
+      return jsonResponse([]);
+    }
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.read_only, true);
+  assert.deepEqual(result.payload.filters_applied, {});
+  assert.deepEqual(result.payload.warnings, ["no_filters_applied_limit_enforced"]);
+  assert.equal(result.payload.count, 0);
+  assert.equal(result.payload.limit_applied, 10);
+  assert.deepEqual(result.payload.opportunities, []);
+  assert.equal(result.payload.duplicate_suggested_slug_count, 0);
+  assert.equal(result.payload.duplicate_keyword_cluster_count, 0);
+  assert.equal(result.payload.matching_landing_slug_count, 0);
+  assert.deepEqual(result.payload.matching_landings, []);
+  assert.equal(paths.length, 1);
+  assert.ok(paths[0].startsWith("seo_landing_opportunities?"));
+});
+
+test("admin seo opportunities inspector requires admin auth", async () => {
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      const previousFetch = global.fetch;
+      let fetchCalls = 0;
+      global.fetch = async () => {
+        fetchCalls += 1;
+        throw new Error("inspector_must_not_fetch_without_auth");
+      };
+      try {
+        const unauthorized = createJsonResponse();
+        await adminHandler(
+          {
+            method: "GET",
+            url: "/api/admin?resource=seo/opportunities/inspect&template_type=home_life_topic",
+            headers: { host: "inmoradar.app" }
+          },
+          unauthorized.res
+        );
+
+        assert.equal(unauthorized.res.statusCode, 401);
+        assert.deepEqual(unauthorized.payload(), { ok: false, error: "unauthorized" });
+        assert.equal(fetchCalls, 0);
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+});
+
 test("admin seo opportunities preview endpoint is read-only", async () => {
   const paths = [];
   const result = await callAdmin("seo/opportunities/preview", {

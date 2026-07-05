@@ -376,7 +376,10 @@ const { handleExtensionUsageSummary } = createExtensionUsageHandlers({
   clampLimit,
   supabaseFetch
 });
-const { handleSeoLandings: handleSeoLandingsReadOnly } = createSeoHandlers({
+const {
+  handleSeoLandings: handleSeoLandingsReadOnly,
+  handleSeoOpportunitiesInspect
+} = createSeoHandlers({
   buildSeoDailyPolicySnapshot,
   clampLimit,
   clampPage,
@@ -5314,6 +5317,11 @@ const ADMIN_SUPABASE_ROUTED_ROUTES = createAdminRouter([
     method: "GET",
     fallbackOnMethodMismatch: true,
     handler: ({ url }) => handleSeoLandingsReadOnly(url)
+  },
+  {
+    resource: "seo/opportunities/inspect",
+    method: "GET",
+    handler: ({ url }) => handleSeoOpportunitiesInspect(url)
   },
   {
     resource: "kpis/settings",
