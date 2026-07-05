@@ -11,6 +11,7 @@ const { buildSeoDailyPolicySnapshot, seoContentTypeForTemplate } = require("./pu
 const { buildPriceCityLanding } = require("./priceCity");
 const { evaluateLandingIndexability } = require("./indexability");
 const { calculateSeoLandingQuality } = require("./quality");
+const { canonicalForSlug, escapeHtml } = require("./text");
 
 const LANDING_TEMPLATE_TYPES = ["price_city", "rent_city", "expensive_listing_city"];
 const EDITORIAL_TEMPLATE_TYPES = ["editorial_guide"];
@@ -19,6 +20,7 @@ const RANDOM_LANDING_TEMPLATE_TYPES = new Set(["random", "mixed", "landing_rando
 const RANDOM_ALL_TEMPLATE_TYPES = new Set(["all"]);
 const RANDOM_NEWS_TEMPLATE_TYPES = new Set(["news", "guides", "editorial"]);
 const SEO_OPPORTUNITY_SEED_CONFIRMATION = "SEED_SEO_OPPORTUNITIES";
+const SEO_DRAFT_FROM_OPPORTUNITY_CONFIRMATION = "GENERATE_DRAFT_FROM_OPPORTUNITY";
 const SEO_OPPORTUNITY_SEED_MAX_LIMIT = 50;
 const SEO_OPPORTUNITY_SEED_DEFAULT_LIMIT = 10;
 const SEO_OPPORTUNITY_SEED_SOURCES = new Set(["market_price_sources"]);
@@ -1299,11 +1301,218 @@ function templateSourceData(sourceData, templateType) {
   };
 }
 
-function buildLandingForOpportunity(opportunity, sourceData) {
+function parseBriefJson(value) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch (_) {
+    return {};
+  }
+}
+
+function normalizeLandingSlug(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^\/+|\/+$/g, "")
+    .toLowerCase();
+}
+
+function suggestedSlugForOpportunity(opportunity) {
+  const brief = parseBriefJson(opportunity?.brief_json);
+  const raw = opportunity?.suggested_slug || brief.suggested_slug || brief.slug;
+  const slug = normalizeLandingSlug(raw || opportunitySlug(opportunity));
+  return slug ? `/${slug}/` : "";
+}
+
+function arrayFromBrief(value) {
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
+function safeHomeLifeBriefText(value) {
+  return String(value || "")
+    .replace(/¿?\s*es\s+(una\s+)?(estafa|fraude|engaño)\s+si/gi, "¿Es una señal a comprobar si")
+    .replace(/\bestafas?\b/gi, "señales delicadas")
+    .replace(/\bfraudes?\b/gi, "incidencias")
+    .replace(/\bengaños?\b/gi, "datos incoherentes")
+    .trim();
+}
+
+function defaultHomeLifeFaq() {
+  return [
+    {
+      question: "¿Qué señales conviene revisar antes de contactar por una vivienda?",
+      answer:
+        "Conviene revisar precio, precio/m², fotos, ubicación, datos incompletos y coherencia general, siempre como señales a comprobar y no como conclusiones absolutas."
+    },
+    {
+      question: "¿Puede un anuncio incompleto ser suficiente para descartar una vivienda?",
+      answer:
+        "No necesariamente. Puede indicar que necesitas pedir más información antes de visitar o comparar con otras viviendas similares."
+    },
+    {
+      question: "¿Cómo ayuda InmoRadar en esta revisión previa?",
+      answer:
+        "InmoRadar resume datos clave del anuncio, ayuda a revisar precio/m², detecta señales de riesgo y facilita comparar varias viviendas con más contexto."
+    },
+    {
+      question: "¿Esta guía sustituye una revisión profesional?",
+      answer:
+        "No. Es una orientación preliminar para preparar mejores preguntas antes de contactar."
+    }
+  ];
+}
+
+function sanitizeHomeLifeFaq(items) {
+  const sourceItems = arrayFromBrief(items).length ? items : defaultHomeLifeFaq();
+  return arrayFromBrief(sourceItems)
+    .slice(0, 5)
+    .map((item) => {
+      const question = typeof item === "object" ? item.question : item;
+      const answer =
+        typeof item === "object" && item.answer
+          ? item.answer
+          : "Revisa el anuncio con calma, contrasta los datos disponibles y prepara preguntas antes de contactar.";
+      return {
+        question: safeHomeLifeBriefText(question),
+        answer: safeHomeLifeBriefText(answer)
+      };
+    })
+    .filter((item) => item.question && item.answer);
+}
+
+function renderList(items) {
+  return arrayFromBrief(items)
+    .map((item) => `<li>${escapeHtml(safeHomeLifeBriefText(item))}</li>`)
+    .join("");
+}
+
+function renderFaq(items) {
+  return arrayFromBrief(items)
+    .slice(0, 5)
+    .map((item) => {
+      const question = typeof item === "object" ? item.question : item;
+      const answer =
+        typeof item === "object" && item.answer
+          ? item.answer
+          : "Revisa el anuncio con calma, contrasta los datos disponibles y prepara preguntas antes de contactar.";
+      return `<div class="seo-faq-item"><h3>${escapeHtml(safeHomeLifeBriefText(question))}</h3><p>${escapeHtml(
+        safeHomeLifeBriefText(answer)
+      )}</p></div>`;
+    })
+    .join("");
+}
+
+function homeLifeTopicBody({ title, brief, faq, ctaPrimary, ctaSecondary, disclaimer }) {
+  const requiredSections = arrayFromBrief(brief.required_h2_sections);
+  const secondaryKeywords = arrayFromBrief(brief.secondary_keywords);
+  const safeFaq = sanitizeHomeLifeFaq(faq);
+
+  const sectionsList = requiredSections.length
+    ? `<ul>${renderList(requiredSections)}</ul>`
+    : `<ul>
+        <li>Datos incompletos o poco claros.</li>
+        <li>Fotos que no permiten entender el estado real de la vivienda.</li>
+        <li>Precio/m² que conviene comparar con viviendas similares.</li>
+        <li>Ubicación, superficie o características que merecen contraste.</li>
+      </ul>`;
+  const keywordList = secondaryKeywords.length
+    ? `<p>También puede ayudarte a revisar: ${escapeHtml(secondaryKeywords.map(safeHomeLifeBriefText).join(", "))}.</p>`
+    : "";
+
+  return `
+    <article class="seo-landing seo-home-life-topic">
+      <h1>${escapeHtml(title)}</h1>
+      <p>Antes de contactar por una vivienda, merece la pena mirar el anuncio con calma. Algunas señales no significan por sí solas que haya un problema, pero sí pueden ayudarte a preparar preguntas prudentes, contrastar datos y tomar una decisión con más información.</p>
+      <p>Esta guía propone una revisión orientativa para detectar señales a comprobar sin sacar conclusiones absolutas sobre anunciantes, inmobiliarias ni portales inmobiliarios.</p>
+
+      <h2>Qué señales conviene comprobar en un anuncio de vivienda</h2>
+      <p>Un anuncio puede parecer atractivo y aun así dejar dudas razonables. Revisa si aparecen superficie, distribución, estado, planta, ascensor, gastos recurrentes, certificado energético y ubicación aproximada. Cuando falte información importante, lo mejor es anotarla como punto a preguntar.</p>
+      ${sectionsList}
+
+      <h2>Preguntas prudentes antes de contactar</h2>
+      <p>Antes de llamar o escribir, prepara preguntas concretas: qué gastos mensuales tiene la vivienda, si las fotos son recientes, si hay derramas previstas, qué incluye el precio y desde cuándo está publicado el anuncio. El objetivo no es acusar, sino obtener contexto útil para decidir si merece la pena avanzar.</p>
+      <p>También puedes preguntar por reformas, orientación, aislamiento, consumo energético y cualquier dato técnico que pueda afectar al coste real de vivir en esa vivienda.</p>
+
+      <h2>Precio/m², fotos, ubicación y datos incompletos</h2>
+      <p>El precio/m² es una referencia útil para comparar, pero no debe interpretarse de forma aislada. Una vivienda puede tener un precio distinto por estado, altura, luz, terraza, garaje, eficiencia energética o cercanía a servicios. Si las fotos no muestran baños, cocina, fachada o zonas clave, conviene pedir más detalle.</p>
+      <p>Los datos incompletos no prueban nada por sí mismos. Funcionan como señales a comprobar: elementos que merecen contraste antes de visitar o descartar.</p>
+      ${keywordList}
+
+      <h2>Cómo comparar varias viviendas sin precipitarte</h2>
+      <p>Compara anuncios similares en una tabla sencilla: precio total, precio/m², superficie, gastos, estado, ubicación, información pendiente y preguntas necesarias. Así evitas decidir solo por una foto o por un precio que parece bajo sin mirar el contexto.</p>
+      <p>Si varias viviendas tienen dudas parecidas, prioriza las que ofrecen más información y dejan menos preguntas básicas sin responder.</p>
+
+      <h2>Cómo te ayuda InmoRadar antes de contactar por un piso</h2>
+      <p>InmoRadar ayuda a analizar anuncios inmobiliarios antes de contactar. Resume datos clave, ayuda a revisar precio/m², detecta señales de riesgo y facilita comparar varias viviendas con más contexto antes de tomar una decisión.</p>
+      <p>También puede ayudarte a estimar mejor el coste real antes de decidir si contactas, visitas o sigues comparando otras opciones.</p>
+      <p><strong>${escapeHtml(ctaPrimary)}</strong></p>
+      <p>${escapeHtml(ctaSecondary)}</p>
+
+      <h2>Resumen: observa señales, pide contexto y decide con más información</h2>
+      <p>Una revisión prudente no busca conclusiones absolutas. Busca ordenar dudas, pedir información concreta y comparar mejor. Si un anuncio deja preguntas importantes abiertas, apunta esas preguntas antes de contactar y contrasta con otras viviendas similares.</p>
+
+      <h2>Preguntas frecuentes</h2>
+      <div class="seo-faq">${renderFaq(safeFaq)}</div>
+
+      <p class="seo-disclaimer">${escapeHtml(disclaimer)}</p>
+      <p><a href="/como-controlar-factura-luz-casa/">Revisar gastos de luz antes de elegir vivienda</a> puede completar esta lectura. También puedes consultar una guía sobre <a href="/guias/coste-real-comprar-vivienda/">coste real de comprar una vivienda</a>.</p>
+    </article>
+  `;
+}
+
+function buildHomeLifeTopicLanding(opportunity, sourceData) {
+  const brief = parseBriefJson(opportunity.brief_json);
+  const slug = normalizeLandingSlug(suggestedSlugForOpportunity(opportunity));
+  const isRiskSignals = opportunity.cluster_id === "risk_signals" || slug === "senales-riesgo-anuncio-vivienda";
+  const title = isRiskSignals
+    ? "Señales de riesgo en un anuncio de vivienda: guía prudente antes de contactar"
+    : String(brief.suggested_title || brief.suggested_h1 || opportunity.keyword || "Guía práctica antes de contactar por una vivienda").trim();
+  const h1 = isRiskSignals
+    ? "Señales de riesgo en un anuncio de vivienda: guía prudente antes de contactar"
+    : String(brief.suggested_h1 || title).trim();
+  const metaDescription = isRiskSignals
+    ? "Guía prudente para revisar señales, datos incompletos y preguntas clave antes de contactar por una vivienda. Compara anuncios con más contexto."
+    : String(brief.suggested_meta_description || "Guía orientativa para revisar anuncios inmobiliarios con más contexto antes de contactar.").trim();
+  const ctaPrimary = "Analiza un piso con InmoRadar antes de contactar.";
+  const ctaSecondary = "Instala la extensión de Chrome y úsala mientras revisas anuncios inmobiliarios.";
+  const disclaimer =
+    "InmoRadar ofrece orientación y análisis preliminar. No sustituye una tasación, asesoramiento legal, financiero, técnico, energético ni de seguros.";
+  const faq = sanitizeHomeLifeFaq(brief.suggested_faqs);
+  const bodyHtml = homeLifeTopicBody({
+    title: h1,
+    brief,
+    faq,
+    ctaPrimary,
+    ctaSecondary,
+    disclaimer
+  });
+
+  return {
+    slug,
+    title,
+    meta_title: title,
+    meta_description: metaDescription,
+    h1,
+    body_html: bodyHtml,
+    city: opportunity.city || null,
+    province: opportunity.province || null,
+    autonomous_community: opportunity.autonomous_community || null,
+    template_type: "home_life_topic",
+    canonical_url: canonicalForSlug(slug),
+    faq,
+    source_data_json: sourceData
+  };
+}
+
+function buildLandingForOpportunity(opportunity, sourceData, options = {}) {
   if (opportunity.template_type === "price_city") return buildPriceCityLanding(opportunity, sourceData);
   if (opportunity.template_type === "rent_city") return buildRentCityLanding(opportunity, sourceData);
   if (opportunity.template_type === "expensive_listing_city") return buildExpensiveListingCityLanding(opportunity, sourceData);
   if (opportunity.template_type === "editorial_guide") return buildEditorialGuideLanding(opportunity, sourceData);
+  if (opportunity.template_type === "home_life_topic" && options.allowHomeLifeTopic === true) {
+    return buildHomeLifeTopicLanding(opportunity, sourceData);
+  }
   throw new Error(`Unsupported template_type: ${opportunity.template_type}`);
 }
 
@@ -1337,6 +1546,252 @@ function buildLandingRecord({ opportunity, landing, sourceData, quality, indexab
     published_at: publishedAt,
     updated_at: now,
     last_generated_at: now
+  };
+}
+
+async function fetchOpportunityById(opportunityId) {
+  const params = new URLSearchParams({
+    select: "*",
+    id: `eq.${opportunityId}`,
+    limit: "1"
+  });
+  const rows = await supabaseFetch(`seo_landing_opportunities?${params.toString()}`);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+async function fetchLandingMatchesByOpportunityId(opportunityId) {
+  const params = new URLSearchParams({
+    select: "id,slug,template_type,status,index_status,published_at",
+    opportunity_id: `eq.${opportunityId}`,
+    limit: "10"
+  });
+  const rows = await supabaseFetch(`seo_landings?${params.toString()}`);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function fetchLandingMatchesBySlug(slug) {
+  const params = new URLSearchParams({
+    select: "id,slug,template_type,status,index_status,published_at",
+    slug: `eq.${slug}`,
+    limit: "10"
+  });
+  const rows = await supabaseFetch(`seo_landings?${params.toString()}`);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function fetchOpportunityMatchesBySuggestedSlug(suggestedSlug) {
+  if (!suggestedSlug) return [];
+  const params = new URLSearchParams({
+    select: "id,keyword,cluster_id,suggested_slug,template_type,status",
+    suggested_slug: `eq.${suggestedSlug}`,
+    limit: "50"
+  });
+  const rows = await supabaseFetch(`seo_landing_opportunities?${params.toString()}`);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function fetchOpportunityMatchesByKeywordCluster(opportunity) {
+  if (!opportunity.keyword || !opportunity.cluster_id) return [];
+  const params = new URLSearchParams({
+    select: "id,keyword,cluster_id,suggested_slug,template_type,status",
+    keyword: `eq.${opportunity.keyword}`,
+    cluster_id: `eq.${opportunity.cluster_id}`,
+    limit: "50"
+  });
+  const rows = await supabaseFetch(`seo_landing_opportunities?${params.toString()}`);
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function insertLanding(landing) {
+  const rows = await supabaseFetch("seo_landings", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify([landing])
+  });
+  return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+function duplicateCheckSummary({ landingOpportunityMatches, landingSlugMatches, suggestedSlugMatches, keywordClusterMatches }) {
+  return {
+    matching_landing_opportunity_count: landingOpportunityMatches.length,
+    matching_landing_slug_count: landingSlugMatches.length,
+    duplicate_suggested_slug_count: suggestedSlugMatches.length,
+    duplicate_keyword_cluster_count: keywordClusterMatches.length,
+    matching_landings: [...landingOpportunityMatches, ...landingSlugMatches].map((landing) => ({
+      id: landing.id,
+      slug: landing.slug,
+      template_type: landing.template_type,
+      status: landing.status,
+      index_status: landing.index_status,
+      published_at: landing.published_at ?? null
+    }))
+  };
+}
+
+function blockedDraftResult(error, httpStatus, extra = {}) {
+  return {
+    ok: false,
+    created: false,
+    error,
+    http_status: httpStatus,
+    published: false,
+    wordpress_called: false,
+    cron_executed: false,
+    seed_executed: false,
+    ...extra
+  };
+}
+
+async function generateSeoDraftFromOpportunity(input = {}) {
+  if (input.confirm !== SEO_DRAFT_FROM_OPPORTUNITY_CONFIRMATION) {
+    return blockedDraftResult("invalid_confirmation", 400);
+  }
+  if (!hasSupabaseConfig()) {
+    return blockedDraftResult("supabase_not_configured", 500);
+  }
+
+  const opportunityId = Number.parseInt(String(input.opportunity_id || input.opportunityId || ""), 10);
+  if (!Number.isInteger(opportunityId) || opportunityId <= 0) {
+    return blockedDraftResult("invalid_opportunity_id", 400);
+  }
+
+  const opportunity = await fetchOpportunityById(opportunityId);
+  if (!opportunity) {
+    return blockedDraftResult("opportunity_not_found", 404, { opportunity_id: opportunityId });
+  }
+  if (String(opportunity.status || "").toLowerCase() !== "pending") {
+    return blockedDraftResult("opportunity_status_not_pending", 409, {
+      opportunity_id: opportunityId,
+      opportunity_status: opportunity.status || null
+    });
+  }
+  if (opportunity.template_type !== "home_life_topic") {
+    return blockedDraftResult("unsupported_template_type", 400, {
+      opportunity_id: opportunityId,
+      template_type: opportunity.template_type || null
+    });
+  }
+
+  const suggestedSlug = suggestedSlugForOpportunity(opportunity);
+  const slug = normalizeLandingSlug(suggestedSlug);
+  if (!slug) {
+    return blockedDraftResult("missing_suggested_slug", 400, { opportunity_id: opportunityId });
+  }
+
+  const [landingOpportunityMatches, landingSlugMatches, suggestedSlugRows, keywordClusterRows] = await Promise.all([
+    fetchLandingMatchesByOpportunityId(opportunityId),
+    fetchLandingMatchesBySlug(slug),
+    fetchOpportunityMatchesBySuggestedSlug(suggestedSlug),
+    fetchOpportunityMatchesByKeywordCluster(opportunity)
+  ]);
+  const suggestedSlugMatches = suggestedSlugRows.filter((row) => Number(row.id) !== opportunityId);
+  const keywordClusterMatches = keywordClusterRows.filter((row) => Number(row.id) !== opportunityId);
+  const duplicate_checks = duplicateCheckSummary({
+    landingOpportunityMatches,
+    landingSlugMatches,
+    suggestedSlugMatches,
+    keywordClusterMatches
+  });
+
+  if (landingOpportunityMatches.length) {
+    return blockedDraftResult("landing_already_exists_for_opportunity", 409, {
+      opportunity_id: opportunityId,
+      slug,
+      duplicate_checks
+    });
+  }
+  if (landingSlugMatches.length) {
+    return blockedDraftResult("landing_slug_already_exists", 409, {
+      opportunity_id: opportunityId,
+      slug,
+      duplicate_checks
+    });
+  }
+  if (suggestedSlugMatches.length) {
+    return blockedDraftResult("duplicate_suggested_slug", 409, {
+      opportunity_id: opportunityId,
+      slug,
+      duplicate_checks
+    });
+  }
+  if (keywordClusterMatches.length) {
+    return blockedDraftResult("duplicate_keyword_cluster", 409, {
+      opportunity_id: opportunityId,
+      slug,
+      duplicate_checks
+    });
+  }
+
+  const now = input.now || new Date().toISOString();
+  const brief = parseBriefJson(opportunity.brief_json);
+  const sourceData = {
+    generated_by: "inmoradar_seo_manual_opportunity_draft",
+    source: "seo_landing_opportunities",
+    opportunity_id: opportunityId,
+    cluster_id: opportunity.cluster_id || null,
+    suggested_slug: suggestedSlug,
+    brief_json: brief,
+    sources: [],
+    records: [],
+    hasRealData: true,
+    hasProvincialOnly: false,
+    manual_review_required: true
+  };
+  const landing = buildLandingForOpportunity(opportunity, sourceData, { allowHomeLifeTopic: true });
+  const quality = calculateSeoLandingQuality(landing, { ...sourceData, faq: landing.faq });
+  const indexability = evaluateLandingIndexability(
+    {
+      ...landing,
+      status: "needs_review",
+      index_status: "noindex",
+      quality_score: quality.score,
+      word_count: quality.word_count
+    },
+    { quality }
+  );
+  const record = buildLandingRecord({
+    opportunity,
+    landing,
+    sourceData,
+    quality,
+    indexability,
+    status: "needs_review",
+    indexStatus: "noindex",
+    now,
+    publishedAt: null
+  });
+  record.source_data_json = {
+    ...record.source_data_json,
+    source: "seo_landing_opportunities",
+    opportunity_id: opportunityId,
+    cluster_id: opportunity.cluster_id || null,
+    suggested_slug: suggestedSlug,
+    brief_json: brief,
+    manual_review_required: true
+  };
+  const saved = await insertLanding(record);
+  const updatedOpportunityRows = await updateOpportunity(opportunity, { status: "needs_review" });
+  const updatedOpportunity = Array.isArray(updatedOpportunityRows) ? updatedOpportunityRows[0] || null : updatedOpportunityRows;
+
+  return {
+    ok: true,
+    created: true,
+    landing_id: saved?.id || null,
+    opportunity_id: opportunityId,
+    slug: record.slug,
+    status: record.status,
+    index_status: record.index_status,
+    canonical_url: record.canonical_url,
+    published_at: record.published_at,
+    warnings: quality.warnings || [],
+    duplicate_checks,
+    opportunity_status: updatedOpportunity?.status || "needs_review",
+    quality_score: quality.score,
+    word_count: quality.word_count,
+    published: false,
+    wordpress_called: false,
+    cron_executed: false,
+    seed_executed: false
   };
 }
 
@@ -1552,6 +2007,7 @@ module.exports = {
   DEFAULT_SEED_OPPORTUNITIES,
   getSeoCandidateSourceDiagnostics,
   getSeoOpportunitiesPreview,
+  generateSeoDraftFromOpportunity,
   seedSeoOpportunitiesFromPreview,
   runSeoLandingGeneration
 };
