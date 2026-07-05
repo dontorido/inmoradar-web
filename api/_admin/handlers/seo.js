@@ -62,6 +62,83 @@ function createSeoHandlers({
     };
   }
 
+  function cleanInspectFilter(value, { lowercase = false } = {}) {
+    const cleaned = String(value || "").trim();
+    if (!cleaned || cleaned.toLowerCase() === "all") return "";
+    const truncated = cleaned.slice(0, 160);
+    return lowercase ? truncated.toLowerCase() : truncated;
+  }
+
+  function normalizeLandingSlug(value) {
+    return String(value || "")
+      .trim()
+      .replace(/^https?:\/\/[^/]+/i, "")
+      .split(/[?#]/)[0]
+      .replace(/^\/+|\/+$/g, "")
+      .toLowerCase();
+  }
+
+  function duplicateOverflowCount(values = []) {
+    const counts = values
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter(Boolean)
+      .reduce((acc, value) => {
+        acc[value] = (acc[value] || 0) + 1;
+        return acc;
+      }, {});
+    return Object.values(counts).reduce((sum, count) => sum + Math.max(0, count - 1), 0);
+  }
+
+  function briefArray(value) {
+    return Array.isArray(value) ? value.filter(Boolean) : [];
+  }
+
+  function publicBrief(brief = {}) {
+    const parsed = parseJsonMaybe(brief);
+    return {
+      primary_keyword: parsed.primary_keyword || null,
+      secondary_keywords: briefArray(parsed.secondary_keywords),
+      suggested_title: parsed.suggested_title || null,
+      suggested_h1: parsed.suggested_h1 || null,
+      suggested_meta_description: parsed.suggested_meta_description || null,
+      required_h2_sections: briefArray(parsed.required_h2_sections),
+      suggested_faqs: briefArray(parsed.suggested_faqs),
+      cta_primary: parsed.cta_primary || null,
+      cta_secondary: parsed.cta_secondary || null,
+      inmoradar_value_angle: parsed.inmoradar_value_angle || null,
+      disclaimer: parsed.disclaimer || null,
+      content_warnings: briefArray(parsed.content_warnings),
+      quality_requirements: briefArray(parsed.quality_requirements)
+    };
+  }
+
+  function publicOpportunityRow(row = {}) {
+    return {
+      id: row.id ?? null,
+      keyword: row.keyword || null,
+      city: row.city || null,
+      suggested_slug: row.suggested_slug || null,
+      cluster_id: row.cluster_id || null,
+      template_type: row.template_type || null,
+      status: row.status || null,
+      search_priority: row.search_priority ?? null,
+      created_at: row.created_at || null,
+      updated_at: row.updated_at || null,
+      brief_json: publicBrief(row.brief_json)
+    };
+  }
+
+  function publicMatchingLanding(row = {}) {
+    return {
+      id: row.id ?? null,
+      slug: row.slug || null,
+      template_type: row.template_type || null,
+      status: row.status || null,
+      index_status: row.index_status || null,
+      published_at: row.published_at || null
+    };
+  }
+
   function buildSeoLandingsSummary(rows = [], opportunities = [], activeStatus = "all") {
     const landings = Array.isArray(rows) ? rows : [];
     const opportunityRows = Array.isArray(opportunities) ? opportunities : [];
@@ -248,8 +325,98 @@ function createSeoHandlers({
     };
   }
 
+  async function handleSeoOpportunitiesInspect(url) {
+    const pageSize = clampLimit(url.searchParams.get("limit"), 10, 50);
+    const filters = {
+      template_type: cleanInspectFilter(url.searchParams.get("template_type"), { lowercase: true }),
+      cluster_id: cleanInspectFilter(url.searchParams.get("cluster_id")),
+      status: cleanInspectFilter(url.searchParams.get("status"), { lowercase: true }),
+      suggested_slug: cleanInspectFilter(url.searchParams.get("suggested_slug")),
+      keyword: cleanInspectFilter(url.searchParams.get("keyword"))
+    };
+    const activeFilters = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
+    const warnings = Object.keys(activeFilters).length ? [] : ["no_filters_applied_limit_enforced"];
+    const opportunitySelect =
+      "id,keyword,city,suggested_slug,cluster_id,template_type,status,search_priority,created_at,updated_at,brief_json";
+    const opportunityParams = new URLSearchParams({
+      select: opportunitySelect,
+      order: "search_priority.desc,id.asc",
+      limit: String(pageSize)
+    });
+    if (filters.template_type) opportunityParams.set("template_type", `eq.${filters.template_type}`);
+    if (filters.cluster_id) opportunityParams.set("cluster_id", `eq.${filters.cluster_id}`);
+    if (filters.status) opportunityParams.set("status", `eq.${filters.status}`);
+    if (filters.suggested_slug) opportunityParams.set("suggested_slug", `eq.${filters.suggested_slug}`);
+    if (filters.keyword) opportunityParams.set("keyword", `eq.${filters.keyword}`);
+
+    const rows = await supabaseFetch(`seo_landing_opportunities?${opportunityParams.toString()}`);
+    const opportunities = Array.isArray(rows) ? rows : [];
+    let duplicateSuggestedSlugCount = duplicateOverflowCount(opportunities.map((row) => row.suggested_slug));
+    let duplicateKeywordClusterCount = duplicateOverflowCount(
+      opportunities.map((row) => (row.keyword && row.cluster_id ? `${row.keyword}::${row.cluster_id}` : ""))
+    );
+    let matchingLandings = [];
+    const slugForLookup = filters.suggested_slug || opportunities[0]?.suggested_slug || "";
+    const landingSlug = normalizeLandingSlug(slugForLookup);
+
+    if (filters.suggested_slug) {
+      const slugParams = new URLSearchParams({
+        select: "id,keyword,cluster_id,suggested_slug,template_type,status",
+        suggested_slug: `eq.${filters.suggested_slug}`,
+        limit: "5000"
+      });
+      const slugRows = await supabaseFetch(`seo_landing_opportunities?${slugParams.toString()}`);
+      duplicateSuggestedSlugCount = Math.max(
+        duplicateSuggestedSlugCount,
+        Math.max(0, (Array.isArray(slugRows) ? slugRows.length : 0) - 1)
+      );
+    }
+
+    if (filters.keyword && filters.cluster_id) {
+      const keywordClusterParams = new URLSearchParams({
+        select: "id,keyword,cluster_id,suggested_slug,template_type,status",
+        keyword: `eq.${filters.keyword}`,
+        cluster_id: `eq.${filters.cluster_id}`,
+        limit: "5000"
+      });
+      const keywordClusterRows = await supabaseFetch(`seo_landing_opportunities?${keywordClusterParams.toString()}`);
+      duplicateKeywordClusterCount = Math.max(
+        duplicateKeywordClusterCount,
+        Math.max(0, (Array.isArray(keywordClusterRows) ? keywordClusterRows.length : 0) - 1)
+      );
+    }
+
+    if (landingSlug) {
+      const landingParams = new URLSearchParams({
+        select: "id,slug,template_type,status,index_status,published_at",
+        slug: `eq.${landingSlug}`,
+        limit: "50"
+      });
+      const landingRows = await supabaseFetch(`seo_landings?${landingParams.toString()}`);
+      matchingLandings = Array.isArray(landingRows) ? landingRows.map(publicMatchingLanding) : [];
+    }
+
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        read_only: true,
+        filters_applied: activeFilters,
+        warnings,
+        count: opportunities.length,
+        limit_applied: pageSize,
+        opportunities: opportunities.map(publicOpportunityRow),
+        duplicate_suggested_slug_count: duplicateSuggestedSlugCount,
+        duplicate_keyword_cluster_count: duplicateKeywordClusterCount,
+        matching_landing_slug_count: matchingLandings.length,
+        matching_landings: matchingLandings
+      }
+    };
+  }
+
   return {
-    handleSeoLandings
+    handleSeoLandings,
+    handleSeoOpportunitiesInspect
   };
 }
 
