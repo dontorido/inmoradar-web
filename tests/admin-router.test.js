@@ -938,6 +938,289 @@ test("admin seo opportunities inspector requires admin auth", async () => {
   );
 });
 
+const RISK_SIGNALS_BRIEF = {
+  primary_keyword: "señales riesgo anuncio vivienda",
+  secondary_keywords: ["señales a comprobar antes de contactar", "datos incompletos vivienda"],
+  suggested_title: "Señales de riesgo en un anuncio de vivienda",
+  suggested_h1: "Señales de riesgo en un anuncio de vivienda antes de contactar",
+  suggested_meta_description: "Checklist prudente para revisar anuncios de vivienda antes de contactar.",
+  required_h2_sections: ["Qué señales conviene comprobar", "Preguntas prudentes antes de contactar"],
+  suggested_faqs: [
+    {
+      question: "¿Qué señales conviene revisar?",
+      answer: "Precio/m², fotos, ubicación y datos incompletos."
+    }
+  ],
+  cta_primary: "Analiza un piso con InmoRadar antes de contactar.",
+  cta_secondary: "Instala la extensión de Chrome y úsala mientras revisas anuncios inmobiliarios.",
+  disclaimer:
+    "InmoRadar ofrece orientación y análisis preliminar. No sustituye una tasación, asesoramiento legal, financiero, técnico, energético ni de seguros.",
+  content_warnings: ["Tono prudente y no acusatorio."]
+};
+
+function riskSignalsOpportunity(overrides = {}) {
+  return {
+    id: 129,
+    keyword: "señales riesgo anuncio vivienda",
+    city: null,
+    suggested_slug: "/senales-riesgo-anuncio-vivienda/",
+    cluster_id: "risk_signals",
+    template_type: "home_life_topic",
+    status: "pending",
+    search_priority: 91,
+    created_at: "2026-07-04T19:42:00.000Z",
+    updated_at: "2026-07-04T19:42:00.000Z",
+    brief_json: RISK_SIGNALS_BRIEF,
+    ...overrides
+  };
+}
+
+function createGenerateDraftFetch({ opportunity = riskSignalsOpportunity(), landingByOpportunity = [], landingBySlug = [], suggestedSlugRows, keywordClusterRows } = {}) {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    const path = apiPath(url);
+    const method = options.method || "GET";
+    calls.push({ path, method, body: options.body || "" });
+
+    if (path.startsWith("seo_landing_opportunities?")) {
+      const params = new URLSearchParams(path.split("?")[1] || "");
+      if (method === "PATCH") {
+        assert.equal(params.get("id"), "eq.129");
+        assert.deepEqual(JSON.parse(options.body), { status: "needs_review" });
+        return jsonResponse([{ id: 129, status: "needs_review" }]);
+      }
+      if (params.get("id") === "eq.129") return jsonResponse(opportunity ? [opportunity] : []);
+      if (params.get("suggested_slug") === "eq./senales-riesgo-anuncio-vivienda/") {
+        return jsonResponse(suggestedSlugRows || (opportunity ? [opportunity] : []));
+      }
+      if (params.get("keyword") === "eq.señales riesgo anuncio vivienda") {
+        return jsonResponse(keywordClusterRows || (opportunity ? [opportunity] : []));
+      }
+      return jsonResponse([]);
+    }
+
+    if (path.startsWith("seo_landings?")) {
+      const params = new URLSearchParams(path.split("?")[1] || "");
+      if (params.get("opportunity_id") === "eq.129") return jsonResponse(landingByOpportunity);
+      if (params.get("slug") === "eq.senales-riesgo-anuncio-vivienda") return jsonResponse(landingBySlug);
+      return jsonResponse([]);
+    }
+
+    if (path === "seo_landings" && method === "POST") {
+      const rows = JSON.parse(options.body);
+      return jsonResponse([{ id: 338, ...rows[0] }]);
+    }
+
+    return jsonResponse([]);
+  };
+  return { calls, fetchImpl };
+}
+
+test("admin seo opportunity draft generation requires admin auth", async () => {
+  await withEnv(
+    {
+      ADMIN_IMPORT_TOKEN: "admin-test-token",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+    },
+    async () => {
+      const previousFetch = global.fetch;
+      let fetchCalls = 0;
+      global.fetch = async () => {
+        fetchCalls += 1;
+        throw new Error("generate_draft_must_not_fetch_without_auth");
+      };
+      try {
+        const unauthorized = createJsonResponse();
+        await adminHandler(
+          {
+            method: "POST",
+            url: "/api/admin?resource=seo/opportunities/generate-draft",
+            headers: { host: "inmoradar.app" },
+            body: { opportunity_id: 129, confirm: "GENERATE_DRAFT_FROM_OPPORTUNITY" }
+          },
+          unauthorized.res
+        );
+
+        assert.equal(unauthorized.res.statusCode, 401);
+        assert.deepEqual(unauthorized.payload(), { ok: false, error: "unauthorized" });
+        assert.equal(fetchCalls, 0);
+      } finally {
+        global.fetch = previousFetch;
+      }
+    }
+  );
+});
+
+test("admin seo opportunity draft generation rejects invalid confirmation without writes", async () => {
+  let fetchCalls = 0;
+  const result = await callAdmin("seo/opportunities/generate-draft", {
+    method: "POST",
+    body: { opportunity_id: 129, confirm: "WRONG" },
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      throw new Error("invalid_confirmation_must_not_fetch");
+    }
+  });
+
+  assert.equal(result.statusCode, 400);
+  assert.equal(result.payload.ok, false);
+  assert.equal(result.payload.error, "invalid_confirmation");
+  assert.equal(result.payload.created, false);
+  assert.equal(result.payload.published, false);
+  assert.equal(result.payload.wordpress_called, false);
+  assert.equal(result.payload.cron_executed, false);
+  assert.equal(result.payload.seed_executed, false);
+  assert.equal(fetchCalls, 0);
+});
+
+test("admin seo opportunity draft generation refuses missing or non-pending opportunities without writes", async () => {
+  const missing = createGenerateDraftFetch({ opportunity: null });
+  const missingResult = await callAdmin("seo/opportunities/generate-draft", {
+    method: "POST",
+    body: { opportunity_id: 129, confirm: "GENERATE_DRAFT_FROM_OPPORTUNITY" },
+    fetchImpl: missing.fetchImpl
+  });
+
+  assert.equal(missingResult.statusCode, 404);
+  assert.equal(missingResult.payload.error, "opportunity_not_found");
+  assert.ok(missing.calls.every((call) => call.method === "GET"));
+
+  const notPending = createGenerateDraftFetch({ opportunity: riskSignalsOpportunity({ status: "ready_to_publish" }) });
+  const notPendingResult = await callAdmin("seo/opportunities/generate-draft", {
+    method: "POST",
+    body: { opportunity_id: 129, confirm: "GENERATE_DRAFT_FROM_OPPORTUNITY" },
+    fetchImpl: notPending.fetchImpl
+  });
+
+  assert.equal(notPendingResult.statusCode, 409);
+  assert.equal(notPendingResult.payload.error, "opportunity_status_not_pending");
+  assert.ok(notPending.calls.every((call) => call.method === "GET"));
+});
+
+test("admin seo opportunity draft generation refuses existing landing matches without writes", async () => {
+  const byOpportunity = createGenerateDraftFetch({
+    landingByOpportunity: [{ id: 338, slug: "senales-riesgo-anuncio-vivienda", status: "needs_review", index_status: "noindex", published_at: null }]
+  });
+  const byOpportunityResult = await callAdmin("seo/opportunities/generate-draft", {
+    method: "POST",
+    body: { opportunity_id: 129, confirm: "GENERATE_DRAFT_FROM_OPPORTUNITY" },
+    fetchImpl: byOpportunity.fetchImpl
+  });
+
+  assert.equal(byOpportunityResult.statusCode, 409);
+  assert.equal(byOpportunityResult.payload.error, "landing_already_exists_for_opportunity");
+  assert.ok(byOpportunity.calls.every((call) => call.method === "GET"));
+
+  const bySlug = createGenerateDraftFetch({
+    landingBySlug: [{ id: 339, slug: "senales-riesgo-anuncio-vivienda", status: "published", index_status: "index", published_at: "2026-07-05T10:00:00.000Z" }]
+  });
+  const bySlugResult = await callAdmin("seo/opportunities/generate-draft", {
+    method: "POST",
+    body: { opportunity_id: 129, confirm: "GENERATE_DRAFT_FROM_OPPORTUNITY" },
+    fetchImpl: bySlug.fetchImpl
+  });
+
+  assert.equal(bySlugResult.statusCode, 409);
+  assert.equal(bySlugResult.payload.error, "landing_slug_already_exists");
+  assert.equal(bySlugResult.payload.duplicate_checks.matching_landing_slug_count, 1);
+  assert.ok(bySlug.calls.every((call) => call.method === "GET"));
+});
+
+test("admin seo opportunity draft generation refuses duplicate opportunity slug or keyword cluster without writes", async () => {
+  const duplicateSlug = createGenerateDraftFetch({
+    suggestedSlugRows: [riskSignalsOpportunity(), riskSignalsOpportunity({ id: 143, keyword: "otra keyword" })]
+  });
+  const duplicateSlugResult = await callAdmin("seo/opportunities/generate-draft", {
+    method: "POST",
+    body: { opportunity_id: 129, confirm: "GENERATE_DRAFT_FROM_OPPORTUNITY" },
+    fetchImpl: duplicateSlug.fetchImpl
+  });
+
+  assert.equal(duplicateSlugResult.statusCode, 409);
+  assert.equal(duplicateSlugResult.payload.error, "duplicate_suggested_slug");
+  assert.equal(duplicateSlugResult.payload.duplicate_checks.duplicate_suggested_slug_count, 1);
+  assert.ok(duplicateSlug.calls.every((call) => call.method === "GET"));
+
+  const duplicateKeyword = createGenerateDraftFetch({
+    keywordClusterRows: [riskSignalsOpportunity(), riskSignalsOpportunity({ id: 144, suggested_slug: "/otra-url/" })]
+  });
+  const duplicateKeywordResult = await callAdmin("seo/opportunities/generate-draft", {
+    method: "POST",
+    body: { opportunity_id: 129, confirm: "GENERATE_DRAFT_FROM_OPPORTUNITY" },
+    fetchImpl: duplicateKeyword.fetchImpl
+  });
+
+  assert.equal(duplicateKeywordResult.statusCode, 409);
+  assert.equal(duplicateKeywordResult.payload.error, "duplicate_keyword_cluster");
+  assert.equal(duplicateKeywordResult.payload.duplicate_checks.duplicate_keyword_cluster_count, 1);
+  assert.ok(duplicateKeyword.calls.every((call) => call.method === "GET"));
+});
+
+test("admin seo opportunity draft generation creates one home-life review draft from exact opportunity", async () => {
+  const { calls, fetchImpl } = createGenerateDraftFetch({
+    opportunity: riskSignalsOpportunity({
+      brief_json: {
+        ...RISK_SIGNALS_BRIEF,
+        secondary_keywords: ["evitar estafa alquiler vivienda", "señales a comprobar antes de contactar"],
+        suggested_faqs: [
+          {
+            question: "¿Es fraude si falta información?",
+            answer: "No. Es una señal a comprobar con preguntas prudentes."
+          }
+        ]
+      }
+    })
+  });
+  const result = await callAdmin("seo/opportunities/generate-draft", {
+    method: "POST",
+    body: { opportunity_id: 129, confirm: "GENERATE_DRAFT_FROM_OPPORTUNITY" },
+    fetchImpl
+  });
+  const postCall = calls.find((call) => call.path === "seo_landings" && call.method === "POST");
+  const patchCalls = calls.filter((call) => call.method === "PATCH");
+  const inserted = JSON.parse(postCall.body)[0];
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.payload.ok, true);
+  assert.equal(result.payload.created, true);
+  assert.equal(result.payload.landing_id, 338);
+  assert.equal(result.payload.opportunity_id, 129);
+  assert.equal(result.payload.slug, "senales-riesgo-anuncio-vivienda");
+  assert.equal(result.payload.status, "needs_review");
+  assert.equal(result.payload.index_status, "noindex");
+  assert.equal(result.payload.canonical_url, "https://inmoradar.app/senales-riesgo-anuncio-vivienda/");
+  assert.equal(result.payload.published_at, null);
+  assert.equal(result.payload.published, false);
+  assert.equal(result.payload.wordpress_called, false);
+  assert.equal(result.payload.cron_executed, false);
+  assert.equal(result.payload.seed_executed, false);
+  assert.equal(result.payload.duplicate_checks.duplicate_suggested_slug_count, 0);
+  assert.equal(result.payload.duplicate_checks.duplicate_keyword_cluster_count, 0);
+
+  assert.equal(inserted.opportunity_id, 129);
+  assert.equal(inserted.template_type, "home_life_topic");
+  assert.equal(inserted.status, "needs_review");
+  assert.equal(inserted.index_status, "noindex");
+  assert.equal(inserted.published_at, null);
+  assert.equal(inserted.slug, "senales-riesgo-anuncio-vivienda");
+  assert.equal(inserted.canonical_url, "https://inmoradar.app/senales-riesgo-anuncio-vivienda/");
+  assert.match(inserted.body_html, /<h1>Señales de riesgo en un anuncio de vivienda: guía prudente antes de contactar<\/h1>/);
+  assert.match(inserted.body_html, /Cómo te ayuda InmoRadar antes de contactar por un piso/);
+  assert.match(inserted.body_html, /Analiza un piso con InmoRadar antes de contactar\./);
+  assert.match(inserted.body_html, /Instala la extensión de Chrome y úsala mientras revisas anuncios inmobiliarios\./);
+  assert.match(inserted.body_html, /No sustituye una tasación, asesoramiento legal, financiero, técnico, energético ni de seguros\./);
+  assert.match(inserted.body_html, /precio\/m²/);
+  assert.match(inserted.body_html, /señales a comprobar|Señales/);
+  assert.doesNotMatch(inserted.body_html, /\bestafas?\b|\bfraudes?\b|\bengaños?\b/i);
+  assert.equal(patchCalls.length, 1);
+  assert.equal(patchCalls[0].path, "seo_landing_opportunities?id=eq.129");
+  assert.deepEqual(JSON.parse(patchCalls[0].body), { status: "needs_review" });
+  assert.ok(calls.some((call) => call.path.startsWith("seo_landing_opportunities?select=*&id=eq.129")));
+  assert.ok(!calls.some((call) => /order=|status=eq\.pending|generate-landings|seo-autogenerate|home-topics-seed|cron|wordpress|publish-landings|\/publish/i.test(call.path)));
+  assert.ok(!calls.some((call) => call.method === "POST" && call.path !== "seo_landings"));
+});
+
 test("admin seo opportunities preview endpoint is read-only", async () => {
   const paths = [];
   const result = await callAdmin("seo/opportunities/preview", {

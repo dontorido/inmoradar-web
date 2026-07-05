@@ -17,7 +17,12 @@ const {
   getSeoContentPublicationStatus,
   runSeoContentPublication
 } = require("./_seo/contentPublisher");
-const { getSeoOpportunitiesPreview, runSeoLandingGeneration, seedSeoOpportunitiesFromPreview } = require("./_seo/generator");
+const {
+  generateSeoDraftFromOpportunity,
+  getSeoOpportunitiesPreview,
+  runSeoLandingGeneration,
+  seedSeoOpportunitiesFromPreview
+} = require("./_seo/generator");
 const { getSeoHomeTopicOpportunitiesPreview, seedSeoHomeTopicOpportunities } = require("./_seo/homeLifeTopics");
 const { evaluateLandingIndexability } = require("./_seo/indexability");
 const { SEO_DAILY_TARGETS, buildSeoDailyPolicySnapshot } = require("./_seo/publishingPolicy");
@@ -995,6 +1000,14 @@ async function handleSeoGenerate(req) {
     maxPublishesPerRun: typeof body.maxPublishesPerRun === "number" ? body.maxPublishesPerRun : undefined
   });
   return { status: 200, payload: result };
+}
+
+async function handleSeoOpportunityGenerateDraft(req) {
+  if (req.method !== "POST") {
+    return { status: 405, payload: { ok: false, error: "method_not_allowed" } };
+  }
+  const result = await generateSeoDraftFromOpportunity(await readJsonBody(req));
+  return { status: result.http_status || (result.ok === false ? 400 : 200), payload: result };
 }
 
 async function handleSeoOpportunitiesPreview(req, url) {
@@ -5412,6 +5425,10 @@ async function handleAdminRequest(req, res) {
     }
     if (resource === "seo/generate-landings") {
       const result = await handleSeoGenerate(req);
+      return json(res, result.status, result.payload);
+    }
+    if (resource === "seo/opportunities/generate-draft") {
+      const result = await handleSeoOpportunityGenerateDraft(req);
       return json(res, result.status, result.payload);
     }
     if (resource === "seo/opportunities/preview") {
