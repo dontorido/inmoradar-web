@@ -13,6 +13,7 @@ test("SEO Autogeneration muestra copy de Vercel Cron 4h sin textos obsoletos", (
   const adminJs = fs.readFileSync(path.join(root, "assets", "admin.js"), "utf8");
   const copy = `${html}\n${adminJs}`;
   const autogenPanel = html.match(/<article class="admin-panel admin-seo-autogen-panel"[\s\S]*?<\/article>/)?.[0] || "";
+  const opportunityInspectorPanel = html.match(/<article class="admin-panel admin-seo-opportunity-inspector-panel"[\s\S]*?<\/article>/)?.[0] || "";
   const autogenLoader = adminJs.match(/async function loadSeoAutogeneration\(\)[\s\S]*?async function loadKpis/)?.[0] || "";
   const previewRenderer = adminJs.match(/function renderSeoOpportunitiesPreview[\s\S]*?function renderSeoSummary/)?.[0] || "";
 
@@ -57,6 +58,16 @@ test("SEO Autogeneration muestra copy de Vercel Cron 4h sin textos obsoletos", (
   assert.match(copy, /data-seo-opportunity-seed-confirm/);
   assert.match(copy, /data-seo-opportunity-seed-execute/);
   assert.match(copy, /seo\/opportunities\/preview&content_type=landing&template=all&limit=50/);
+  assert.match(copy, /Inspector de opportunities SEO \(read-only\)/);
+  assert.match(copy, /Solo lectura\./);
+  assert.match(copy, /No crea drafts, no publica y no ejecuta seeds\./);
+  assert.match(copy, /Usa este inspector para confirmar IDs reales antes de operar\./);
+  assert.match(copy, /No uses IDs inferidos\./);
+  assert.match(copy, /Buscar risk_signals home-life pending/);
+  assert.match(copy, /seo\/opportunities\/inspect/);
+  assert.match(copy, /data-seo-opportunity-inspector-form/);
+  assert.match(copy, /data-seo-opportunity-inspector-result/);
+  assert.doesNotMatch(opportunityInspectorPanel, /data-seo-publish|data-seo-generate|data-seo-opportunity-seed|data-seo-home-topic-seed|PUBLICAR_LANDING|SEED_SEO/);
   assert.match(copy, /Crear oportunidades SEO temáticas, no publicar/);
   assert.match(copy, /No publica landings\. Solo crea oportunidades pending/);
   assert.match(copy, /SEED_SEO_HOME_TOPICS/);

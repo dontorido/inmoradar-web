@@ -202,6 +202,9 @@ const state = {
     lastPreview: null,
     lastResult: null
   },
+  seoOpportunityInspector: {
+    lastResult: null
+  },
   parking: {
     lastProbe: null
   },
@@ -355,6 +358,9 @@ const els = {
   seoOpportunitiesPreview: document.querySelector("[data-seo-opportunities-preview]"),
   seoOpportunitiesPreviews: document.querySelectorAll("[data-seo-opportunities-preview]"),
   seoAutogenOpportunitiesPreview: document.querySelector("[data-seo-autogen-opportunities-preview]"),
+  seoOpportunityInspectorForm: document.querySelector("[data-seo-opportunity-inspector-form]"),
+  seoOpportunityInspectorResult: document.querySelector("[data-seo-opportunity-inspector-result]"),
+  seoOpportunityInspectorPresetButtons: document.querySelectorAll("[data-seo-opportunity-inspector-preset]"),
   seoRows: document.querySelector("[data-seo-rows]"),
   seoPagination: document.querySelector("[data-seo-pagination]"),
   premiumFilter: document.querySelector("[data-premium-filter]"),
@@ -7834,6 +7840,176 @@ async function loadSeoHomeTopicOpportunitiesPreview() {
   }));
 }
 
+function seoOpportunityInspectorSafeList(values, emptyText = "Sin datos") {
+  const items = Array.isArray(values) ? values.filter(Boolean) : [];
+  if (!items.length) return `<span>${escapeHtml(emptyText)}</span>`;
+  return items
+    .slice(0, 8)
+    .map((item) => {
+      if (item && typeof item === "object") {
+        const question = item.question || item.q || "";
+        const answer = item.answer || item.a || "";
+        const text = [question, answer].filter(Boolean).join(" - ") || JSON.stringify(item);
+        return `<span>${escapeHtml(text)}</span>`;
+      }
+      return `<span>${escapeHtml(item)}</span>`;
+    })
+    .join("");
+}
+
+function seoOpportunityInspectorScalar(value) {
+  if (value === undefined || value === null || value === "") return "-";
+  return String(value);
+}
+
+function renderSeoOpportunityInspector(payload = null) {
+  if (!els.seoOpportunityInspectorResult) return;
+  if (!payload) {
+    els.seoOpportunityInspectorResult.innerHTML = `<section><strong>Estado</strong><p>Configura filtros o usa el preset para consultar opportunities reales.</p></section>`;
+    return;
+  }
+  if (payload.ok === false) {
+    els.seoOpportunityInspectorResult.innerHTML = `<section><strong>Error</strong><p>${escapeHtml(payload.message || payload.error || "No se pudo consultar el inspector read-only.")}</p></section>`;
+    return;
+  }
+
+  const opportunities = Array.isArray(payload.opportunities) ? payload.opportunities : [];
+  const rows = opportunities
+    .map((row) => `
+      <tr>
+        <td><strong>${escapeHtml(seoOpportunityInspectorScalar(row.id))}</strong></td>
+        <td>${escapeHtml(seoOpportunityInspectorScalar(row.keyword))}</td>
+        <td>${escapeHtml(seoOpportunityInspectorScalar(row.city))}</td>
+        <td><code>${escapeHtml(seoOpportunityInspectorScalar(row.suggested_slug))}</code></td>
+        <td>${escapeHtml(seoOpportunityInspectorScalar(row.cluster_id))}</td>
+        <td>${escapeHtml(seoOpportunityInspectorScalar(row.template_type))}</td>
+        <td>${chip(row.status || "-", statusTone(row.status))}</td>
+        <td>${escapeHtml(seoOpportunityInspectorScalar(row.search_priority))}</td>
+        <td>${escapeHtml(formatDate(row.created_at))}</td>
+        <td>${escapeHtml(formatDate(row.updated_at))}</td>
+      </tr>
+    `)
+    .join("");
+  const briefSections = opportunities
+    .map((row) => {
+      const brief = row.brief_json || {};
+      return `
+        <section>
+          <strong>Brief ${escapeHtml(seoOpportunityInspectorScalar(row.id))}</strong>
+          <div>
+            <span><b>primary_keyword:</b> ${escapeHtml(seoOpportunityInspectorScalar(brief.primary_keyword))}</span>
+            <span><b>secondary_keywords:</b> ${seoOpportunityInspectorSafeList(brief.secondary_keywords)}</span>
+            <span><b>suggested_title:</b> ${escapeHtml(seoOpportunityInspectorScalar(brief.suggested_title))}</span>
+            <span><b>suggested_h1:</b> ${escapeHtml(seoOpportunityInspectorScalar(brief.suggested_h1))}</span>
+            <span><b>suggested_meta_description:</b> ${escapeHtml(seoOpportunityInspectorScalar(brief.suggested_meta_description))}</span>
+            <span><b>required_h2_sections:</b> ${seoOpportunityInspectorSafeList(brief.required_h2_sections)}</span>
+            <span><b>suggested_faqs:</b> ${seoOpportunityInspectorSafeList(brief.suggested_faqs)}</span>
+            <span><b>cta_primary:</b> ${escapeHtml(seoOpportunityInspectorScalar(brief.cta_primary))}</span>
+            <span><b>cta_secondary:</b> ${escapeHtml(seoOpportunityInspectorScalar(brief.cta_secondary))}</span>
+            <span><b>disclaimer:</b> ${escapeHtml(seoOpportunityInspectorScalar(brief.disclaimer))}</span>
+            <span><b>content_warnings:</b> ${seoOpportunityInspectorSafeList(brief.content_warnings)}</span>
+          </div>
+        </section>
+      `;
+    })
+    .join("");
+  const matchingLandings = Array.isArray(payload.matching_landings) ? payload.matching_landings : [];
+  const matchingHtml = matchingLandings.length
+    ? matchingLandings
+        .map((row) => `<span>#${escapeHtml(row.id)} ${escapeHtml(row.slug || "-")} - ${escapeHtml(row.template_type || "-")} - ${escapeHtml(row.status || "-")} - ${escapeHtml(row.index_status || "-")} - ${escapeHtml(formatDate(row.published_at))}</span>`)
+        .join("")
+    : "<span>Sin landings coincidentes por slug.</span>";
+  const filterHtml = Object.entries(payload.filters_applied || {})
+    .map(([key, value]) => `<span><b>${escapeHtml(key)}:</b> ${escapeHtml(value)}</span>`)
+    .join("") || "<span>Sin filtros; limit aplicado.</span>";
+
+  els.seoOpportunityInspectorResult.innerHTML = `
+    <section>
+      <strong>Diagnostico read-only</strong>
+      <div>
+        <span><b>ok:</b> ${escapeHtml(Boolean(payload.ok))}</span>
+        <span><b>read_only:</b> ${escapeHtml(Boolean(payload.read_only))}</span>
+        <span><b>count:</b> ${escapeHtml(payload.count || 0)}</span>
+        <span><b>limit_applied:</b> ${escapeHtml(payload.limit_applied || 0)}</span>
+        <span><b>duplicate_suggested_slug_count:</b> ${escapeHtml(payload.duplicate_suggested_slug_count || 0)}</span>
+        <span><b>duplicate_keyword_cluster_count:</b> ${escapeHtml(payload.duplicate_keyword_cluster_count || 0)}</span>
+        <span><b>matching_landing_slug_count:</b> ${escapeHtml(payload.matching_landing_slug_count || 0)}</span>
+      </div>
+    </section>
+    <section><strong>Filtros aplicados</strong><div>${filterHtml}</div></section>
+    <section>
+      <strong>Opportunities</strong>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>keyword</th>
+              <th>city</th>
+              <th>suggested_slug</th>
+              <th>cluster_id</th>
+              <th>template_type</th>
+              <th>status</th>
+              <th>search_priority</th>
+              <th>created_at</th>
+              <th>updated_at</th>
+            </tr>
+          </thead>
+          <tbody>${rows || '<tr><td colspan="10">Sin resultados.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </section>
+    ${briefSections || "<section><strong>Brief</strong><p>Sin brief_json para mostrar.</p></section>"}
+    <section><strong>matching_landings</strong><div>${matchingHtml}</div></section>
+  `;
+}
+
+function seoOpportunityInspectorParams(overrides = {}) {
+  const form = els.seoOpportunityInspectorForm;
+  const data = form ? new FormData(form) : new FormData();
+  const values = {
+    template_type: data.get("template_type"),
+    cluster_id: data.get("cluster_id"),
+    status: data.get("status"),
+    suggested_slug: data.get("suggested_slug"),
+    keyword: data.get("keyword"),
+    limit: data.get("limit"),
+    ...overrides
+  };
+  const params = new URLSearchParams({ resource: "seo/opportunities/inspect" });
+  for (const key of ["template_type", "cluster_id", "status", "suggested_slug", "keyword"]) {
+    const value = String(values[key] || "").trim();
+    if (value) params.set(key, value);
+  }
+  const rawLimit = Number.parseInt(String(values.limit || "10"), 10);
+  params.set("limit", String(Math.max(1, Math.min(50, Number.isFinite(rawLimit) ? rawLimit : 10))));
+  return params;
+}
+
+function applySeoOpportunityInspectorPreset(preset) {
+  if (!els.seoOpportunityInspectorForm) return;
+  const form = els.seoOpportunityInspectorForm;
+  if (preset === "risk_signals_home_life_pending") {
+    form.elements.template_type.value = "home_life_topic";
+    form.elements.cluster_id.value = "risk_signals";
+    form.elements.status.value = "pending";
+    form.elements.suggested_slug.value = "";
+    form.elements.keyword.value = "";
+    form.elements.limit.value = "10";
+  }
+}
+
+async function runSeoOpportunityInspector(overrides = {}) {
+  if (!els.seoOpportunityInspectorResult) return null;
+  els.seoOpportunityInspectorResult.innerHTML = `<section><strong>Consultando</strong><p>Inspector read-only en curso...</p></section>`;
+  const params = seoOpportunityInspectorParams(overrides);
+  const result = await api(`/api/admin?${params.toString()}`);
+  state.seoOpportunityInspector.lastResult = result;
+  renderSeoOpportunityInspector(result);
+  showStatus(`Inspector read-only: ${Number(result.count || 0)} opportunities encontradas.`, "good");
+  return result;
+}
+
 function seoOpportunitySeedRoot() {
   return els.seoAutogenOpportunitiesPreview || document;
 }
@@ -8490,6 +8666,26 @@ if (els.seoAutogenConditionsForm) {
     });
   });
 }
+if (els.seoOpportunityInspectorForm) {
+  els.seoOpportunityInspectorForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    runSeoOpportunityInspector().catch((error) => {
+      const message = error.payload?.message || error.message || "No se pudo consultar el inspector read-only.";
+      renderSeoOpportunityInspector({ ok: false, message });
+      showStatus(message, "bad");
+    });
+  });
+}
+els.seoOpportunityInspectorPresetButtons?.forEach((button) => {
+  button.addEventListener("click", () => {
+    applySeoOpportunityInspectorPreset(button.dataset.seoOpportunityInspectorPreset);
+    runSeoOpportunityInspector().catch((error) => {
+      const message = error.payload?.message || error.message || "No se pudo consultar el preset risk_signals.";
+      renderSeoOpportunityInspector({ ok: false, message });
+      showStatus(message, "bad");
+    });
+  });
+});
 document.addEventListener("submit", (event) => {
   if (!event.target.matches("[data-seo-opportunity-seed-form]")) return;
   event.preventDefault();
