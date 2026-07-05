@@ -1166,7 +1166,7 @@ test("admin seo opportunity draft generation creates one home-life review draft 
         suggested_faqs: [
           {
             question: "¿Es fraude si falta información?",
-            answer: "No. Es una señal a comprobar con preguntas prudentes."
+            answer: "No. No afirma engaño: es una señal a comprobar con preguntas prudentes."
           }
         ]
       }
@@ -1180,6 +1180,17 @@ test("admin seo opportunity draft generation creates one home-life review draft 
   const postCall = calls.find((call) => call.path === "seo_landings" && call.method === "POST");
   const patchCalls = calls.filter((call) => call.method === "PATCH");
   const inserted = JSON.parse(postCall.body)[0];
+  const sourceFaq = inserted.source_data_json.faq;
+  const sourceFaqText = JSON.stringify(sourceFaq);
+  const simulatedFaqJsonLd = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: sourceFaq.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: { "@type": "Answer", text: item.answer }
+    }))
+  });
 
   assert.equal(result.statusCode, 200);
   assert.equal(result.payload.ok, true);
@@ -1213,6 +1224,12 @@ test("admin seo opportunity draft generation creates one home-life review draft 
   assert.match(inserted.body_html, /precio\/m²/);
   assert.match(inserted.body_html, /señales a comprobar|Señales/);
   assert.doesNotMatch(inserted.body_html, /\bestafas?\b|\bfraudes?\b|\bengaños?\b/i);
+  assert.ok(Array.isArray(sourceFaq));
+  assert.ok(sourceFaq.length >= 1);
+  assert.match(sourceFaqText, /señal a comprobar|señales a comprobar|preguntas prudentes/i);
+  assert.doesNotMatch(sourceFaqText, /\bestafas?\b|\bfraudes?\b|\bengaños?\b/i);
+  assert.match(simulatedFaqJsonLd, /señal a comprobar|señales a comprobar|preguntas prudentes/i);
+  assert.doesNotMatch(simulatedFaqJsonLd, /\bestafas?\b|\bfraudes?\b|\bengaños?\b/i);
   assert.equal(patchCalls.length, 1);
   assert.equal(patchCalls[0].path, "seo_landing_opportunities?id=eq.129");
   assert.deepEqual(JSON.parse(patchCalls[0].body), { status: "needs_review" });

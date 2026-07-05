@@ -1331,10 +1331,54 @@ function arrayFromBrief(value) {
 
 function safeHomeLifeBriefText(value) {
   return String(value || "")
+    .replace(/¿?\s*es\s+(una\s+)?(estafa|fraude|engaño)\s+si/gi, "¿Es una señal a comprobar si")
     .replace(/\bestafas?\b/gi, "señales delicadas")
     .replace(/\bfraudes?\b/gi, "incidencias")
     .replace(/\bengaños?\b/gi, "datos incoherentes")
     .trim();
+}
+
+function defaultHomeLifeFaq() {
+  return [
+    {
+      question: "¿Qué señales conviene revisar antes de contactar por una vivienda?",
+      answer:
+        "Conviene revisar precio, precio/m², fotos, ubicación, datos incompletos y coherencia general, siempre como señales a comprobar y no como conclusiones absolutas."
+    },
+    {
+      question: "¿Puede un anuncio incompleto ser suficiente para descartar una vivienda?",
+      answer:
+        "No necesariamente. Puede indicar que necesitas pedir más información antes de visitar o comparar con otras viviendas similares."
+    },
+    {
+      question: "¿Cómo ayuda InmoRadar en esta revisión previa?",
+      answer:
+        "InmoRadar resume datos clave del anuncio, ayuda a revisar precio/m², detecta señales de riesgo y facilita comparar varias viviendas con más contexto."
+    },
+    {
+      question: "¿Esta guía sustituye una revisión profesional?",
+      answer:
+        "No. Es una orientación preliminar para preparar mejores preguntas antes de contactar."
+    }
+  ];
+}
+
+function sanitizeHomeLifeFaq(items) {
+  const sourceItems = arrayFromBrief(items).length ? items : defaultHomeLifeFaq();
+  return arrayFromBrief(sourceItems)
+    .slice(0, 5)
+    .map((item) => {
+      const question = typeof item === "object" ? item.question : item;
+      const answer =
+        typeof item === "object" && item.answer
+          ? item.answer
+          : "Revisa el anuncio con calma, contrasta los datos disponibles y prepara preguntas antes de contactar.";
+      return {
+        question: safeHomeLifeBriefText(question),
+        answer: safeHomeLifeBriefText(answer)
+      };
+    })
+    .filter((item) => item.question && item.answer);
 }
 
 function renderList(items) {
@@ -1359,33 +1403,10 @@ function renderFaq(items) {
     .join("");
 }
 
-function homeLifeTopicBody({ title, brief, ctaPrimary, ctaSecondary, disclaimer }) {
+function homeLifeTopicBody({ title, brief, faq, ctaPrimary, ctaSecondary, disclaimer }) {
   const requiredSections = arrayFromBrief(brief.required_h2_sections);
   const secondaryKeywords = arrayFromBrief(brief.secondary_keywords);
-  const faq = arrayFromBrief(brief.suggested_faqs).length
-    ? brief.suggested_faqs
-    : [
-        {
-          question: "¿Qué señales conviene revisar antes de contactar por una vivienda?",
-          answer:
-            "Conviene revisar precio, precio/m², fotos, ubicación, datos incompletos y coherencia general, siempre como señales a comprobar y no como conclusiones absolutas."
-        },
-        {
-          question: "¿Puede un anuncio incompleto ser suficiente para descartar una vivienda?",
-          answer:
-            "No necesariamente. Puede indicar que necesitas pedir más información antes de visitar o comparar con otras viviendas similares."
-        },
-        {
-          question: "¿Cómo ayuda InmoRadar en esta revisión previa?",
-          answer:
-            "InmoRadar resume datos clave del anuncio, ayuda a revisar precio/m², detecta señales de riesgo y facilita comparar varias viviendas con más contexto."
-        },
-        {
-          question: "¿Esta guía sustituye una revisión profesional?",
-          answer:
-            "No. Es una orientación preliminar para preparar mejores preguntas antes de contactar."
-        }
-      ];
+  const safeFaq = sanitizeHomeLifeFaq(faq);
 
   const sectionsList = requiredSections.length
     ? `<ul>${renderList(requiredSections)}</ul>`
@@ -1432,7 +1453,7 @@ function homeLifeTopicBody({ title, brief, ctaPrimary, ctaSecondary, disclaimer 
       <p>Una revisión prudente no busca conclusiones absolutas. Busca ordenar dudas, pedir información concreta y comparar mejor. Si un anuncio deja preguntas importantes abiertas, apunta esas preguntas antes de contactar y contrasta con otras viviendas similares.</p>
 
       <h2>Preguntas frecuentes</h2>
-      <div class="seo-faq">${renderFaq(faq)}</div>
+      <div class="seo-faq">${renderFaq(safeFaq)}</div>
 
       <p class="seo-disclaimer">${escapeHtml(disclaimer)}</p>
       <p><a href="/como-controlar-factura-luz-casa/">Revisar gastos de luz antes de elegir vivienda</a> puede completar esta lectura. También puedes consultar una guía sobre <a href="/guias/coste-real-comprar-vivienda/">coste real de comprar una vivienda</a>.</p>
@@ -1457,14 +1478,15 @@ function buildHomeLifeTopicLanding(opportunity, sourceData) {
   const ctaSecondary = "Instala la extensión de Chrome y úsala mientras revisas anuncios inmobiliarios.";
   const disclaimer =
     "InmoRadar ofrece orientación y análisis preliminar. No sustituye una tasación, asesoramiento legal, financiero, técnico, energético ni de seguros.";
+  const faq = sanitizeHomeLifeFaq(brief.suggested_faqs);
   const bodyHtml = homeLifeTopicBody({
     title: h1,
     brief,
+    faq,
     ctaPrimary,
     ctaSecondary,
     disclaimer
   });
-  const faq = arrayFromBrief(brief.suggested_faqs);
 
   return {
     slug,
