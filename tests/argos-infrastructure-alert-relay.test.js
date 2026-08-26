@@ -29,8 +29,11 @@ test('ARGOS relay is fixed to Sergio and rejects arbitrary destinations', () => 
 test('ARGOS relay accepts only bounded Bolsa Vercel or GitHub OIDC identities', () => {
   assert.match(source, /VERCEL_PROJECT_ID = 'prj_ZzlybK3gIGN1b2J4UbjR1VKqo7Yr'/);
   assert.match(source, /GITHUB_REPOSITORY = 'dontorido\/bolsa-intelligence'/);
+  assert.match(source, /GITHUB_REPOSITORY_ID = '1342335621'/);
+  assert.match(source, /GITHUB_OWNER_ID = '41258518'/);
   assert.match(source, /infrastructure-watchdog-external\.yml/);
   assert.match(source, /jwtVerify\(token, await jwksFor\(issuer\), \{ issuer, audience: AUDIENCE \}\)/);
+  assert.match(source, /workflowRef === exactWorkflowRef \|\| workflowRef\.endsWith\(workflowSuffix\)/);
   assert.match(source, /MAX_BODY_BYTES = 64 \* 1024/);
 });
 
@@ -54,6 +57,15 @@ test('configuration diagnostic exposes provider presence but never credential va
     if (previous.RESEND_EMAIL_FROM === undefined) delete process.env.RESEND_EMAIL_FROM;
     else process.env.RESEND_EMAIL_FROM = previous.RESEND_EMAIL_FROM;
   }
+});
+
+test('signed identity diagnostic is explicit and cannot bypass mail authorization', () => {
+  assert.match(source, /action === 'diagnostic_identity'/);
+  assert.match(source, /caller\.verified \? 403 : 401/);
+  assert.match(source, /github_claims_rejected/);
+  assert.match(source, /vercel_claims_rejected/);
+  assert.match(source, /identity_rejected/);
+  assert.match(source, /if \(!caller\.ok\)/);
 });
 
 test('relay keeps mail authority bounded and contains no infrastructure mutation path', () => {
