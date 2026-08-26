@@ -7,6 +7,8 @@ const VERCEL_PROJECT_ID = 'prj_ZzlybK3gIGN1b2J4UbjR1VKqo7Yr';
 const VERCEL_PROJECT_NAME = 'bolsa-intelligence';
 const GITHUB_ISSUER = 'https://token.actions.githubusercontent.com';
 const GITHUB_REPOSITORY = 'dontorido/bolsa-intelligence';
+const GITHUB_REPOSITORY_ID = '1342335621';
+const GITHUB_OWNER_ID = '41258518';
 const GITHUB_WORKFLOW = '.github/workflows/infrastructure-watchdog-external.yml';
 const MAX_BODY_BYTES = 64 * 1024;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{1,180}$/;
@@ -76,44 +78,85 @@ async function jwksFor(issuer) {
   return jwks;
 }
 
-function githubWorkflowAllowed(payload) {
-  if (payload.repository !== GITHUB_REPOSITORY) return false;
-  if (payload.repository_owner !== 'dontorido') return false;
-  if (payload.ref !== 'refs/heads/main') return false;
-  if (!ALLOWED_GITHUB_EVENTS.has(String(payload.event_name || ''))) return false;
-  const workflowRef = String(payload.job_workflow_ref || payload.workflow_ref || '');
-  return workflowRef === `${GITHUB_REPOSITORY}/${GITHUB_WORKFLOW}@refs/heads/main`;
+function githubWorkflowAssessment(payload) {
+  const workflowRef = String(payload.workflow_ref || payload.job_workflow_ref || '');
+  const exactWorkflowRef = `${GITHUB_REPOSITORY}/${GITHUB_WORKFLOW}@refs/heads/main`;
+  const workflowSuffix = `/bolsa-intelligence/${GITHUB_WORKFLOW}@refs/heads/main`;
+  const checks = {
+    repository: payload.repository === GITHUB_REPOSITORY,
+    repository_id: !payload.repository_id || String(payload.repository_id) === GITHUB_REPOSITORY_ID,
+    repository_owner: !payload.repository_owner || payload.repository_owner === 'dontorido',
+    repository_owner_id: !payload.repository_owner_id || String(payload.repository_owner_id) === GITHUB_OWNER_ID,
+    ref: payload.ref === 'refs/heads/main',
+    event_name: ALLOWED_GITHUB_EVENTS.has(String(payload.event_name || '')),
+    workflow_ref: workflowRef === exactWorkflowRef || workflowRef.endsWith(workflowSuffix),
+  };
+  return {
+    allowed: Object.values(checks).every(Boolean),
+    checks,
+    workflow_ref: workflowRef,
+    repository: String(payload.repository || ''),
+    ref: String(payload.ref || ''),
+    event_name: String(payload.event_name || ''),
+  };
 }
 
-function vercelCallerAllowed(payload) {
-  return payload.owner_id === VERCEL_OWNER_ID
-    && payload.project_id === VERCEL_PROJECT_ID
-    && payload.project === VERCEL_PROJECT_NAME
-    && ALLOWED_VERCEL_ENVIRONMENTS.has(String(payload.environment || ''));
+function vercelAssessment(payload) {
+  const checks = {
+    owner_id: payload.owner_id === VERCEL_OWNER_ID,
+    project_id: payload.project_id === VERCEL_PROJECT_ID,
+    project: payload.project === VERCEL_PROJECT_NAME,
+    environment: ALLOWED_VERCEL_ENVIRONMENTS.has(String(payload.environment || '')),
+  };
+  return { allowed: Object.values(checks).every(Boolean), checks };
 }
 
 async function authenticate(request) {
   const authorization = String(request.headers.authorization || '');
-  if (!authorization.startsWith('Bearer ')) return null;
+  if (!authorization.startsWith('Bearer ')) {
+    return { ok: false, verified: false, reason: 'authorization_missing', provider: null, diagnostic: null };
+  }
   const token = authorization.slice(7).trim();
-  if (!token) return null;
+  if (!token) return { ok: false, verified: false, reason: 'token_missing', provider: null, diagnostic: null };
 
   try {
     const { decodeJwt, jwtVerify } = await jose();
     const unverified = decodeJwt(token);
     const issuer = normalizedIssuer(unverified.iss);
-    if (!issuer) return null;
+    if (!issuer) return { ok: false, verified: false, reason: 'issuer_not_allowed', provider: null, diagnostic: null };
     const { payload } = await jwtVerify(token, await jwksFor(issuer), { issuer, audience: AUDIENCE });
 
     if (issuer === GITHUB_ISSUER) {
-      if (request.headers['x-argos-service-auth'] !== 'github-oidc-v1') return null;
-      return githubWorkflowAllowed(payload) ? { provider: 'github', payload } : null;
+      const headerOk = request.headers['x-argos-service-auth'] === 'github-oidc-v1';
+      const assessment = githubWorkflowAssessment(payload);
+      const ok = headerOk && assessment.allowed;
+      return {
+        ok,
+        verified: true,
+        reason: ok ? 'ok' : (!headerOk ? 'github_service_header_invalid' : 'github_claims_rejected'),
+        provider: 'github',
+        payload,
+        diagnostic: { ...assessment, service_header: headerOk },
+      };
     }
-    if (request.headers['x-argos-service-auth'] !== 'vercel-oidc-v1') return null;
-    return vercelCallerAllowed(payload) ? { provider: 'vercel', payload } : null;
+
+    const headerOk = request.headers['x-argos-service-auth'] === 'vercel-oidc-v1';
+    const assessment = vercelAssessment(payload);
+    const ok = headerOk && assessment.allowed;
+    return {
+      ok,
+      verified: true,
+      reason: ok ? 'ok' : (!headerOk ? 'vercel_service_header_invalid' : 'vercel_claims_rejected'),
+      provider: 'vercel',
+      payload,
+      diagnostic: { ...assessment, service_header: headerOk },
+    };
   } catch (error) {
-    console.warn('[argos-alert-relay] oidc_rejected', error instanceof Error ? error.name : 'error');
-    return null;
+    const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+    const name = error instanceof Error ? error.name : 'error';
+    const reason = `jwt_invalid:${code || name}`;
+    console.warn('[argos-alert-relay] oidc_rejected', reason);
+    return { ok: false, verified: false, reason, provider: null, diagnostic: null };
   }
 }
 
@@ -221,7 +264,24 @@ module.exports = async function handler(request, response) {
   }
 
   const caller = await authenticate(request);
-  if (!caller) return sendJson(response, 401, { ok: false, error: 'unauthorized' });
+  if (request.body?.action === 'diagnostic_identity') {
+    return sendJson(response, caller.ok ? 200 : (caller.verified ? 403 : 401), {
+      ok: caller.ok,
+      verified: caller.verified,
+      provider: caller.provider,
+      reason: caller.reason,
+      diagnostic: caller.diagnostic,
+    });
+  }
+  if (!caller.ok) {
+    console.warn('[argos-alert-relay] identity_rejected', JSON.stringify({
+      provider: caller.provider,
+      reason: caller.reason,
+      diagnostic: caller.diagnostic,
+    }).slice(0, 1200));
+    return sendJson(response, 401, { ok: false, error: 'unauthorized', reason: caller.reason });
+  }
+
   const payload = normalizedPayload(request.body || {});
   if (!payload) return sendJson(response, 400, { ok: false, error: 'invalid_alert_payload' });
   if (!config.resend.configured && !config.cloudflare.configured) {
