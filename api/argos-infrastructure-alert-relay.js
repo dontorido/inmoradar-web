@@ -9,7 +9,10 @@ const GITHUB_ISSUER = 'https://token.actions.githubusercontent.com';
 const GITHUB_REPOSITORY = 'dontorido/bolsa-intelligence';
 const GITHUB_REPOSITORY_ID = '1342335621';
 const GITHUB_OWNER_ID = '41258518';
-const GITHUB_WORKFLOW = '.github/workflows/infrastructure-watchdog-external.yml';
+const GITHUB_WORKFLOWS = new Set([
+  '.github/workflows/infrastructure-watchdog-external.yml',
+  '.github/workflows/argos2-progress-email.yml',
+]);
 const MAX_BODY_BYTES = 64 * 1024;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{1,180}$/;
 const ALLOWED_VERCEL_ENVIRONMENTS = new Set(['production', 'preview']);
@@ -80,8 +83,8 @@ async function jwksFor(issuer) {
 
 function githubWorkflowAssessment(payload) {
   const workflowRef = String(payload.workflow_ref || payload.job_workflow_ref || '');
-  const exactWorkflowRef = `${GITHUB_REPOSITORY}/${GITHUB_WORKFLOW}@refs/heads/main`;
-  const workflowSuffix = `/bolsa-intelligence/${GITHUB_WORKFLOW}@refs/heads/main`;
+  const exactWorkflowRefs = [...GITHUB_WORKFLOWS].map((workflow) => `${GITHUB_REPOSITORY}/${workflow}@refs/heads/main`);
+  const workflowSuffixes = [...GITHUB_WORKFLOWS].map((workflow) => `/bolsa-intelligence/${workflow}@refs/heads/main`);
   const checks = {
     repository: payload.repository === GITHUB_REPOSITORY,
     repository_id: !payload.repository_id || String(payload.repository_id) === GITHUB_REPOSITORY_ID,
@@ -89,7 +92,7 @@ function githubWorkflowAssessment(payload) {
     repository_owner_id: !payload.repository_owner_id || String(payload.repository_owner_id) === GITHUB_OWNER_ID,
     ref: payload.ref === 'refs/heads/main',
     event_name: ALLOWED_GITHUB_EVENTS.has(String(payload.event_name || '')),
-    workflow_ref: workflowRef === exactWorkflowRef || workflowRef.endsWith(workflowSuffix),
+    workflow_ref: exactWorkflowRefs.includes(workflowRef) || workflowSuffixes.some((suffix) => workflowRef.endsWith(suffix)),
   };
   return {
     allowed: Object.values(checks).every(Boolean),
