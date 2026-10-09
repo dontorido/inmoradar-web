@@ -32,8 +32,11 @@ test('ARGOS relay accepts only bounded Bolsa Vercel or GitHub OIDC identities', 
   assert.match(source, /GITHUB_REPOSITORY_ID = '1342335621'/);
   assert.match(source, /GITHUB_OWNER_ID = '41258518'/);
   assert.match(source, /infrastructure-watchdog-external\.yml/);
+  assert.match(source, /argos2-progress-email\.yml/);
+  assert.match(source, /GITHUB_WORKFLOWS = new Set/);
   assert.match(source, /jwtVerify\(token, await jwksFor\(issuer\), \{ issuer, audience: AUDIENCE \}\)/);
-  assert.match(source, /workflowRef === exactWorkflowRef \|\| workflowRef\.endsWith\(workflowSuffix\)/);
+  assert.match(source, /exactWorkflowRefs\.includes\(workflowRef\)/);
+  assert.match(source, /workflowSuffixes\.some/);
   assert.match(source, /MAX_BODY_BYTES = 64 \* 1024/);
 });
 
